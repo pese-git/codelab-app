@@ -22,10 +22,11 @@
 
 Сгенерированный файл SHALL соответствовать исходникам (PR-1). В `lib/` ядра вне `prompts.g.dart` НЕ SHALL быть многострочных строковых литералов промптов (PR-2).
 
-Тексты SHALL быть английскими, написанными для CodeLab (`AGENTS.md` §5). Файлы этапа 2:
+Тексты SHALL быть английскими, написанными для CodeLab (`AGENTS.md` §5); тексты, промпты и описания инструментов сторонних агентов, в том числе Claude Code, НЕ SHALL воспроизводиться (§7а `07-decision-sources.md`). Файлы:
 - `system/base.md`, `system/untrusted.md`, `modes/plan.md`;
-- `tools/read.md`, `tools/edit.md`, `tools/listing.md`, `tools/exec.md`, `tools/plan.md`;
-- `tool_descriptions/<tool>.md` для семи встроенных инструментов.
+- `tools/read.md`, `tools/edit.md`, `tools/listing.md`, `tools/exec.md`, `tools/tasks.md` (`tools: [task_create]`; заменяет `tools/plan.md`, change `add-subagents-and-tasks`);
+- `tool_descriptions/<tool>.md` для встроенных инструментов `read`, `write`, `edit`, `ls`, `search`, `exec`, `task_create`, `task_update`, `task_list`, `task_get`, `agent`, и `tool_descriptions/task_update_subagent.md` — описание детского варианта `task_update` (design.md change `add-subagents-and-tasks`, D46, п. 4); файла для `update_plan` нет;
+- `subagent/system.md`, `subagent/task.md` (переменные `id`, `subject`) и `subagent/types/<name>.md` для `general`, `explore`, `review`, `plan` (§17.3.3, §17.16.4).
 
 #### Scenario: Синхронизация с исходниками
 - **WHEN** тест генерирует файл в памяти
@@ -34,6 +35,22 @@
 #### Scenario: Ошибки генератора
 - **WHEN** генератор получает файл с неизвестной подстановкой, файл с необъявленной переменной, файл с ключом `author` и два файла с одним `id`
 - **THEN** каждый случай даёт ошибку, называющую путь файла
+
+#### Scenario: Описание agent по глубине
+- **WHEN** описание `agent` рендерится для корневой сессии при `max_depth: 3` и для ребёнка глубины 2 при том же `max_depth`
+- **THEN** первое содержит `A subagent may start its own subagents, up to 2 more level(s) below it.`, второе — `Subagents you start cannot start other subagents.`; оба рендеринга детерминированы (итерация 4)
+
+#### Scenario: Описание agent до вложенности
+- **WHEN** до итерации 4 change (ребёнку `agent` не даётся) описание `agent` рендерится для корневой сессии при `max_depth: 3`
+- **THEN** `nesting` строится от эффективной глубины 1 и даёт `Subagents you start cannot start other subagents.`: описание не обещает модели вложенности, которой нет (design.md, D36, Т16)
+
+#### Scenario: Описание детского task_update
+- **WHEN** схемы шага собираются для корня и для ребёнка `general`
+- **THEN** описание `task_update` ребёнка — `Change the status of a task list item assigned to you: in_progress when you start it, completed when done.` и `You cannot change other fields or items assigned to someone else. Your assigned item, if any, is named in your instructions.`; у корня — прежнее описание; параметры обеих схем совпадают (`prompt_sections_tools_test.dart`, итерация 4; D46, п. 4)
+
+#### Scenario: Описание agent: порядок со списком задач
+- **WHEN** описание `agent` рендерится для корневой сессии
+- **THEN** сразу после строки `Several agent calls in one response run in parallel, at most <N> at a time.` идёт строка `Put task list calls before the first agent call of a response: an agent call placed after a task list call waits until every call before it has finished.`; имён инструментов списка задач в ней нет (design.md, D39 «Известное ограничение — волны», D41, п. 4)
 
 ### Requirement: Шаблоны
 `PromptTemplate(id, vars, text, tools)` SHALL подставлять только именованные значения `{{имя}}`, а `\{{` превращать в литерал `{{`. Значения вставляются как есть, без повторной подстановки. `render` с неполным или лишним набором значений SHALL давать `ArgumentError` (PR-4). Условий, циклов и вложенных шаблонов нет.
@@ -51,28 +68,36 @@
 5. `tools/edit`.
 6. `tools/listing` при `fileListing`.
 7. `tools/exec` при `shellExec`.
-8. `tools/plan`.
+8. `tools/tasks` — если в наборе есть `task_create` (у потомков её нет: детский вариант без `task_create`).
 9. `mcp` — по требованию «Секция mcp».
+9a. `skills/catalog` — если capability `skills` включена и в снимке каталога сессии есть навыки, видимые модели (capability `agent-skills`, «Секция каталога в системном промпте»; design.md change `add-agent-skills`, D6); у потомка — тот же снимок, что у родителя, и только если `skill` в наборе потомка (PR-6; design.md change `add-subagents-and-tasks`, D34).
 10. `project_context` — если `PromptInputs.projectContext` содержит хотя бы один файл (design.md change `add-agent-project-files`, D5).
 11. `agent_profile` — если у сессии выбран агент (D11).
+12. `subagent/system` — только у потомка (design.md change `add-subagents-and-tasks`, D16).
+13. профиль типа субагента `## Agent profile: <name>` — только у потомка, тело — `subagent/types/<name>.md` или тело пользовательского определения.
+14. `subagent/task` — только у потомка с назначенным пунктом списка задач.
 
-`PromptInputs` SHALL получить поля `projectContext` (`ProjectContext?`, результат `assembleProjectContext`) и `agentProfile` (имя и тело выбранного определения или `null`). Тексты `project_context.md`, `project_context_file.md` и `agent_profile.md` SHALL лежать в `prompts/` и генерироваться в `prompts.g.dart` (PR-1, PR-2).
+`PromptInputs` SHALL получить поля `projectContext` (`ProjectContext?`, результат `assembleProjectContext`), `agentProfile` (имя и тело выбранного определения или `null`) и `subagent` (тип, тело и назначенный пункт потомка или `null`); поле `skills` (навыки `modelVisible` снимка каталога сессии, по имени; пустой список — секции нет и промпт побайтово прежний; change `add-agent-skills`) у потомка берётся из снимка родителя (D34). Тексты `project_context.md`, `project_context_file.md`, `agent_profile.md`, `skills/catalog.md`, `skills/invoked.md`, `skills/reattached.md`, `tool_descriptions/skill.md` и файлы `subagent/` SHALL лежать в `prompts/` и генерироваться в `prompts.g.dart` (PR-1, PR-2).
 
 Одинаковые входы SHALL давать побайтово одинаковый результат; секций выключенных capability в нём нет (PR-3, HOST-4).
 
-Секция с непустым `tools` SHALL входить в промпт, только если включены все её инструменты (PR-6). База и секции без `tools` НЕ SHALL называть ни одного инструмента по имени, которое не совпадает с обычным английским словом.
+Секция `skills/catalog` называет инструмент `skill` и потому объявляет `tools: [skill]`; `skills/invoked.md` и `skills/reattached.md` — без `tools` и инструментов не называют. Секция с непустым `tools` SHALL входить в промпт, только если включены все её инструменты (PR-6). База и секции без `tools` НЕ SHALL называть ни одного инструмента по имени, которое не совпадает с обычным английским словом. Секция `tools/tasks` SHALL называть только `task_create`; правила `task_update`, `task_list`, `task_get` — в их описаниях, правило «после сжатия узнай состояние списка вызовом `task_list`» — в `tool_descriptions/task_list.md` (design.md change `add-subagents-and-tasks`, D32).
 
 #### Scenario: Golden на профиль и режим
 - **WHEN** промпт собирается для профилей `agent-serve` и `embedded-cli` в режимах `standard` и `plan` с фиксированной датой
-- **THEN** результат совпадает с `test/prompts/golden/<profile>-<mode>.txt`
+- **THEN** результат совпадает с `test/prompts/golden/<profile>-<mode>.txt`, где вместо `tools/plan` стоит `tools/tasks`
 
 #### Scenario: Секция выключенного инструмента
 - **WHEN** набор инструментов сессии не содержит `ls`, а затем не содержит `write` и `edit`
 - **THEN** в первом промпте нет `tools/listing`, во втором есть `tools/read` и нет `tools/edit`
 
+#### Scenario: Секция списка задач называет только якорь
+- **WHEN** тест-сторож проверяет `tools/tasks.md` и `tool_descriptions/task_list.md`
+- **THEN** в `tools/tasks.md` нет `task_update`, `task_list`, `task_get`; описание `task_list` содержит правило о вызове после сжатия контекста (`prompt_sections_tools_test.dart`)
+
 #### Scenario: База не называет инструментов
-- **WHEN** тест-сторож проверяет `system/base.md`, `system/untrusted.md`, `project_context.md`, `project_context_file.md` и `agent_profile.md`
-- **THEN** в них нет слов `exec`, `ls`, `update_plan` и подстроки `mcp__`
+- **WHEN** тест-сторож проверяет `system/base.md`, `system/untrusted.md`, `project_context.md`, `project_context_file.md`, `agent_profile.md`, `skills/invoked.md`, `skills/reattached.md` и `subagent/system.md`
+- **THEN** в них нет слов `exec`, `ls`, `update_plan`, `task_create` и подстроки `mcp__`
 
 #### Scenario: Контекст проекта без профиля
 - **WHEN** промпт собирается с двумя файлами контекста без выбранного агента
@@ -81,6 +106,18 @@
 #### Scenario: Контекст проекта и профиль агента
 - **WHEN** промпт собирается с теми же двумя файлами контекста и выбранным агентом `reviewer`
 - **THEN** последние две секции — `# Project instructions` и `# Agent profile: reviewer`; результат совпадает с `test/prompts/golden/agent-serve-standard-project-agent.txt`, а без последней секции — с `agent-serve-standard-project.txt`
+
+#### Scenario: Каталог навыков между mcp и контекстом проекта
+- **WHEN** промпт собирается с сервером MCP с инструментами, двумя навыками и двумя файлами контекста проекта
+- **THEN** секция `## Skills` стоит после секции `# MCP servers` и до `# Project instructions`; без навыков результат побайтово равен промпту тех же входов до этого change
+
+#### Scenario: Промпт ребёнка
+- **WHEN** промпт собирается для ребёнка `explore` с назначенным пунктом `#2` в режиме `plan`
+- **THEN** после секций базы идут `subagent/system`, `## Agent profile: explore` и строка `Your task: #2 …`; секции `tools/tasks` нет; результат совпадает с `test/prompts/golden/subagent-explore-plan.txt`
+
+#### Scenario: Промпт ребёнка с навыками
+- **WHEN** промпт собирается для ребёнка `general` в режиме `standard`, а у родителя навыки `flutter-golden` и `release-notes`
+- **THEN** секция `## Skills` стоит после `mcp` и до `project_context`, её текст побайтово равен секции родителя, за ней идут `subagent/system` и `## Agent profile: general`; результат совпадает с `test/prompts/golden/subagent-general-skills.txt` (задача 2s.1)
 
 ### Requirement: Секция mcp
 Системный промпт сессии SHALL содержать секцию `mcp` (`prompts/mcp.md`, текст — design.md change `add-agent-mcp-client`, D12), если capability `mcp` включена и у сессии есть хотя бы один сервер с хотя бы одним включённым инструментом (шаг 9 §11.5, PR-6). Строки секции — `- <name>: <N> tools, prefix mcp__<имя после замены символов>__` в порядке регистрации серверов. Сервер без инструментов в секцию НЕ SHALL входить. Промпт SHALL пересобираться при создании и загрузке сессии и при изменении набора MCP-инструментов на границе шага.

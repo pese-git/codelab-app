@@ -1,15 +1,19 @@
 ## MODIFIED Requirements
 
 ### Requirement: Страницы Providers и MCP servers в навигации
-Composition root SHALL делать видимыми страницы «Connection», «Providers», «MCP servers» и «Skills & extensions» группы «Agent» в порядке требования «Навигация настроек»; остальные страницы остаются скрытыми (SETUP-17). Тела страниц SHALL иметь ключи `settings-providers`, `settings-mcp` и `settings-skills`. Поиск «Find a setting» SHALL находить «Providers» по ключевым словам `provider`, `model`, `api key`, `key storage`, `base url`, «MCP servers» — по `mcp`, `server`, `tools`, `headers`, а «Skills & extensions» — по `skill`, `agents.md`, `context`, `template`, `prompt`, `extension` (design.md change `add-app-skills-page`, D13).
+Composition root SHALL делать видимыми страницы «Connection», «Providers», «MCP servers», «Agents & modes» и «Skills & extensions» группы «Agent» в порядке требования «Навигация настроек»; остальные страницы остаются скрытыми (SETUP-17). Тела страниц SHALL иметь ключи `settings-providers`, `settings-mcp`, `settings-agents-modes` и `settings-skills`. Поиск «Find a setting» SHALL находить «Providers» по ключевым словам `provider`, `model`, `api key`, `key storage`, `base url`, «MCP servers» — по `mcp`, `server`, `tools`, `headers`, «Agents & modes» — по `mode`, `permission`, `bypass`, `plan`, `effort`, `reasoning`, `agent`, `definition`, `subagent` (design.md change `add-settings-agents-modes`, D9, D20), а «Skills & extensions» — по `skill`, `agents.md`, `context`, `template`, `prompt`, `extension` (design.md change `add-app-skills-page`, D13).
 
-#### Scenario: Четыре страницы группы Agent
+#### Scenario: Пять страниц группы Agent
 - **WHEN** пользователь открывает настройки
-- **THEN** навигация показывает в группе «Agent» пункты `settings-nav-connection`, `settings-nav-providers`, `settings-nav-mcp-servers`, `settings-nav-skills-and-extensions` в этом порядке, заголовка «App» нет
+- **THEN** навигация показывает в группе «Agent» пункты `settings-nav-connection`, `settings-nav-providers`, `settings-nav-mcp-servers`, `settings-nav-agents-and-modes`, `settings-nav-skills-and-extensions` в этом порядке, заголовка «App» нет
 
 #### Scenario: Поиск ключа API
 - **WHEN** пользователь вводит `api key` в «Find a setting»
 - **THEN** в навигации остаётся «Providers»
+
+#### Scenario: Поиск режима bypass
+- **WHEN** пользователь вводит `bypass` в «Find a setting»
+- **THEN** в навигации остаётся «Agents & modes», а выбор результата открывает тело `settings-agents-modes`
 
 #### Scenario: Поиск AGENTS.md
 - **WHEN** пользователь вводит `agents.md` в «Find a setting»

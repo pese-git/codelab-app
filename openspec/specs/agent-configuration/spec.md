@@ -79,7 +79,7 @@
 
 Строка и столбец SHALL браться из позиций слоя. У слоя без позиций (окружение, флаги, хранилище приложения) сообщение SHALL называть источник и путь ключа без строки.
 
-Ключ схемы MVP без потребителя в этой сборке и ключ раздела после MVP SHALL приниматься с одним предупреждением `config.key.not_applied {key, source}` на каждый явно заданный лист; ключ вне схемы и вне списка разделов после MVP — проблема `unknownKey`. В `profile.<name>` допустимы только встроенные профили и известные capability (иначе `unknownKey`); capability после MVP даёт `config.key.not_applied`; расширение профиля — проблема с ключом `profile.<name>.<capability>`.
+Раздел `skills` (кроме подраздела `skills.operative`) — ключи схемы с потребителем (capability `agent-skills`, «Конфигурация навыков»; design.md change `add-agent-skills`, D11), capability `skills` в `profile.<name>` — известная. Ключ схемы MVP без потребителя в этой сборке и ключ раздела после MVP SHALL приниматься с одним предупреждением `config.key.not_applied {key, source}` на каждый явно заданный лист; ключ вне схемы и вне списка разделов после MVP — проблема `unknownKey`. В `profile.<name>` допустимы только встроенные профили и известные capability (иначе `unknownKey`); capability после MVP даёт `config.key.not_applied`; расширение профиля — проблема с ключом `profile.<name>.<capability>`.
 
 #### Scenario: Опечатка с подсказкой
 - **WHEN** `config.yaml` содержит в строке 12, столбце 3 ключ `compaction.reserve_token`
@@ -98,7 +98,7 @@
 - **THEN** сообщение называет источник `app-storage` и ключ `budget.max_steps`, строки и столбца нет (`config_validator_positions_test.dart`)
 
 #### Scenario: Ключ без потребителя
-- **WHEN** глобальный конфиг задаёт `loop.empty_response_retries: 3` и `skills.max_skills: 100`
+- **WHEN** глобальный конфиг задаёт `loop.empty_response_retries: 3` и `skills.operative.max_tokens: 1024`
 - **THEN** загрузка успешна, каждое значение даёт одно предупреждение `config.key.not_applied` с ключом и источником
 
 #### Scenario: Предупреждения по листьям
@@ -120,6 +120,10 @@
 #### Scenario: Провайдер без agent.default_model
 - **WHEN** единственный слой объявляет провайдера `gw` с моделью `m` и не задаёт `agent.default_model`
 - **THEN** проблем нет, `CoreConfig.defaultModel` — `gw/m`, `CoreConfig.defaultModelSource` — `firstProvider`
+
+#### Scenario: Раздел skills применяется
+- **WHEN** глобальный конфиг задаёт `skills.max_skills: 100`, `skills.catalog_max_chars: 500` и `profile.agent-serve.skills: off`
+- **THEN** `max_skills` применён без `config.key.not_applied`; `catalog_max_chars` — проблема границы `1000–64000`; сужение профиля по `skills` принято
 
 ### Requirement: Доверие к проектному конфигу
 Оба проектных слоя — `<cwd>/.codelab/config.yaml` и `<cwd>/.codelab/config.local.yaml` — SHALL подчиняться правилам доверия §15.3, пока проект не в `trusted_projects` (решение пользователя 2026-10-30). Проект доверенный, если его канонический корень есть в `trusted_projects` глобального слоя (`user` или `appStorage`). Загрузчик (`codelab_agent_io`) SHALL канонизировать корень проекта и каждый элемент `trusted_projects` (раскрыть `~`, `.`/`..` и symlink; несуществующий путь — нормализация без раскрытия symlink) до сравнения: иначе `trusted_projects: [/work/link]` для проекта `/work/real` (или наоборот) давал бы разный ответ в зависимости от записи пути. В `trusted_projects` SHALL допускаться только абсолютные пути (относительный — проблема). Относительный путь SHALL давать проблему `expected an absolute path` с ключом `trusted_projects[i]`; `~` SHALL раскрываться. `trusted_projects` в проектных слоях SHALL отбрасываться с предупреждением `config.project.untrusted_key` (`ignored: trusted_projects is read only from the global config`), а в слое `--config` — быть проблемой. Без доверия:
@@ -422,11 +426,11 @@
 - **THEN** `config.trustedProjects` и `config.withoutProject.trustedProjects` равны `[/work/a, /work/b]`
 
 ### Requirement: config check показывает диагностику файлов проекта
-`ConfigCommands.check` SHALL после валидной загрузки конфига загружать файлы проекта для канонического `--cwd` (та же форма, что у runtime: `LocalExecutionEnv.realpath`) тем же `ProjectFilesLoader` с доверием и каталогом моделей загруженного конфига и печатать перед последней строкой (design.md, D13):
+`ConfigCommands.check` SHALL после валидной загрузки конфига загружать файлы проекта для канонического `--cwd` (та же форма, что у runtime: `LocalExecutionEnv.realpath`) тем же `ProjectFilesLoader` с доверием и каталогом моделей загруженного конфига — и файлы проекта, и, при включённой capability `skills`, навыки (`loadSkills` и проверка ядра, capability `agent-skills`) и печатать перед последней строкой (design.md, D13):
 - каждую диагностику уровня `error` или `warning` — строкой `warning: <path>[:<line>[:<column>]]: <message>`;
-- диагностику `untrusted_project` — строкой `note: <каталог>: the project is not trusted; add it to trusted_projects`, по строке на каталог (`.codelab/prompts`, `.codelab/agents`).
+- диагностику `untrusted_project` уровня `info` — строкой `note: <каталог>: the project is not trusted; add it to trusted_projects`; диагностика `untrusted_project` уровня `warning` (относительный элемент `skills.extra_roots` недоверенного проекта — ошибка настройки) печатается по общему правилу строкой `warning:`; по строке на каталог (`.codelab/prompts`, `.codelab/agents`, каждый корень навыков проекта `.codelab/skills` и `.agents/skills`). Предупреждения навыков (`yaml_repaired`, `invalid_name`, `name_mismatch`, `missing_name`, `unknown_key`, `empty_body`, `shadowed` и другие уровня `warning`) печатаются по общему правилу.
 
-Прочие диагностики уровня `info` НЕ SHALL печататься. Сообщения SHALL быть фиксированными текстами кодов (D3, D10); имя ключа или фрагмент файла в сообщение НЕ SHALL попадать. Непредвиденное исключение загрузчика SHALL давать одну строку `warning: <cwd>: project files could not be read: <runtimeType>`; загрузка дольше 5 с (D6) SHALL прерываться строкой `warning: <cwd>: project files were not read within 5 s`. Диагностики, заметки, сбой и таймаут НЕ SHALL считаться проблемами: последняя строка и код выхода определяются только конфигом. При невалидном конфиге файлы проекта НЕ SHALL проверяться. Вывод SHALL совпадать у `codelab-agent config check` и `codelab config check`.
+Прочие диагностики уровня `info` НЕ SHALL печататься. Сообщения SHALL быть фиксированными текстами кодов (D3, D10); имя ключа или фрагмент файла в сообщение НЕ SHALL попадать. Непредвиденное исключение загрузчика SHALL давать одну строку `warning: <cwd>: project files could not be read: <runtimeType>`; загрузка дольше 5 с (D6) SHALL прерываться строкой `warning: <cwd>: project files were not read within 5 s`. Навыки читаются отдельной фазой (capability `agent-skills`, «Порт файлов навыков»): исключение или таймаут только этой фазы SHALL давать строку `warning: <cwd>: skills could not be read: <runtimeType>` или `warning: <cwd>: skills were not read within 5 s`, а диагностики файлов проекта печатаются как обычно; и наоборот. Диагностики, заметки, сбой и таймаут НЕ SHALL считаться проблемами: последняя строка и код выхода определяются только конфигом. При невалидном конфиге файлы проекта НЕ SHALL проверяться. Вывод SHALL совпадать у `codelab-agent config check` и `codelab config check`.
 
 #### Scenario: Битое определение агента
 - **WHEN** конфиг валиден, проект доверенный, а `.codelab/agents/reviewer.md` содержит неизвестный ключ `color` в строке 4
@@ -447,6 +451,10 @@
 #### Scenario: Таймаут загрузки
 - **WHEN** конфиг валиден, а загрузка файлов проекта не завершается за 5 с
 - **THEN** stdout содержит строку `warning: <cwd>: project files were not read within 5 s`, последняя строка и код выхода — как без файлов проекта
+
+#### Scenario: Битый навык
+- **WHEN** конфиг валиден, а `$CODELAB_HOME/skills/notes/SKILL.md` содержит `name: Notes`
+- **THEN** stdout содержит строку с префиксом `warning: <home>/skills/notes/SKILL.md:` и фиксированным текстом кода `invalid_name`; последняя строка `Config: valid`, код `0`
 
 ### Requirement: config check показывает состояние секретов
 Если загрузка валидна, а конфиг ссылается на секреты (`api_key_secret`, `${secret:…}` у провайдеров и MCP-серверов), `config check` SHALL проверять каждое имя (без повторов) резолвером без режима отладки, с тем же хранилищем, что у подкоманд `secret`. Перед последней строкой `Config: …` SHALL печататься:
@@ -1236,4 +1244,76 @@
 #### Scenario: Отложенный новый провайдер не становится моделью
 - **WHEN** применённый снимок — провайдер `b` (модель `y`) без ключа модели, неявная модель `b/y`; перезагрузка добавляет перед ним провайдера `a` с `api_key_secret` (отложен до перезапуска)
 - **THEN** итог `applied`, неявная модель снимка — `b/y`, `pendingRestartKeys` содержит `providers.a` и не содержит `agent.default_model`; проблемы `validateSnapshot` нет
+
+### Requirement: Ключи subagents в схеме и реестре настроек
+Схема конфига SHALL содержать ключи базового этапа субагентов (решение пользователя 2026-11-10; design.md change `add-subagents-and-tasks`, D17, D22):
+
+| Ключ | Тип | По умолчанию | Диапазон |
+|---|---|---|---|
+| `subagents.enabled` | bool | `true` | — |
+| `subagents.max_depth` | int | `3` | 1–3 |
+| `subagents.max_concurrent` | int | `3` | 1–8 |
+| `subagents.max_per_turn` | int | `10` | 1–50 |
+| `subagents.max_steps` | int | `30` | 1–500 |
+| `subagents.max_tokens` | int | нет | ≥ 1 |
+| `subagents.max_cost` | float | нет | > 0 |
+| `subagents.max_duration` | duration | `10m` | > 0 |
+| `subagents.report_max_bytes` | int | `16384` | 1024–1048576 |
+| `subagents.progress_interval` | duration | `2s` | > 0 |
+| `subagents.heartbeat_interval` | duration | `15s` | > 0 |
+| `subagents.cancel_grace` | duration | `10s` | > 0 |
+
+Правила:
+- значение вне диапазона или неверного типа SHALL давать `ConfigIssue` с путём ключа, строкой и столбцом, а не исключение; ключ остаётся со значением по умолчанию;
+- проектный слой SHALL только ужесточать: меньшие числа, `enabled: false`; смягчение SHALL отбрасываться с логом `config.project.untrusted_key` (как у `permissions`);
+- ключи других этапов §17.3.10 (`background`, `follow_ups` и др.) в схему НЕ SHALL входить до своих changes (CFG-5).
+
+`SettingsRegistry` SHALL вместо опакового дескриптора `subagents` содержать по дескриптору на каждый ключ таблицы:
+- `scope: shared`, раздел `Subagents`, непустые `label` и `description`;
+- `type`, `defaultValue`, `min`/`max` совпадают со схемой (требование «Реестр настроек», тест полноты: граница принимается, значение за ней отклоняется);
+- `restartRequired: false`: лимиты читаются при каждом `spawn`;
+- `layers` — по правилам доверия: проектный слой только ужесточает.
+
+Так ключи доступны `config get|set`, `/settings` CLI и страницам настроек app через `ConfigWriter` без отдельного кода.
+
+#### Scenario: Умолчания
+- **WHEN** конфиг пустой
+- **THEN** `CoreConfig.subagents` — `enabled: true`, `max_depth: 3`, `max_concurrent: 3`, `max_per_turn: 10`, `max_steps: 30`
+
+#### Scenario: Диапазон глубины
+- **WHEN** глобальный слой задаёт `subagents.max_depth: 4`, затем `0`, затем `3`
+- **THEN** первые два значения дают `ConfigIssue` с путём `subagents.max_depth` и итоговым значением 3; третье принимается
+
+#### Scenario: Проект не повышает глубину
+- **WHEN** глобальный слой задаёт `max_depth: 2`, а проект — `max_depth: 3`
+- **THEN** итоговое значение 2, лог `config.project.untrusted_key`
+
+#### Scenario: Дескрипторы в реестре
+- **WHEN** запускается `settings_registry_complete_test.dart`
+- **THEN** каждый ключ `subagents.*` таблицы покрыт дескриптором `shared` с совпадающими `min`/`max`; опакового дескриптора `subagents` нет
+
+#### Scenario: Запись через config set
+- **WHEN** выполняется `codelab-agent config set subagents.max_concurrent 9`, затем `… 2`
+- **THEN** первая команда отклоняется проверкой `ConfigWriter` с проблемой `subagents.max_concurrent` (CLI — код `64`, как у любого ключа с `min`/`max`), байты файла не меняются; вторая записывает значение, и после применения перезагрузки следующий `spawn` использует 2 слота без перезапуска агента
+
+#### Scenario: Глубина 1
+- **WHEN** `subagents.max_depth: 1`
+- **THEN** у ребёнка нет `agent`, описание `agent` корня содержит `Subagents you start cannot start other subagents.`
+
+### Requirement: Цены моделей конфигурации
+Ключи цен модели `providers.<p>.models.<m>.cost_input`, `cost_output`, `cost_cache_read` и `cost_cache_write` (тип `float`, доллары за 10⁶ токенов) SHALL принимать только неотрицательные конечные числа; `0` допустим (бесплатная модель). Отрицательное значение и не конечное значение (`.nan`, `.inf`, `-.inf` YAML, число вне диапазона `double`) SHALL давать проблему этого ключа при проверке слоя (`CoreConfig.fromLayers`, требование «Схема и строгая проверка»), и `CoreConfig` НЕ SHALL строиться — так же, как у других семантических проверок §15.5, шаг 8. Текст проблемы SHALL называть путь ключа и ожидание `must be a finite number not less than 0` и НЕ SHALL содержать значения (требование «Наблюдаемость загрузки конфигурации»). Правило SHALL действовать для всех слоёв, включая окружение, флаги и хранилище приложения, и для `config check`, который печатает проблему и завершается кодом ошибки, как при любой другой проблеме (design.md change `add-usage-extension`, D20).
+
+Почему: цены входят в стоимость хода (`calculateCost`, `agent-llm`), а стоимость — в уведомление `_codelab/session/usage`; бесконечная цена давала исключение при проекции события и ошибку `-32603` любому клиенту, а отрицательная печаталась как положительная строка стоимости (D20).
+
+#### Scenario: Отрицательная цена
+- **WHEN** `config.yaml` задаёт у модели `gw/m` `cost_input: -1`
+- **THEN** загрузка даёт проблему с ключом `providers.gw.models.m.cost_input` и текстом `must be a finite number not less than 0` без значения `-1`, `CoreConfig` не построен, а `codelab-agent config check` печатает эту проблему и завершается кодом ошибки
+
+#### Scenario: Бесконечная и неопределённая цена
+- **WHEN** `config.yaml` задаёт у модели `gw/m` `cost_output: .inf` и `cost_cache_read: .nan`
+- **THEN** загрузка даёт две проблемы — `providers.gw.models.m.cost_output` и `providers.gw.models.m.cost_cache_read`, `CoreConfig` не построен
+
+#### Scenario: Нулевая и дробная цена
+- **WHEN** `config.yaml` задаёт у модели `gw/m` `cost_input: 0`, `cost_output: 2` и `cost_cache_write: 0.3`
+- **THEN** проблем нет, `ModelRef.cost` модели — `input` 0, `output` 2, `cacheWrite` 0.3 (целое `2` принимается как `float`)
 

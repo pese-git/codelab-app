@@ -8,7 +8,8 @@
 - `shellExec`, `fileListing`, `interactiveApproval` — как в этапе 2; в `embedded-app-desktop` — те же состояния, что в `embedded-cli`: `shellExec` и `fileListing` — transport `local`, `interactiveApproval` — transport `acp` (design.md change `add-embedded-agent-mode`, D4);
 - `sessionPersistence` — transport `jsonl-file` во всех трёх профилях;
 - `compaction` — `on` во всех трёх профилях;
-- `mcp` — transport `{stdio, http}` во всех трёх профилях (design.md change `add-agent-mcp-client`, D3).
+- `mcp` — transport `{stdio, http}` во всех трёх профилях (design.md change `add-agent-mcp-client`, D3);
+- `skills` — `on` во всех трёх профилях (design.md change `add-agent-skills`, D11); сужает её только `profile.<name>.skills: off`; выключенная — нет ни секции каталога, ни инструмента `skill`, ни команд `skill:*` (SKL-5, HOST-4). Отсутствие порта `skillFiles` capability не сужает (D16). Ключ `skills.enabled` capability НЕ SHALL сужать ни в `buildAgentCore`, ни у сессии другой папки: он действует на сессию, и `skills.enabled: false` в `CoreConfig` сессии — в том числе сессии в корне запуска — даёт этой сессии пустой снимок навыков без вызова порта (требование «Конфигурация сессии вне корня запуска», решения Q44, Q45).
 
 Для неизвестного имени `of` бросает `ArgumentError`. Состояния `off` и `transport` SHALL нести непустую причину.
 
@@ -36,8 +37,16 @@
 - **WHEN** один сценарий модели («прочитай файл, измени, покажи план») проходит через ядро в профилях `agent-serve`, `embedded-app-desktop` и `embedded-cli` с одинаковыми ответами на запросы разрешений
 - **THEN** последовательности `AgentEvent` трёх прогонов совпадают; различаются только env и gate хоста (§10.12)
 
+#### Scenario: Навыки выключены конфигом
+- **WHEN** ядро собирается в профиле `agent-serve` с `skills.enabled: false`, и клиент создаёт сессию
+- **THEN** `CorePlan.offReasons` не содержит `skills`, порт `skillFiles` при открытии сессии не вызывается, у сессии нет секции каталога, инструмента `skill` и команд `skill:*`
+
+#### Scenario: Навыки выключены профилем
+- **WHEN** профиль `agent-serve` сужается до `skills: CapabilityOff(…)`
+- **THEN** `CorePlan.offReasons` содержит причину для `skills`, порт `skillFiles` при открытии сессии не вызывается
+
 ### Requirement: Минимальная сборка buildAgentCore
-Хост SHALL собирать ядро только через `buildAgentCore(profile, services, config, streamFunction)` (HOST-6). Функция выполняет шаги §10.7 документа ядра в объёме этапов 2–4 и 8 (design.md change `add-agent-core-loop-and-tools`, D12; design.md change `add-agent-core-sessions-and-compaction`, D12; design.md change `add-dart-agent-acp-server`, D3; design.md change `add-agent-mcp-client`, D3, D6):
+Хост SHALL собирать ядро только через `buildAgentCore(profile, services, config, streamFunction)` (HOST-6). Функция выполняет шаги §10.7 документа ядра в объёме этапов 2–4 и 8 (design.md change `add-agent-core-loop-and-tools`, D12; design.md change `add-agent-core-sessions-and-compaction`, D12; design.md change `add-dart-agent-acp-server`, D3; design.md change `add-agent-mcp-client`, D3, D6; design.md change `add-subagents-and-tasks`, D13, D17):
 
 1. **Сужение по сервисам и конфигурации:**
    - нет `gate` → `interactiveApproval` выключается;
@@ -50,15 +59,16 @@
    - транспорт capability `mcp`, которого нет в `services.mcp.transports`, → `HostWiringException`, называющий `mcp` и транспорт.
 3. **Env-цепочка** `BoundedEnv(baseEnv, root: cwd)` на сессию. Все инструменты получают один экземпляр внешнего `BoundedEnv` (ENV-2).
 4. **Реестр инструментов:**
-   - `read`, `write`, `edit`, `update_plan` — всегда;
+   - `read`, `write`, `edit`, `task_create`, `task_update`, `task_list`, `task_get` — всегда;
    - `exec` — при `shellExec`;
    - `ls`, `search` — при `fileListing`;
+   - `agent` — на сессию при `subagents.enabled` конфига этой сессии на момент её создания и эффективном окне контекста модели сессии не меньше порога субагентов 32 768 токенов (design.md change `add-subagents-and-tasks`, D40; иначе `agent` зарегистрирован, но скрыт из схем шага, лог `subagent.unavailable`, ошибки нет) (живая перезагрузка действует на новые сессии, design.md change `add-subagents-and-tasks`, D37); `enum` типов — из встроенных типов и определений агентов сессии (agent-subagents «Инструмент task и типы субагентов»);
    - дубликат имени встроенного инструмента → `HostWiringException` (HOST-5).
 
-   Это базовый реестр. Каждая сессия получает свою копию с MCP-инструментами своих серверов («MCP-серверы сессии»).
-5. **Политика разрешений** — первым звеном `beforeToolCall`, хуки хоста `extraBeforeToolCall` — последними; `extraAfterToolCall` — первыми в `afterToolCall`.
+   Это базовый реестр. Каждая сессия получает свою копию с MCP-инструментами своих серверов («MCP-серверы сессии») и с `agent`.
+5. **Политика разрешений** — первым звеном `beforeToolCall`, хуки хоста `extraBeforeToolCall` — последними; `extraAfterToolCall` — первыми в `afterToolCall`. У потомков субагентов те же хуки `extraBeforeToolCall` стоят последними после политики потомка и получают вызов с цепочкой `toolCallId` (agent-subagents «Сборка ребёнка»; design.md change `add-subagents-and-tasks`, D48 п. 1).
 6. **Промпт** из секций включённых capability.
-7. **`AgentRuntime`** с хранилищем `services.sessions`, настройками `CoreConfig.compaction`, каталогом `services.models` (без каталога — каталог из одной `CoreConfig.defaultModel`) и усилием рассуждения по умолчанию `CoreConfig.effort` (`medium`).
+7. **`AgentRuntime`** с хранилищем `services.sessions`, настройками `CoreConfig.compaction` и `CoreConfig.subagents`, каталогом `services.models` (без каталога — каталог из одной `CoreConfig.defaultModel`) и усилием рассуждения по умолчанию `CoreConfig.effort` (`medium`).
 8. **`CorePlan`** со списком инструментов базового реестра, секций промпта и причин выключения, лог `host.plan`.
 
 Выключенная capability НЕ SHALL оставлять на поверхности модели ни схемы, ни секции промпта (HOST-4).
@@ -68,8 +78,20 @@
 - **THEN** `AgentRuntime.models.models` содержит одну модель — `CoreConfig.defaultModel`
 
 #### Scenario: Матрица профиля
-- **WHEN** ядро собирается для `agent-serve` на `MemoryExecutionEnv` и `MemorySessionStore` с `shellExec` и `sessionPersistence`, выключенными через `narrowed`
-- **THEN** схемы запроса — `read`, `write`, `edit`, `update_plan`, `ls`, `search` в этом порядке, в промпте нет `tools/exec`, а `CorePlan.offReasons` содержит причины для `shellExec`, `sessionPersistence` и `mcp`
+- **WHEN** ядро собирается для `agent-serve` на `MemoryExecutionEnv` и `MemorySessionStore` с `shellExec` и `sessionPersistence`, выключенными через `narrowed`, и `subagents.enabled: false`
+- **THEN** схемы запроса — `read`, `write`, `edit`, `task_create`, `task_update`, `task_list`, `task_get`, `ls`, `search` в этом порядке, в промпте нет `tools/exec`, а `CorePlan.offReasons` содержит причины для `shellExec`, `sessionPersistence` и `mcp`
+
+#### Scenario: Субагенты включены
+- **WHEN** та же сборка с `subagents.enabled: true`
+- **THEN** схемы запроса сессии дополнительно содержат `agent` последним встроенным инструментом, а в промпте есть описание `agent` со списком типов
+
+#### Scenario: Субагенты выключены перезагрузкой
+- **WHEN** ядро собрано с `subagents.enabled: true`, открыта сессия A, затем перезагрузка конфига ставит `subagents.enabled: false` и открывается сессия B
+- **THEN** схемы сессии A по-прежнему содержат `agent`, у сессии B `agent` нет, а `AgentRuntime.subagents` возвращает `null` (D37)
+
+#### Scenario: Малое окно — нет agent
+- **WHEN** ядро собрано с `subagents.enabled: true`, а сессия создаётся с моделью, у которой `effectiveContextWindow` — 8 192 (или окно ограничено `compaction.context_window_cap: 8192`)
+- **THEN** схемы сессии не содержат `agent`, сессия создаётся без ошибки, в логе — `subagent.unavailable` с `session_id`, `reason: context_window`, `window: 8192`, `min_window: 32768`; с моделью окна 32 768 `agent` в схемах есть (D40)
 
 #### Scenario: Включено без сервиса
 - **WHEN** профиль с включённым `shellExec` собирается над `MemoryExecutionEnv`
@@ -249,7 +271,7 @@
 - **THEN** сервер пропущен с `mcp.server.skipped` и причиной «сервис MCP не передан», сессия создана
 
 ### Requirement: Конфигурация сессии вне корня запуска
-Если `CoreConfig.projectRoot` задан и канонический `cwd` новой или загружаемой сессии ему не равен, `AgentRuntime` SHALL строить для сессии конфигурацию **её папки** — полный `CoreConfig` из слоёв папки и свою функцию модели — а не брать снимок корня запуска (design.md change `require-project-folder`, D21; заменяет D9 change `add-agent-configuration`).
+Если `CoreConfig.projectRoot` задан и канонический `cwd` новой или загружаемой сессии ему не равен, `AgentRuntime` SHALL строить для сессии конфигурацию **её папки** — полный `CoreConfig` из слоёв папки и свою функцию модели — а не брать снимок корня запуска (design.md change `require-project-folder`, D21; заменяет D9 change `add-agent-configuration`). Правки глобальных слоёв, которые перезагрузка откладывает до перезапуска, сессия получает из применённого снимка процесса (требование «Сессии других папок при перезагрузке корня»; design.md change `defer-restart-keys-in-folder-sessions`).
 
 **На сессию** SHALL браться всё, что входит в `CoreConfig`:
 - провайдеры (`providers.*`) и каталог моделей (`model_catalog.*`);
@@ -259,14 +281,15 @@
 - бюджет хода, пороги сжатия (`compaction.*`, кроме `compaction.enabled`);
 - MCP-серверы конфигурации;
 - `redact.*`;
-- `tools.project_context.max_bytes`.
+- `tools.project_context.max_bytes`;
+- `skills.*` (design.md change `add-agent-skills`, D11, решение Q44): `extra_roots`, `disabled`, пределы и `skills.enabled`; корни навыков проекта и `projectTrusted` запроса к порту `skillFiles` считаются по каноническому `cwd` сессии. `skills.enabled: false` папки выключает навыки только сессий этой папки — и для корня запуска, и для других папок: порт `skillFiles` не вызывается, снимок пуст, capability `skills` в `CorePlan` не меняется (решение Q45).
 
 Функция модели (`StreamFunction`) и каталог сессии SHALL строиться функцией хоста `modelsFor` по `CoreConfig` сессии.
 
 **На процесс** SHALL оставаться:
 - `HostSettings` (`secrets.*`, в том числе бэкенд, `sessions.*`, `logging.*`, `config.*`, `profile.*`), а также `exec.*` и `compaction.enabled` (capability `compaction`);
 - `trusted_projects`;
-- capability и сужение профиля;
+- capability и сужение профиля, в том числе capability `skills`: её сужает только `profile.<name>.skills: off` (требование «Профили хостов и сужение»), а не `skills.enabled` (решение Q45);
 - резолвер секретов, HTTP-клиент, журнал сессий и память последней модели.
 
 **Порт.** `AgentCoreServices` SHALL принимать необязательный порт `ProjectConfigLoader { Future<ConfigLoadResult> loadForProject(String canonicalCwd) }` (поле `projectConfig`). Порт загружает слои `user`, `<cwd>/.codelab/config.yaml`, `<cwd>/.codelab/config.local.yaml`, `--config`, окружения и флагов тем же загрузчиком и окружением, что при старте, с доверием проектам, закреплённым по `initial.config.trustedProjects`; относительный путь `--config` SHALL разрешаться от корня запуска, а не от папки сессии. Если порт передан без `modelsFor`, `buildAgentCore` SHALL бросать `HostWiringException`.
@@ -274,22 +297,25 @@
 **Порядок.** На каждый вызов `createSession` и `loadSession` сессии вне корня, без кэша, `AgentRuntime` SHALL выполнять шаги по порядку, до создания журнала новой сессии:
 1. канонизировать `cwd`;
 2. вызвать `loadForProject`;
-3. проверить снимок (`validateSnapshot`);
-4. вызвать `modelsFor`;
-5. выбрать модель сессии по существующему правилу, с памятью последней модели процесса;
-6. только потом читать файлы проекта и подключать MCP-серверы.
+3. подставить отложенные до перезапуска части из применённого снимка процесса (требование «Сессии других папок при перезагрузке корня», «Отложенные правки в сессиях других папок»);
+4. проверить снимок (`validateSnapshot`);
+5. вызвать `modelsFor`;
+6. выбрать модель сессии по существующему правилу, с памятью последней модели процесса;
+7. только потом читать файлы проекта и подключать MCP-серверы.
+
+Если у хоста нет `ConfigSource`, подстановки нет: перезагрузки нет, ничего не отложено; сессия получает загрузку как есть.
 
 Каталог сессии SHALL быть доступен как `AgentSession.models` и служить источником вариантов `configOptions` `model`, проверки `session/set_config_option`, выбора модели новой сессии (требование «Модель новой сессии»: «каталог сессии») и модели журнала при `loadSession`. Правка проектных файлов SHALL применяться к следующему `session/new` или `session/load` этой папки; живой перезагрузки проектных слоёв других папок у открытых сессий нет. Перезагрузка конфигурации корня (`reloadConfig`) НЕ SHALL менять функцию модели и конфигурацию сессий других папок.
 
-**Ключи процесса из папки сессии.** Ключи процесса, которые слои папки сессии задают иначе, чем применённый снимок, НЕ SHALL применяться. Сравниваются только ключи, которые есть в `values` загрузки папки и отличаются от применённых; ключ, который задаёт только корень, предупреждения не даёт. По одному разу на папку SHALL писаться `config.session.process_keys_ignored {session_id, keys}` — только ключи показа, без значений.
+**Ключи процесса из папки сессии.** Ключи процесса, которые задают проектные слои папки сессии, НЕ SHALL применяться. Ключ задан проектным слоем, если его значение в `values` загрузки папки отличается от значения в `CoreConfig.withoutProjectValues` той же загрузки (проектные слои его изменили); у загрузки без проектных слоёв таких ключей нет. Значения глобальных слоёв с применённым снимком процесса при этом НЕ SHALL сравниваться: правка глобального файла после старта не приписывается папке. По одному разу на папку SHALL писаться `config.session.process_keys_ignored {session_id, keys}` — только ключи показа, без значений.
 
-**Проблемы (fail closed).** Если загрузка, проверка снимка или `modelsFor` дали проблемы или исключение, сессия НЕ SHALL создаваться или загружаться: журнал новой сессии не создаётся (её нет в `listSessions`), журнал загружаемой не меняется. Ни снимок корня, ни снимок без проекта НЕ SHALL подставляться. `AgentRuntime` SHALL бросать типизированную ошибку `ProjectConfigException {cwd, issues}`. Её текст — проблемы в форме `config check`, без значений секретов и подставленных переменных.
+**Проблемы (fail closed).** Если загрузка, подстановка отложенных частей, проверка снимка или `modelsFor` дали проблемы или исключение, сессия НЕ SHALL создаваться или загружаться: журнал новой сессии не создаётся (её нет в `listSessions`), журнал загружаемой не меняется. Ни снимок корня, ни снимок без проекта НЕ SHALL подставляться. `AgentRuntime` SHALL бросать типизированную ошибку `ProjectConfigException {cwd, issues}`. Её текст — проблемы в форме `config check`, без значений секретов и подставленных переменных.
 
 **Отмена.** Остановка рантайма во время этих шагов SHALL прерывать ожидание. Сессия при этом не создаётся, MCP-процессы не стартуют.
 
 **Канонизация `cwd`.** Перед сравнением (`CoreConfig.forSessionCwd`) `cwd` сессии SHALL канонизироваться портом `PathResolver.realpath` базового окружения; ядро само путь не раскрывает. Если путь не раскрылся, сравнивается нормализованная запись пути, и `loadForProject` получает её же. Сравнивается равенство канонических путей по компонентам, а не вложенность: подкаталог корня — своя папка.
 
-**Лог.** На каждую такую папку SHALL писаться один лог `config.session.project {session_id, cwd, config_root, trusted}` уровня `info`. Отказ SHALL писаться `config.session.project_invalid {cwd, issues}` уровня `error`; `issues` — источник, строка, столбец, путь ключа и класс проблемы, без текстов и значений.
+**Лог.** На каждую такую папку SHALL писаться один лог `config.session.project {session_id, cwd, process_root, trusted}` уровня `info`. `process_root` — канонический корень процесса (`CoreConfig.projectRoot` применённого снимка): он показывает, относительно чего папка сессии «другая», а не откуда взята её конфигурация. Конфигурация сессии читается из слоёв `cwd`. Поля `config_root` в этом событии НЕ SHALL быть. Отказ SHALL писаться `config.session.project_invalid {cwd, issues}` уровня `error`; `issues` — источник, строка, столбец, путь ключа и класс проблемы, без текстов и значений.
 
 **Без порта** поведение прежнее: сессия вне корня получает `CoreConfig.withoutProject`, пишется лог `config.session.outside_root {session_id, cwd, config_root}`. Без `projectRoot` все сессии получают `CoreConfig`.
 
@@ -316,6 +342,10 @@
 #### Scenario: Ключ процесса задаёт только корень
 - **WHEN** доверенный `config.local.yaml` корня `/A` задаёт `logging.level: debug`, а `/B` ключей процесса не задаёт, и клиент создаёт сессию с `cwd: /B`
 - **THEN** лога `config.session.process_keys_ignored` нет
+
+#### Scenario: Глобальная правка ключа процесса не приписывается папке
+- **WHEN** после старта с корнем `/A` в `$CODELAB_HOME/config.yaml` меняется `logging.level`, перезагрузки ещё не было, доверенный `/B/.codelab/config.yaml` задаёт только `budget.max_steps`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** лога `config.session.process_keys_ignored` нет, логирование процесса прежнее
 
 #### Scenario: Битый конфиг проекта сессии
 - **WHEN** `/B/.codelab/config.yaml` не разбирается, и клиент создаёт сессию с `cwd: /B`
@@ -345,9 +375,29 @@
 - **WHEN** ядро собрано с `projectRoot: /A` и портом, `/L` — symlink на `/A`, `/M` — symlink на доверенный `/B`
 - **THEN** сессия с `cwd: /L` получает применённый снимок, `loadForProject` не вызывается; сессия с `cwd: /M` получает конфигурацию `loadForProject('/B')` — канонического пути
 
+#### Scenario: Лог называет корень процесса
+- **WHEN** ядро собрано с `projectRoot: /A` и портом, и клиент создаёт сессию с `cwd: /B`
+- **THEN** лог `config.session.project` содержит `cwd: /B` и `process_root: /A` и не содержит поля `config_root`
+
 #### Scenario: Без порта — прежнее поведение
 - **WHEN** ядро собрано без `ProjectConfigLoader`, с `projectRoot: /A`, и сессия создана с `cwd: /B`
 - **THEN** сессия получает `withoutProject`, лог `config.session.outside_root`
+
+#### Scenario: Навыки сессии вне корня запуска
+- **WHEN** ядро собрано с `projectRoot: /A`, портом `ProjectConfigLoader` и портом `skillFiles`, `/A/.codelab/config.yaml` задаёт `skills.disabled: [pdf]`, доверенный `/B/.codelab/config.local.yaml` — `skills.disabled: [notes]` и `skills.extra_roots: [/opt/b]`, порт навыков находит `pdf` и `notes`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** запрос к порту навыков — `cwd: /B`, `projectTrusted: true`, `extraRoots: [/opt/b]`; в каталоге сессии `/B` есть `pdf` и нет `notes`, а у сессии `/A` нет `pdf`
+
+#### Scenario: Навыки выключены только в сессиях папки
+- **WHEN** ядро собрано с `projectRoot: /A` и портом, конфигурация корня навыки не выключает, доверенный `/B/.codelab/config.yaml` задаёт `skills.enabled: false`, и клиент создаёт сессии с `cwd: /B` и `cwd: /A`
+- **THEN** для сессии `/B` порт навыков не вызывается и её каталог пуст, сессия `/A` получает навыки, `CorePlan.offReasons` не содержит `skills`, лога `config.session.process_keys_ignored` с ключом `skills.enabled` нет
+
+#### Scenario: Недоверенный проект сессии не расширяет навыки
+- **WHEN** глобальный слой задаёт `skills.disabled: [pdf]` и `skills.max_skills: 50`, недоверенный `/B/.codelab/config.local.yaml` — `skills.disabled: [notes]`, `skills.max_skills: 1000` и `skills.extra_roots: [/opt/evil]`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** запрос к порту навыков — `projectTrusted: false`, без `/opt/evil` в `extraRoots`; в конфигурации сессии `skills.disabled` — `[pdf, notes]`, `skills.max_skills` — `50`, есть `config.project.untrusted_key` по `skills.max_skills` и `skills.extra_roots` (решения Q40, Q43)
+
+#### Scenario: Навыки выключены в корне запуска
+- **WHEN** ядро собрано с `projectRoot: /A` и портом, `/A/.codelab/config.yaml` задаёт `skills.enabled: false`, доверенный `/B` задаёт `skills.enabled: true` (или ключа не задаёт), порт навыков находит `pdf`, и клиент создаёт сессии с `cwd: /A` и `cwd: /B`
+- **THEN** `CorePlan.offReasons` не содержит `skills`; для сессии `/A` порт навыков не вызывается и её каталог пуст; сессия `/B` получает `pdf` (решение Q45)
 
 ### Requirement: Файлы проекта сессии
 `createSession` и `loadSession` SHALL до возврата сессии вызывать `AgentCoreServices.projectFiles.load` (если порт задан) с каноническим `cwd` сессии, признаком `projectTrusted` и `tools.project_context.max_bytes` снимка конфигурации сессии (design.md change `add-agent-project-files`, D1, D4). `projectTrusted` SHALL быть истинным, только если канонический `cwd` равен одному из `CoreConfig.trustedProjects`; канонизация — тем же `PathResolver.realpath`, что выбирает снимок (D9 change `add-agent-configuration`). Если `cwd` не раскрылся (у базового env нет `PathResolver` или `realpath` вернул ошибку), `projectTrusted` SHALL быть ложным (fail-closed, D4): нераскрытый путь не сравнивается с доверенными корнями.
@@ -712,13 +762,31 @@
 - **THEN** во всех вариантах действие классифицируется как критическое по PERM-11, как запись в `$CODELAB_HOME/config.yaml`; пути не входят в `watchedConfigFiles`
 
 ### Requirement: Сессии других папок при перезагрузке корня
-Сессия, конфигурацию которой построил `ProjectConfigLoader` (требование «Конфигурация сессии вне корня запуска»), SHALL держать свои `CoreConfig`, каталог и функцию модели до закрытия; правки глобальных слоёв доходят до неё только при следующем открытии (design.md change `require-project-folder`, D21, Q12, Q19 (a)). Перезагрузка конфигурации корня (требование «Живая перезагрузка конфигурации») к такой сессии НЕ SHALL применяться:
+Сессия, конфигурацию которой построил `ProjectConfigLoader` (требование «Конфигурация сессии вне корня запуска»), SHALL держать свои `CoreConfig`, каталог и функцию модели до закрытия (design.md change `require-project-folder`, D21, Q12, Q19 (a)). Правки глобальных слоёв доходят до неё при следующем открытии. Исключение — правки, которые перезагрузка откладывает до перезапуска: их сессия до перезапуска процесса получает из применённого снимка (design.md change `defer-restart-keys-in-folder-sessions`, D1–D5). Перезагрузка конфигурации корня (требование «Живая перезагрузка конфигурации») к такой сессии НЕ SHALL применяться:
 - её функция модели и каталог не заменяются, `config.reload.model_orphaned` для неё не пишется;
 - событие `ModelOptionsChanged` ей не публикуется;
 - серверы конфигурации ей не заменяются (требование «Серверы конфигурации при перезагрузке», шаг 7а);
 - бюджет и пороги сжатия на границе хода берутся из её собственной конфигурации.
 
 Сессии в корне запуска и сессии хоста без порта (`withoutProject`) SHALL вести себя по требованию «Живая перезагрузка конфигурации», как раньше.
+
+**Отложенные правки в сессиях других папок.** На шаге 3 порядка открытия (требование «Конфигурация сессии вне корня запуска») `AgentRuntime` SHALL сравнивать глобальные слои загрузки папки с применённым снимком тем же планом, что перезагрузка (`planConfigReload`, требование «Живая перезагрузка конфигурации», шаг 4). Второго чтения файлов при этом нет.
+- **База** — снимок без проекта применённого снимка процесса, с которым началось открытие: `CoreConfig.withoutProject` и `withoutProjectValues`. Если у корня нет проектных слоёв, база — полный снимок и его `values`. Перезагрузка корня, завершившаяся во время открытия, базу этого открытия НЕ SHALL менять.
+- **Сравниваемое** — снимок без проекта загрузки папки: `withoutProject` и `withoutProjectValues` результата `loadForProject`. Если у папки нет проектных слоёв — её полный снимок и `values`.
+- Если у базы или у загрузки папки нет `withoutProjectValues`, хотя снимок без проекта есть, недостающая карта SHALL считаться пустой для плана (fail closed: всё различие откладывается).
+- Если у загрузки папки есть `withoutProject`, но нет `withoutProjectValues`, пара снимков папки неизвестна: ни одна часть НЕ SHALL считаться перекрытой проектным слоем (fail closed).
+
+Отложенные планом части SHALL браться из базы через `CoreConfig.withDeferred` поверх полного снимка папки, если проектный слой папки их не перекрыл. Перекрытие определяется по паре снимков самой загрузки папки — полному и без проекта:
+- **провайдер** `providers.<id>`, отложенный по R0-4 (группа `kind`, `base_url`, `headers`, `auth_header`, `api_key`, `api_key_env`, `api_key_secret` провайдера с ключом изменилась, или провайдер с ключом новый), а также провайдер полного снимка папки, ключ которого даёт только проектный слой папки (`config.local.yaml` доверенного проекта): план по глобальным значениям его не видит, но группа, изменившаяся в глобальных слоях после старта, подставляется по тому же правилу. Группа, не изменившаяся относительно базы, не подставляется. Перекрыт, только если каждый лист группы, который изменился относительно базы, в полном снимке папки отличается от снимка без проекта папки. Иначе группа SHALL браться из базы, а модели — из полного снимка папки; если в группе базы ключа нет, запросы идут на прежний адрес без ключа, и секрет проекта на изменённый адрес НЕ SHALL уходить до перезапуска. Провайдер, которого в базе нет, SHALL исключаться из снимка сессии вместе с отложенными ссылками на его модели;
+- **сервер** `mcp.servers[<name>]`, отложенный по R0-1, R0-4 или R6-1. Перекрыт, только если элемент полного снимка папки отличается от элемента снимка без проекта папки. Иначе SHALL браться элемент базы, а сервера, которого в базе нет, в снимке сессии нет. Выключение вместе с правкой соединения (R6-1) SHALL давать элемент базы с `enabled: false`;
+- **`agent.default_model`**, отложенная вместе с новым провайдером. Перекрыта, только если значение полного снимка папки отличается от снимка без проекта папки. Иначе SHALL браться модель базы, а неявная модель SHALL считаться заново по итоговым провайдерам. Если модели базы нет в каталоге провайдеров базы (резервная модель снимка без проекта корня пришла из проектного слоя корня), модель SHALL считаться неявной по итоговым провайдерам;
+- **раздел `permissions`**, отложенный по R0-1. Если у загрузки папки нет проектных слоёв, SHALL браться раздел базы. Если проектные слои есть, сессия НЕ SHALL открываться: `ProjectConfigException` с проблемой по ключу `permissions`, источником `config reload` и текстом `the global permissions changed after the agent started; restart the agent to open sessions in this folder`.
+
+Если значение проектного слоя совпадает со значением глобального, часть SHALL считаться неперекрытой и браться из базы (fail closed). `trusted_projects` закрепляет загрузчик (`pinnedTrustedProjects`). Ключи процесса и ключи реестра с `restartRequired` к сессии не применяются по правилу «Ключи процесса из папки сессии». Ключи, которые план применяет сразу (модели, провайдеры без ключа, HTTP-серверы без подстановок, бюджет и другие), SHALL браться из загрузки папки, как раньше. Итог подстановки SHALL проходить `validateSnapshot` и `modelsFor`; проблема — отказ `ProjectConfigException`.
+
+**Лог.** Если на открытии подставлена хоть одна часть, SHALL писаться `config.session.restart_pending {session_id, cwd, keys}` уровня `warning`. `keys` — отсортированные ключи показа подставленных частей (`providers.<id>`, `mcp.servers[<name>]`, `agent.default_model`, листья `permissions.*`), без значений. Отказ по правам пишется `config.session.project_invalid`, как другие отказы.
+
+**Состояние перезапуска.** `restartRequiredKeys`, `pendingRestartKeys`, строки `Restart required` команд `/config` и `/status` и лог `config.reload.restart_required` SHALL описывать применённый снимок процесса и действовать для сессий всех папок. Открытие сессии другой папки их НЕ SHALL менять. После перезагрузки той же правки ключи `restart_pending` входят в `pendingRestartKeys`; до неё их показывает `/config check`.
 
 #### Scenario: Перезагрузка корня меняет каталог
 - **WHEN** с портом открыты сессии `/A` (корень) и `/B`, и перезагрузка добавляет модель в каталог корня
@@ -727,4 +795,93 @@
 #### Scenario: Перезагрузка корня меняет серверы конфигурации
 - **WHEN** с портом открыта сессия `/B` с сервером `b` своего проекта, и перезагрузка корня удаляет из глобального слоя сервер `g`
 - **THEN** серверы сессии `/B` не переподключаются и не заменяются
+
+#### Scenario: Глобальная смена api_key_env ждёт перезапуска и в другой папке
+- **WHEN** агент запущен с корнем `/A`, глобальный провайдер `openrouter` задаёт `api_key_env: OR_KEY_A`, после старта в `$CODELAB_HOME/config.yaml` он меняется на `OR_KEY_B`, перезагрузка корня откладывает `providers.openrouter`, `/B` провайдера `openrouter` не задаёт, и клиент создаёт сессию с `cwd: /B`
+- **THEN** запросы сессии `/B` к `openrouter` идут на прежний `base_url` с ключом из `OR_KEY_A`; лог `config.session.restart_pending` с `keys: [providers.openrouter]` без значений; `pendingRestartKeys` содержит `providers.openrouter`; после перезапуска процесса новая сессия `/B` берёт ключ из `OR_KEY_B`
+
+#### Scenario: Проектный провайдер доверенной папки работает сразу
+- **WHEN** после старта с корнем `/A` глобальный слой меняет `api_key_env` провайдера `openrouter`, доверенный `/B/.codelab/config.local.yaml` задаёт провайдера `local` с `base_url`, `api_key_secret` и `agent.default_model: local/m`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** модель сессии `/B` — `local/m` с адресом и ключом из `config.local.yaml`; группа `openrouter` — прежняя; `keys` лога `config.session.restart_pending` — только `providers.openrouter`
+
+#### Scenario: Проект перекрывает группу глобального провайдера
+- **WHEN** после старта глобальный слой меняет `api_key_env` провайдера `openrouter`, а доверенный `/B/.codelab/config.local.yaml` задаёт для `openrouter` свои `base_url` и `api_key_secret`
+- **THEN** группа `openrouter` сессии `/B` — из `config.local.yaml` (правило группы D23), лога `config.session.restart_pending` нет
+
+#### Scenario: Проект наследует изменённый адрес
+- **WHEN** после старта глобальный слой меняет `base_url` провайдера `openrouter` с ключом, а доверенный `/B/.codelab/config.local.yaml` задаёт для него только `api_key_secret`
+- **THEN** группа `openrouter` сессии `/B` — группа применённого снимка целиком: прежний адрес и прежняя аутентификация глобального слоя; ключ проекта на новый адрес не уходит; `keys` лога `config.session.restart_pending` — `providers.openrouter`
+
+#### Scenario: Ключ проекта не уходит на изменённый глобальный адрес
+- **WHEN** глобальный провайдер `p` задан без ключа, доверенный `/B/.codelab/config.local.yaml` задаёт для него только `api_key_secret`, после старта глобальный слой меняет `base_url` провайдера `p`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** группа `p` сессии `/B` — группа применённого снимка: прежний `base_url`, без ключа; секрет проекта на новый адрес не уходит до перезапуска; `keys` лога `config.session.restart_pending` — `providers.p`
+
+#### Scenario: Новый глобальный провайдер с ключом не появляется в другой папке
+- **WHEN** после старта глобальный слой добавляет провайдера `n` с `api_key_secret` и моделью `n/m` и меняет `agent.default_model` на `n/m`, `/B` их не задаёт, и клиент создаёт сессию с `cwd: /B`
+- **THEN** в каталоге сессии `/B` и в вариантах `configOptions` `model` нет `n/m`, модель сессии — модель по умолчанию применённого снимка; `keys` лога `config.session.restart_pending` — `agent.default_model`, `providers.n`
+
+#### Scenario: Новый глобальный провайдер без ключа появляется сразу
+- **WHEN** после старта глобальный слой добавляет провайдера `ollama` без `api_key_*`, подстановок и секретных заголовков, и клиент создаёт сессию с `cwd: /B`
+- **THEN** каталог сессии `/B` содержит модели `ollama`, лога `config.session.restart_pending` нет
+
+#### Scenario: Новый глобальный stdio-сервер ждёт перезапуска в другой папке
+- **WHEN** после старта глобальный слой добавляет stdio-сервер `x` и HTTP-сервер `h` без подстановок, `/B` своих серверов не задаёт, и клиент создаёт сессию с `cwd: /B`
+- **THEN** сессия `/B` подключает `h`, процесс `x` не запускается, `keys` лога `config.session.restart_pending` — `mcp.servers[x]`
+
+#### Scenario: Проект перекрывает сервер своим элементом
+- **WHEN** после старта глобальный слой меняет `command` stdio-сервера `x`, а доверенный `/B/.codelab/config.local.yaml` задаёт свой сервер `x` с другой `command`
+- **THEN** сессия `/B` запускает `x` по `command` проекта, `mcp.servers[x]` в `restart_pending` нет
+
+#### Scenario: Совпадение с глобальным значением не считается перекрытием
+- **WHEN** после старта глобальный слой меняет `command` stdio-сервера `x` на `run-b`, а доверенный `/B/.codelab/config.local.yaml` задаёт сервер `x` с тем же элементом (`command: run-b`)
+- **THEN** сессия `/B` получает элемент `x` применённого снимка, `keys` лога `config.session.restart_pending` — `mcp.servers[x]`
+
+#### Scenario: Глобальные права после старта в папке без проектных слоёв
+- **WHEN** после старта глобальный слой меняет `permissions.tools.exec` на `allow`, у `/B` нет `.codelab/config*.yaml`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** следующий `exec` сессии `/B` спрашивается, как при старте; `keys` лога `config.session.restart_pending` — `permissions.tools.exec`
+
+#### Scenario: Глобальные права после старта в папке с проектными слоями
+- **WHEN** после старта глобальный слой меняет `permissions.tools.exec` на `allow`, а у `/B` есть `.codelab/config.yaml`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** сессия не создаётся: `ProjectConfigException` с проблемой по ключу `permissions` и текстом `the global permissions changed after the agent started; restart the agent to open sessions in this folder`; журнала сессии нет, лог `config.session.project_invalid`; после перезапуска процесса сессия создаётся
+
+#### Scenario: Хост без ConfigSource не подставляет отложенное
+- **WHEN** ядро собрано с портом `ProjectConfigLoader` и `modelsFor`, но без `ConfigSource`, загрузка `/B` с `.codelab/config.yaml` даёт глобальные `permissions.tools.exec: allow`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** сессия `/B` создаётся с загрузкой как есть; отказа по `permissions` и лога `config.session.restart_pending` нет
+
+#### Scenario: Перезагрузка во время открытия не меняет базу
+- **WHEN** `loadForProject` для `/B` ещё не завершился, а перезагрузка корня применяет снимок, в котором `providers.openrouter` отложен
+- **THEN** сессия `/B` получает группу `openrouter` того снимка, с которым началось открытие; смеси двух снимков нет
+
+#### Scenario: Открытие сессии не меняет состояние перезапуска
+- **WHEN** наблюдатель выключен (`config.watch: false`), после старта глобальный слой меняет `api_key_env` провайдера `openrouter`, и клиент создаёт сессию с `cwd: /B`
+- **THEN** сессия `/B` получает прежнюю группу и лог `config.session.restart_pending`; `configStatus().pendingRestartKeys` пуст; `/config check` печатает `Restart required: providers.openrouter`
+
+### Requirement: Смена конфигурации во время сжатия сохраняется в журнале
+`setMode`, `setModel`, `setEffort` и `setAgent`, вызванные, пока идёт сжатие контекста — фоновое `afterTurn`, ручное `/compact` или аварийное `preflight`/`overflow` внутри хода, — SHALL оставлять свои записи (`mode_change`, `model_change`, `config_change`) на активной ветке журнала, так что `loadSession` восстанавливает значение последней смены (design.md change `fix-config-change-during-background-compaction`, D1, D2).
+
+Смена конфигурации НЕ SHALL ждать завершения сжатия и НЕ SHALL отменять его (D4): вызов завершается так же, как вне сжатия. Сжатие, во время которого прошла смена, SHALL быть записано (требование agent-compaction «Запись сжатия ложится на текущий лист»), а транскрипт после него — тем же, что без смены.
+
+#### Scenario: Режим во время фонового сжатия
+- **WHEN** после хода идёт фоновое `afterTurn`-сжатие, суммаризатор ещё не ответил, вызывается `setMode(plan)` и завершается, затем суммаризатор отвечает, сессия закрывается и открывается `loadSession`
+- **THEN** `setMode` завершился до ответа суммаризатора; в журнале одна запись `compaction` на активной ветке; после `loadSession` режим — `plan`
+
+#### Scenario: Модель во время фонового сжатия
+- **WHEN** во время фонового `afterTurn`-сжатия вызывается `setModel` на другую модель каталога
+- **THEN** после `loadSession` модель сессии — выбранная, лога `session.model.not_restored` нет
+
+#### Scenario: Уровень рассуждения во время фонового сжатия
+- **WHEN** во время фонового `afterTurn`-сжатия вызывается `setEffort(high)`
+- **THEN** после `loadSession` `effort == high`
+
+#### Scenario: Агент во время фонового сжатия
+- **WHEN** во время фонового `afterTurn`-сжатия вызывается `setAgent` с определением, задающим режим и модель
+- **THEN** после `loadSession` активен этот агент, режим и модель — его
+
+#### Scenario: Режим во время ручного сжатия
+- **WHEN** идёт `/compact`, суммаризатор ещё не ответил, вызывается `setMode(plan)`
+- **THEN** ответ `/compact` — `Compacted: …`; после `loadSession` режим — `plan`
+
+#### Scenario: Модель во время аварийного сжатия
+- **WHEN** провайдер ответил `overflow`, идёт аварийное сжатие, и в это время вызывается `setModel`
+- **THEN** ход завершается `TurnEnded(completed)` с одной записью `compaction`; после `loadSession` модель — выбранная
 

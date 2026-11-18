@@ -51,7 +51,7 @@
 - **THEN** первая попытка не публикует `Connected` и возможности агента, не запрашивает `session/list` и не загружает сессии; `WorkspaceState` меняет только исход второй попытки
 
 ### Requirement: Инкрементальная проекция транскрипта
-`TranscriptProjector` SHALL строить `TranscriptItem` сессии инкрементально по новым `session/update`: дельты `agent_message_chunk` и `agent_thought_chunk` подряд дописываются в один элемент того же вида, любое другое обновление закрывает отрезок; `tool_call` с известным `toolCallId` обновляет существующий элемент, а не добавляет второй; статус и одобрение вызова берутся из read-модели хода ядра клиента; запрос разрешения привязывается к `ToolCallItem` по `toolCallId`, а для вызова без `tool_call` — к элементу вызова в конце хода; сорвавшийся ход добавляет `NoticeItem` вида `error` с типизированным сбоем хода (`PromptFailure`), завершённый ход без вывода агента — `NoticeItem` вида `emptyTurn`; ход, завершённый с `stopReason` `max_tokens`, `max_turn_requests` или `refusal`, — `NoticeItem` вида `turnStopped` всегда, даже при выводе агента, и вместо `emptyTurn` у хода без вывода (решение пользователя 2026-11-08, design.md change `add-provider-setup-ui`, Q33, D27). Заметка `turnStopped` SHALL строиться только по `stopReason` ответа на `session/prompt`: у ходов реплея `session/load` его нет, и заметки у них нет (Q36). Тексты `turnStopped`: `max_tokens` — `The model reached its token limit, so the turn ended.`; `max_turn_requests` — `The turn reached the limit of model requests.`; `refusal` — `The agent refused to continue.`. Повторно обработанный снимок сессии SHALL быть no-op. Для любой последовательности обновлений результат инкрементальной проекции SHALL совпадать с проекцией с нуля по всем ходам сессии.
+`TranscriptProjector` SHALL строить `TranscriptItem` сессии инкрементально по новым `session/update`: дельты `agent_message_chunk` и `agent_thought_chunk` подряд дописываются в один элемент того же вида, любое другое обновление закрывает отрезок; `tool_call` с известным `toolCallId` обновляет существующий элемент, а не добавляет второй; статус и одобрение вызова берутся из read-модели хода ядра клиента; запрос разрешения привязывается к `ToolCallItem` по `toolCallId`, а для вызова без `tool_call` — к элементу вызова в конце хода; сорвавшийся ход добавляет `NoticeItem` вида `error` с типизированным сбоем хода (`PromptFailure`), завершённый ход без вывода агента — `NoticeItem` вида `emptyTurn`; ход, завершённый с `stopReason` `max_tokens`, `max_turn_requests` или `refusal`, — `NoticeItem` вида `turnStopped` всегда, даже при выводе агента, и вместо `emptyTurn` у хода без вывода (решение пользователя 2026-11-08, design.md change `add-provider-setup-ui`, Q33, D27). Заметка `turnStopped` SHALL строиться только по `stopReason` ответа на `session/prompt`: у ходов реплея `session/load` его нет, и заметки у них нет (Q36). Тексты `turnStopped`: `max_tokens` — `The model reached its token limit, so the turn ended.`; `max_turn_requests` — `The turn reached the limit of model requests.`; `refusal` — `The agent refused to continue.`. Если итог хода `max_turn_requests` несёт причину бюджета (acp-protocol-client «Причина остановки по бюджету») со значением `steps`, `tokens`, `cost`, `duration` или `deadline`, заметка `turnStopped` SHALL называть лимит: `The turn stopped: budget exceeded: <limit>.`; без причины или с незнакомой причиной SHALL оставаться текст `The turn reached the limit of model requests.` (design.md change `add-usage-extension`, D10, D21 Т6). Повторно обработанный снимок сессии SHALL быть no-op. Для любой последовательности обновлений результат инкрементальной проекции SHALL совпадать с проекцией с нуля по всем ходам сессии.
 
 #### Scenario: Свойство на корпусе фикстур
 - **WHEN** выполняется `transcript_projector_test.dart: incremental projection equals full rebuild for every fixture`
@@ -76,6 +76,14 @@
 #### Scenario: Реплей session/load без заметки исхода
 - **WHEN** сессия загружена через `session/load`, и в реплее истории есть ход, который при живом выполнении завершился с `stopReason: max_tokens` (реплей ACP не передаёт `stopReason`, `03-Session Setup.md`, «Loading a Session»), а после загрузки новый ход той же сессии завершается с `stopReason: max_tokens`
 - **THEN** ход реплея не получает `NoticeItem` вида `turnStopped`, а новый ход получает; исход хода клиент не хранит и не восстанавливает (решение пользователя 2026-11-09, design.md change `add-provider-setup-ui`, Q36)
+
+#### Scenario: Лимит стоимости
+- **WHEN** ход завершён `max_turn_requests` с причиной `cost`
+- **THEN** в ленте заметка `turnStopped` с текстом `The turn stopped: budget exceeded: cost.`
+
+#### Scenario: Причина неизвестна
+- **WHEN** ход завершён `max_turn_requests` без причины или с причиной `energy`
+- **THEN** в ленте заметка `turnStopped` с текстом `The turn reached the limit of model requests.`
 
 ### Requirement: Публикация представлений сессии
 `SessionHandle.view` SHALL публиковать неизменяемый `SessionView` с растущим `revision` синхронно: одно изменение сессии в ядре клиента — одна публикация, и `SessionHandle.current` уже обновлён, когда другие подписчики `sessionChanges` получают это изменение. `SessionView.status` активной сессии `running` (в том числе с ожидающими одобрениями) или `cancelling` SHALL означать «сессия занята»; `SessionView.configOptionInFlight` SHALL быть отличным от `null` на время запроса `session/set_config_option`, и повторный `SessionHandle.setConfigOption` в это время SHALL быть no-op. `SessionView.plan` SHALL содержать записи последнего обновления `plan` сессии (`PlanEntryView`: содержание, статус, приоритет) в порядке агента, а до первого обновления — пустой список; каждое обновление `plan` SHALL заменять план целиком.
@@ -576,4 +584,429 @@ Kit SHALL предоставлять операцию `ClientWorkspace.ensureAge
 #### Scenario: CLI-путь не меняется
 - **WHEN** хост вызывает `connect(profile, projectDirectory: '/work/app')` и создаёт сессии без `cwd`
 - **THEN** `agentDirectory` и `projectDirectory` — `/work/app`, сессии создаются с `cwd` `/work/app`, а `reconnect()` загружает их все
+
+### Requirement: Метаданные пунктов плана
+`PlanEntryView` SHALL получать из `_meta.codelab.task` entry `plan` необязательные поля `taskId` (строка), `owner` (строка) и `blockedBy` (список строк) (design.md change `add-subagents-and-tasks`, D15). Отсутствие `_meta`, неверный тип поля или неизвестные ключи SHALL давать `null` (или пустой список) для этого поля без отказа обработки обновления. Каждое обновление `plan` по-прежнему SHALL заменять план целиком (требование «Публикация представлений сессии»).
+
+`SessionView` SHALL давать представлению для каждого пункта:
+- список незавершённых блокеров — id из `blockedBy`, чьи пункты в текущем плане не `completed`;
+- метку владельца-субагента — `type` из известного kit сведения о субагенте с этим id (`ToolCallView.subagentCall` вызовов `agent` сессии; с итерации 3 — и `SubagentRequester` запросов одобрения), иначе сам id; для `owner: main` и без `owner` метки нет (design.md, D36 Т13, D42 Т9).
+
+#### Scenario: План с метаданными
+- **WHEN** агент присылает `plan`, где у второй entry `_meta.codelab.task: {"id": "2", "owner": "sub_a1", "blockedBy": ["1"]}`, а первая entry `pending`
+- **THEN** `PlanEntryView` второго пункта имеет `taskId: "2"`, `owner: "sub_a1"`, незавершённый блокер `1`
+
+#### Scenario: План стороннего агента
+- **WHEN** агент присылает `plan` без `_meta` (фикстура `acp/prompt-update-plan`, роль `client`)
+- **THEN** `SessionView.plan` содержит пункты с `taskId == null`, показ прежний
+
+#### Scenario: Неверная форма метаданных
+- **WHEN** у entry `_meta.codelab.task` — `{"id": 5, "blockedBy": "1"}`
+- **THEN** обновление применяется, `taskId` и `blockedBy` пустые, ошибки нет
+
+### Requirement: Запрос одобрения от субагента
+`PendingApprovalView` и `ToolCallView` вызова, объявленного только запросом `session/request_permission`, SHALL получать поле `subagent` (`SubagentRequester`: `id`, `type`, `description`, `depth`, `parentToolCallId`) из `toolCall._meta.codelab.subagent` запроса (design.md, D15). Поле нужно, чтобы показать, кто спрашивает.
+
+Смысл `_meta.codelab.subagent` SHALL определяться видом кадра (design.md, D43, п. 1): в `toolCall` запроса разрешения — спрашивающий потомок, в `tool_call` и `tool_call_update` — запущенный вызовом `agent` субагент. `SubagentRequester` SHALL браться только из запроса разрешения и храниться отдельно от данных вызова `agent`; запрос НЕ SHALL делать вызов вызовом `agent` (`ToolCallView.subagentCall`) и НЕ SHALL менять его `subagentSummary`. Нет или неверная форма → `null`, запрос показывается как обычный. `toolCallId` с `/` SHALL оставаться непрозрачной строкой: kit его не разбирает.
+
+`SubagentRequester` SHALL давать `pathTypes` — типы цепочки от ребёнка корня до спрашивающего (D27): первый — тип вызова `agent` с id `parentToolCallId`: `subagentCall.type`, если его нет — `rawInput.type`, иначе `…` (D43, п. 4), последний — `type` спрашивающего, промежуточные — `type` вызовов `agent`, найденных подъёмом по `parentToolCallId` в дереве вызовов (этап 2); звено, которое kit не знает (нет дерева), — `…`. Длина пути равна `depth`. Kit SHALL давать строку пути `review › explore` для представлений.
+
+Ответ на такой запрос SHALL идти тем же `SessionHandle.respond` и только в этот запрос (PERM-4). Сведения о субагенте SHALL оставаться у записи вызова после решения.
+
+Вызов потомка, объявленный только запросом с `SubagentRequester`, НЕ SHALL давать отдельного элемента транскрипта, пока в ходе есть строка вызова `agent` с id `subagent.parentToolCallId` (D43, п. 2): ожидающее одобрение и после решения его исход SHALL быть доступны представлению у этой строки. Если такой строки в ходе нет, вызов SHALL показываться прежним элементом вызова, объявленного только запросом, в конце хода.
+
+Строка вызова `agent` (`kind: think`) SHALL показывать в `ToolRowView`:
+- заголовок агента как деталь;
+- последнюю строку прогресса из `content`, пока вызов идёт;
+- текст отчёта как текстовый вывод после завершения.
+
+#### Scenario: Запрос ребёнка
+- **WHEN** агент присылает `session/request_permission` с `toolCall.toolCallId: "call_3/call_1"` и `_meta.codelab.subagent: {"id": "sub_a1", "type": "review", "description": "Check the diff", "depth": 1, "path": [], "parentToolCallId": "call_3"}`
+- **THEN** `PendingApprovalView.subagent` — `review`, `Check the diff`, глубина 1, `parentToolCallId: "call_3"`, путь `review`; ответ уходит с id этого запроса
+
+#### Scenario: Путь внука без дерева
+- **WHEN** клиент без `subagentToolCalls` получает запрос внука `explore` (`depth: 2`, `parentToolCallId` — вызов `agent` корня с `rawInput.type: "review"`)
+- **THEN** путь — `review › explore`; при `depth: 3` без дерева — `review › … › explore`
+
+#### Scenario: Запрос ребёнка не делает вызов вызовом agent
+- **WHEN** агент присылает запрос ребёнка `review` к `call_1/call_1` с `_meta.codelab.subagent` `{id, type, description, depth: 1, path: [], parentToolCallId: "call_1"}`, строка `call_1` — вызов `agent` с `subagentCall` `sub_a1`
+- **THEN** у записи `call_1/call_1` `subagentCall == null` и `subagentSummary == null`, `subagent` — `review`; отдельного элемента транскрипта для `call_1/call_1` нет, одобрение доступно у строки `call_1`; после решения — его исход там же
+
+#### Scenario: Запрос ребёнка без строки корня
+- **WHEN** приходит запрос ребёнка с `parentToolCallId: "call_9"`, а строки `call_9` в ходе нет
+- **THEN** вызов показывается элементом вызова, объявленного только запросом, в конце хода, с `subagent` и путём
+
+#### Scenario: Тип звена по умолчанию
+- **WHEN** у вызова `agent` корня `rawInput` без `type`, а `subagentCall.type` — `general`; приходит запрос внука `explore` (`depth: 2`)
+- **THEN** путь — `general › explore`
+
+#### Scenario: Запрос без сведений о субагенте
+- **WHEN** запрос несёт `toolCallId` с `/`, но без `_meta.codelab.subagent`
+- **THEN** `subagent == null`, запрос показывается и решается как обычный
+
+### Requirement: Дерево вызовов потомков
+`ToolCallView` SHALL получать необязательное `parentToolCallId` из `_meta.codelab.parentToolCallId` кадров `tool_call` и `tool_call_update` (этап 2; design.md change `add-subagents-and-tasks`, D21). `SessionView` SHALL давать представлению дерево: вызовы с `parentToolCallId` — дети вызова с этим id в том же ходе, в порядке прихода; вызов, чей родитель неизвестен, SHALL показываться на верхнем уровне, а не теряться. Неверная форма поля → `null`.
+
+Ожидающее одобрение вызова потомка SHALL оставаться привязанным к его `toolCallId` (PERM-4); путь от корня до такого вызова SHALL быть доступен представлению, чтобы раскрыть его. Повтор кадров реплея и живого хода SHALL не дублировать детей (идемпотентность по `toolCallId`, `AGENTS.md` §9).
+
+При дереве вызов потомка объявлен своим `tool_call`, и правило «без отдельного элемента» требования «Запрос одобрения от субагента» к нему не применяется: вызов остаётся вложенной строкой. Его ожидающее одобрение и исход SHALL при этом быть доступны и у строки вызова `agent` корневого уровня (`subagent.parentToolCallId`, как без дерева — D27 п. 4, D43 п. 2), и у вложенной строки. Решение представление принимает в блоке под строкой корня; вложенная строка показывает ожидание и исход (design.md, D47 Т9).
+
+#### Scenario: Запрос в дереве
+- **WHEN** при дереве внук просит `exec` для вызова `call_1/call_2/call_1`, объявленного `tool_call` с `parentToolCallId: "call_1/call_2"`, а запрос несёт `subagent.parentToolCallId: "call_1"`
+- **THEN** ожидающее одобрение доступно у строки `call_1` (как без дерева) и у вложенной строки `call_1/call_2/call_1`, отдельного элемента верхнего уровня нет; путь — типы `subagentCall` вызовов `call_1` и `call_1/call_2` без `…`; после ответа исход виден там же, а ответ уходит один раз в этот запрос
+
+#### Scenario: Вложенность по parentToolCallId
+- **WHEN** агент присылает `tool_call` `call_1` (`agent`), затем `call_1/call_1` и `call_1/call_2/call_1` с `parentToolCallId` `call_1` и `call_1/call_2`, причём `call_1/call_2` пришёл раньше своего ребёнка
+- **THEN** дерево: `call_1` → [`call_1/call_1`, `call_1/call_2` → [`call_1/call_2/call_1`]]
+
+#### Scenario: Неизвестный родитель
+- **WHEN** приходит `tool_call` с `parentToolCallId: "call_9"`, которого в ходе нет
+- **THEN** вызов показывается на верхнем уровне, ошибки нет
+
+#### Scenario: Реплей без дублей
+- **WHEN** сессия с деревом вызовов загружается дважды подряд в один `ClientWorkspace`
+- **THEN** у каждого вызова `agent` ровно столько детей, сколько в журнале
+
+### Requirement: Итог и хвост субагента
+Вызов SHALL считаться вызовом `agent` с первого кадра, если его `tool_call` несёт `_meta.codelab.subagent` (`ToolCallView.subagentCall`: `type` и необязательный `id`; D28). Без `id` приходит реплей отклонённого вызова: у него нет записи `subagent` (design.md, D36, Т15). Отсутствие поля, `type` не строкой, неверная форма или неизвестные ключи SHALL давать `null` без отказа; такой вызов (сторонний агент) — обычный вызов `think`.
+
+`ToolCallView` вызова `agent` SHALL получать `subagentSummary` (`toolCalls`, `inputTokens`, `outputTokens`, `duration`) из `_meta.codelab.subagent.summary` финального обновления (design.md change `add-subagents-and-tasks`, D24). Отсутствие, неверная форма или неизвестные ключи SHALL давать `null` или игнорироваться без отказа обработки. Kit SHALL давать готовую строку итога `N tool calls · N.Nk tokens · <время>` и её сокращённый вид для свёрнутой строки `N tool calls · N.Nk · <время>` (D27) (токены — `input + output`, `k` с одним знаком; время — `48s`, `2m 05s`, `1h 02m`).
+
+Для работающего вызова `agent` с потомками в дереве (acp-client-kit «Дерево вызовов потомков») `SessionView` SHALL давать «хвост» (D25): три последних вызова его поддерева по порядку прихода их `tool_call`, в этом порядке, и `moreCount` — число остальных вызовов поддерева. Вызовами поддерева SHALL считаться все вызовы потомков, включая вложенные вызовы `agent` и операции со списком задач, — как в `summary.toolCalls` (D24), поэтому счётчик работающего вызова не прыгает при завершении (design.md, D47 Т9). Токенов в хвосте нет: kit НЕ SHALL разбирать строку прогресса; токены даёт только `subagentSummary` завершённого вызова (D24, D25, Q15). Без вызовов потомков хвост пуст, и представление показывает строку прогресса.
+
+#### Scenario: Вызов agent с первого кадра
+- **WHEN** приходит `tool_call` с `kind: think` и `_meta.codelab.subagent: {"id": "sub_a1", "type": "explore", "x": 1}`, потомков и запросов ещё нет
+- **THEN** `subagentCall` — `sub_a1`, `explore`; неизвестный ключ проигнорирован; тот же кадр без `_meta` даёт `subagentCall == null`
+
+#### Scenario: Итог в представлении
+- **WHEN** финальный `tool_call_update` вызова `agent` несёт `summary` `{"toolCalls": 4, "tokens": {"input": 15200, "output": 3000}, "durationMs": 48000, "future": 1}`
+- **THEN** строка итога — `4 tool calls · 18.2k tokens · 48s`, неизвестный ключ проигнорирован
+
+#### Scenario: Сторонний агент без итога
+- **WHEN** вызов `agent` завершается без `_meta.codelab.subagent.summary`
+- **THEN** `subagentSummary == null`, строки итога нет
+
+#### Scenario: Хвост из пяти вызовов
+- **WHEN** у работающего вызова `agent` пять вызовов потомков
+- **THEN** хвост — три последних, `moreCount` — 2, токенов у хвоста нет, даже если строка прогресса их содержит
+
+### Requirement: Операции со списком задач в ленте
+Kit SHALL распознавать вызов операции со списком задач только по ключу `plan._meta.codelab.taskChange` (design.md, D35), без разбора текста, заголовка и порядка кадров: вызов любого уровня дерева вызовов (у потомка `toolCallId` — цепочка) вида `think`, без `_meta.codelab.subagent`, завершившийся `completed`, на который ссылается `taskChange.toolCallId` хотя бы одного `plan`. Такой вызов SHALL становиться в транскрипте элементом `TaskOpsItem` с изменением из ключей: добавленные id (`op: create`), удалённые (`op: delete` и `deleted`), ставшие `completed` (`op: update`, пункт `completed` в этом `plan` и не `completed` в предыдущем плане сессии) и прочие изменённые id (`changed`). Подряд идущие `TaskOpsItem` без других элементов транскрипта между ними SHALL сливаться в один (изменения объединяются) только среди соседей одного родителя: операция потомка становится вложенным элементом строки своего `agent` и не сливается с операциями корня или другого потомка (design.md, D48 п. 3; решение пользователя 2026-11-15, Q35 (а)). В счётчике и хвосте поддерева операция остаётся вызовом (требование «Итог и хвост субагента»).
+
+`plan` без `taskChange` (сторонний или старый агент, реплей) и `taskChange` без `toolCallId` (`restore`, `assign`) SHALL только обновлять план сессии; вызовы при этом остаются обычными `ToolCallView`. Запасного распознавания по сравнению планов или по статусу вызова в момент прихода `plan` НЕ SHALL быть. Неизвестные ключи и значения `taskChange` SHALL игнорироваться; ключ неверной формы — как отсутствующий.
+
+Kit SHALL давать текст элемента: «Task #3 added to the plan» / «Tasks #1–#4 added to the plan» (подряд идущие id — диапазоном, иначе списком `#1, #3`), «Task #2 done», «Task #2 removed», «Task #2 updated»; части объединяются через `; `.
+
+Вызов `failed` и вызов, на который не ссылается ни один `taskChange` (чтение `task_list`, `task_get`; план стороннего агента), SHALL оставаться обычным `ToolCallView`.
+
+После `session/load` прошлые вызовы `task_*` приходят реплеем завершёнными `tool_call`, а план — одним `plan` после истории без `taskChange` (agent-acp-server «Реплей плана без taskChange»). Поэтому в реплее они SHALL показываться обычными строками вызовов, а не `TaskOpsItem`: это ожидаемо, текущий список виден по `plan` в хвосте.
+
+#### Scenario: Слияние созданий
+- **WHEN** четыре вызова `think` подряд, на каждый ссылается `plan` с `taskChange` `{op: create, toolCallId: <id вызова>, changed: [<новый id>]}` (`#1`…`#4`), все `completed`
+- **THEN** транскрипт содержит один `TaskOpsItem` с текстом «Tasks #1–#4 added to the plan»
+
+#### Scenario: Операции ребёнка в дереве
+- **WHEN** при дереве ребёнок вызова `call_1` делает два успешных `task_update` `call_1/call_2` и `call_1/call_3` подряд, на каждый ссылается `plan` с `taskChange.toolCallId`, а корень между ними — свой `task_update` `call_4`
+- **THEN** под `call_1` — один вложенный `TaskOpsItem` с обоими изменениями; операция корня — отдельный `TaskOpsItem` верхнего уровня, слияния между уровнями нет
+
+#### Scenario: Отклонённая операция
+- **WHEN** вызов `think` завершился `failed`, ни один `plan` на него не ссылается
+- **THEN** вызов — обычный `ToolCallView` со статусом `failed`
+
+#### Scenario: Параллельный пакет с чтением между операциями
+- **WHEN** ответ модели — пакет `[task_create, read, task_create]` с id `c1`, `r1`, `c2`; `plan` с `taskChange {op: create, toolCallId: "c2", changed: ["2"]}` приходит раньше `plan` для `c1` (`changed: ["1"]`); все три вызова `completed`
+- **THEN** транскрипт — `TaskOpsItem` «Task #1 added to the plan», строка `read`, `TaskOpsItem` «Task #2 added to the plan»: каждый `plan` отнесён к своему вызову по ключу независимо от порядка кадров, `read` разделяет элементы, слияния нет
+
+#### Scenario: task_list в пакете не операция
+- **WHEN** пакет `[task_create, task_list]`; `plan` с `taskChange.toolCallId` вызова `task_create` приходит, пока оба вызова `in_progress`
+- **THEN** `task_create` — `TaskOpsItem` «Task #1 added to the plan», `task_list` — обычный `ToolCallView`
+
+#### Scenario: plan без taskChange
+- **WHEN** агент CodeLab старой версии присылает вызов `think` и во время него `plan` с `_meta.codelab.task`, но без `taskChange`
+- **THEN** план сессии обновлён, вызов — обычный `ToolCallView`, `TaskOpsItem` нет
+
+#### Scenario: restore без toolCallId
+- **WHEN** во время хода приходит `plan` с `taskChange {op: restore, actor: main}` без `toolCallId`, пока вызов `think` в `in_progress`
+- **THEN** план сессии заменён, вызов после `completed` — обычный `ToolCallView`
+
+#### Scenario: Реплей прошлых операций
+- **WHEN** `session/load` проигрывает три завершённых вызова `task_create`, затем один `plan` со списком `#1`–`#3` без `taskChange`
+- **THEN** три вызова — обычные строки `ToolCallView`, `TaskOpsItem` нет; план сессии — `#1`–`#3`
+
+#### Scenario: Сторонний агент
+- **WHEN** агент без `_meta.codelab.task` присылает вызов `think` и `plan` во время него
+- **THEN** вызов — обычный `ToolCallView`, план показывается как прежде
+
+### Requirement: Список субагентов сессии
+`SessionView.subagents` SHALL давать список субагентов сессии для панели Agents v1 (решение пользователя 2026-11-12, Q13; design.md change `add-subagents-and-tasks`, D33): по одной строке `SubagentRowView` на каждый вызов сессии с `ToolCallView.subagentCall` (требование «Итог и хвост субагента»), за все ходы, включая вызовы потомков из дерева (требование «Дерево вызовов потомков») и вызовы, проигранные `session/load`. Порядок — обход в глубину в порядке прихода: строки потомков стоят под строкой своего родительского вызова `agent`. Вызов без `subagentCall` (сторонний агент) строки НЕ SHALL давать.
+
+Строка SHALL содержать:
+- `toolCallId` вызова на проводе (ключ строки), id и `type` субагента, заголовок — `rawInput.description`, а без него — `title` вызова как есть;
+- состояние `running`, `awaitingApproval`, `completed`, `failed` или `cancelled`: терминальные — по статусу вызова `agent`, как у его строки в ленте, кроме позднего неитогового кадра (до follow-up F.1, ниже); `awaitingApproval` — если есть ожидающее одобрение этой строки (ниже); иначе `running`;
+- время: у терминальной строки — `duration` из `subagentSummary`; у работающей — `startedAt`, момент, когда kit впервые увидел `tool_call` вызова, по часам, внедрённым в `ClientWorkspace` (повтор кадра его не сдвигает); у терминальной строки без `subagentSummary` времени нет. Kit SHALL давать формат длительности тот же, что у строки итога (`48s`, `2m 05s`, `1h 02m`);
+- число вызовов инструментов: у терминальной строки — `subagentSummary.toolCalls`, у работающей — число вызовов её поддерева в дереве; токены `input + output` — только из `subagentSummary`;
+- последнее действие: у работающей строки — `title` последнего пришедшего вызова её поддерева, у `failed` — `_meta.codelab.subagent.failure`; иначе нет;
+- глубину: 1 для вызова без `parentToolCallId` или с неизвестным родителем, иначе глубина строки-родителя плюс 1;
+- id пунктов плана, у которых `PlanEntryView.owner` — id этого субагента, и id из `rawInput.task`;
+- `approvalId` ожидающего одобрения, у которого `PendingApprovalView.subagent.id` — id этого субагента; если строки с таким id нет, одобрение SHALL относиться к строке корневого уровня с `toolCallId`, равным `subagent.parentToolCallId`. Кроме того, строка SHALL получать `awaitingApproval` и `approvalId` ожидающего одобрения, чей `toolCallId` равен её собственному `toolCallId`: запуск самой строки ждёт решения (design.md, D50 п. 3). Отметка спрашивающего при этом остаётся; при нескольких одобрениях строки `approvalId` — самого раннего. Счётчик `awaitingApproval` считает строки, а не одобрения.
+
+`SessionView` SHALL давать счётчики строк по состояниям.
+
+Kit НЕ SHALL разбирать `title`, строку прогресса и текст отчёта: состояния `queued` и `waiting`, шаги и токены работающего субагента в строке НЕ SHALL появляться (D33). Отсутствие или неверная форма любого источника SHALL давать пустое поле, а не отказ обработки обновления.
+
+Список SHALL быть функцией транскрипта, ожидающих одобрений и плана сессии: повтор кадров, реплей и повторная загрузка сессии SHALL давать тот же список без дублей (идемпотентность по `toolCallId`, `AGENTS.md` §9). Кадр вызова `agent`, пришедший после его терминального статуса, НЕ SHALL возвращать строку в `running` (поздние события): kit SHALL помнить последний итоговый статус вызова, а смена одного итога другим (итоговый `completed` после `cancelled`) SHALL следовать ленте. До follow-up F.1, который делает итог окончательным для всех вызовов, это правило действует только для строки списка, а `ToolCallView.status` и лента не меняются (design.md, D50 п. 1).
+
+#### Scenario: Строки ребёнка и внука
+- **WHEN** клиент с `subagentToolCalls` получает `tool_call` `call_1` (`agent`, `_meta.codelab.subagent: {"id": "sub_a1", "type": "review"}`, `rawInput.description: "Check the diff"`), затем `call_1/call_1` (`read`) и `call_1/call_2` (`agent`, `sub_b2`, `explore`) с `parentToolCallId: "call_1"`, затем `call_1/call_2/call_1` (`ls`) с `parentToolCallId: "call_1/call_2"`
+- **THEN** `SessionView.subagents` — две строки: `sub_a1` `review` «Check the diff» глубины 1, `running`, 3 вызова поддерева, последнее действие — `title` вызова `ls`; под ней `sub_b2` `explore` глубины 2, `running`, 1 вызов
+
+#### Scenario: Итог завершённого субагента
+- **WHEN** вызов `agent` `sub_a1` завершается `completed` с `summary` `{"toolCalls": 4, "tokens": {"input": 15200, "output": 3000}, "durationMs": 48000}`
+- **THEN** строка — `completed`, 4 вызова, 18.2k токенов, 48s, последнего действия нет; счётчик `completed` равен 1
+
+#### Scenario: Отмена и отказ
+- **WHEN** один вызов `agent` завершается `failed` с `_meta.codelab.subagent.failure: "budget_exceeded:steps"`, другой — `failed` с `_meta.codelab.outcome: "cancelled"`
+- **THEN** первая строка — `failed` с последним действием `budget_exceeded:steps`, вторая — `cancelled`
+
+#### Scenario: Ожидание одобрения потомка
+- **WHEN** у работающего `sub_b2` (внук) ожидает ответа `session/request_permission` с `_meta.codelab.subagent.id: "sub_b2"`
+- **THEN** строка `sub_b2` — `awaitingApproval` с `approvalId` этого запроса, строка `sub_a1` остаётся `running`; после ответа пользователя строка `sub_b2` снова `running`
+
+#### Scenario: Одобрение без дерева
+- **WHEN** клиент без вызовов потомков получает запрос внука `sub_b2` с `parentToolCallId: "call_1"`, а строки `sub_b2` нет
+- **THEN** `awaitingApproval` с `approvalId` этого запроса получает строка `call_1`
+
+#### Scenario: Пункты списка у субагента
+- **WHEN** план содержит `#2` с `_meta.codelab.task.owner: "sub_a1"`, а `rawInput.task` вызова `sub_a1` — `"2"`
+- **THEN** строка `sub_a1` несёт один пункт `2`
+
+#### Scenario: Реплей без дублей в списке
+- **WHEN** сессия с двумя вызовами `agent`, у одного из которых вызов `agent` потомка, загружается дважды подряд в один `ClientWorkspace`
+- **THEN** `SessionView.subagents` — ровно три строки, все терминальные, со временем и вызовами из `summary`
+
+#### Scenario: Поздний кадр после завершения
+- **WHEN** после `tool_call_update` `completed` вызова `agent` приходит ещё один `tool_call_update` того же `toolCallId` со `status: in_progress`
+- **THEN** строка остаётся `completed`; `ToolCallView.status` этого вызова следует общему слиянию кадров, как до этого change (до F.1)
+
+#### Scenario: Запуск ждёт одобрения
+- **WHEN** ребёнок `sub_a1` запускает внука: приходит `tool_call` `call_1/call_2` (`agent`, `_meta.codelab.subagent: {"id": "sub_b2", "type": "explore"}`, `status: pending`), и `session/request_permission` для `toolCallId` `call_1/call_2` с `_meta.codelab.subagent.id: "sub_a1"` ждёт ответа
+- **THEN** строки `sub_a1` и `sub_b2` — `awaitingApproval` с `approvalId` этого запроса, счётчик `awaitingApproval` равен 2; после ответа обе строки — `running`
+
+#### Scenario: Время работающего субагента
+- **WHEN** часы `ClientWorkspace` показывают `10:00:00`, когда приходит `tool_call` вызова `agent`, и `10:00:30`, когда тот же `tool_call` приходит повторно
+- **THEN** `startedAt` строки — `10:00:00`, формат длительности для 41 с — `41s`; после завершения с `summary.durationMs: 48000` время строки — 48s из `summary`
+
+#### Scenario: Сторонний агент без признака
+- **WHEN** агент присылает вызов `think` с заголовком «Subagent explore: …» без `_meta.codelab.subagent`
+- **THEN** `SessionView.subagents` пуст
+
+### Requirement: Отмена по признаку агента
+Запись вызова SHALL хранить признак агента `_meta.codelab.outcome` из последнего кадра вызова (`tool_call` или `tool_call_update`), где признак был: кадр с признаком заменяет прежнее значение, кадр без признака (в том числе повтор `tool_call` в реплее и поздний неитоговый `pending`/`in_progress`) его не снимает, снимает только кадр с итоговым статусом `completed` (design.md change `add-subagents-and-tasks`, D41, п. 1). `ToolCallView.status` SHALL быть `cancelled`, если статус вызова — `failed`, а сохранённый признак — `"cancelled"`, у вызова любого инструмента, вживую и в реплее `session/load`. Так вызов, отменённый в прошлом ходе, после загрузки сессии показывается так же, как вживую (agent-workbench-ui «Отменяемый ход в workbench»). Другие значения `outcome` (`rejected`, `interrupted`, неизвестные), его отсутствие и неверная форма (не строка) SHALL оставлять `failed`. Статус вызова признак не меняет: он сливается из кадров по общим правилам. Пометка вызова, отменённого самим клиентом (`cancelTurn`), SHALL работать как прежде: признак агента её дополняет, а не заменяет.
+
+#### Scenario: Отменённый субагент после загрузки
+- **WHEN** `session/load` проигрывает `tool_call` вызова `agent` со `status: failed` и `_meta.codelab: {"outcome": "cancelled", "subagent": {"id": "sub_a1", "type": "explore", "summary": {"toolCalls": 2, "tokens": {"input": 900, "output": 100}, "durationMs": 4000}}}`
+- **THEN** `ToolCallView.status` — `cancelled`, `subagentSummary` разобран; строка панели Agents этого вызова — `cancelled`
+
+#### Scenario: Отмена не клиентом вживую
+- **WHEN** во время хода, который клиент не отменял, приходит `tool_call_update` вызова `exec` со `status: failed` и `_meta.codelab.outcome: "cancelled"`
+- **THEN** `ToolCallView.status` — `cancelled`
+
+#### Scenario: Кадр без признака не снимает отмену
+- **WHEN** приходит `tool_call_update` вызова `agent` со `status: failed` и `_meta.codelab.outcome: "cancelled"`, затем `tool_call_update` того же вызова со `status: failed` без `_meta.codelab.outcome`
+- **THEN** `ToolCallView.status` — `cancelled`
+
+#### Scenario: Итоговый completed снимает признак
+- **WHEN** после кадра со `status: failed` и `_meta.codelab.outcome: "cancelled"` приходит кадр того же вызова со `status: completed`
+- **THEN** `ToolCallView.status` — `succeeded`, признак `outcome` записи снят
+
+#### Scenario: Другие исходы остаются Failed
+- **WHEN** реплей отдаёт два вызова `failed`: один с `_meta.codelab.outcome: "interrupted"`, другой с `"rejected"`, и третий — с `outcome: 5`
+- **THEN** у всех трёх `ToolCallView.status` — `failed`, ошибки обработки нет
+
+### Requirement: Usage сессии
+`SessionView` SHALL содержать `usage` (`UsageView`) — usage и стоимость последнего хода и сессии и заполнение контекста по уведомлениям `_codelab/session/usage` (design.md change `add-usage-extension`, D2, D6–D9). Разбор формы SHALL жить в одном месте пакета (`UsageDecoder`); остальная модель от формы на проводе не зависит. Kit SHALL NOT суммировать ходы и оценивать окно модели сам: все значения берутся из последнего применённого снимка.
+
+Состояния `UsageView.support`:
+- `unknown` — агент не объявил `usage` и снимков не было; клиенты показывают «неизвестно», а не нули (VIEW-6);
+- `awaiting` — агент объявил `usage`, снимков ещё нет;
+- `reported` — применён хотя бы один снимок.
+
+Свёртка SHALL подчиняться правилам:
+- снимок применяется, только если его `seq` больше последнего применённого для этой сессии в текущем поколении соединения; равный или меньший — отбрасывается с записью DEBUG `usage.stale` (`session_id`, `seq`, `last_seq`, `connection_generation`);
+- смена поколения соединения (переподключение, перезапуск агента) и `session/load` SHALL сбрасывать `usage` сессии в `awaiting` или `unknown` по объявлению нового соединения; сброс при `session/load` SHALL происходить в начале загрузки, до отправки запроса, а не по ответу: снимок `trigger: "load"`, который агент шлёт после ответа (change `add-usage-ledger`, D8, D10), не стирается, в каком бы порядке kit ни обработал ответ и уведомление;
+- снимок для сессии, загрузка которой идёт, но которой ещё нет в рабочем пространстве, SHALL ждать её регистрации: kit хранит последний по `seq` такой снимок и применяет его при регистрации сессии, а при сбое загрузки отбрасывает с записью DEBUG `usage.unknown_session`;
+- `trigger` `load` SHALL разбираться как известный повод (`UsageTrigger.load`): снимок без `turnId`, меняет `session` и `context`, `lastTurn` не меняет;
+- каждый снимок с `turnId` заменяет `lastTurn` агрегатом `turn` (тот же `turnId` — ход идёт); снимок без `turnId` (`compaction`) `lastTurn` не меняет и меняет только `session` и `context`; новый `turnId` без разобранного `turn` — `lastTurn` пуст;
+- деньги SHALL храниться в целых микроединицах (`Money.micros`) с валютой; строка `cost` разбирается без `double`; целая часть — не более 9 цифр (не более `999999999.999999`), чтобы микроединицы оставались точным целым и на web; неверная строка, большее значение или `cost` без `currency` — стоимость отсутствует (цена неизвестна), предупреждение `usage.decode_failed` с `reason: wrong_format` для неверной строки и большего значения;
+- `currency` SHALL приниматься только как код ISO 4217 вида `^[A-Z]{3}$`; иная строка — поле неверно: стоимостей снимка нет, как у `cost` без `currency`, предупреждение `usage.decode_failed` с `field: currency`, `reason: wrong_format`; токены и контекст снимка применяются (решение пользователя 2026-11-16 по ревью итерации 3, design.md, D9, D23 Т9 п. 5);
+- причины `partial` переводятся в множество известных значений (`noUsage`, `noPrice`, `beforeLoad`); незнакомые строки отбрасываются;
+- `context.fraction` SHALL быть `null` без `size` или при `size == 0`; `context.compactionSoon` SHALL быть `true` только при известном `compactAt` и `used ≥ 0.9 × compactAt` (design.md, D11; решение пользователя Q3 (б)) и SHALL считаться без переполнения при больших значениях (D22);
+- не разобрались обязательные поля (`sessionId`, `seq`, `trigger`, `session.tokens`) — снимок отбрасывается целиком; необязательное поле неверного типа — поле отсутствует; в обоих случаях — предупреждение `usage.decode_failed` (`session_id`, `field`, `reason`, `connection_generation`; не чаще раза на сессию и поле) без payload, исключения нет;
+- снимок для сессии, которой нет в рабочем пространстве, отбрасывается с записью DEBUG `usage.unknown_session` (`session_id`, `connection_generation`).
+
+Публикация `SessionView` с новым `usage` SHALL идти тем же путём, что и другие изменения сессии (одно изменение — одна ревизия).
+
+#### Scenario: Агент без расширения
+- **WHEN** агент не объявил `usage` и не прислал `_codelab/session/usage`
+- **THEN** `SessionView.usage.support` — `unknown`, `lastTurn`, `session` и `context` — `null`
+
+#### Scenario: Два хода
+- **WHEN** агент присылает снимки двух ходов (`turnId` A, затем B) с суммой сессии в каждом
+- **THEN** `lastTurn` — итог хода B, `session` — сумма из последнего снимка, `support` — `reported`
+
+#### Scenario: Дубль и опоздание
+- **WHEN** приходят снимки с `seq` 3, 5, затем 4 и снова 5
+- **THEN** применены только 3 и 5, `lastSeq` — 5
+
+#### Scenario: Деньги без накопления ошибки
+- **WHEN** 1 000 снимков подряд несут `session.cost`, растущую на `"0.000001"`
+- **THEN** `session.cost.micros` последнего снимка равно значению из его строки точно
+
+#### Scenario: Валюта не ISO 4217
+- **WHEN** снимок несёт `session.cost` `"1.2"` и `currency` `"usd"`, `"US$"` или `"\u001b[31m"`
+- **THEN** снимок применён с токенами и контекстом, `session.cost` — `null`, записано одно предупреждение `usage.decode_failed` с `field: currency` и `reason: wrong_format`; с `currency` `"EUR"` — `session.cost.micros` `1200000` и `currency` `EUR`
+
+#### Scenario: Неверный тип поля
+- **WHEN** снимок содержит `context: {"used": "many", "size": 200000}`
+- **THEN** снимок применён без `context`, записано одно предупреждение `usage.decode_failed`, исключения нет
+
+#### Scenario: Скорое сжатие
+- **WHEN** снимок несёт `context: {"used": 168000, "size": 200000, "compactAt": 183616}`, затем `context: {"used": 168000, "size": 200000}`
+- **THEN** `compactionSoon` сначала `true`, затем `false`
+
+#### Scenario: Причины неполноты
+- **WHEN** `session.partial` — `["beforeLoad", "future"]`
+- **THEN** `session.partial` в `UsageView` — `{beforeLoad}`
+
+#### Scenario: Переподключение
+- **WHEN** после применённого снимка с `seq` 9 соединение переподключается, и новый агент присылает снимок с `seq` 1
+- **THEN** снимок с `seq` 1 применён
+
+#### Scenario: Снимок load после загрузки
+- **WHEN** открытую в рабочем пространстве сессию загружают заново, агент отвечает на `session/load` и сразу присылает снимок `trigger: "load"` с суммой сессии, а kit обрабатывает уведомление раньше обновления сессии по ответу
+- **THEN** после загрузки `support` — `reported`, `session` — сумма снимка, `lastTurn` — `null`; снимок не стёрт сбросом загрузки (`session_usage_test.dart`; change `add-usage-ledger`, D10)
+
+#### Scenario: Снимок load до регистрации сессии
+- **WHEN** сессию из списка (её нет среди открытых) загружают впервые, и снимок `trigger: "load"` обработан до регистрации сессии в рабочем пространстве
+- **THEN** после регистрации `session` — сумма этого снимка; записи `usage.unknown_session` нет
+
+#### Scenario: Сорвавшаяся загрузка открытой сессии
+- **WHEN** у открытой сессии `usage` — `reported`, и её повторный `session/load` завершился ошибкой
+- **THEN** `usage` остаётся сброшенным (`awaiting` или `unknown`) до следующего снимка; прежние числа не восстанавливаются
+
+#### Scenario: Загрузка сорвалась
+- **WHEN** снимок пришёл для загружаемой сессии, а `session/load` завершился ошибкой
+- **THEN** снимок отброшен с записью DEBUG `usage.unknown_session`, состояние рабочего пространства не меняется
+
+### Requirement: Журнал usage сессии в клиенте
+`SessionView` SHALL содержать `usageLedger` — состояние журнала usage сессии, полученного запросом `_codelab/session/usage/ledger` (design.md change `add-usage-ledger`, D6, D10). Состояние — закрытая иерархия: `unavailable` (агент не объявил `usageLedger`), `idle` (объявил, журнал не запрашивали), `loading` (с предыдущим журналом, если был), `loaded` (журнал), `failed` (причина `UsageLedgerFailure(kind, code)` с видами `agentError`, `decode`, `request` и предыдущий журнал, если был). Модель журнала — `UsageLedgerView` с `seq` (может быть `0` — снимков не было), `turns`, `turnCount` и `total` типа `UsageTotals`.
+
+`ClientWorkspace.refreshUsageLedger(sessionId, {rebuild = false})` SHALL:
+- для сессии, которой нет в рабочем пространстве, завершаться `Future.error(ClientWorkspaceException)`, как другие операции `ClientWorkspace` с неизвестным id;
+- без объявленного `usageLedger` не отправлять запрос и оставлять `unavailable`;
+- перед отправкой слитого следующего запроса заново проверять объявление `usageLedger`, `dispose` рабочего пространства, эпоху сессии и поколение соединения;
+- держать на сессию не больше одного запроса в полёте; вызовы во время полёта сливаются в один следующий запрос, `rebuild` в слиянии побеждает;
+- применять ответ, только если с момента отправки не сменились поколение соединения и поколение загрузки сессии; иначе отбрасывать с записью DEBUG `usage.ledger.stale` — в том числе ошибку, которой ядро завершило запрос при замене транспорта: состояние тогда `idle`, а не `failed`;
+- при ошибке JSON-RPC переходить в `failed` с кодом ошибки и записью WARNING `usage.ledger.failed {session_id, code}`.
+
+Переподключение и `session/load` SHALL сбрасывать `usageLedger` в `idle` или `unavailable` по объявлению соединения. Kit НЕ SHALL складывать журнал со снимками `_codelab/session/usage` и сам ничего не суммирует; решение, когда обновлять журнал, принимает хост, сравнивая `usageLedger.seq` с `usage.lastSeq`.
+
+Разбор ответа SHALL жить в одном месте пакета (`UsageLedgerDecoder`) и SHALL использовать те же правила денег, валюты и причин, что `UsageDecoder` (требование «Usage сессии»): микроединицы без `double`, `currency` по `^[A-Z]{3}$`, незнакомые причины отбрасываются. Не разобрались `sessionId`, `seq` или `total.tokens` — ответ отбрасывается, состояние `failed` с причиной `decode`; ход или шаг без обязательных полей пропускается; необязательное поле неверного типа отсутствует; в каждом случае — WARNING `usage.ledger.decode_failed {session_id, field, reason}` (`reason`: `required` для обязательных полей, `wrong_format` для денег и валюты) не чаще раза на сессию и поле (ограничение держит `ClientWorkspace`), без payload, исключения нет. Шаг SHALL сохранять `toolCallIds`, чтобы хост подписывал шаг по транскрипту. Ответ, который не JSON-объект, и ответ с `sessionId`, отличным от запрошенного, SHALL давать `failed` вида `decode`; несовпадение — с WARNING `usage.ledger.decode_failed {field: sessionId, reason: mismatch}`. Строки агента (`title`, `model`, `ledger.reason`, `toolCallIds`) SHALL очищаться от управляющих символов C0/C1 и ограничиваться длиной (`title` — 64 руны).
+
+#### Scenario: Журнал неизвестной сессии
+- **WHEN** хост вызывает `refreshUsageLedger` для id, которого нет в рабочем пространстве
+- **THEN** операция завершается `ClientWorkspaceException`, запрос не отправлен
+
+#### Scenario: Чужой sessionId в ответе
+- **WHEN** запрос ушёл для сессии A, а ответ несёт `sessionId` B
+- **THEN** `usageLedger` сессии A — `failed` вида `decode`, записан WARNING `usage.ledger.decode_failed` с `field: sessionId`, `reason: mismatch`
+
+#### Scenario: Управляющие символы в подписи
+- **WHEN** `title` хода содержит `\u001b[31m` и длиннее 64 рун
+- **THEN** в `UsageLedgerView` подпись без управляющих символов и не длиннее 64 рун
+
+#### Scenario: Агент без журнала
+- **WHEN** агент не объявил `usageLedger`, и хост вызывает `refreshUsageLedger`
+- **THEN** запрос не отправлен, `usageLedger` — `unavailable`
+
+#### Scenario: Журнал загружен
+- **WHEN** агент объявил `usageLedger` и отвечает журналом с двумя ходами
+- **THEN** `usageLedger` — `loaded`, у журнала `seq` ответа, два хода с шагами, `toolCallIds` шагов, суммы в микроединицах (фикстура `acp/usage-ledger-request`, клиентская роль)
+
+#### Scenario: Слияние вызовов
+- **WHEN** во время запроса хост вызывает `refreshUsageLedger` дважды, второй раз с `rebuild: true`
+- **THEN** после ответа на первый уходит ровно один запрос с `rebuild: true`
+
+#### Scenario: Ответ старого соединения
+- **WHEN** запрос ушёл, соединение переподключилось, затем пришёл ответ
+- **THEN** ответ не применён, записан DEBUG `usage.ledger.stale`, `usageLedger` — `idle`
+
+#### Scenario: Ошибка агента
+- **WHEN** агент отвечает `-32002`
+- **THEN** `usageLedger` — `failed` с кодом `-32002` и предыдущим журналом, если он был
+
+### Requirement: Бюджет хода в usage сессии
+`UsageView` SHALL содержать `budget` — прогресс бюджета хода из поля `budget` снимков `_codelab/session/usage` (design.md change `add-desktop-usage-pane`, D9). В нём необязательные подполя `steps`, `tokens` (`used`, `limit` — целые), `cost` (израсходованное — `Money?`, лимит — `Money`) и `duration` (`usedMs`, `limitMs` — целые), а также `turnId` снимка, `receivedAt` — момент применения снимка по часам рабочего пространства (`ClientWorkspace(clock: …)`) — и признак `ended` «итог хода»: бюджет взят из снимка с поводом `turn` (решение пользователя Q11 (а)). Свёртка SHALL оставаться чистой: момент применения передаёт вызывающий, а kit НЕ SHALL вызывать `DateTime.now` в проекции.
+
+Разбор SHALL жить в `UsageDecoder` по общим правилам снимка:
+- `budget` SHALL читаться только у снимка с `turnId`; у снимка без `turnId`, в том числе с `turnId` неверного типа, поле `budget` НЕ SHALL читаться и НЕ SHALL давать предупреждений `budget*`;
+- `steps`, `tokens`, `duration` — объект с обоими целыми ≥ 0;
+- `cost.limit` обязателен, `cost.used` необязателен; оба разбираются правилом `cost` (микроединицы без `double`, целая часть не длиннее 9 цифр). Отсутствующий `used` — цена неизвестна, `used` или `limit` не по формату — подполя `cost` нет;
+- `budget.cost` без `currency` SHALL отсутствовать с общим предупреждением `currency` (`required_with_cost`);
+- неверное подполе — подполя нет, WARNING `usage.decode_failed` с `field: budget.<подполе>`; `budget` не объект — поля нет, `field: budget`. Предупреждения подчиняются правилу «не чаще раза на сессию и поле», снимок применяется;
+- незнакомые ключи внутри `budget` и его подполей SHALL игнорироваться без предупреждения;
+- `budget` без единого разобранного известного подполя SHALL считаться отсутствующим в снимке.
+
+Свёртка: снимок с `turnId` и `budget` SHALL заменять `budget`, `ended` SHALL быть истинен только у снимка с поводом `turn`; снимок с тем же `turnId` без `budget` его не меняет, кроме снимка `turn`, который SHALL ставить `ended` при прежних числах; `ended` SHALL оставаться истинным для того же `turnId`: снимок `step` того же хода после итогового `turn` обновляет числа и `receivedAt`, но `ended` не снимает; снимок с новым `turnId` без `budget` SHALL делать его `null`; снимок без `turnId` (`compaction`, `compactionDiscarded`, `load`, незнакомый повод) его не меняет. Правила `seq`, поколения соединения, сброса при переподключении и `session/load` — те же, что у остального `usage` (требование «Usage сессии»): сброс SHALL делать `budget` равным `null`. Kit НЕ SHALL досчитывать время сам: оценку между снимками делает хост по `receivedAt`.
+
+#### Scenario: Бюджет из снимка шага
+- **WHEN** снимок `step` хода A несёт `budget` с `tokens {used 92000, limit 200000}` и `cost {used "0.41", limit "0.5"}` при `currency` `USD`, а часы рабочего пространства показывают T
+- **THEN** `usage.budget.tokens` — 92000 из 200000, `cost.used.micros` — 410000, `cost.limit.micros` — 500000, `turnId` — A, `receivedAt` — T, `ended` ложен, а `steps` и `duration` отсутствуют
+
+#### Scenario: Итог хода
+- **WHEN** после снимков `step` хода A с `budget` приходит снимок `turn` хода A с `budget`
+- **THEN** `usage.budget` — числа снимка `turn`, `ended` истинен; следующий снимок `step` хода B с `budget` делает `ended` ложным
+
+#### Scenario: Шаг после итога того же хода
+- **WHEN** после снимка `turn` хода A с `budget` приходит снимок `step` хода A с `budget` (нарушение порядка агентом)
+- **THEN** `usage.budget` — числа и `receivedAt` снимка `step`, `ended` остаётся истинным
+
+#### Scenario: Бюджет без хода не читается
+- **WHEN** снимок без `turnId` или с `turnId` неверного типа несёт `budget` — строку
+- **THEN** `usage.budget` не меняется, предупреждений с `field: budget` нет (у `turnId` неверного типа — только его предупреждение `turnId`)
+
+#### Scenario: Цена неизвестна
+- **WHEN** `budget.cost` — `{"limit": "0.5"}` без `used`, `currency` — `USD`
+- **THEN** `usage.budget.cost.used` — `null`, `cost.limit.micros` — 500000, предупреждений нет
+
+#### Scenario: Тот же ход без бюджета
+- **WHEN** после снимка `step` хода A с `budget` приходит снимок хода A без `budget`
+- **THEN** `usage.budget` и его `receivedAt` не меняются
+
+#### Scenario: Новый ход без лимитов
+- **WHEN** после хода A с `budget` приходит снимок `step` хода B без `budget`
+- **THEN** `usage.budget` — `null`
+
+#### Scenario: Снимки без хода
+- **WHEN** после снимка `turn` хода A с `budget` приходят снимки `compaction` и `compactionDiscarded`
+- **THEN** `usage.budget` не меняется
+
+#### Scenario: Неверное подполе
+- **WHEN** `budget.tokens` — `{"used": "many", "limit": 200000}`
+- **THEN** снимок применён, `usage.budget.tokens` — `null`, остальные подполя разобраны, записано одно предупреждение `usage.decode_failed` с `field: budget.tokens`
+
+#### Scenario: Бюджет не объект
+- **WHEN** `budget` — строка
+- **THEN** снимок применён как снимок без `budget`, записано одно предупреждение `usage.decode_failed` с `field: budget`
+
+#### Scenario: Сброс при переподключении и загрузке
+- **WHEN** у сессии есть `usage.budget`, и рабочее пространство переподключается к агенту или начинает `session/load` этой сессии
+- **THEN** `usage.budget` — `null` вместе со сбросом остального `usage`
+
+### Requirement: Точная запись суммы usage
+Kit SHALL предоставлять `formatUsageMoneyExact(Money)` — точную десятичную строку суммы для экспорта (design.md change `add-desktop-usage-pane`, D5): целая часть, точка и до 6 знаков без хвостовых нулей, ноль — `0`, без символа и кода валюты, без `double`. Строка SHALL совпадать с формой `cost` на проводе (D9 change `add-usage-extension`), так что разбор строки даёт исходные микроединицы.
+
+#### Scenario: Обратимость
+- **WHEN** `Money.micros` — 2260000, 41, 0 и 999999999999999
+- **THEN** строки — `2.26`, `0.000041`, `0` и `999999999.999999`, и разбор каждой строки правилом `cost` даёт исходные микроединицы
 

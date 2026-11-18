@@ -97,13 +97,14 @@
 - **THEN** решение — `cancelled`, инструмент не исполняется, поздний ответ не меняет ни одного решения
 
 ### Requirement: Разрешить всегда по инструменту и шаблону
-`allowAlways` и `rejectAlways` SHALL храниться только по `PermissionKey(tool, pattern)` в памяти сессии; решение для одного ключа НЕ SHALL применяться к другому (PERM-3).
+`allowAlways` и `rejectAlways` SHALL храниться только по `PermissionKey(tool, pattern)` в памяти сессии; решение для одного ключа НЕ SHALL применяться к другому (PERM-3). У дерева субагентов хранилище одно — корневой сессии: решение, принятое в запросе потомка, действует для всего дерева, и наоборот (SUB-2).
 
 `permissionPattern` встроенных инструментов SHALL строиться по §7.5:
 - `write`, `edit` — путь относительно корня после нормализации;
 - `read`, `ls`, `search` — нормализованный путь, по умолчанию `.`;
 - `exec` — строка команды без пробелов по краям;
-- `update_plan` — `*`;
+- `task_create`, `task_update`, `task_list`, `task_get` — `*`;
+- `agent` — имя типа субагента (`agent`): «разрешить всегда» для `explore` не разрешает `general`;
 - прочие — канонический JSON аргументов.
 
 #### Scenario: Всегда для одного файла
@@ -113,6 +114,10 @@
 #### Scenario: Всегда для команды
 - **WHEN** пользователь выбрал `allowAlways` для `exec npm test`, а модель вызывает `exec rm -rf /` и `exec npm test --watch`
 - **THEN** оба вызова снова идут к gate (`allow_always_key_test.dart`)
+
+#### Scenario: Всегда для типа субагента
+- **WHEN** в режиме `ask` пользователь выбрал `allowAlways` для `agent` с `type: explore`, а затем модель вызывает `agent` с `explore` и с `general`
+- **THEN** первый исполняется без вопроса, для второго gate получает запрос
 
 ### Requirement: Критические шаблоны команд
 Команда `exec` SHALL разбираться лексером §7.6 документа ядра:
@@ -138,10 +143,10 @@
 - **THEN** в `bypass` gate получает запрос без варианта `allow_always`, а в `autopilot` вызов отклонён без запроса (`autopilot_test.dart`, `acp/permission-critical-pattern-in-bypass` на уровне ядра)
 
 ### Requirement: Критические пути правок конфигурации агента
-Вызовы `write` и `edit` с нормализованной целью из списка §7.6.1 SHALL быть критическими. Список: `.codelab/config.yaml`, `.codelab/config.local.yaml`, `.codelab/cli.yaml`, `.codelab/agents/**`, `.codelab/skills/**`, `.codelab/prompts/**`, `.codelab/hooks/**`.
+Вызовы `write` и `edit` с нормализованной целью из списка §7.6.1 SHALL быть критическими. Список: `.codelab/config.yaml`, `.codelab/config.local.yaml`, `.codelab/cli.yaml`, `.codelab/agents/**`, `.codelab/skills/**`, `.codelab/prompts/**`, `.codelab/hooks/**`, `.agents/skills/**` (корень навыков проекта, design.md change `add-agent-skills`, D9; решение пользователя Q16). Критическими SHALL быть и правки **всех корней навыков** сессии с поддеревом — существующих или нет, независимо от доверия проекту (решение пользователя Q27): корни проекта на уровнях выше рабочей папки до корня git-репозитория (`<уровень>/.codelab/skills/**`, `<уровень>/.agents/skills/**`) и относительные элементы `skills.extra_roots`, разрешённые от `cwd` (`.claude/skills/**`). Эти корни зависят от `cwd` сессии, поэтому они SHALL быть **путями сессии**: рантайм при открытии сессии добавляет их к защищаемым путям политики этой сессии той же функцией списка корней, что даёт их загрузчику навыков; поле хоста `agentConfigPaths` (ниже) действует на весь процесс и их не содержит. Для путей сессии действуют те же правила сравнения, канонизации и `exec`, что для путей от хоста.
 
 Критическими SHALL быть и правки путей конфигурации агента, которые хост передаёт полем `AgentCoreServices.agentConfigPaths: AgentConfigPaths {paths, expansions, caseInsensitive}` (design.md change `add-config-writer-and-reload`, D8; OQ2 (а)):
-- состав — файлы, которые наблюдает `ConfigWatcher`: `$CODELAB_HOME/config.yaml`, файл `--config`/`CODELAB_CONFIG`, `<корень запуска>/.codelab/config.yaml` и `config.local.yaml`; `$CODELAB_HOME/secrets.yaml` — при любом `secrets.backend`, хотя наблюдатель следит за ним только при `file` (R5-1); а также каталоги `$CODELAB_HOME/agents` и `$CODELAB_HOME/prompts` с поддеревом;
+- состав — файлы, которые наблюдает `ConfigWatcher`: `$CODELAB_HOME/config.yaml`, файл `--config`/`CODELAB_CONFIG`, `<корень запуска>/.codelab/config.yaml` и `config.local.yaml`; `$CODELAB_HOME/secrets.yaml` — при любом `secrets.backend`, хотя наблюдатель следит за ним только при `file` (R5-1); а также каталоги `$CODELAB_HOME/agents`, `$CODELAB_HOME/prompts` и `$CODELAB_HOME/skills` с поддеревом; корни навыков `~/.agents/skills` и абсолютные элементы `skills.extra_roots` с поддеревом (design.md change `add-agent-skills`, D9; решения пользователя Q9, Q16, Q27);
 - хост SHALL передавать пути абсолютными и каноническими: `~` раскрыт, символические ссылки раскрыты по самому глубокому существующему предку пути;
 - `expansions` — значения `HOME` и `CODELAB_HOME` окружения хоста для раскрытия в командах `exec`; `caseInsensitive` — признак файловой системы без учёта регистра, его определяет хост;
 - цель `write`/`edit` SHALL сравниваться после канонизации `BoundedEnv` (тот же результат, что для containment), без учёта регистра при `caseInsensitive`;
@@ -163,6 +168,7 @@
 
 Команда `exec` SHALL совпадать с критическим шаблоном `write to agent configuration` по правилу белого списка чтения (R5-4, решение пользователя 2026-11-03):
 - разбор SHALL охватывать каждую простую команду строки: в цепочках (`&&`, `||`, `;`), в конвейерах (`|`), внутри `sh -c`/`bash -c`, после `env` (в том числе `env -C DIR`) и после `cd DIR` — `DIR` становится рабочим каталогом следующих команд цепочки;
+- текст команды `sh -c`, `bash -c`, `dash -c` SHALL определяться по порядку разбора опций оболочки: `-o`, `+o`, `-O`, `+O` забирают следующее слово, в том числе после `-c`; в кластере каждая `o`/`O` забирает по слову (`-co pipefail`, `-oc`, `-ceo x`, `-cO x`); `--rcfile` и `--init-file` — со значением; `--` и `-` завершают опции; неизвестная длинная опция оболочки делает команду неразбираемой — критической (fail closed; design.md change `add-agent-skills`, D17, ревью безопасности 2026-11-13);
 - у простой команды проверяются слова-аргументы и значения опций (`-o FILE`, `-C DIR`, `--output=FILE`, `-d DIR`, `of=FILE`), а также рабочий каталог, заданный `cd`, `env -C` или `-C DIR`. Путь сравнивается после раскрытия `~`, `$HOME`, `${HOME}`, `$CODELAB_HOME`, `${CODELAB_HOME}` (значения — из `expansions`) и разрешения относительно рабочего каталога команды (включая `../`);
 - если хотя бы одно такое значение разрешается в защищаемый путь, путь внутри защищаемого каталога или близкий каталог-предок, команда SHALL быть критической, кроме команд только чтения: `cat`, `less`, `more`, `head`, `tail`, `grep`/`egrep`/`fgrep`, `rg`, `ag`, `ls`, `stat`, `file`, `wc`, `diff`, `cmp`, `sha256sum`/`shasum`/`md5sum`, `jq`/`yq`, `git diff|log|show|status|blame`, `test`/`[`, `realpath`, `readlink`, `dirname`, `basename`, `echo`/`printf`;
 - исключение белого списка SHALL NOT действовать при опциях записи и исполнения — такая команда проверяется как любая команда не из списка: `jq`/`yq` с `-i`, `--in-place*`, `--inplace*`, `-s` или `--split-exp`; `rg`/`ag` с `--pre`, `--pre-glob`, `--search-zip` (`-z`); `less` с `-o`, `-O`, `--log-file`; `file` с `-C`, `--compile`; `git` с глобальными опциями `-c`, `--config-env`, `--exec-path`, `--git-dir`, `--work-tree`; `git diff` с `--output`, `--ext-diff`, `--textconv`;
@@ -280,6 +286,144 @@
 - **WHEN** в режиме `bypass` модель вызывает `exec` с `GIT_PAGER='rm .codelab/config.local.yaml' git log`, `env EDITOR='tee ~/.codelab/config.yaml' git commit`, `export LESSOPEN='| rm ~/.codelab/config.yaml %s'; less a.txt`, `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=x git log`, `GIT_DIR=/tmp/r git status` или `env GIT_EXEC_PATH=/tmp/x git log`; затем — `GIT_PAGER=cat git log`, `PAGER=less git log` и `export EDITOR=vim; git status`
 - **THEN** первые шесть команд совпадают с шаблоном `write to agent configuration` (вложенная команда пишет в защищаемый путь; `GIT_CONFIG_*`, `GIT_DIR`, `GIT_EXEC_PATH` — всегда); последние три — нет
 
+Исключения для навыков (design.md change `add-agent-skills`, D9; решения пользователя Q24, Q25, Q29 и их уточнения Q33–Q38) применяются к каждой простой команде строки отдельно (`cd`, `pushd` и `popd` меняют рабочий каталог последующих команд, но не снимают их критичность). «Внутри каталога навыка» везде проверяется по **каноническому** пути — после разрешения ссылок тем же резолвером путей политики, поэтому `scripts/run -> /bin/cp`, аргумент-ссылка наружу или ссылка на `SKILL.md` исключения не получают. Имя `SKILL.md` сравнивается с базовым именем канонического пути без учёта регистра (на нечувствительной к регистру ФС `skill.md` — тот же файл). Исключения не убирают срабатывание там, где путь записи в корень навыков явно виден в команде; запись, которую разбор не видит (скрипт из файла и другие известные пределы ниже), исключения не создают и не закрывают:
+- **E1 — скрипт навыка** (Q25, уточнено Q34, Q36, Q37). Исполняемый файл SHALL NOT делать команду критической при любом рабочем каталоге, только если: (1) это существующий обычный файл под `<dir>/scripts/` загруженного навыка (имя каталога — по `specification.md`), в пути после `scripts/` нет сегментов, начинающихся с `.`, и сегментов `node_modules`, `site-packages`, `vendor`; не `SKILL.md`; (2) он стоит первым словом команды и это слово содержит `/` (слово без `/` оболочка ищет в `PATH`, а не в рабочем каталоге: `cd <dir> && run.sh` под E1 не подпадает), или он — первый позиционный аргумент интерпретатора, узнанного по **голому базовому имени** из `PATH`: `python`, `python3`, `node`, `tsx`, `bash`, `sh`, `zsh`, `pwsh`, `ruby`, `perl`, `deno run`, `bun run`, `uv run`, `pipx run`; интерпретатор с путём под E1 не подпадает; (3) у интерпретатора перед путём скрипта **нет ни одной опции**, кроме `pwsh -File`/`-f` (Q34: allowlist безопасных опций не заводится; опции кода, модуля и stdin — `-c`, `-e`, `-E`, `-p`, `-n`, `-i`, `-m`, `-M`, `-r`, `-s`, `-`, `--eval`, `--print`, `--require`, `--import`, `--loader`, `--preload`, `-Command`, `-EncodedCommand`, `--with`, `--spec` — частные случаи этого правила); (4) скрипт или интерпретатор стоит **первым словом** простой команды: перед ним нет ни префиксного присваивания (`NAME=… python3 …`), ни лаунчера — любой программы, запускающей следующую за ней команду (`env` в любой форме, `sudo`, `doas`, `time`, `nohup`, `timeout`, `command`, `exec`, `nice`, `ionice`, `stdbuf`, `xargs` и другие); и **все сегменты, исполненные раньше в той же оболочке, а для вложенной строки — и на всех охватывающих уровнях, взяты из разрешённого списка**: `cd`, `pushd`, `popd`, `:` и команды белого списка чтения без опций, задающих переменную (`printf -v` исключён). Любая другая команда раньше скрипта — в том числе другой вызов скрипта навыка (в `python3 <p1> && python3 <p2>` второй вызов критичен, fail closed), присваивание, `export`, `declare`, `read`, `mapfile`, `set`, `trap`, `source`/`.`, `alias`, `hash`, `enable`, определение функции, — а также зарезервированные слова оболочки (`if`, `then`, `elif`, `else`, `fi`, `for`, `select`, `while`, `until`, `do`, `done`, `case`, `esac`, `function`, `{`, `}`, `[[`, `]]`, `!`; `[` и `test` — команды белого списка чтения, они E1 не отключают) и `eval` на том же уровне отключают E1 (решение Q47: разрешённый список вместо перечня запретов, по образцу Q34 — неизвестное отключает; fail closed: переменные окружения, функции, псевдонимы и ловушки меняют исполняемый код). Вложенная строка `-c` получает E1, только если оболочка — `sh`, `bash` или `dash` по голому имени, вызванная с `-c` и, кроме него, лишь с `-e`, `-u`, `-x`, `-o pipefail`, без `-l`, `--login`, `-i`, `--rcfile`, `--init-file` (startup-файлы исполняют неизвестный код); опции проверяются на всём отрезке между именем оболочки и текстом команды, в том числе после `-c` (`bash -c -l "…"`, `bash -c -i "…"`, `sh -c -i "…"` — без E1); `zsh -c`, `env -S` и `eval` E1 не дают. Файл навыка, названный как интерпретатор (`<dir>/scripts/…/tsx`, `<dir>/scripts/bin/node`), подчиняется для своих аргументов тем же правилам (3) и (4): любая его опция перед первым позиционным аргументом, в том числе опции кода, модуля и stdin Q34, отключает E1; файл навыка с именем раннера `deno`, `bun`, `uv`, `pipx` требует подкоманду `run`, и опции до скрипта отключают E1 (Q36, Q47).
+- **E2 — рабочий каталог навыка** (Q24, сужено Q33). Рабочий каталог (`ExecOptions.cwd`, `cd <dir>`, `pushd <dir>`) в каталоге загруженного навыка SHALL NOT делать простую команду критической, **только если** её исполняемый файл — скрипт навыка по E1 или команда из белого списка чтения. Любая другая команда с таким рабочим каталогом — критическая, даже без единого слова-пути: `tar -x`, `unzip -o`, `7z x`, `cpio -i`, `jar x`, `git pull`, `git merge`, `npm install`, `find -delete` и подобные пишут в рабочий каталог неявно. `env -C DIR` и опция `-C DIR` под E2 сознательно не подпадают и проверяются как прежде (безопасная сторона).
+- **E3 — ресурс навыка аргументом его скрипта** (Q29, уточнено Q35, Q38). Слово-аргумент или значение опции SHALL NOT делать критической простую команду, **только если** её исполняемый файл — скрипт навыка по E1 и слово по каноническому пути — существующий обычный файл под `<dir>/assets/` **того же** навыка с расширением не `.md`. Файлы под `references/` и `scripts/`, сам `SKILL.md` любого навыка (по Q30 это доверенные инструкции и исполняемый код), файлы другого навыка (в том числе через `..`), слова с маской или фигурными скобками (`*`, `?`, `[…]`, `{…}` — каждый вариант раскрытия проверяется как отдельное слово) исключения E3 не получают никогда. Дополнительная эвристика — значения опций вывода исключения не получают и для `assets/`: `-o`, `-o<path>`, `-O`, `--output`, `--output=…`, `--out`, `--out=…`, `--outfile`, `--output-file`, `--out-file`, `--outdir`, `--dest`, `--target`, `--write`, `-w`, `of=…`; опцией вывода считается и короткий кластер, кончающийся на `o`, `O` или `w` (`-vo <path>`, `-vo<path>`, `-xw <path>`), и сокращение длинной опции вывода из списка, которое принимает GNU getopt (`--outp`, `--outf=…`, `--wri`) — уточнение ревью итерации 2. Жёсткие ссылки E3 не различает: `FileStat` порта окружения не отдаёт число ссылок (`nlink`), поэтому ограничение `nlink == 1` не вводится — известный предел.
+Пишущие команды (`cp`, `mv`, `rm`, `sed -i`, `ln`, `tee`, `curl -o`, `wget -O`, `install`, `rsync`, `truncate`, `dd of=` и другие команды не из белого списка чтения, не подпадающие под E1), цели перенаправления (`>`, `>>`) в каталог навыка, ещё не существующие пути в каталоге навыка и прочие слова, попадающие в защищаемые пути, проверяются по правилу белого списка чтения, как выше, и остаются критическими. Команда, подпадающая под исключения, идёт по обычной политике уровня `exec`, в том числе с `allow_always`. Остаточные риски: скрипт навыка сам пишет в свой каталог или исполняет переданный ему код (`<dir>/scripts/run.sh "rm …"`) — политика не разбирает содержимое программ; проверка идёт в `beforeToolCall`, а исполнение — позже (TOCTOU: файл или ссылка могут смениться между проверкой и запуском).
+
+#### Scenario: Подложить навык командой
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `mkdir -p ~/.agents/skills/x && cat > ~/.agents/skills/x/SKILL.md`
+- **THEN** вызов — критический шаблон `write to agent configuration`: вопрос пользователю, без `allow_always`
+
+#### Scenario: Правка навыка проекта
+- **WHEN** в режиме `accept-edits` модель вызывает `write` с целью `.agents/skills/pdf/SKILL.md`
+- **THEN** вызов критический: вопрос задаётся, `allow_always` не предлагается
+
+#### Scenario: Скрипт навыка не критичен
+- **WHEN** в режиме `standard` модель вызывает `exec` с `python3 scripts/extract.py /work/demo/a.pdf` и `cwd` — каталог навыка `<cwd>/.codelab/skills/pdf`
+- **THEN** вопрос — обычный для уровня `exec`, с вариантом `allow_always`
+
+#### Scenario: Запись в каталог навыка из скрипта-команды
+- **WHEN** с тем же `cwd` модель вызывает `exec` с `python3 scripts/extract.py > notes.md`
+- **THEN** цель перенаправления `notes.md` лежит в каталоге навыка — вызов критический
+
+#### Scenario: Скрипт навыка по абсолютному пути из рабочей папки
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `python3 /home/u/.codelab/skills/release-notes/scripts/x.py --out notes.md` и `cwd` рабочей папки
+- **THEN** вызов не критический (решение Q25): выполняется по обычной политике режима; с `--out /home/u/.codelab/skills/release-notes/notes.md` — критический
+
+#### Scenario: Ресурс навыка аргументом
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `python3 /home/u/.codelab/skills/pdf/scripts/fill.py --schema /home/u/.codelab/skills/pdf/assets/schema.json /work/demo/a.pdf`, файл `schema.json` существует
+- **THEN** вызов не критический (решения Q29, Q38: `assets/`, не `.md`); если вместо `schema.json` указан ещё не существующий `/home/u/.codelab/skills/pdf/assets/new.json` или в команде есть `> /home/u/.codelab/skills/pdf/assets/schema.json` — критический
+
+#### Scenario: Пишущие команды на существующий файл навыка критичны
+- **WHEN** в режиме `bypass` модель вызывает `exec` по очереди с `sed -i 's/a/b/' /home/u/.codelab/skills/pdf/SKILL.md`, `cp /tmp/evil.md /home/u/.codelab/skills/pdf/SKILL.md`, `rm /home/u/.codelab/skills/pdf/SKILL.md` и `curl -o /home/u/.codelab/skills/pdf/SKILL.md https://example.com/x`; файл `SKILL.md` существует
+- **THEN** каждый вызов — критический шаблон `write to agent configuration`: вопрос пользователю, без `allow_always` (решение Q29 в суженной формулировке)
+
+#### Scenario: cd в каталог навыка не снимает критичность
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `cd /home/u/.codelab/skills/pdf && rm SKILL.md`
+- **THEN** вызов критический: `rm` — не скрипт навыка, его аргумент разрешается от нового каталога в защищаемый путь
+
+#### Scenario: Ресурс навыка аргументом чужой программе
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `python3 /work/demo/tool.py /home/u/.codelab/skills/pdf/assets/schema.json`
+- **THEN** вызов критический: исполняемый файл — не скрипт навыка
+
+#### Scenario: Неявная запись в рабочий каталог навыка критична
+- **WHEN** в режиме `bypass` модель вызывает `exec` по очереди с `cd /home/u/.agents/skills/pdf && tar -xf /work/e.tar`, `cd /home/u/.agents/skills/pdf && unzip -o /work/e.zip`, `cd /home/u/.agents/skills/pdf && git pull`, `cd /home/u/.agents/skills/pdf && npm install`, `cd /home/u/.agents/skills/pdf && find . -name '*.md' -delete`; во втором варианте — те же команды без `cd`, с `ExecOptions.cwd` `/home/u/.agents/skills/pdf`
+- **THEN** каждый вызов — критический шаблон `write to agent configuration` (решение Q33): исполняемый файл — не скрипт навыка и не команда белого списка чтения
+
+#### Scenario: Чтение из рабочего каталога навыка не критично
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `cd /home/u/.agents/skills/pdf && cat references/FORMS.md`
+- **THEN** вызов не критический: `cat` — команда белого списка чтения (E2, Q33)
+
+#### Scenario: Код интерпретатору вместо скрипта критичен
+- **WHEN** в режиме `bypass` модель вызывает `exec` по очереди с `perl -pi -e 's/a/b/' /home/u/.agents/skills/pdf/SKILL.md`, `python3 -c "open('/home/u/.agents/skills/pdf/SKILL.md','w')" /home/u/.agents/skills/pdf/scripts/x.py`, `node -e "…" /home/u/.agents/skills/pdf/scripts/x.js`, `bash -c '…' /home/u/.agents/skills/pdf/scripts/x.sh`, `python3 - /home/u/.agents/skills/pdf/scripts/x.py <<EOF … EOF` и `python3 -m zipfile -c /home/u/.agents/skills/pdf/SKILL.md /tmp/a`
+- **THEN** каждый вызов критический (решение Q34): опция кода, модуля или stdin отключает E1
+
+#### Scenario: Скрипт-ссылка наружу и интерпретатор с путём
+- **WHEN** `/home/u/.agents/skills/pdf/scripts/run` — ссылка на `/bin/cp`, и модель вызывает `exec` с `/home/u/.agents/skills/pdf/scripts/run /tmp/x /home/u/.agents/skills/pdf/assets/a.json`; во втором варианте — `/tmp/python3 /home/u/.agents/skills/pdf/scripts/x.py /home/u/.agents/skills/pdf/assets/a.json`
+- **THEN** оба вызова критические: канонический путь исполняемого файла вне каталога навыка; интерпретатор с путём не узнаётся (E1, Q34)
+
+#### Scenario: Вывод скрипта навыка в SKILL.md критичен
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `python3 /home/u/.agents/skills/pdf/scripts/fill.py --output /home/u/.agents/skills/pdf/SKILL.md`, во втором варианте — `python3 /home/u/.agents/skills/pdf/scripts/fill.py /home/u/.agents/skills/pdf/SKILL.md`, в третьем — `python3 /home/u/.agents/skills/pdf/scripts/fill.py -o/home/u/.agents/skills/pdf/assets/schema.json`
+- **THEN** все три вызова критические (решение Q35): `SKILL.md` и значения опций вывода под E3 не подпадают
+
+#### Scenario: Ресурс другого навыка, через .. и чужой SKILL.md
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `python3 /home/u/.agents/skills/pdf/scripts/fill.py /home/u/.agents/skills/notes/assets/a.json`, во втором варианте — `python3 /home/u/.agents/skills/pdf/scripts/fill.py /home/u/.agents/skills/pdf/assets/../../notes/assets/a.json`, в третьем — `python3 /home/u/.agents/skills/pdf/scripts/fill.py /home/u/.agents/skills/notes/SKILL.md`
+- **THEN** все три вызова критические (E3: только `assets/` того же навыка по каноническому пути; Q38)
+
+#### Scenario: Ресурсы вне assets и опции вывода
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `python3 /home/u/.agents/skills/pdf/scripts/fill.py /home/u/.agents/skills/pdf/references/a.md`, во втором варианте — `python3 /home/u/.agents/skills/pdf/scripts/fill.py --out=/home/u/.agents/skills/pdf/assets/a.json`, в третьем — `python3 /home/u/.agents/skills/pdf/scripts/fill.py /home/u/.agents/skills/pdf/assets/*.json`
+- **THEN** все три вызова критические (Q38, Q35: `references/` не получает E3; `--out=…` — опция вывода; маска — без E3)
+
+#### Scenario: Ссылка на SKILL.md и регистр имени
+- **WHEN** `/home/u/.agents/skills/pdf/assets/x.json` — ссылка на `../SKILL.md`, и модель вызывает `exec` с `python3 /home/u/.agents/skills/pdf/scripts/fill.py /home/u/.agents/skills/pdf/assets/x.json`; во втором варианте на нечувствительной к регистру ФС — `python3 /home/u/.agents/skills/pdf/scripts/fill.py /home/u/.agents/skills/pdf/skill.md`
+- **THEN** оба вызова критические: сравнение идёт по каноническому пути и по базовому имени без учёта регистра
+
+#### Scenario: Первое слово без косой черты
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `cd /home/u/.agents/skills/pdf/scripts && run.sh /home/u/.agents/skills/pdf/assets/a.json`, во втором варианте — `/home/u/.agents/skills/pdf/scripts/run.sh /home/u/.agents/skills/pdf/assets/a.json`
+- **THEN** первый вызов критический (слово без `/` ищется в `PATH`, E1 не действует, E2 — тоже), второй — нет
+
+#### Scenario: Переменные окружения перед интерпретатором
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `NODE_OPTIONS=--require=/tmp/x.js node /home/u/.agents/skills/pdf/scripts/x.js /home/u/.agents/skills/pdf/assets/a.json`, во втором варианте — `export PYTHONPATH=/tmp; python3 /home/u/.agents/skills/pdf/scripts/x.py /home/u/.agents/skills/pdf/assets/a.json`, в третьем — `env -S 'python3 -c …' /home/u/.agents/skills/pdf/scripts/x.py`
+- **THEN** все вызовы критические (Q37, fail closed)
+
+#### Scenario: Лаунчер перед скриптом навыка
+- **WHEN** в режиме `bypass` модель вызывает `exec` по очереди с `time python3 /home/u/.agents/skills/pdf/scripts/x.py /home/u/.agents/skills/pdf/assets/a.json`, `nohup python3 /home/u/.agents/skills/pdf/scripts/x.py /home/u/.agents/skills/pdf/assets/a.json`, `sudo /home/u/.agents/skills/pdf/scripts/run.sh /home/u/.agents/skills/pdf/assets/a.json`, `timeout 5 python3 /home/u/.agents/skills/pdf/scripts/x.py /home/u/.agents/skills/pdf/assets/a.json` и `echo /home/u/.agents/skills/pdf/assets/a.json | xargs python3 /home/u/.agents/skills/pdf/scripts/x.py`
+- **THEN** каждый вызов — критический шаблон `write to agent configuration`: лаунчер перед скриптом отключает E1 (fail closed, Q37)
+
+#### Scenario: Окружение и код оболочки перед скриптом навыка
+- **WHEN** в режиме `bypass` модель вызывает `exec` по очереди с `X=1; python3 <p>`, `export X; python3 <p>`, `set -a; python3 <p>`, `set -o allexport; python3 <p>`, `. /tmp/env.sh; python3 <p>`, `source /tmp/env.sh; python3 <p>`, `alias python3=/tmp/x; python3 <p>`, `hash -p /tmp/x python3; python3 <p>`, `enable -n echo; python3 <p>`, `python3() { :; }; python3 <p>` и `X=1 sh -c 'python3 <p>'`, где `<p>` — `/home/u/.agents/skills/pdf/scripts/x.py /home/u/.agents/skills/pdf/assets/a.json`
+- **THEN** каждый вызов критический (Q37, Q47): раньше скрипта — сегменты вне разрешённого списка, а для вложенной строки — и во внешней, что отключает E1
+
+#### Scenario: Только разрешённые сегменты перед скриптом навыка
+- **WHEN** в режиме `bypass` модель вызывает `exec` по очереди, где `<p>` — `/home/u/.agents/skills/pdf/scripts/x.py /home/u/.agents/skills/pdf/assets/a.json`: (1) управляющие конструкции — `for i in 1; do export X=1; done; python3 <p>` и `if true; then python3 <p>; fi`; (2) `eval` — `eval "export X=1"; python3 <p>` и `eval python3 <p>`; (3) переменные командами — `read PATH < /tmp/p; python3 <p>`, `printf -v PATH /tmp; python3 <p>` и `mapfile -t A < /tmp/a; python3 <p>`; (4) оболочки со startup-файлами — `bash -lc "python3 <p>"`, `bash --rcfile /tmp/rc -c "python3 <p>"`, `bash -i -c "python3 <p>"` и `zsh -c "python3 <p>"`; (5) прочие команды раньше скрипта — `trap 'rm -f /tmp/x' DEBUG; python3 <p>` и `mkdir -p /tmp/x; python3 <p>`
+- **THEN** каждый вызов — критический шаблон `write to agent configuration` (решение Q47)
+
+#### Scenario: Второй скрипт, двойные скобки и опции после -c
+- **WHEN** в режиме `bypass` модель вызывает `exec` по очереди с `python3 /home/u/.agents/skills/pdf/scripts/a.py && python3 <p>`, `[[ -f /tmp/x ]] && python3 <p>`, `bash -c -l "python3 <p>"`, `bash -c -i "python3 <p>"` и `sh -c -i "python3 <p>"`; затем — `[ -f /tmp/x ] && python3 <p>` и `test -f /tmp/x && python3 <p>`
+- **THEN** первые пять вызовов критические (решение Q47): скрипт навыка в разрешённый список не входит, `[[` — зарезервированное слово, опции оболочки после `-c` проверяются так же; последние два не критичны — `[` и `test` из белого списка чтения
+
+#### Scenario: Разрешённые сегменты и простая вложенная оболочка
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `sh -e -c "python3 <p>"`, во втором варианте — `cd /work/demo && cat notes.txt && python3 <p>`, в третьем — `bash -o pipefail -c "cd /work/demo; python3 <p>"`
+- **THEN** ни один вызов не критичен (решение Q47): `sh`/`bash` вызваны только с `-c` и допустимыми опциями, сегменты раньше скрипта — из разрешённого списка
+
+#### Scenario: Раннер с именем файла навыка
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `/home/u/.agents/skills/pdf/scripts/bin/deno /home/u/.agents/skills/pdf/scripts/x.ts /home/u/.agents/skills/pdf/assets/a.json`, во втором варианте — `/home/u/.agents/skills/pdf/scripts/bin/uv --with x run /home/u/.agents/skills/pdf/scripts/x.py /home/u/.agents/skills/pdf/assets/a.json`
+- **THEN** оба вызова критические (Q36, Q47): раннеру нужна подкоманда `run`, опции до скрипта отключают E1
+
+#### Scenario: Скрипт навыка с именем интерпретатора
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `/home/u/.agents/skills/pdf/scripts/tsx --import /tmp/x.js /home/u/.agents/skills/pdf/assets/a.json`
+- **THEN** вызов критический (Q36): опция перед первым позиционным аргументом отключает E1 и у файла навыка, названного как интерпретатор
+
+#### Scenario: Кластер и сокращения опций вывода
+- **WHEN** в режиме `bypass` модель вызывает `exec` по очереди с `python3 /home/u/.agents/skills/pdf/scripts/fill.py -vo /home/u/.agents/skills/pdf/assets/a.json`, `python3 /home/u/.agents/skills/pdf/scripts/fill.py --outp=/home/u/.agents/skills/pdf/assets/a.json` и `python3 /home/u/.agents/skills/pdf/scripts/fill.py --wri /home/u/.agents/skills/pdf/assets/a.json`
+- **THEN** каждый вызов критический: значение опции вывода исключения E3 не получает (Q35, Q38, уточнены ревью итерации 2)
+
+#### Scenario: Исполняемый файл вне scripts/
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `/home/u/.agents/skills/pdf/node_modules/.bin/shx cp /tmp/evil /home/u/.agents/skills/pdf/references/a.md`, во втором варианте — `/home/u/.agents/skills/pdf/.venv/bin/pip install x`, в третьем — `/home/u/.agents/skills/pdf/scripts/node_modules/.bin/prettier --write /home/u/.agents/skills/pdf/references/a.md`
+- **THEN** все вызовы критические (Q36)
+
+#### Scenario: pwsh -File
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `pwsh -File /home/u/.agents/skills/pdf/scripts/fill.ps1 /home/u/.agents/skills/pdf/assets/a.json`, во втором варианте — `pwsh -NoProfile -File /home/u/.agents/skills/pdf/scripts/fill.ps1`
+- **THEN** первый вызов не критический (единственная допустимая опция — `-File`), второй критический (любая другая опция отключает E1)
+
+#### Scenario: pushd в каталог навыка
+- **WHEN** в режиме `bypass` модель вызывает `exec` с `pushd /home/u/.agents/skills/pdf && npm install && popd`
+- **THEN** вызов критический (E2, Q33)
+
+#### Scenario: Навыки в autopilot
+- **WHEN** хост включил `autopilot`, и модель вызывает `exec` с `cd /home/u/.agents/skills/pdf && tar -xf /work/e.tar`; во втором варианте — `python3 /home/u/.agents/skills/pdf/scripts/fill.py /home/u/.agents/skills/pdf/assets/a.json`
+- **THEN** первый вызов отклонён без вопроса с текстом `critical command blocked in autopilot: write to agent configuration` (критический шаблон `exec`, PERM-9; текст `Editing agent configuration requires a human` — у `write` и `edit`), второй выполнен по политике режима (E1, E3)
+
+#### Scenario: Относительный корень extra_roots защищён в сессии
+- **WHEN** глобальный конфиг задаёт `skills.extra_roots: [".claude/skills"]`, сессия открыта в `/work/demo`, а модель в режиме `accept-edits` вызывает `write` с целью `.claude/skills/lint/SKILL.md`
+- **THEN** вызов критический (решение Q27); в сессии с другим `cwd` путь `/work/demo/.claude/skills` не защищается этим правилом
+
+#### Scenario: Опции оболочки перед текстом -c
+- **WHEN** в режиме `bypass` модель вызывает `exec` по очереди с `bash -O extglob -c 'rm -rf .codelab'`, `bash -co pipefail 'rm -rf .codelab'` и `bash --unknown-opt -c 'ls'`; затем — `bash -o pipefail -c "python3 /home/u/.agents/skills/pdf/scripts/x.py /home/u/.agents/skills/pdf/assets/a.json"`
+- **THEN** первые два вызова совпадают с критическим шаблоном `write to agent configuration` (значение опции не принимается за текст команды), третий критичен как неразбираемая команда; последний не критичен — текст команды найден верно, и действует исключение E1
+
 ### Requirement: MCP-вызов только после решения политики
 Вызов MCP-инструмента SHALL доходить до MCP-сервера (`tools/call`) только после того, как `PermissionPolicy` первым звеном `beforeToolCall` его разрешила (P-01, TOOL-1, PERM-1).
 
@@ -312,4 +456,27 @@
 #### Scenario: Смена режима не снимает запрет
 - **WHEN** в той же сессии клиент переключает режим на `bypass`, а модель вызывает `write`
 - **THEN** вызов отклонён без запроса
+
+### Requirement: Разрешения потомка через gate корневой сессии
+Запрос разрешения потомка любой глубины SHALL уходить в gate корневой сессии через `SubagentPermissionGate` (§17.3.3, SUB-3):
+- `toolCallId` — цепочка id вызовов через `/` от вызова `agent` корневой сессии до вызова потомка; уникальна в корневой сессии (PERM-4);
+- `title` — `[<agent>: <description>] <title вызова>` того потомка, чей вызов;
+- `rawInput`, `locations`, diff, `reason`, `allowAlwaysOffered`, `kind`, `tier` и пометка критической команды — без изменений (PERM-6, PERM-9);
+- запрос несёт сведения о потомке (`id`, `type`, `description`, `depth`, `path`, `parentToolCallId` корня) для `_meta.codelab.subagent`.
+
+Запросы потомков одного дерева SHALL уходить пользователю по одному в порядке поступления; запрос самой корневой сессии очереди не ждёт. Пока запрос ждёт, хэндл потомка в `waiting` с `waitingFor: approval`. Отмена токена потомка SHALL снимать его запрос с исходом `cancelled` (PERM-7).
+
+Эффективный режим потомка SHALL сужаться по всей цепочке предков при каждом решении (SUB-2). `PolicyRules` у всего дерева общие. Без gate у корневой сессии запрос потомка SHALL становиться отказом `no approval interface is available` (PERM-5).
+
+#### Scenario: Два ребёнка спрашивают одновременно
+- **WHEN** два ребёнка одного пакета одновременно вызывают `exec`, требующий вопроса
+- **THEN** fake gate корня получает второй запрос только после ответа на первый; `toolCallId` — `call_3/call_1` и `call_4/call_1` (`subagent_permission_prefix_test.dart`)
+
+#### Scenario: Запрет всегда нельзя обойти через ребёнка
+- **WHEN** пользователь выбрал `rejectAlways` для `exec rm -rf build` в корневой сессии, затем ребёнок вызывает ту же команду
+- **THEN** вызов ребёнка отклонён без запроса к gate
+
+#### Scenario: Вопрос внука
+- **WHEN** внук глубины 2 вызывает `exec`, требующий вопроса
+- **THEN** gate корня получает запрос с `toolCallId` из трёх сегментов, title с префиксом типа и заголовка внука и `depth: 2`
 
