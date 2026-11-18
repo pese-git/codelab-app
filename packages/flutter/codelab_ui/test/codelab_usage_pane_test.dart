@@ -109,10 +109,11 @@ CodeLabUsagePane _full({
   bool showRebuild = true,
   bool showExport = true,
   String? statusHint,
+  String statusLine = 'Ledger: up to date · 12 records',
 }) => CodeLabUsagePane(
   title: 'This session',
   cards: _cards,
-  statusLine: 'Ledger: up to date · 12 records',
+  statusLine: statusLine,
   statusHint: statusHint,
   turns: turns,
   models: models,
@@ -283,6 +284,26 @@ void main() {
 
       expect(find.byKey(const ValueKey('usage-ledger-status')), findsOneWidget);
       expect(statusTooltips(tester), isEmpty);
+    });
+
+    testWidgets('строка состояния с управляющим и bidi символом экранируется', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _pane(_full(statusLine: 'Ledger: a\u001bb \u202Eevil')),
+      );
+
+      final text = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const ValueKey('usage-ledger-status')),
+          matching: find.byType(Text),
+        ),
+      );
+      final shown = text.data ?? text.textSpan!.toPlainText();
+      expect(shown, isNot(contains('\u001b')));
+      expect(shown, isNot(contains('\u202E')));
+      expect(shown, contains(r'\u001b'));
+      expect(shown, contains(r'\u202e'));
     });
 
     testWidgets('подсказка проходит escapeForDisplay: причина — строка агента, '

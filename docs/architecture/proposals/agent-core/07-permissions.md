@@ -181,10 +181,12 @@ decide(tool, args, id):
 ask(reason, allowAlwaysOffered = true):
   allowAlwaysOffered &= tool.offersAllowAlways(args)                     # после MVP: lsp rename (§17.8.9)
   if gate == null: return Denied('no approval interface is available')
-  t0 = clock.now()
-  d = await gate.request(PermissionRequest(kind: tool.kindOf(args), tier: tool.tierOf(args),
-        title, locations, diffs из ToolPrepared.presentation ?? present(args, ctx), allowAlwaysOffered, ...), cancel)
-  ctx.services.approvalWait.add(clock.now() - t0)   # исключается из maxDuration хода (§5.2)
+  ctx.services.approvalWait.begin(clock.now())       # объединение ожиданий исключается из maxDuration хода
+  try:                                               # (§5.2; change fix-usage-pane-live-cards, D6)
+    d = await gate.request(PermissionRequest(kind: tool.kindOf(args), tier: tool.tierOf(args),
+          title, locations, diffs из ToolPrepared.presentation ?? present(args, ctx), allowAlwaysOffered, ...), cancel)
+  finally:
+    ctx.services.approvalWait.end(clock.now())       # закрывается и при отмене
   switch d:
     allowOnce   → Allowed('user')
     allowAlways → allowAlways.add(key) (если allowAlwaysOffered, иначе как allowOnce); Allowed('user')

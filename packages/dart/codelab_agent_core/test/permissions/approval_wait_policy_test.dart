@@ -59,4 +59,27 @@ void main() {
       const Duration(seconds: 5),
     );
   });
+
+  test('исключение шлюза (не отмена) закрывает ожидание в finally', () async {
+    final p0 = await PolicyHarness.create();
+    final clock = p0.h.clock;
+    final gate = FakeGate(
+      (_) => throw StateError('gate failed'),
+      clock,
+      const Duration(seconds: 7),
+    );
+    final p = await PolicyHarness.wrap(p0.h, gate: gate);
+
+    final running = p.run('w', const {});
+    await clock.elapse(const Duration(seconds: 7));
+    final outcome = await running;
+    await clock.elapse(const Duration(seconds: 100));
+
+    // Ошибка шлюза не глотается: исполнитель отдаёт failed.
+    expect(outcome.outcome, ToolOutcome.failed);
+    expect(
+      p.h.executor.services.approvalWait.totalAt(clock.now()),
+      const Duration(seconds: 7),
+    );
+  });
 }

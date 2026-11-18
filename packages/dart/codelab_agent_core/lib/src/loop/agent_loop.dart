@@ -332,15 +332,15 @@ final class _Turn {
   /// входит в бюджет (SUB-11, D36 Т8); стоимость `null`, пока у модели нет цен.
   BudgetProgress _progress(int steps) {
     final total = _usage + _childUsage;
+    final now = _config.clock.now();
     final waited =
-        (_config.approvalWait?.totalAt(_config.clock.now()) ?? Duration.zero) -
-        _waitAtStart;
+        (_config.approvalWait?.totalAt(now) ?? Duration.zero) - _waitAtStart;
     return BudgetProgress(
       limits: _config.budget,
       steps: steps,
       tokens: total.input + total.output,
       cost: _config.model.cost == null ? null : total.cost.total,
-      active: _config.clock.now().difference(_startedAt) - waited,
+      active: now.difference(_startedAt) - waited,
     );
   }
 

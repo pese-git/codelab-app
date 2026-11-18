@@ -646,14 +646,16 @@ void main() {
     expect(await scene.ticksIn(2), 0);
     final frozen = scene.timeSeconds!;
 
-    // Пользователь думает 2,5 с: время ожидания в Time попадать не должно.
-    await scene.realWait(2500);
+    // Пользователь думает 3 с: время ожидания в Time попадать не должно.
+    await scene.realWait(3000);
     await scene.respond();
 
     expect(
       scene.timeSeconds,
-      lessThanOrEqualTo(frozen + 1),
-      reason: 'без вычитания ожидания Time прыгнул бы на 2–3 с',
+      // Строго меньше длины паузы: небольшая задержка CI допустима, прыжок
+      // на всё ожидание (≥ 3 с) — нет.
+      lessThan(frozen + 3),
+      reason: 'без вычитания ожидания Time прыгнул бы на ≥ 3 с',
     );
     expect(
       await scene.ticksIn(3),

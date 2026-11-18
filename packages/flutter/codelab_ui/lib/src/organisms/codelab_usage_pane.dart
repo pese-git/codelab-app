@@ -142,10 +142,10 @@ class CodeLabUsageBudget {
 /// (`codelab_ui/AGENTS.md` §2). Тон карточек, тексты (`~$2.26`, `—`,
 /// `Couldn't load usage history.`) и подписи приходят готовыми.
 /// Как использовать: слот `ToolPane.usage` дока; app (`WorkbenchUsagePane`)
-/// передаёт карточки, строки и колбэки. Высота панели — по содержимому: прокрутку
-/// даёт вызывающий. Ключи: `usage-rebuild`, `usage-export`,
-/// `usage-ledger-status` (с необязательной подсказкой `statusHint`), `usage-card-<id>`, `usage-turn-<id>`,
-/// `usage-step-<id>`, `usage-model-<n>`, `usage-retry`, `usage-note`,
+/// передаёт карточки, строки и колбэки. Высота панели — по содержимому:
+/// прокрутку даёт вызывающий. Ключи: `usage-rebuild`, `usage-export`,
+/// `usage-ledger-status` (с необязательной подсказкой `statusHint`),
+/// `usage-card-<id>`, `usage-turn-<id>`, `usage-step-<id>`, `usage-model-<n>`, `usage-retry`, `usage-note`,
 /// `usage-progress`, блок бюджета — `usage-budget`, `usage-budget-title`,
 /// `usage-budget-<id>`, `usage-budget-note`.
 class CodeLabUsagePane extends StatefulWidget {

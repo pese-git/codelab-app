@@ -707,6 +707,10 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   /// записи, и подписи шагов (`UsageStepLabeler`) должны обновиться.
   List<ToolCallItem> _usageCalls = const [];
 
+  // Не `_usageWaits == view.approvalWaits`: freezed оборачивает список в
+  // `EqualUnmodifiableListView`, чей `==` сравнивает исходные списки по
+  // identity, а `const []` по умолчанию — обычный список. Нужен поэлементный
+  // обход.
   bool _sameUsageWaits(List<ApprovalWaitView> waits) {
     if (identical(_usageWaits, waits)) return true;
     if (_usageWaits.length != waits.length) return false;
