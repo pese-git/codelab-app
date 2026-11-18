@@ -20,11 +20,12 @@ void main() {
       addTearDown(binding.scope.dispose);
 
       final buffer = binding.scope.resolve<LogBuffer>();
-      // При сборке scope пишется только запись о бэкенде хранилища секретов
+      // При сборке scope пишутся запись о языке интерфейса (change
+      // `add-desktop-localization`, D13) и о бэкенде хранилища секретов
       // (change `add-provider-setup-ui`, D18); событий соединения ещё нет.
       expect(
         [for (final entry in buffer.entries.value) entry['event']],
-        ['secrets.client.backend'],
+        ['app.locale_resolved', 'secrets.client.backend'],
       );
 
       binding.transport.emitDiagnostic(

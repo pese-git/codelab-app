@@ -80,10 +80,12 @@ final class AppLanguageCubit extends Cubit<AppLanguageState>
     required Locale locale,
     List<Locale> Function()? systemLocales,
     Logger? logger,
+    Logger? appLogger,
   }) : _preferences = preferences,
        _systemLocales =
            systemLocales ?? (() => PlatformDispatcher.instance.locales),
        _logger = logger,
+       _appLogger = appLogger ?? logger,
        super(
          AppLanguageState(
            preference: preference,
@@ -95,6 +97,10 @@ final class AppLanguageCubit extends Cubit<AppLanguageState>
   final AppLanguagePreferences _preferences;
   final List<Locale> Function() _systemLocales;
   final Logger? _logger;
+
+  /// Логгер компонента `app` для `app.locale_applied` (D13); без него события
+  /// идут в [_logger].
+  final Logger? _appLogger;
 
   /// Подписчики [changes]; считаются для события `app.locale_applied`.
   final _listeners = <MultiStreamController<AppLocalizations>>[];
@@ -146,7 +152,7 @@ final class AppLanguageCubit extends Cubit<AppLanguageState>
       for (final controller in List.of(_listeners)) {
         controller.add(state.strings);
       }
-      _logger?.debug(
+      _appLogger?.debug(
         'app.locale_applied',
         context: {
           'locale': locale.toLanguageTag(),

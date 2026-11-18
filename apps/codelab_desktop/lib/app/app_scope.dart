@@ -104,16 +104,21 @@ import 'navigation/settings_page_store.dart';
 import 'connection_environment.dart';
 import 'secret_migration_offer.dart';
 
-import 'language/app_language_cubit.dart' show AppLanguageState;
+import 'language/app_language_cubit.dart'
+    show AppLanguageCubit, AppLanguageState, AppStrings;
+import '../core/platform/app_language_preferences.dart';
+import '../l10n/app_localizations.dart' show lookupAppLocalizations;
 
 part 'app_scope.module.cherrypick.g.dart';
 
 typedef CodeLabTransportFactory = AcpTransport Function();
 
 Scope createCodeLabRootScope({
-  // ЗАГЛУШКА красных тестов задачи 1.5: начальное состояние языка (шов D2,
-  // `add-desktop-localization`); реализация — задача 1.6.
+  // Начальное состояние языка (шов D2, `add-desktop-localization`): `main`
+  // читает предпочтение до `runApp`, поэтому первый кадр сразу на нужном
+  // языке. Без шва — `en` (тесты и хосты без предпочтения).
   AppLanguageState? language,
+  AppLanguagePreferences? languagePreferences,
   CodeLabTransportFactory? transportFactory,
   CodeLabStdioTransportFactory? stdioTransportFactory,
   CodeLabWebSocketTransportFactory? webSocketTransportFactory,
@@ -161,6 +166,10 @@ Scope createCodeLabRootScope({
         closeTimeout: embeddedCloseTimeout,
         environment: connectionEnvironment.variables,
         providerSetupProbe: providerSetupProbe,
+      ),
+      CodeLabLanguageModule(
+        language: language,
+        preferences: languagePreferences,
       ),
       CodeLabPlatformModule(
         directoryExists: directoryExists ?? ioDirectoryExists,
@@ -439,6 +448,57 @@ final class CodeLabLoggingLifecycle implements Disposable {
   @override
   Future<void> dispose() =>
       Future.wait([flushed(), if (httpOutput != null) httpOutput!.close()]);
+}
+
+/// Регистрирует единственного владельца языка интерфейса.
+///
+/// Почему отдельный модуль: язык — не часть платформы и не части рабочего
+/// места; у него один владелец на весь процесс (`state-management.md` §63а,
+/// `add-desktop-localization`, D2).
+///
+/// Для чего: singleton [AppLanguageCubit] с начальным состоянием из шва и порт
+/// [AppStrings] для Cubit-ов с текстом. Закрывает Cubit
+/// `CodeLabRootLifecycle.dispose` вместе со scope.
+///
+/// Как использовать: `createCodeLabRootScope(language:, languagePreferences:)`;
+/// тесты подставляют язык `CodeLabTestBinding(locale:)`.
+final class CodeLabLanguageModule extends Module {
+  CodeLabLanguageModule({AppLanguageState? language, this.preferences})
+    : language = language ?? _defaultLanguage();
+
+  final AppLanguageState language;
+  final AppLanguagePreferences? preferences;
+
+  static AppLanguageState _defaultLanguage() => AppLanguageState(
+    preference: AppLanguagePreference.en,
+    locale: const Locale('en'),
+    strings: lookupAppLocalizations(const Locale('en')),
+  );
+
+  @override
+  void builder(Scope currentScope) {
+    final appLogger = codeLabAppLogger();
+    final cubit = AppLanguageCubit(
+      preferences:
+          preferences ??
+          SharedPreferencesAppLanguagePreferences(logger: appLogger),
+      preference: language.preference,
+      locale: language.locale,
+      logger: _settingsLogger(),
+      appLogger: appLogger,
+    );
+    // Один раз за запуск (D13): язык текста в событие не попадает, только
+    // выбор и применённая локаль.
+    appLogger.info(
+      'app.locale_resolved',
+      context: {
+        'preference': language.preference.name,
+        'locale': language.locale.toLanguageTag(),
+      },
+    );
+    bind<AppLanguageCubit>().toInstance(cubit);
+    bind<AppStrings>().toInstance(cubit);
+  }
 }
 
 final class CodeLabPlatformModule extends Module {
@@ -993,7 +1053,7 @@ Logger _workbenchLogger() => StructuredLogLogger(
 /// Логгер событий жизненного цикла приложения (`app.exit_*`,
 /// `app.shutdown_step_failed`): категория `application`, компонент `app`
 /// (`add-client-process-shutdown-on-exit`, D6).
-Logger _appLogger() => StructuredLogLogger(
+Logger codeLabAppLogger() => StructuredLogLogger(
   'codelab_desktop.app',
 ).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'app'});
 
@@ -1047,6 +1107,7 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     SecretMigrationOffer secretMigrationOffer,
     NavigationCubit navigationCubit,
     TerminalTabsCubit terminalTabsCubit,
+    AppLanguageCubit languageCubit,
   ) => CodeLabRootLifecycle(
     application: application,
     transport: transport,
@@ -1058,6 +1119,7 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     secretMigrationOffer: secretMigrationOffer,
     navigationCubit: navigationCubit,
     terminalTabsCubit: terminalTabsCubit,
+    languageCubit: languageCubit,
   );
 }
 
@@ -1104,8 +1166,9 @@ final class CodeLabRootLifecycle implements Disposable {
     required SecretMigrationOffer secretMigrationOffer,
     required NavigationCubit navigationCubit,
     required TerminalTabsCubit terminalTabsCubit,
+    AppLanguageCubit? languageCubit,
     Logger? logger,
-  }) : _logger = logger ?? _appLogger(),
+  }) : _logger = logger ?? codeLabAppLogger(),
        _application = application,
        _transport = transport,
        _workspace = workspace,
@@ -1115,7 +1178,8 @@ final class CodeLabRootLifecycle implements Disposable {
        _secretMigrationCubit = secretMigrationCubit,
        _secretMigrationOffer = secretMigrationOffer,
        _navigationCubit = navigationCubit,
-       _terminalTabsCubit = terminalTabsCubit;
+       _terminalTabsCubit = terminalTabsCubit,
+       _languageCubit = languageCubit;
 
   final AcpClientApplication _application;
   final AcpTransport _transport;
@@ -1149,6 +1213,10 @@ final class CodeLabRootLifecycle implements Disposable {
   /// (D4, «Выход из app»), затем Cubit закрывается. Порядка относительно
   /// рабочего пространства нет (`add-client-process-shutdown-on-exit`, D2).
   final TerminalTabsCubit _terminalTabsCubit;
+
+  /// Владелец языка интерфейса (D2): закрывается вместе со scope, после чего
+  /// запись выбора не применяется.
+  final AppLanguageCubit? _languageCubit;
 
   /// Логгер событий `app.*` (D6); по умолчанию — `codelab_desktop.app`, как у
   /// обработчика выхода. Шов тестов.
@@ -1212,6 +1280,7 @@ final class CodeLabRootLifecycle implements Disposable {
       await _navigationCubit.close();
       await _secretMigrationCubit.close();
       await _shellCubit.close();
+      await _languageCubit?.close();
     });
     await _step('workspace', _workspace.dispose);
     await Future.wait([_closeEmbedded(), _closeAcp()]);
@@ -1276,6 +1345,7 @@ final class CodeLabDependencies {
     required this.secretMigrationCubit,
     required this.navigationCubit,
     required this.terminalTabsCubit,
+    required this.languageCubit,
     required this.settingsPages,
     required this.createConnectionSettingsCubit,
     required this.createAddProfileCubit,
@@ -1299,6 +1369,9 @@ final class CodeLabDependencies {
 
   /// Вкладки терминала пользователя (`add-integrated-terminal`, D3).
   final TerminalTabsCubit terminalTabsCubit;
+
+  /// Единственный владелец языка интерфейса (D2).
+  final AppLanguageCubit languageCubit;
 
   /// Страницы настроек, видимые в этой сборке.
   final SettingsPages settingsPages;
@@ -1373,10 +1446,14 @@ class CodeLabBootstrap extends StatefulWidget {
     this.logDirectoryPath,
     this.profileSecrets,
     this.profileSecretsOpener,
+    this.language,
     super.key,
   });
 
   final Widget child;
+
+  /// Начальное состояние языка из `main` (D2); без него — `en`.
+  final AppLanguageState? language;
   final Scope? scope;
 
   /// Хранилище секретов, открытое в `main` (`openProfileSecrets`); без него
@@ -1404,6 +1481,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
         logDirectoryPath: widget.logDirectoryPath,
         profileSecrets: widget.profileSecrets,
         profileSecretsOpener: widget.profileSecretsOpener,
+        language: widget.language,
       );
   late final CodeLabDependencies _dependencies = CodeLabDependencies(
     application: _scope.resolve<AcpClientApplication>(),
@@ -1412,6 +1490,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     secretMigrationCubit: _scope.resolve<SecretMigrationCubit>(),
     navigationCubit: _scope.resolve<NavigationCubit>(),
     terminalTabsCubit: _scope.resolve<TerminalTabsCubit>(),
+    languageCubit: _scope.resolve<AppLanguageCubit>(),
     settingsPages: _scope.resolve<SettingsPages>(),
     createConnectionSettingsCubit: _scope.resolve<ConnectionSettingsCubit>,
     createAddProfileCubit: _scope.resolve<AddProfileCubit>,
@@ -1438,7 +1517,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
       onExitRequested: AppExitHandler(
         closeRoot: rootLifecycle.dispose,
         pendingSteps: () => rootLifecycle.pendingSteps,
-        logger: _appLogger(),
+        logger: codeLabAppLogger(),
         flushLogs: _scope.resolve<CodeLabLoggingLifecycle>().flushed,
       ).onExitRequested,
     );

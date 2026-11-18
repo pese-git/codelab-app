@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../l10n/l10n.dart';
+import '../l10n/app_localizations.dart';
+import 'language/app_language_cubit.dart';
 import '../features/settings/presentation/settings_shell.dart';
 import '../features/workbench/application/shell_cubit.dart';
 import '../features/workbench/presentation/widgets/restart_confirmation_dialog.dart';
@@ -41,15 +42,21 @@ class CodeLabApp extends StatelessWidget {
         BlocProvider.value(value: dependencies.navigationCubit),
         // Панель Terminal дока читает вкладки сессии (D3).
         BlocProvider.value(value: dependencies.terminalTabsCubit),
+        BlocProvider.value(value: dependencies.languageCubit),
       ],
-      child: FluentApp(
-        title: 'CodeLab',
-        // Делегаты app и Fluent; язык приложения подключается в 1.5/1.6
-        // (add-desktop-localization, D2). До тех пор locale берётся системный
-        // и сводится к en/ru, иначе en.
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: _CodeLabHome(startOnLaunch: startOnLaunch),
+      // Язык читает только этот BlocBuilder, и меняется только `locale`:
+      // `FluentApp` не пересоздаётся, поэтому State виджетов (ввод
+      // композера, фокус, прокрутка) сохраняется (add-desktop-localization,
+      // D2, R6). Остальные виджеты получают язык через `Localizations`.
+      child: BlocBuilder<AppLanguageCubit, AppLanguageState>(
+        buildWhen: (previous, current) => previous.locale != current.locale,
+        builder: (context, language) => FluentApp(
+          title: 'CodeLab',
+          locale: language.locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: _CodeLabHome(startOnLaunch: startOnLaunch),
+        ),
       ),
     );
   }

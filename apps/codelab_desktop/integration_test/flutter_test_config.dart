@@ -30,7 +30,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// поверхностью окна, и на macOS окно было чёрным весь тест.
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
+    // Язык `en` задан явно: приёмка не зависит от языка машины
+    // (add-desktop-localization, D9).
+    SharedPreferences.setMockInitialValues({'codelab.app.language': 'en'});
     await _resizeWindow(e2eWindowSize);
   });
   await testMain();
