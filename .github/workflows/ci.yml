@@ -38,6 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.scope.outputs.matrix }}
+      site: ${{ steps.scope.outputs.site }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -102,6 +103,37 @@ jobs:
           name: parity-results-${{ matrix.job }}
           path: parity-results
           if-no-files-found: warn
+
+  # Проверка сайта site/ (ADR-0003; design.md change add-astro-site, D13).
+  # Почему отдельный джоб, а не строка матрицы checks: сайту нужен только Node
+  # из site/.nvmrc, а шаг prepare ставит FVM и Flutter. Запускается, когда scope
+  # выдал site=true: изменён site/** или опубликованная документация, либо
+  # полный прогон. Идёт параллельно с checks.
+  # Почему без публикации: джоб только собирает и проверяет сайт (astro check,
+  # тесты, сборка с непустым SITE_BASE, внутренние ссылки), артефакт не
+  # загружает и секретов не получает; хостинг — отдельное решение.
+  # Полный checkout не нужен: документы читаются из рабочей копии, а ссылки на
+  # GitHub берут коммит из GITHUB_SHA, без истории git.
+  site:
+    needs: scope
+    if: needs.scope.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: site
+    env:
+      ASTRO_TELEMETRY_DISABLED: "1"
+      SITE_BASE: /codelab-app/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: site/.nvmrc
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run verify
 
   # Nightly check of the evidence of the Must rows of the goals matrix
   # (docs/architecture/proposals/agent-parity-goals.md, §1.4): reads the
@@ -173,16 +205,20 @@ jobs:
           path: parity-results
           retention-days: 90
 
-  # The one status to require in branch protection: green when every scheduled
-  # check passed or there was nothing to check (documentation only). parity is
-  # skipped on pull requests and pushes.
+  # Единственный статус для защиты ветки: зелёный, когда каждая запланированная
+  # проверка прошла или проверять было нечего. checks и site пропускаются, если
+  # их часть не затронута: только документация вне сайта — без checks, правка
+  # пакета без опубликованных документов — без site. Красный site при зелёных
+  # Dart-джобах делает ci красным (project-site «Проверка сайта в CI», D13).
+  # parity пропускается на pull request и push.
   ci:
-    needs: [scope, checks, parity]
+    needs: [scope, checks, site, parity]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "scope=${{ needs.scope.result }} checks=${{ needs.checks.result }} parity=${{ needs.parity.result }}"
+          echo "scope=${{ needs.scope.result }} checks=${{ needs.checks.result }} site=${{ needs.site.result }} parity=${{ needs.parity.result }}"
           [ "${{ needs.scope.result }}" = success ] || exit 1
           case "${{ needs.checks.result }}" in success|skipped) ;; *) exit 1;; esac
+          case "${{ needs.site.result }}" in success|skipped) ;; *) exit 1;; esac
           case "${{ needs.parity.result }}" in success|skipped) ;; *) exit 1;; esac
