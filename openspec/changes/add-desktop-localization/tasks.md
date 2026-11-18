@@ -55,7 +55,7 @@
 - [x] 1.2 `[desktop]` Каталоги и разрешение:
   - `pubspec.yaml` (`flutter_localizations`, `intl: any`, `generate: true`), `l10n.yaml`, `lib/l10n/app_en.arb`, `app_ru.arb`, сгенерированный код, `lib/l10n/l10n.dart` (`context.l10n`);
   - `lib/app/language/app_locale.dart` (`resolveAppLocale`), `lib/core/platform/app_language_preferences.dart` (порт и `SharedPreferencesAppLanguagePreferences`).
-- [ ] 1.3 `[desktop]` Красные тесты `AppLanguageCubit` и порта `AppStrings` (D2, D9; сценарии «Сбой записи», «Два выбора подряд», «Закрытый компонент не реагирует на смену языка»):
+- [x] 1.3 `[desktop]` Красные тесты `AppLanguageCubit` и порта `AppStrings` (D2, D9; сценарии «Сбой записи», «Два выбора подряд», «Закрытый компонент не реагирует на смену языка»):
   - начальное состояние из шва, без асинхронной загрузки;
   - `select(ru)` публикует новое состояние синхронно, до завершения записи;
   - сбой записи: язык остаётся, `saveFailed`, событие `settings.language_save_failed {error_class}`;
