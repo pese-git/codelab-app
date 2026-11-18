@@ -13,16 +13,18 @@
 пользователя 2026-11-18 по SMK-42 и SMK-43 — записать и закрыть отдельным change, кандидат
 `fix-usage-pane-live-cards`. SMK-44 и SMK-45 — UX-наблюдения 2026-11-17; их можно взять в тот же change.
 
+**Статус 2026-11-18:** открыт OpenSpec change `fix-usage-pane-live-cards` (`openspec/changes/fix-usage-pane-live-cards/`). Причины в коде — его design.md, раздел «Причины в коде». Решения пользователя 2026-11-18 (Q1–Q6 — все по рекомендации): SMK-44 и SMK-45 закрываются тем же change. SMK-44 — не дефект агента: `usage.json` пишется лениво, и после каждого хода он устарел по дизайну. SMK-45 — `cost` нет уже в ответе агента: у агрегата без шагов цены нет. При сверке найден дефект ядра, связанный с SMK-43: ожидания параллельных одобрений вычитаются из времени хода дважды (Q3).
+
 Приоритеты и колонки — как в [smoke-2026-10-30.md](smoke-2026-10-30.md).
 
 ## Сводка
 
 | ID | P | Тип | Область | Кратко | OpenSpec | Issue |
 |---|---|---|---|---|---|---|
-| SMK-42 | P2 | ux | desktop | Во время хода карточки Input, Output, Cost панели Usage отстают от живых снимков | да | — |
-| SMK-43 | P3 | ux | desktop | Время бюджета откатывается назад, когда агент запрашивает одобрение | да | — |
-| SMK-44 | P3 | ux | desktop, agent | Строка журнала `rebuilt from journal (stale)` после каждого хода | уточнить | — |
-| SMK-45 | P3 | ux | desktop | Cost `—` и `price unknown` у пустой сессии с моделью с ценами | да | — |
+| SMK-42 | P2 | ux | desktop | Во время хода карточки Input, Output, Cost панели Usage отстают от живых снимков | да, `fix-usage-pane-live-cards` (Q1) | — |
+| SMK-43 | P3 | ux | desktop, agent | Время бюджета откатывается назад, когда агент запрашивает одобрение | да, `fix-usage-pane-live-cards` (Q2–Q4) | — |
+| SMK-44 | P3 | ux | desktop | Строка журнала `rebuilt from journal (stale)` после каждого хода | да, `fix-usage-pane-live-cards` (Q5 (а)) | — |
+| SMK-45 | P3 | ux | desktop | Cost `—` и `price unknown` у пустой сессии с моделью с ценами | да, `fix-usage-pane-live-cards` (Q6 (а)) | — |
 
 ## Карточки
 
