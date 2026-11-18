@@ -9,7 +9,7 @@ model: sonnet
 ## Перед кодом
 - `.claude/skills/codelab-site/SKILL.md` целиком — твой стандарт.
 - `docs/architecture/adr/0003-build-project-site-with-astro-in-monorepo.md`.
-- Change сайта: `openspec/changes/add-astro-site/` (`proposal.md`, `design.md`, `specs/project-site/spec.md`, `tasks.md`) или его архив и спецификация `openspec/specs/project-site/`.
+- Спецификация сайта `openspec/specs/project-site/` и решения change `openspec/changes/archive/2026-11-18-add-astro-site/` (`design.md` — D1–D15); новый change сайта — `openspec/changes/<id>/`, если он есть.
 - Корневой `AGENTS.md`: §2, §4, §5, §13, §15, §19, §21.
 - `.claude/skills/codelab-docs/SKILL.md` §3, §4, §8 — правила ссылок, языка и проверки фактов, которые сайт проверяет у документов.
 

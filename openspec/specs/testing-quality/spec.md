@@ -105,7 +105,7 @@ CodeLab SHALL рассматривать тесты, архитектурные 
 - **THEN** релевантные тесты проходят, и задача удовлетворяет Definition of Done из спеки
 
 ### Requirement: Непрерывная интеграция
-CodeLab SHALL запускать CI (`.github/workflows/ci.yml`) на каждый pull request и на push в `master` и `develop`. Обязательные джобы `format`, `analyze`, `test`, `conformance`, `guard`, `web-compile` и `e2e-cli-dart` SHALL запускать соответствующие Melos-скрипты на FVM-закреплённом SDK; `e2e-cli-dart` — `test:e2e:cli:dart-agent`. Python-агента в CI нет, и прогон против него в CI НЕ SHALL запускаться. Ночной запуск по расписанию SHALL прогонять те же джобы. Интеграционные тесты в CI SHALL выполняться только на Dart VM (`ubuntu-latest`); Flutter-тесты приложения на macOS (`test:e2e:app:*`) в CI НЕ SHALL запускаться — это локальные приёмочные ворота этапа. Шаблон pull request SHALL содержать чек-лист: OpenSpec change, тесты, сторонний код.
+CodeLab SHALL запускать CI (`.github/workflows/ci.yml`) на каждый pull request и на push в `master` и `develop`. Обязательные джобы `format`, `analyze`, `test`, `conformance`, `guard`, `web-compile` и `e2e-cli-dart` SHALL запускать соответствующие Melos-скрипты на FVM-закреплённом SDK; `e2e-cli-dart` — `test:e2e:cli:dart-agent`. Обязательный джоб `site` SHALL проверять сайт `site/` на Node из `site/.nvmrc` (project-site «Проверка сайта в CI»; design.md change `add-astro-site`, D13); итоговый джоб `ci` SHALL ждать его наравне с джобами матрицы. Python-агента в CI нет, и прогон против него в CI НЕ SHALL запускаться. Ночной запуск по расписанию SHALL прогонять те же джобы. Интеграционные тесты в CI SHALL выполняться только на Dart VM (`ubuntu-latest`); Flutter-тесты приложения на macOS (`test:e2e:app:*`) в CI НЕ SHALL запускаться — это локальные приёмочные ворота этапа. Шаблон pull request SHALL содержать чек-лист: OpenSpec change, тесты, сторонний код.
 
 #### Scenario: Pull request с нарушением
 - **WHEN** открыт pull request, в котором нарушен формат, анализ, тест, сторож или web-компиляция
@@ -122,6 +122,10 @@ CodeLab SHALL запускать CI (`.github/workflows/ci.yml`) на кажды
 #### Scenario: e2e CLI против Dart-агента в CI
 - **WHEN** CI запускается на pull request
 - **THEN** джоб `e2e-cli-dart` на `ubuntu-latest` прогоняет e2e терминального клиента против Dart-агента, и его падение делает pull request красным
+
+#### Scenario: Сайт в CI
+- **WHEN** CI запускается на pull request, который меняет `site/**` или опубликованную документацию
+- **THEN** джоб `site` на `ubuntu-latest` собирает и проверяет сайт, и его падение делает итоговый джоб `ci` и pull request красными
 
 ### Requirement: Клиентская conformance-проверка на корпусе фикстур
 CodeLab SHALL проигрывать каждую golden-фикстуру с ролью `client` против `AcpClientApplication` тестом `packages/dart/codelab_client_acp/test/fixtures/client_fixture_conformance_test.dart`. Melos-скрипт `conformance:client` SHALL запускать эту проверку и SHALL входить в полную проверку `check` и в джоб CI `conformance`.
