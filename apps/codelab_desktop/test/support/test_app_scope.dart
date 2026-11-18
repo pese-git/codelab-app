@@ -1,6 +1,12 @@
 import 'dart:convert';
 
 import 'package:codelab_desktop/app/app_scope.dart';
+import 'package:codelab_desktop/app/language/app_language_cubit.dart'
+    show AppLanguageState;
+import 'package:codelab_desktop/core/platform/app_language_preferences.dart'
+    show AppLanguagePreference;
+import 'package:codelab_desktop/l10n/app_localizations.dart'
+    show lookupAppLocalizations;
 import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snapshot_store.dart'
     show kWorkspaceSnapshotPrefsKey;
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
@@ -104,6 +110,9 @@ final class CodeLabTestBinding {
     String? project,
     ProjectFolderPicker? projectFolderPicker,
     UsageCsvSaver? usageCsvSaver,
+    // Язык первого кадра (D9): по умолчанию `en`, поэтому существующие
+    // проверки текстов на английском не меняются.
+    Locale locale = const Locale('en'),
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
     // а у плагина в тестах нет реализации канала: без моков каждая загрузка
@@ -124,6 +133,13 @@ final class CodeLabTestBinding {
       ...preferences,
     });
     scope = createCodeLabRootScope(
+      language: AppLanguageState(
+        preference: locale.languageCode == 'ru'
+            ? AppLanguagePreference.ru
+            : AppLanguagePreference.en,
+        locale: locale,
+        strings: lookupAppLocalizations(locale),
+      ),
       transportFactory: () => this.transport,
       stdioTransportFactory: stdioTransportFactory,
       webSocketTransportFactory: webSocketTransportFactory,

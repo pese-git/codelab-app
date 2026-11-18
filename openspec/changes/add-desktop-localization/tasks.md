@@ -64,7 +64,7 @@
   - `AppStrings.changes` отдаёт новый `AppLocalizations` ровно один раз на смену языка; повторный выбор того же языка события не даёт;
   - события `settings.language_changed {language, locale}`, `app.locale_applied {locale, subscribers}` (D13).
 - [x] 1.4 `[desktop]` `lib/app/language/app_language_cubit.dart` (`AppLanguageCubit`, `AppLanguageState`, порт `AppStrings`), `test/support/app_strings.dart` (`FixedAppStrings`, `TestAppStrings`).
-- [ ] 1.5 `[desktop]` Красные тесты подключения к app:
+- [x] 1.5 `[desktop]` Красные тесты подключения к app:
   - `codelab_app_widget_test.dart`: `FluentApp` получает `supportedLocales` = `en`, `ru` и делегаты app, кита и Fluent. `locale` берётся из `AppLanguageCubit`; первый кадр на языке шва, без кадра на английском;
   - после `select(ru)` `FluentApp` не пересоздаётся: `State` корневого виджета рабочего места тот же, текст композера и фокус сохранены (сценарий «Ввод пользователя сохраняется»; R6);
   - `CodeLabTestBinding()` даёт `en`, `CodeLabTestBinding(locale: Locale('ru'))` — `ru`; помощник `localizedFluentApp` (D9);
