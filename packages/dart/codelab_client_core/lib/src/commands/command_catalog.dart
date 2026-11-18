@@ -21,6 +21,9 @@ abstract class HostCommand with _$HostCommand {
     required String label,
     required String description,
     @Default(true) bool isAvailable,
+    // ЗАГЛУШКА задачи 3.1 change `add-desktop-localization` (D4): дополнительные
+    // строки поиска; учёт в `CommandCatalog.search` — задача 3.2.
+    @Default(<String>[]) List<String> searchAliases,
   }) = _HostCommand;
 }
 

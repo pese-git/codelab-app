@@ -102,6 +102,7 @@ sealed class TranscriptItem with _$TranscriptItem {
     required NoticeKind kind,
     required String text,
     PromptFailure? failure,
+    NoticeReason? reason,
   }) = NoticeItem;
 }
 
@@ -325,4 +326,65 @@ enum NoticeKind {
   /// Сессию не удалось восстановить после перезапуска хоста, и вместо неё
   /// создана новая (design D6).
   reconnected,
+}
+
+/// ЗАГЛУШКА задачи 3.1 change `add-desktop-localization` (D6): типизированная
+/// причина заметки, по которой хост строит текст на своём языке. Поведение
+/// (заполнение в проекции и рабочем пространстве) — задача 3.2.
+sealed class NoticeReason {
+  const NoticeReason();
+}
+
+/// ЗАГЛУШКА (3.1): причина `emptyTurn` — `stopReason` хода или `null`.
+final class EmptyTurnReason extends NoticeReason {
+  const EmptyTurnReason(this.stopReason);
+
+  final StopReason? stopReason;
+
+  @override
+  bool operator ==(Object other) =>
+      other is EmptyTurnReason && other.stopReason == stopReason;
+
+  @override
+  int get hashCode => Object.hash(EmptyTurnReason, stopReason);
+}
+
+/// ЗАГЛУШКА (3.1): причина `turnStopped` — `stopReason` и известный лимит
+/// бюджета (`null` для незнакомого или отсутствующего).
+final class TurnStoppedReason extends NoticeReason {
+  const TurnStoppedReason(this.stopReason, {this.budgetLimit});
+
+  final StopReason stopReason;
+  final String? budgetLimit;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TurnStoppedReason &&
+      other.stopReason == stopReason &&
+      other.budgetLimit == budgetLimit;
+
+  @override
+  int get hashCode => Object.hash(TurnStoppedReason, stopReason, budgetLimit);
+}
+
+/// ЗАГЛУШКА (3.1): причина восстановления сессии для `detached` и
+/// `reconnected`.
+enum SessionRestoreCause { agentCannotRestore, restoreFailed }
+
+/// ЗАГЛУШКА (3.1): причина `detached` и `reconnected`; [sessionId] — у
+/// причины с сессией.
+final class SessionRestoreReason extends NoticeReason {
+  const SessionRestoreReason(this.cause, {this.sessionId});
+
+  final SessionRestoreCause cause;
+  final SessionId? sessionId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionRestoreReason &&
+      other.cause == cause &&
+      other.sessionId == sessionId;
+
+  @override
+  int get hashCode => Object.hash(SessionRestoreReason, cause, sessionId);
 }
