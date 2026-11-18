@@ -13,8 +13,12 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_bloc: ^9.1.1
+  flutter_localizations:
+    sdk: flutter
   freezed_annotation: ^3.1.0
   gpt_markdown: ">=1.4.1 <1.5.0"
+  # Версию intl закрепляет flutter_localizations SDK (D3 change add-desktop-localization).
+  intl: any
   val_highlight: ^0.1.1
 
 dev_dependencies:
@@ -25,4 +29,5 @@ dev_dependencies:
   freezed: ^3.2.5
 
 flutter:
+  generate: true
   uses-material-design: true

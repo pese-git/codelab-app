@@ -1,0 +1,10 @@
+# Каталоги кита codelab_ui (add-desktop-localization, D3, D4). Сгенерированный
+# код коммитится; актуальность проверяет `melos run l10n:check`.
+arb-dir: lib/src/l10n
+template-arb-file: codelab_ui_en.arb
+output-localization-file: codelab_localizations.dart
+output-class: CodeLabLocalizations
+# Фолбэк на английский без делегата в дереве (D4): `of` может вернуть null.
+nullable-getter: true
+required-resource-attributes: true
+untranslated-messages-file: build/l10n_untranslated.json
