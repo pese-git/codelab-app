@@ -75,7 +75,7 @@
 - [x] 1.9 `[desktop]` Красные тесты страницы «General» и навигации настроек:
   - `general_page_test.dart`: ключи `settings-general-language`, `settings-language-system|en|ru`, эндонимы. Выбор `Русский` без перезапуска переводит заголовок страницы, навигацию настроек и строку «Language» (сценарий «Смена языка применяется сразу на странице настроек» — критерий D-19). Ошибка сбоя записи показывается на новом языке (сценарий «Сбой записи»). `English` возвращает английский (сценарий «Возврат к английскому»). `expectNoStaleLanguage` на экране настроек после переключения;
   - `settings_shell_test.dart`: «General» в `defaultSettingsPages` и в группе «App»; заголовки групп и страниц пересобираются при смене языка.
-- [ ] 1.10 `[desktop]` `general_page.dart` (читает и вызывает `AppLanguageCubit`, своего Cubit-а нет — D2), запись в `settingsPageBuilders` и `defaultSettingsPages`. `SettingsPage`/`SettingsGroup` без поля `title`, заголовки даёт функция presentation `settingsPageTitleOf(l10n, page)` (D5, п. 8). Сообщения `en`/`ru` страницы и навигации.
+- [x] 1.10 `[desktop]` `general_page.dart` (читает и вызывает `AppLanguageCubit`, своего Cubit-а нет — D2), запись в `settingsPageBuilders` и `defaultSettingsPages`. `SettingsPage`/`SettingsGroup` без поля `title`, заголовки даёт функция presentation `settingsPageTitleOf(l10n, page)` (D5, п. 8). Сообщения `en`/`ru` страницы и навигации.
 
 ## 2. Кит `codelab_ui` (итерация 2)
 

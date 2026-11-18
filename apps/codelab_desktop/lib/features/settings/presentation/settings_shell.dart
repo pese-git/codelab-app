@@ -3,12 +3,14 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../../../app/navigation/settings_page.dart';
+import '../../../l10n/l10n.dart';
 import '../application/settings_search_index.dart';
 import 'agents_modes_page.dart';
 import 'connection_page.dart';
 import 'mcp_page.dart';
 import 'providers_page.dart';
 import 'general_page.dart';
+import 'settings_titles.dart';
 import 'skills_page.dart';
 
 /// Тела страниц настроек.
@@ -115,7 +117,12 @@ class _SettingsShellState extends State<SettingsShell> {
   Widget build(BuildContext context) {
     final builders = widget.builders ?? settingsPageBuilders;
     final narrow = MediaQuery.sizeOf(context).width < settingsNarrowBreakpoint;
-    final matches = SettingsSearchIndex.search(widget.pages.visible, _query);
+    final l10n = context.l10n;
+    final matches = SettingsSearchIndex.search(
+      widget.pages.visible,
+      _query,
+      titleOf: (page) => settingsPageTitleOf(l10n, page),
+    );
     final body = builders[widget.selected];
 
     // Собственная область фокуса: Tab и Shift+Tab ходят только по настройкам
@@ -139,9 +146,9 @@ class _SettingsShellState extends State<SettingsShell> {
                 for (final page in matches)
                   CodeLabSettingsNavItem(
                     id: page.slug,
-                    title: page.title,
+                    title: settingsPageTitleOf(l10n, page),
                     icon: _iconOf(page),
-                    group: page.group.title,
+                    group: settingsGroupTitleOf(l10n, page.group),
                   ),
               ],
               selectedId: widget.selected.slug,

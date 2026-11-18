@@ -15,7 +15,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsLanguageTitle => 'Язык';
 
   @override
-  String get settingsLanguageSystem => 'Системный';
+  String get settingsLanguageSystem => 'Как в системе';
 
   @override
   String get settingsLanguageEnglish => 'English';
@@ -26,4 +26,43 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsLanguageSaveFailed =>
       'Не удалось сохранить язык. После перезапуска CodeLab будет использовать прежний язык.';
+
+  @override
+  String get settingsGroupAgent => 'Агент';
+
+  @override
+  String get settingsGroupApp => 'Приложение';
+
+  @override
+  String get settingsPageConnectionTitle => 'Подключение';
+
+  @override
+  String get settingsPageProvidersTitle => 'Провайдеры';
+
+  @override
+  String get settingsPageMcpServersTitle => 'MCP-серверы';
+
+  @override
+  String get settingsPageAgentsAndModesTitle => 'Агенты и режимы';
+
+  @override
+  String get settingsPagePermissionsAndToolsTitle => 'Разрешения и инструменты';
+
+  @override
+  String get settingsPageRedactionTitle => 'Маскирование';
+
+  @override
+  String get settingsPageSkillsAndExtensionsTitle => 'Навыки и расширения';
+
+  @override
+  String get settingsPageCodeAndWebTitle => 'Код и веб';
+
+  @override
+  String get settingsPageAppearanceTitle => 'Оформление';
+
+  @override
+  String get settingsPageKeyboardTitle => 'Клавиатура';
+
+  @override
+  String get settingsGeneralSectionInterface => 'Интерфейс';
 }

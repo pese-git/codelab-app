@@ -8,11 +8,13 @@
 
 import 'package:codelab_desktop/app/default_settings_pages.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
-import 'package:codelab_desktop/features/settings/application/settings_search_index.dart';
 import 'package:codelab_desktop/features/settings/presentation/settings_shell.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../../support/l10n_app.dart';
+import '../../../support/settings_search.dart';
 
 Finder _nav(SettingsPage page) => find.byKey(ValueKey(page.navKey));
 
@@ -23,9 +25,12 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      FluentApp(
-        home: SettingsShell(
-          pages: defaultSettingsPages,
+      localizedFluentApp(
+        SettingsShell(
+          pages: SettingsPages(
+            available: {...defaultSettingsPages.available}
+              ..remove(SettingsPage.general),
+          ),
           selected: SettingsPage.connection,
           onSelected: (_) {},
           onBack: () {},
@@ -47,6 +52,7 @@ void main() {
       SettingsPage.mcpServers,
       SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
+      SettingsPage.general,
     ]);
     expect(settingsPageBuilders, contains(SettingsPage.skillsAndExtensions));
   });
@@ -117,7 +123,7 @@ void main() {
       'extension',
     ]) {
       expect(
-        SettingsSearchIndex.search(defaultSettingsPages.visible, word),
+        searchSettings(defaultSettingsPages.visible, word),
         contains(SettingsPage.skillsAndExtensions),
         reason: word,
       );

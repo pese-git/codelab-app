@@ -8,7 +8,6 @@ import 'package:codelab_desktop/app/default_settings_pages.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_desktop/l10n/app_localizations_ru.dart';
-import 'package:codelab_desktop/features/settings/application/settings_search_index.dart';
 import 'package:codelab_desktop/features/settings/presentation/settings_shell.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -17,6 +16,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/l10n_app.dart';
 import '../../../support/l10n_mix.dart';
+import '../../../support/settings_search.dart';
+
+/// Страницы группы Agent рабочей сборки: без «General» заголовка «App» нет.
+final _agentPages = {...defaultSettingsPages.available}
+  ..remove(SettingsPage.general);
 
 Finder _nav(SettingsPage page) => find.byKey(ValueKey(page.navKey));
 
@@ -94,8 +98,8 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      FluentApp(
-        home: SettingsShell(
+      localizedFluentApp(
+        SettingsShell(
           pages: SettingsPages(available: available),
           selected: selected,
           onSelected: onSelected ?? (_) {},
@@ -302,8 +306,8 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      FluentApp(
-        home: Column(
+      localizedFluentApp(
+        Column(
           children: [
             Expanded(
               child: SettingsShell(
@@ -366,6 +370,7 @@ void main() {
       SettingsPage.mcpServers,
       SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
+      SettingsPage.general,
     ]);
   });
 
@@ -375,7 +380,7 @@ void main() {
   // `defaultSettingsPages` и `settingsPageBuilders`).
   testWidgets('Three pages of the Agent group: Connection, Providers and '
       'MCP servers in this order, no App title', (tester) async {
-    await pumpShell(tester, available: defaultSettingsPages.available);
+    await pumpShell(tester, available: _agentPages);
 
     expect(_nav(SettingsPage.mcpServers), findsOneWidget);
     expect(SettingsPage.mcpServers.navKey, 'settings-nav-mcp-servers');
@@ -397,7 +402,7 @@ void main() {
   testWidgets('Five pages of the Agent group: Connection, Providers, MCP '
       'servers, Agents & modes and Skills & extensions in this order, no App '
       'title', (tester) async {
-    await pumpShell(tester, available: defaultSettingsPages.available);
+    await pumpShell(tester, available: _agentPages);
 
     expect(SettingsPage.agentsAndModes.navKey, 'settings-nav-agents-and-modes');
     expect(_nav(SettingsPage.agentsAndModes), findsOneWidget);
@@ -419,6 +424,7 @@ void main() {
       SettingsPage.mcpServers,
       SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
+      SettingsPage.general,
     ]);
   });
 
@@ -447,7 +453,7 @@ void main() {
   });
 
   testWidgets('search "headers" keeps MCP servers', (tester) async {
-    await pumpShell(tester, available: defaultSettingsPages.available);
+    await pumpShell(tester, available: _agentPages);
 
     await tester.enterText(
       find.byKey(CodeLabSettingsNavigation.searchKey),
@@ -500,14 +506,12 @@ void main() {
     ];
 
     test('an empty query keeps all visible pages in order', () {
-      expect(SettingsSearchIndex.search(visible, ''), visible);
-      expect(SettingsSearchIndex.search(visible, '  '), visible);
+      expect(searchSettings(visible, ''), visible);
+      expect(searchSettings(visible, '  '), visible);
     });
 
     test('matches a title by substring without regard to case', () {
-      expect(SettingsSearchIndex.search(visible, 'KEYB'), [
-        SettingsPage.keyboard,
-      ]);
+      expect(searchSettings(visible, 'KEYB'), [SettingsPage.keyboard]);
     });
 
     test('matches Connection keywords', () {
@@ -518,7 +522,7 @@ void main() {
         'token',
         'restart',
       ]) {
-        expect(SettingsSearchIndex.search(visible, word), [
+        expect(searchSettings(visible, word), [
           SettingsPage.connection,
         ], reason: word);
       }
@@ -533,7 +537,7 @@ void main() {
         'key storage',
         'base url',
       ]) {
-        expect(SettingsSearchIndex.search(pages, word), [
+        expect(searchSettings(pages, word), [
           SettingsPage.providers,
         ], reason: word);
       }
@@ -546,7 +550,7 @@ void main() {
         SettingsPage.mcpServers,
       ];
       for (final word in const ['mcp', 'server', 'tools', 'headers']) {
-        expect(SettingsSearchIndex.search(pages, word), [
+        expect(searchSettings(pages, word), [
           SettingsPage.mcpServers,
         ], reason: word);
       }
@@ -572,21 +576,16 @@ void main() {
         'subagent',
       ]) {
         expect(
-          SettingsSearchIndex.search(pages, word),
+          searchSettings(pages, word),
           contains(SettingsPage.agentsAndModes),
           reason: word,
         );
       }
-      expect(SettingsSearchIndex.search(pages, 'bypass'), [
-        SettingsPage.agentsAndModes,
-      ]);
+      expect(searchSettings(pages, 'bypass'), [SettingsPage.agentsAndModes]);
     });
 
     test('never returns a page that is not visible', () {
-      expect(
-        SettingsSearchIndex.search(const [SettingsPage.general], 'token'),
-        isEmpty,
-      );
+      expect(searchSettings(const [SettingsPage.general], 'token'), isEmpty);
     });
   });
 }

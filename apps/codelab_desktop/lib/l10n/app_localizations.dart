@@ -133,6 +133,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t save the language. CodeLab will use the previous language after restart.'**
   String get settingsLanguageSaveFailed;
+
+  /// Заголовок группы «Agent» в навигации настроек.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent'**
+  String get settingsGroupAgent;
+
+  /// Заголовок группы «App» в навигации настроек.
+  ///
+  /// In en, this message translates to:
+  /// **'App'**
+  String get settingsGroupApp;
+
+  /// Пункт навигации и заголовок страницы настроек Connection.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection'**
+  String get settingsPageConnectionTitle;
+
+  /// Пункт навигации страницы настроек Providers.
+  ///
+  /// In en, this message translates to:
+  /// **'Providers'**
+  String get settingsPageProvidersTitle;
+
+  /// Пункт навигации страницы настроек MCP servers. MCP — название протокола, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP servers'**
+  String get settingsPageMcpServersTitle;
+
+  /// Пункт навигации страницы настроек Agents & modes.
+  ///
+  /// In en, this message translates to:
+  /// **'Agents & modes'**
+  String get settingsPageAgentsAndModesTitle;
+
+  /// Пункт навигации страницы настроек Permissions & tools.
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions & tools'**
+  String get settingsPagePermissionsAndToolsTitle;
+
+  /// Пункт навигации страницы настроек Redaction (скрытие секретов в тексте).
+  ///
+  /// In en, this message translates to:
+  /// **'Redaction'**
+  String get settingsPageRedactionTitle;
+
+  /// Пункт навигации страницы настроек Skills & extensions.
+  ///
+  /// In en, this message translates to:
+  /// **'Skills & extensions'**
+  String get settingsPageSkillsAndExtensionsTitle;
+
+  /// Пункт навигации страницы настроек Code & web.
+  ///
+  /// In en, this message translates to:
+  /// **'Code & web'**
+  String get settingsPageCodeAndWebTitle;
+
+  /// Пункт навигации страницы настроек Appearance.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsPageAppearanceTitle;
+
+  /// Пункт навигации страницы настроек Keyboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard'**
+  String get settingsPageKeyboardTitle;
+
+  /// Заголовок секции страницы General, в которой выбирается язык интерфейса.
+  ///
+  /// In en, this message translates to:
+  /// **'Interface'**
+  String get settingsGeneralSectionInterface;
 }
 
 class _AppLocalizationsDelegate
