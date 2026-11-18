@@ -215,7 +215,7 @@
 
 Итерации 2 и 3 зависят от 1; 4 и 5 — от 1 и независимы друг от друга. Итерация 6 идёт последней. Между итерациями `develop` остаётся рабочим: `system` даёт `en` до итерации 6 (D2).
 
-**Активные changes.** `add-settings-agents-modes`, `add-app-skills-page`, `add-desktop-usage-pane`, `add-file-preview-and-tree`, `add-integrated-terminal`, `add-subagents-and-tasks` добавляют строки в те же экраны. После слияния итерации 1 новые строки в этих changes пишутся сразу ключами ARB с `en` и `ru`. Правило попадает в `apps/codelab_desktop/AGENTS.md` (задача 0.3). Итерация экрана в начале сверяет свой список строк с `develop`.
+**Активные changes.** `add-app-skills-page`, `add-file-preview-and-tree`, `add-integrated-terminal` добавляют строки в те же экраны (`add-settings-agents-modes`, `add-desktop-usage-pane`, `add-subagents-and-tasks` архивированы 2026-11-18, их строки уже в `develop` и входят в сверку итерации экрана). После слияния итерации 1 новые строки в этих changes пишутся сразу ключами ARB с `en` и `ru`. Правило попадает в `apps/codelab_desktop/AGENTS.md` (задача 0.3). Итерация экрана в начале сверяет свой список строк с `develop`.
 
 **Список Cubit-ов с текстом в состоянии** (подписка на `AppStrings`, D5): `ConnectionCubit`, `ActiveSessionCubit`, `SessionsCubit`, `SecretMigrationCubit`, фасад `CodeLabShellCubit` (палитра собирается в `shell_state` из каталога команд — сверить), `ConnectionSettingsCubit`, `AddProfileCubit`, `ProviderSettingsCubit`, `ProviderWizardCubit`, `McpSettingsCubit`, `AgentsModesCubit`, `SkillsSettingsCubit`. Итерация экрана начинает со сверки списка по коду (поиск литералов в `application/`). Каждый Cubit из списка получает тест смены языка (D9). Cubit, который перестал хранить текст, из списка уходит.
 
