@@ -369,6 +369,32 @@ void main() {
       ),
     );
 
+    // Регрессия: на `ru` в ленте шириной 696 px (окно рабочего места 1440 px)
+    // ряд кнопок одобрения переполнялся на 16 px (задача 3.4
+    // `add-desktop-localization`, D8, R4). Кнопки теперь переносятся, подписи
+    // остаются полными.
+    for (final width in const [696.0, 560.0, 420.0]) {
+      testWidgets('ru: полоса при ширине ${width.toInt()} px без переполнения '
+          'и с полными подписями', (tester) async {
+        await tester.pumpWidget(
+          _ruHost(
+            SizedBox(
+              width: width,
+              child: CodeLabApprovalPrompt(
+                options: _options,
+                rawInput: '{}',
+                onOptionSelected: (_) {},
+              ),
+            ),
+          ),
+        );
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Разрешить'), findsOneWidget);
+        expect(find.text('Отклонить'), findsOneWidget);
+      });
+    }
+
     testWidgets('en без делегата: Allow, Reject, Only this time', (
       tester,
     ) async {

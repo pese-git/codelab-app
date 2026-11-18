@@ -7,11 +7,12 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_desktop/features/workbench/application/ui_mappers.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'shell_cubit_characterization/harness.dart';
 import '../../../support/transcript_rows.dart';
+import 'shell_cubit_characterization/harness.dart';
 
 void main() {
   setUp(setUpCharacterization);
@@ -50,6 +51,7 @@ void main() {
     test('maps each failure class to its title', () {
       String title(String? errorClass) => failureTitleOf(
         PromptFailure.agent(errorClass: errorClass, message: 'm'),
+        l10n: AppLocalizationsEn(),
       );
 
       expect(
@@ -67,14 +69,23 @@ void main() {
       expect(title('quantumFlux'), 'The agent could not complete the turn');
       expect(title(null), 'The agent could not complete the turn');
       expect(
-        failureTitleOf(const PromptFailure.connectionLost()),
+        failureTitleOf(
+          const PromptFailure.connectionLost(),
+          l10n: AppLocalizationsEn(),
+        ),
         'The connection to the agent was lost',
       );
       expect(
-        failureTitleOf(const PromptFailure.request(code: -32603, message: 'x')),
+        failureTitleOf(
+          const PromptFailure.request(code: -32603, message: 'x'),
+          l10n: AppLocalizationsEn(),
+        ),
         'The agent could not complete the turn',
       );
-      expect(failureTitleOf(null), 'The agent could not complete the turn');
+      expect(
+        failureTitleOf(null, l10n: AppLocalizationsEn()),
+        'The agent could not complete the turn',
+      );
     });
   });
 

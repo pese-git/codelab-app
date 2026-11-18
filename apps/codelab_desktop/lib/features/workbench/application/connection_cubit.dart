@@ -19,12 +19,16 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         WebSocketProfile,
         WorkspaceState,
         describeFailure,
-        describeConnectFailureByToken,
+        profileTokenSent,
+        tokenRejectionStatus,
         secretMissingWarning;
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabConnectionStatus;
 
+import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import '../../../app/provider_setup_offer.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../l10n/app_localizations_en.dart';
 import '../../settings/application/connection_commands.dart';
 import '../../settings/application/default_profile_resolver.dart';
 import '../../settings/application/embedded_profile.dart';
@@ -90,8 +94,14 @@ final class ProviderSetupNotice {
 /// пользователю, а какие сессии в работе — знает `ConnectionCubit`, а не
 /// виджет (корневой `AGENTS.md` §10).
 ///
-/// Как использовать: виджет показывает [message] и возвращает ответ
-/// `ConnectionCubit.confirmRestart` / `cancelRestart`.
+/// Для чего: типизированные данные диалога; текст с ICU `plural` по числу
+/// сессий строит presentation по каталогу (`RestartConfirmationDialog`,
+/// `add-desktop-localization`, D5, D8): разовое сообщение нельзя пересобрать
+/// из входов, поэтому в состоянии лежит не строка, а название профиля и
+/// сессии.
+///
+/// Как использовать: виджет показывает сообщение по [title] и [sessions] и
+/// возвращает ответ `ConnectionCubit.confirmRestart` / `cancelRestart`.
 final class RestartConfirmation {
   const RestartConfirmation({required this.title, required this.sessions});
 
@@ -100,14 +110,6 @@ final class RestartConfirmation {
 
   /// Названия сессий в ходе, ждущих одобрения или отменяемых.
   final List<String> sessions;
-
-  /// Текст диалога из спецификации app-settings (D22).
-  String get message {
-    final n = sessions.length;
-    return 'Restart $title? This interrupts $n running '
-        '${n == 1 ? 'session' : 'sessions'}: ${sessions.join(', ')}. '
-        'Queued prompts stay.';
-  }
 
   @override
   bool operator ==(Object other) =>
@@ -132,9 +134,10 @@ final class RestartConfirmation {
 /// Почему отдельная функция: тот же текст нужен `SessionsCubit` для сессии
 /// исчезнувшей папки (spec agent-workbench-ui «Исчезнувшая папка сессии»);
 /// ручного Connect больше нет, поэтому «connect again» из текста убран.
-String projectFolderMissingMessage(String path) =>
-    'Project folder not found: $path. '
-    'Choose an existing folder with Open folder….';
+/// Язык — явный вход [l10n]: на экран идёт текст текущего языка, в журнал —
+/// английский (`AppLocalizationsEn()`, D5 п. 6).
+String projectFolderMissingMessage(String path, AppLocalizations l10n) =>
+    l10n.workbenchProjectFolderMissing(path);
 
 /// Профиль текущего окна и статус соединения.
 ///
@@ -154,11 +157,16 @@ final class WindowConnectionState {
     required this.connectionStatus,
     required this.profile,
     this.runningProfile,
+    required this.l10n,
     this.connectionMessage,
     this.providerSetupNotice,
     this.failureRepeat = 0,
     this.pendingRestart,
   });
+
+  /// Каталог текущего языка: явный вход текста состояния (D5). Меняется
+  /// только событием `AppStrings.changes`.
+  final AppLocalizations l10n;
 
   final CodeLabConnectionStatus connectionStatus;
 
@@ -189,10 +197,12 @@ final class WindowConnectionState {
   final RestartConfirmation? pendingRestart;
 
   /// Тип подключения для подписи («stdio», «WebSocket», «Embedded agent»).
+  ///
+  /// `stdio` и `WebSocket` — названия протоколов и не переводятся (D7).
   String get transportLabel => switch (shownProfile) {
     StdioProfile() => 'stdio',
     WebSocketProfile() => 'WebSocket',
-    EmbeddedProfile() => 'Embedded agent',
+    EmbeddedProfile() => l10n.workbenchTransportEmbedded,
   };
 
   String get selectedProfileLabel => profileTitle(shownProfile);
@@ -213,6 +223,7 @@ final class WindowConnectionState {
       'codelab_embedded ($embeddedHostProfile)';
 
   WindowConnectionState _copyWith({
+    AppLocalizations? l10n,
     CodeLabConnectionStatus? connectionStatus,
     ConnectionProfile? profile,
     ConnectionProfile? runningProfile,
@@ -221,6 +232,7 @@ final class WindowConnectionState {
     int? failureRepeat,
     Object? pendingRestart = _unset,
   }) => WindowConnectionState(
+    l10n: l10n ?? this.l10n,
     connectionStatus: connectionStatus ?? this.connectionStatus,
     profile: profile ?? this.profile,
     runningProfile: runningProfile ?? this.runningProfile,
@@ -276,7 +288,9 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     Logger? eventLogger,
     ProfileSecretSource? tokenSecrets,
     ProviderSetupOffer? providerSetupOffer,
-  }) : _tokenSecrets = tokenSecrets,
+    required AppStrings strings,
+  }) : _strings = strings,
+       _tokenSecrets = tokenSecrets,
        _setupOffer = providerSetupOffer,
        _workspace = workspace,
        _diagnostics = diagnostics,
@@ -285,10 +299,14 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
        _eventLogger = eventLogger,
        super(
          WindowConnectionState(
+           l10n: strings.current,
            connectionStatus: CodeLabConnectionStatus.disconnected,
            profile: initialProfile,
          ),
        ) {
+    // Одна подписка на язык на весь срок жизни Cubit (D5 п. 3, R3): не
+    // зависит ни от подключения, ни от смены сессии; отменяется в `close()`.
+    _languageSubscription = strings.changes.listen(_handleLanguage);
     _workspaceSubscription = _workspace.state.listen(_handleWorkspaceChange);
     if (defaultProfiles == null) {
       // Без выбора по умолчанию (фасад без графа) профиль окна — начальный.
@@ -304,6 +322,15 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   final SettingsCubit _settings;
   final ActiveSessionCubit _activeSession;
   final Logger? _eventLogger;
+  final AppStrings _strings;
+  late final StreamSubscription<AppLocalizations> _languageSubscription;
+
+  /// Отказ «папки проекта нет» в `connectionMessage` в виде пути и готового
+  /// текста: сообщение app, которое строится из входа (пути) и языка, поэтому
+  /// при смене языка пересобирается из пути в [_handleLanguage] (D5 п. 1).
+  /// Текст ядра не меняется, отказ по токену хранится отдельно
+  /// ([_tokenRejection]).
+  ({String path, String text})? _missingFolder;
 
   /// Источник токенов профилей: только чтобы предупредить о пустом секрете
   /// до подключения (D13); значение не сохраняется.
@@ -361,12 +388,13 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   /// Поколение соединения: растёт с каждой начатой попыткой (D17).
   int get generation => _attempt;
 
-  /// Причина отказа по токену текущей попытки (`the agent rejected the token
-  /// (HTTP 401)`) вместо текста kit «Failed to start ACP transport.»; `null` —
-  /// отказа по токену нет. Одно поле вместо флага: текст и есть признак.
-  /// Живёт, пока workspace остаётся в `ConnectionFailed` этой попытки; новая
-  /// попытка его сбрасывает.
-  String? _tokenRejection;
+  /// Отказ по токену текущей попытки (вместо текста kit «Failed to start ACP
+  /// transport.»): данные — HTTP-статус и «ушёл ли токен», а не готовая строка.
+  /// Текст собирается по каталогу текущего языка (`_tokenRejectionText`) и
+  /// пересобирается в [_handleLanguage]; `null` — отказа по токену нет. Живёт,
+  /// пока workspace остаётся в `ConnectionFailed` этой попытки; новая попытка
+  /// его сбрасывает.
+  _TokenRejection? _tokenRejection;
 
   /// Номер последнего вызова старта/перезапуска до обращения к kit: им
   /// отбрасываются устаревшие ожидания (проверка папки). Отказ намерения
@@ -727,14 +755,17 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
       // Текст отказа по токену строится до проверки номера попытки:
       // чтение источника токена асинхронно, а после `await` вытесненная
       // попытка уже не вправе менять состояние (§9).
-      final rejection = await _tokenRejectionText(error, target);
+      final rejection = await _tokenRejectionOf(error, target);
       if (isClosed) return;
       if (attempt != _attempt) {
         _recordStaleAttempt(error);
         return;
       }
+      // В журнал — английский текст независимо от языка интерфейса (D5 п. 6).
       final message =
-          rejection ??
+          (rejection == null
+              ? null
+              : _tokenRejectionText(rejection, AppLocalizationsEn())) ??
           _byType(
             target,
             stdio: restart
@@ -821,9 +852,38 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
 
   @override
   Future<void> close() async {
+    await _languageSubscription.cancel();
     await _workspaceSubscription.cancel();
     await _restartTargets.close();
     return super.close();
+  }
+
+  /// Смена языка: подписи состояния пересобираются из текущих входов (D5).
+  ///
+  /// Профиль, статус, метка провайдера и диалог перезапуска не меняются:
+  /// меняются каталог и отказ «папки нет», собранный из пути. После `close`
+  /// событие игнорируется (D5 п. 3).
+  void _handleLanguage(AppLocalizations l10n) {
+    if (isClosed) return;
+    final missing = _missingFolder;
+    final rejection = _tokenRejection;
+    final String? rebuilt;
+    if (missing != null && state.connectionMessage == missing.text) {
+      rebuilt = projectFolderMissingMessage(missing.path, l10n);
+      _missingFolder = (path: missing.path, text: rebuilt);
+    } else if (rejection != null &&
+        state.connectionMessage == _tokenRejectionText(rejection, state.l10n)) {
+      // Отказ по токену хранится данными (статус и «ушёл ли токен»), текст
+      // собирается заново на новом языке (D5 п. 1).
+      rebuilt = _tokenRejectionText(rejection, l10n);
+    } else {
+      rebuilt = null;
+    }
+    emit(
+      rebuilt == null
+          ? state._copyWith(l10n: l10n)
+          : state._copyWith(l10n: l10n, connectionMessage: rebuilt),
+    );
   }
 
   /// Подставляет профиль по умолчанию, пока пользователь ничего не выбрал.
@@ -850,7 +910,10 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
       _dropSetupNotice();
     }
     final message = switch (workspace.connection) {
-      ConnectionFailed() when _tokenRejection != null => _tokenRejection,
+      ConnectionFailed() when _tokenRejection != null => _tokenRejectionText(
+        _tokenRejection!,
+        _strings.current,
+      ),
       ConnectionLost(:final message) ||
       ConnectionFailed(:final message) => message,
       _ => null,
@@ -874,29 +937,38 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     });
   }
 
-  /// Текст отказа 401/403 для [profile] или `null`, если ошибка другая.
+  /// Отказ 401/403 для [profile] в виде данных или `null`, если ошибка другая.
   ///
-  /// Почему: kit отдаёт `ConnectionFailed.message` без причины, и баннер
-  /// показывал бы «Failed to start ACP transport.» (design.md change
-  /// `add-app-settings-shell`, D12). `tokenSent` берётся у того же
-  /// [ProfileSecretSource], которым composition root открывает транспорт;
-  /// значение токена читается и отбрасывается внутри [describeConnectFailureByToken].
-  Future<String?> _tokenRejectionText(
+  /// Почему данные, а не текст: kit отдаёт `ConnectionFailed.message` без
+  /// причины, и баннер показывал бы «Failed to start ACP transport.» (design.md
+  /// change `add-app-settings-shell`, D12); текст отказа — сообщение app,
+  /// которое пересобирается при смене языка (`add-desktop-localization`, D5
+  /// п. 1). Статус даёт `tokenRejectionStatus`, «ушёл ли токен» — `profileTokenSent`
+  /// у того же [ProfileSecretSource], которым composition root открывает
+  /// транспорт; значение токена читается и отбрасывается внутри kit.
+  Future<_TokenRejection?> _tokenRejectionOf(
     Object error,
     ConnectionProfile profile,
   ) async {
-    final text = await describeConnectFailureByToken(
-      error,
-      profile,
-      _tokenSecrets,
-    );
-    if (text == null || text.isEmpty) {
-      return text;
+    final status = tokenRejectionStatus(error);
+    if (status == null) {
+      return null;
     }
-    // Kit отдаёт строчный текст для CLI; остальные тексты баннера — с
-    // заглавной и точкой, поэтому app приводит его к тому же виду.
-    return '${text[0].toUpperCase()}${text.substring(1)}.';
+    return _TokenRejection(
+      status,
+      tokenSent: await profileTokenSent(profile, _tokenSecrets),
+    );
   }
+
+  /// Текст отказа по токену на языке [l10n] (метка security в ARB, D14):
+  /// «ушёл токен» — «отклонил», иначе — «требует» (acp-client-kit «Отказ
+  /// рукопожатия из-за токена»). Значения токена в тексте нет.
+  static String _tokenRejectionText(
+    _TokenRejection rejection,
+    AppLocalizations l10n,
+  ) => rejection.tokenSent
+      ? l10n.workbenchTokenRejected(rejection.status)
+      : l10n.workbenchTokenRequired(rejection.status);
 
   String? _kitMessage(WorkspaceState workspace) =>
       switch (workspace.connection) {
@@ -909,7 +981,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   /// текст kit, который `_handleWorkspaceChange` уже мог записать (kit
   /// публикует `ConnectionFailed` до того, как `connect` бросит ошибку).
   void _publishFailure(
-    String? rejection, {
+    _TokenRejection? rejection, {
     required ConnectionProfile profile,
     required int intent,
     int repeat = 0,
@@ -931,7 +1003,9 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         connectionStatus: CodeLabConnectionStatus.failed,
         // Без отказа по токену — текст kit текущего состояния, а не прежний
         // `connectionMessage`: он мог остаться от прошлой попытки.
-        connectionMessage: rejection ?? _kitMessage(_workspace.current),
+        connectionMessage: rejection == null
+            ? _kitMessage(_workspace.current)
+            : _tokenRejectionText(rejection, _strings.current),
       ),
     );
   }
@@ -972,10 +1046,12 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     if (missing == null) {
       return false;
     }
-    final message = projectFolderMissingMessage(missing);
+    final message = projectFolderMissingMessage(missing, _strings.current);
+    _missingFolder = (path: missing, text: message);
     _rejectBeforeConnect(message: message);
+    // В журнал — английский текст независимо от языка интерфейса (D5 п. 6).
     _diagnostics.record(
-      message,
+      projectFolderMissingMessage(missing, AppLocalizationsEn()),
       severity: DiagnosticSeverity.error,
       source: 'project',
     );
@@ -1084,4 +1160,13 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     severity: DiagnosticSeverity.error,
     source: 'transport',
   );
+}
+
+/// Отказ сервера по токену (401/403) как данные: HTTP-статус и признак, что
+/// токен был отправлен. Текст собирает [ConnectionCubit] по каталогу языка.
+final class _TokenRejection {
+  const _TokenRejection(this.status, {required this.tokenSent});
+
+  final int status;
+  final bool tokenSent;
 }

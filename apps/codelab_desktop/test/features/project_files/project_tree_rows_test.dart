@@ -97,7 +97,7 @@ void main() {
       ['big', 'big/a', 'big/\u0000more'],
     );
     expect(rows.last.kind, CodeLabFileTreeRowKind.more);
-    expect(rows.last.name, '… 42 more');
+    expect(rows.last.name, '42');
     expect(rows.last.depth, 1);
   });
 

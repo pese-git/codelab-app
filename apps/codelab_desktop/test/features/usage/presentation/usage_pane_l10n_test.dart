@@ -211,7 +211,7 @@ void main() {
       expect(pane, contains(title));
     }
     // Число записей склоняется (D8): 3 записи.
-    expect(pane, contains('Журнал: актуален · 3 записи'));
+    expect(pane, contains('История расхода: актуальна · 3 записи'));
     // Кит: подписи кнопок панели.
     expect(pane, contains('Пересобрать из журнала'));
     expect(pane, contains('Экспорт в CSV'));

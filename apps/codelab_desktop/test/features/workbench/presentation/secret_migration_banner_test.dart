@@ -14,14 +14,16 @@ import 'package:codelab_desktop/features/workbench/application/secret_migration_
 import 'package:codelab_desktop/features/workbench/application/secret_migration_runner.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/secret_migration_banner.dart';
+import 'package:codelab_desktop/l10n/app_localizations.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../../support/test_app_scope.dart';
+import '../../../support/l10n_app.dart';
 import '../../../support/start_agent.dart';
+import '../../../support/test_app_scope.dart';
 
 final class _FakeRunner implements SecretMigrationRunner {
   final planCompleters = <Completer<SecretMigrationOutcome>>[];
@@ -78,6 +80,8 @@ void main() {
   Future<void> pumpBanner(WidgetTester tester) async {
     await tester.pumpWidget(
       FluentApp(
+        localizationsDelegates: l10nTestDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: ScaffoldPage(
           content: BlocProvider.value(
             value: cubit,

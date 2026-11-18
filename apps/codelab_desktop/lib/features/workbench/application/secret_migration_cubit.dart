@@ -3,8 +3,49 @@ import 'dart:async';
 import 'package:codelab_client_acp/codelab_client_acp.dart' show Logger;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import 'secret_migration_runner.dart';
+
+/// Причина сбоя плана или переноса секретов — разовое сообщение в виде
+/// типа, а не строки (`add-desktop-localization`, D5: разовое сообщение нельзя
+/// пересобрать из входов, поэтому текст собирает presentation по каталогу).
+///
+/// Почему закрытая иерархия: у сбоя два источника с разной судьбой текста.
+/// Отчёт порта ([SecretMigrationPortProblem]) приходит готовым английским
+/// текстом от мигратора, содержит пути файлов конфигурации и показывается как
+/// есть (D7; перевод текста порта — вне итерации 3). Непредвиденное
+/// исключение ([SecretMigrationUnexpected]) даёт только имя типа: `toString()`
+/// исключения может нести литерал секрета.
+sealed class SecretMigrationFailure {
+  const SecretMigrationFailure();
+}
+
+/// Проблема из отчёта порта: [text] показывается как есть.
+final class SecretMigrationPortProblem extends SecretMigrationFailure {
+  const SecretMigrationPortProblem(this.text);
+
+  final String text;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SecretMigrationPortProblem && other.text == text;
+
+  @override
+  int get hashCode => Object.hash(SecretMigrationPortProblem, text);
+}
+
+/// Непредвиденное исключение: только имя типа [errorClass], без текста.
+final class SecretMigrationUnexpected extends SecretMigrationFailure {
+  const SecretMigrationUnexpected(this.errorClass);
+
+  final String errorClass;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SecretMigrationUnexpected && other.errorClass == errorClass;
+
+  @override
+  int get hashCode => Object.hash(SecretMigrationUnexpected, errorClass);
+}
 
 /// Состояние переноса секретов встроенного агента.
 ///
@@ -71,14 +112,14 @@ final class SecretMigrationPlanReady extends SecretMigrationState {
   final String? detail;
 }
 
-/// План не построен; [message] — безопасный текст без `error.toString()`.
+/// План не построен; [failure] — безопасная причина без `error.toString()`.
 final class SecretMigrationPlanFailed extends SecretMigrationState {
-  const SecretMigrationPlanFailed(this.message);
+  const SecretMigrationPlanFailed(this.failure);
 
-  /// Текст проблемы для диалога: из отчёта порта или `Planning failed: <тип>.`
-  /// (D8); без значений секретов, но может содержать пути файлов конфига
+  /// Причина для диалога: отчёт порта или имя типа исключения (D8); без
+  /// значений секретов, но текст порта может содержать пути файлов конфига
   /// (строки `problems` мигратора), поэтому в лог не пишется.
-  final String message;
+  final SecretMigrationFailure failure;
 }
 
 /// Перенос выполняется.
@@ -106,7 +147,7 @@ final class SecretMigrationApplied extends SecretMigrationState {
   final bool agentGone;
 }
 
-/// Перенос не выполнен; [message] — безопасный текст без `error.toString()`.
+/// Перенос не выполнен; [failure] — безопасная причина без `error.toString()`.
 ///
 /// При частичном сбое (часть файлов уже переписана) [movedAny] `true`, а
 /// [items] — то, что перенесено: пользователь видит это под текстом проблемы
@@ -114,16 +155,16 @@ final class SecretMigrationApplied extends SecretMigrationState {
 /// [SecretMigrationApplied]).
 final class SecretMigrationApplyFailed extends SecretMigrationState {
   const SecretMigrationApplyFailed(
-    this.message, {
+    this.failure, {
     this.items = const [],
     this.movedAny = false,
     this.canRestart = false,
     this.agentGone = false,
   });
 
-  /// Текст проблемы для диалога (из отчёта порта или `Migration failed: <тип>.`);
-  /// без значений секретов, показывается как есть.
-  final String message;
+  /// Причина для диалога (отчёт порта или имя типа исключения); без значений
+  /// секретов.
+  final SecretMigrationFailure failure;
 
   /// Что уже перенесено при частичном сбое; пусто, если [movedAny] `false`.
   final List<String> items;
@@ -163,15 +204,18 @@ final class SecretMigrationApplyFailed extends SecretMigrationState {
 /// ошибок строятся из отчёта порта или имени типа исключения, никогда из
 /// `toString()`; в [logger] идут только события, числа, id бэкенда и имена
 /// типов — без путей и значений (`AGENTS.md` §16).
+///
+/// Язык (`add-desktop-localization`, D5, D12): в состоянии нет текста,
+/// зависящего от языка, — сбои типизированы ([SecretMigrationFailure]), тексты
+/// диалога собирает presentation, а текст отчёта порта показывается как есть
+/// (D7). Поэтому Cubit на `AppStrings` не подписан; язык диалога держит
+/// `secret_migration_banner_l10n_test.dart`.
 final class SecretMigrationCubit extends Cubit<SecretMigrationState> {
   SecretMigrationCubit({
     required SecretMigrationRunner runner,
     required Stream<bool> turnActivity,
     Stream<String?>? offered,
     Logger? logger,
-    // ЗАГЛУШКА задачи 3.3 change `add-desktop-localization` (D5): порт языка
-    // принят, но Cubit на него не подписывается; поведение — задача 3.4.
-    AppStrings? strings,
   }) : _runner = runner,
        _logger = logger,
        super(const SecretMigrationHidden()) {
@@ -292,7 +336,7 @@ final class SecretMigrationCubit extends Cubit<SecretMigrationState> {
           'secret_migration.plan_failed',
           context: {'exit_code': report.exitCode},
         );
-        emit(SecretMigrationPlanFailed(problem));
+        emit(SecretMigrationPlanFailed(SecretMigrationPortProblem(problem)));
         return;
       }
       // Блокирующий признак сильнее `canApply` порта: перенос при бэкенде
@@ -322,7 +366,11 @@ final class SecretMigrationCubit extends Cubit<SecretMigrationState> {
         'secret_migration.plan_failed',
         context: {'error_class': '${error.runtimeType}'},
       );
-      emit(SecretMigrationPlanFailed(_describe('Planning', error)));
+      emit(
+        SecretMigrationPlanFailed(
+          SecretMigrationUnexpected('${error.runtimeType}'),
+        ),
+      );
     }
   }
 
@@ -349,7 +397,7 @@ final class SecretMigrationCubit extends Cubit<SecretMigrationState> {
         );
         emit(
           SecretMigrationApplyFailed(
-            problem,
+            SecretMigrationPortProblem(problem),
             items: report.movedAny ? report.items : const [],
             movedAny: report.movedAny,
             canRestart: !_turnActive && !gone,
@@ -376,7 +424,11 @@ final class SecretMigrationCubit extends Cubit<SecretMigrationState> {
         'secret_migration.apply_failed',
         context: {'error_class': '${error.runtimeType}'},
       );
-      emit(SecretMigrationApplyFailed(_describe('Migration', error)));
+      emit(
+        SecretMigrationApplyFailed(
+          SecretMigrationUnexpected('${error.runtimeType}'),
+        ),
+      );
     }
   }
 
@@ -410,7 +462,7 @@ final class SecretMigrationCubit extends Cubit<SecretMigrationState> {
         current.canRestart == (active || current.agentGone)) {
       emit(
         SecretMigrationApplyFailed(
-          current.message,
+          current.failure,
           items: current.items,
           movedAny: true,
           canRestart: !active && !current.agentGone,
@@ -423,8 +475,4 @@ final class SecretMigrationCubit extends Cubit<SecretMigrationState> {
   void _emitIfChanged(SecretMigrationState next) {
     if (state.runtimeType != next.runtimeType) emit(next);
   }
-
-  /// Только имя типа: `toString()` исключения может нести литерал секрета.
-  static String _describe(String action, Object error) =>
-      '$action failed: ${error.runtimeType}.';
 }

@@ -7,11 +7,12 @@
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/project_files/application/preview_view.dart';
 import 'package:codelab_desktop/features/project_files/application/project_tree_state.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 ({String kind, String value}) _probe(FilePreviewState state) =>
-    switch (previewContentOf(state)!) {
+    switch (previewContentOf(state, AppLocalizationsEn())!) {
       CodeLabFilePreviewLoading() => (kind: 'loading', value: ''),
       CodeLabFilePreviewText(:final text) => (kind: 'text', value: text),
       CodeLabFilePreviewBinary(:final sizeLabel) => (
@@ -30,7 +31,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('no file means no preview', () {
-    expect(previewContentOf(const PreviewNone()), isNull);
+    expect(previewContentOf(const PreviewNone(), AppLocalizationsEn()), isNull);
   });
 
   test('a file in flight is loading', () {

@@ -51,10 +51,10 @@ void main() {
       final labeler = UsageStepLabeler([call], cwd: _cwd);
 
       expect(
-        labeler.labelOf(_step(['call_1'])),
+        labeler.labelOf(_step(['call_1'])).englishText,
         'Read lib/acp_transcript_panel.dart',
       );
-      expect(labeler.labelOf(_step(['call_1'])), _rowLabel(call));
+      expect(labeler.labelOf(_step(['call_1'])).englishText, _rowLabel(call));
     });
 
     test('шаг с тремя вызовами: подпись первого найденного и суффикс +2', () {
@@ -66,7 +66,7 @@ void main() {
       ], cwd: _cwd);
 
       expect(
-        labeler.labelOf(_step(['call_1', 'call_2', 'call_3'])),
+        labeler.labelOf(_step(['call_1', 'call_2', 'call_3'])).englishText,
         '${_rowLabel(first)} +2',
       );
     });
@@ -74,13 +74,13 @@ void main() {
     test('шаг без вызовов — reply', () {
       final labeler = UsageStepLabeler([_read('call_1', '/work/a')], cwd: _cwd);
 
-      expect(labeler.labelOf(_step(const [])), 'reply');
+      expect(labeler.labelOf(_step(const [])).englishText, 'reply');
     });
 
     test('вызовы не найдены в транскрипте — N tool calls', () {
       final labeler = UsageStepLabeler([_read('call_1', '/work/a')], cwd: _cwd);
 
-      expect(labeler.labelOf(_step(['x1', 'x2'])), '2 tool calls');
+      expect(labeler.labelOf(_step(['x1', 'x2'])).englishText, '2 tool calls');
     });
 
     test('вызов потомка не ищется на вложенном уровне: вызов только корня', () {
@@ -89,7 +89,7 @@ void main() {
       final labeler = UsageStepLabeler([root], cwd: _cwd);
 
       expect(
-        labeler.labelOf(_step(['call_1/call_1', 'call_1/call_2'])),
+        labeler.labelOf(_step(['call_1/call_1', 'call_1/call_2'])).englishText,
         '2 tool calls',
       );
     });
@@ -99,7 +99,7 @@ void main() {
       final labeler = UsageStepLabeler([second], cwd: _cwd);
 
       expect(
-        labeler.labelOf(_step(['missing', 'call_2', 'call_3'])),
+        labeler.labelOf(_step(['missing', 'call_2', 'call_3'])).englishText,
         '${_rowLabel(second)} +2',
       );
     });
@@ -107,7 +107,10 @@ void main() {
     test('пустой транскрипт даёт N tool calls, а не ошибку', () {
       final labeler = UsageStepLabeler(const [], cwd: _cwd);
 
-      expect(labeler.labelOf(_step(['a', 'b', 'c'])), '3 tool calls');
+      expect(
+        labeler.labelOf(_step(['a', 'b', 'c'])).englishText,
+        '3 tool calls',
+      );
     });
   });
 }

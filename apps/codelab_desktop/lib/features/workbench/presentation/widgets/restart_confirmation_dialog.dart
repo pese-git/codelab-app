@@ -1,5 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
+import '../../../../l10n/l10n.dart';
 import '../../application/connection_cubit.dart' show RestartConfirmation;
 import '../../application/shell_cubit.dart';
 
@@ -10,6 +11,10 @@ import '../../application/shell_cubit.dart';
 /// текст и возвращает ответ (корневой `AGENTS.md` §10). Диалог рисуется по
 /// состоянию, поэтому его видно и над рабочим местом, и над настройками
 /// (design.md change `require-project-folder`, D18, D22).
+///
+/// Текст собирается здесь по каталогу (`add-desktop-localization`, D5, D8):
+/// число сессий склоняется ICU `plural`, а открытый диалог пересобирается при
+/// смене языка вместе с деревом, не теряя `pending`.
 ///
 /// Как использовать: `CodeLabApp` кладёт его поверх `Stack` рабочего места и
 /// настроек, пока `CodeLabShellState.pendingRestart != null`. «Restart agent» —
@@ -26,24 +31,31 @@ class RestartConfirmationDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Positioned.fill(
       child: ColoredBox(
         color: Colors.black.withAlpha(60),
         child: Center(
           child: ContentDialog(
             key: const ValueKey('restart-agent-dialog'),
-            title: const Text('Restart agent?'),
-            content: Text(pending.message),
+            title: Text(l10n.workbenchRestartTitle),
+            content: Text(
+              l10n.workbenchRestartMessage(
+                pending.title,
+                pending.sessions.length,
+                pending.sessions.join(', '),
+              ),
+            ),
             actions: [
               FilledButton(
                 key: const ValueKey('restart-agent-confirm'),
                 onPressed: () => cubit.confirmRestart(),
-                child: const Text('Restart agent'),
+                child: Text(l10n.commonRestartAgent),
               ),
               Button(
                 key: const ValueKey('restart-agent-cancel'),
                 onPressed: cubit.cancelRestart,
-                child: const Text('Cancel'),
+                child: Text(l10n.commonCancel),
               ),
             ],
           ),

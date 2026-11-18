@@ -5,6 +5,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/platform/usage_csv_saver.dart';
+import '../../../l10n/l10n.dart';
 import '../../workbench/application/shell_cubit.dart';
 import '../application/usage_pane_data.dart';
 import 'usage_pane_view.dart';
@@ -131,10 +132,11 @@ class _WorkbenchUsagePaneState extends State<WorkbenchUsagePane> {
         buildWhen: (previous, current) => previous.usage != current.usage,
         builder: (context, state) {
           final data = state.usage;
+          final l10n = context.l10n;
           return SingleChildScrollView(
             child: CodeLabUsagePane(
-              title: 'This session',
-              cards: usageCardsOf(data),
+              title: l10n.usageTitle,
+              cards: usageCardsOf(data, l10n),
               // Часы спрашиваются, только когда блок есть: без бюджета
               // панель от них не зависит.
               budget: data.budget == null
@@ -142,27 +144,28 @@ class _WorkbenchUsagePaneState extends State<WorkbenchUsagePane> {
                   : usageBudgetViewOf(
                       data,
                       now: (widget.clock ?? DateTime.now)(),
+                      l10n: l10n,
                     ),
-              statusLine: data.statusLine,
-              statusHint: data.statusHint,
-              turns: usageTurnRowsOf(data),
-              models: usageModelRowsOf(data),
+              statusLine: usageLedgerStatusOf(data.ledgerLine, l10n),
+              statusHint: usageLedgerHintOf(data.ledgerLine, l10n),
+              turns: usageTurnRowsOf(data, l10n),
+              models: usageModelRowsOf(data, l10n),
               loading: data.busy && data.ledger == null,
               refreshing: data.busy && data.ledger != null,
               notes: [
                 switch (data.notice) {
                   UsagePaneNotice.ledgerFailed => CodeLabUsageNote(
-                    text: "Couldn't load usage history.",
+                    text: l10n.usageNoteLedgerFailed,
                     hint: data.failureHint,
-                    retryLabel: 'Retry',
+                    retryLabel: l10n.commonRetry,
                   ),
-                  UsagePaneNotice.noLedger => const CodeLabUsageNote(
-                    text: 'This agent does not provide usage history.',
+                  UsagePaneNotice.noLedger => CodeLabUsageNote(
+                    text: l10n.usageNoteNoLedger,
                   ),
                   UsagePaneNotice.none => null,
                 },
                 if (_saveFailed)
-                  const CodeLabUsageNote(text: "Couldn't save the file."),
+                  CodeLabUsageNote(text: l10n.usageNoteSaveFailed),
               ].nonNulls.toList(),
               showRebuild: data.ledgerAvailable,
               showExport: data.canExport,

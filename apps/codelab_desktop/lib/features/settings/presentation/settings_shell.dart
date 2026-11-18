@@ -8,9 +8,9 @@ import '../../../l10n/l10n.dart';
 import '../application/settings_search_index.dart';
 import 'agents_modes_page.dart';
 import 'connection_page.dart';
+import 'general_page.dart';
 import 'mcp_page.dart';
 import 'providers_page.dart';
-import 'general_page.dart';
 import 'settings_titles.dart';
 import 'skills_page.dart';
 
@@ -178,13 +178,11 @@ class _SettingsShellState extends State<SettingsShell> {
                             padding: const EdgeInsets.only(bottom: 16),
                             child: InfoBar(
                               key: const ValueKey('settings-pending-approval'),
-                              title: const Text(
-                                'Agent is waiting for your approval',
-                              ),
+                              title: Text(l10n.settingsShellPendingApproval),
                               severity: InfoBarSeverity.warning,
                               action: Button(
                                 onPressed: widget.onBackToApproval,
-                                child: const Text('Back to session'),
+                                child: Text(l10n.settingsShellBackToSession),
                               ),
                             ),
                           ),

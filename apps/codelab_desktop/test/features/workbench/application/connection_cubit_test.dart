@@ -10,12 +10,14 @@
 
 import 'dart:async';
 
-import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:codelab_desktop/app/embedded_transport_resolver.dart';
+import 'package:codelab_desktop/app/language/app_language_cubit.dart'
+    show AppStrings;
 import 'package:codelab_desktop/app/provider_setup_offer.dart';
 import 'package:codelab_desktop/core/platform/connection_preferences.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
@@ -23,12 +25,15 @@ import 'package:codelab_desktop/features/settings/application/connection_command
 import 'package:codelab_desktop/features/settings/application/default_profile_resolver.dart';
 import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
+import 'package:codelab_desktop/l10n/app_localizations_ru.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
     show EmbeddedAgentConfigException;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../support/app_strings.dart';
 import '../../../support/fake_usage_csv_saver.dart';
 import '../../../support/in_memory_profile_store.dart';
 import '../../../support/recording_logger.dart';
@@ -139,6 +144,7 @@ void main() {
     ProviderSetupOffer? providerSetupOffer,
     bool alsoRecording = false,
     String? project = '/work/app',
+    AppStrings? strings,
   }) {
     resolver = _RecordingResolver();
     shellLog = RecordingLogger();
@@ -165,6 +171,7 @@ void main() {
       eventLogger: eventLog,
       tokenSecrets: tokenSecrets,
       providerSetupOffer: providerSetupOffer,
+      strings: strings ?? FixedAppStrings(AppLocalizationsEn()),
     );
     addTearDown(parts.close);
     // Неявной папки нет (require-project-folder D1): проект выбран явно.
@@ -909,6 +916,54 @@ void main() {
       expect(logged(), contains('The agent rejected the token (HTTP 401).'));
       expect(logged(), isNot(contains('AcpWebSocketHandshakeRejected')));
       expect('$state${logged()}', isNot(contains(marker)));
+    });
+
+    test('ru: отказ по токену — перевод в баннере; журнал английский; смена '
+        'языка пересобирает текст, а en возвращает прежний', () async {
+      final strings = TestAppStrings(AppLocalizationsRu());
+      addTearDown(strings.close);
+      build(tokenSecrets: withToken(), strings: strings);
+      resolver.failWith['remote'] = rejection(401);
+
+      await start(remote);
+      await pumpEventQueue();
+
+      expect(
+        parts.connection.state.connectionMessage,
+        'Агент отклонил токен (HTTP 401).',
+      );
+      // В журнал — английский текст независимо от языка интерфейса.
+      expect(logged(), contains('The agent rejected the token (HTTP 401).'));
+      expect(logged(), isNot(contains('Агент отклонил')));
+
+      strings.emit(AppLocalizationsEn());
+      await pumpEventQueue();
+      expect(
+        parts.connection.state.connectionMessage,
+        'The agent rejected the token (HTTP 401).',
+      );
+      strings.emit(AppLocalizationsRu());
+      await pumpEventQueue();
+      expect(
+        parts.connection.state.connectionMessage,
+        'Агент отклонил токен (HTTP 401).',
+      );
+    });
+
+    test('ru: без токена — «требует токен»', () async {
+      build(
+        tokenSecrets: ProfileSecretSource(const {}, stored: _Secrets()),
+        strings: FixedAppStrings(AppLocalizationsRu()),
+      );
+      resolver.failWith['remote'] = rejection(403);
+
+      await start(remote);
+      await pumpEventQueue();
+
+      expect(
+        parts.connection.state.connectionMessage,
+        'Агент требует токен (HTTP 403).',
+      );
     });
 
     test('without a token the text says the agent requires one', () async {

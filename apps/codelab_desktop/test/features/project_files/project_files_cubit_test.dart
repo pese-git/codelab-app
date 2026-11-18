@@ -422,7 +422,7 @@ void main() {
 
       final more = cubit.state.rows.last;
       expect(more.kind, CodeLabFileTreeRowKind.more);
-      expect(more.name, '… 5000 more');
+      expect(more.name, '5000');
     });
 
     test('Refresh re-reads the root and the expanded folders and shows a '

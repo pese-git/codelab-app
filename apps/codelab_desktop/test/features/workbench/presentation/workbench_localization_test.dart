@@ -90,9 +90,13 @@ void main() {
       await scene.newSession('s1');
 
       expect(find.text('Отправьте сообщение, чтобы начать.'), findsOneWidget);
-      // Название по умолчанию и подпись сессии в сайдбаре.
+      // Название по умолчанию в сайдбаре; подпись `updatedLabel` кит не
+      // рисует, поэтому она проверяется по данным строки.
       expect(find.text('Новая сессия'), findsWidgets);
-      expect(find.text('Активна'), findsOneWidget);
+      expect(
+        scene.cubit.state.sessions.map((s) => s.updatedLabel),
+        contains('Активна'),
+      );
       final status = scene.textOf(find.byType(CodeLabSessionStatusBar));
       expect(status, contains('расход: —'));
       // Кит: подсказка композера.
@@ -169,13 +173,21 @@ void main() {
 
       expect(scene.cubit.state.connectionStatus, CodeLabConnectionStatus.lost);
       // Кит: текст баннера.
-      expect(find.text('Подключение к агенту потеряно'), findsOneWidget);
+      // Тот же текст теперь и у заголовка заметки сбоя в ленте (решение
+      // пользователя 2026-11-19), поэтому в баннере — по ключевому типу.
+      expect(
+        _inKeyType(
+          CodeLabConnectionBanner,
+          find.text('Подключение к агенту потеряно'),
+        ),
+        findsOneWidget,
+      );
       expect(
         _inKeyType(CodeLabConnectionBanner, find.text('Повторить')),
         findsOneWidget,
       );
       final transcript = scene.textOf(find.byType(CodeLabTranscriptPanel));
-      expect(transcript, contains('Связь с агентом потеряна'));
+      expect(transcript, contains('Подключение к агенту потеряно'));
       // Текст ошибки ядра уходит в раскрытие и остаётся английским (D7).
       expect(turn.method, sessionPromptMethod);
 
@@ -278,13 +290,25 @@ void main() {
         'Начать новую ACP-сессию.',
         'Журналы',
         'Открыть журналы протокола и диагностики.',
-        'Переподключиться',
-        'Повторить текущее подключение к агенту.',
+        // Профиль сцены — локальный stdio: пункт `reconnect` называется
+        // «Restart agent» (Q24, D22), как на `en`.
+        'Перезапустить агента',
+        'Перезапустить агента выбранным профилем и перезагрузить открытые '
+            'сессии.',
       ]) {
         expect(palette, contains(text));
       }
-      // Команда агента: имя и описание агента.
-      expect(palette, contains('Review the plan'));
+      // Команда агента в конце списка выходит за видимую часть палитры; по
+      // запросу она видна: имя и описание агента без перевода.
+      await tester.enterText(
+        find.byKey(CodeLabCommandPaletteSurface.queryFieldKey),
+        'review',
+      );
+      await tester.pump();
+      expect(
+        scene.textOf(find.byType(CodeLabCommandPaletteSurface)),
+        contains('Review the plan'),
+      );
 
       await scene.close();
     });

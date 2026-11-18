@@ -15,14 +15,20 @@ import 'package:flutter_test/flutter_test.dart';
 /// Для чего: собирает видимые строки дерева (`Text`, `RichText`, `placeholder`
 /// полей, `Tooltip.message`, `Semantics.label`) и падает, если среди них есть
 /// значение сообщения каталога [from] без плейсхолдеров, у которого перевод в
-/// [to] отличается. Сообщения с плейсхолдерами и строки, одинаковые в обоих
-/// языках (`OK`, `MCP`, эндонимы), пропускаются; ответы агента, пути и команды
-/// в каталог не входят, поэтому ложных срабатываний нет.
+/// [to] отличается. Кандидаты берутся из двух каталогов: app
+/// (`lib/l10n/app_<язык>.arb`) и кита (`codelab_ui_<язык>.arb`): строка кита
+/// («Running» тега вызова, «Awaiting approval», «Copy»), оставшаяся на экране
+/// при неисправном пересоздании, ловится так же, как строка app (D9;
+/// `add-desktop-localization`, задача 3.4). Сообщения с плейсхолдерами и
+/// строки, одинаковые в обоих языках (`OK`, `MCP`, эндонимы), пропускаются;
+/// ответы агента, пути и команды в каталог не входят, поэтому ложных
+/// срабатываний нет.
 ///
 /// Как использовать: экран в [from] с данными → `AppLanguageCubit.select` →
 /// `pumpAndSettle` → `await expectNoStaleLanguage(tester, from: …, to: …)`;
-/// затем обратно. Каталоги читаются из `lib/l10n/app_<язык>.arb` текущего
-/// пакета (каталог кита добавляется вместе с итерацией 2).
+/// затем обратно. Каталог app читается из `lib/l10n` текущего пакета, каталог
+/// кита — из `../../packages/flutter/codelab_ui/lib/src/l10n` (тесты
+/// запускаются из каталога пакета `apps/codelab_desktop`).
 Future<void> expectNoStaleLanguage(
   WidgetTester tester, {
   required AppLocalizations from,
@@ -54,13 +60,24 @@ Future<void> expectNoStaleLanguage(
   }
 }
 
-Map<String, String> _catalog(String localeName) {
+/// Каталог app и кита одного языка в одной карте; ключи с префиксом каталога,
+/// чтобы одноимённые сообщения не затёрли друг друга.
+Map<String, String> _catalog(String localeName) => {
+  ..._arb('app', 'lib/l10n/app_$localeName.arb'),
+  ..._arb(
+    'kit',
+    '../../packages/flutter/codelab_ui/lib/src/l10n/'
+        'codelab_ui_$localeName.arb',
+  ),
+};
+
+Map<String, String> _arb(String prefix, String path) {
   final json =
-      jsonDecode(File('lib/l10n/app_$localeName.arb').readAsStringSync())
-          as Map<String, dynamic>;
+      jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
   return {
     for (final entry in json.entries)
-      if (!entry.key.startsWith('@')) entry.key: entry.value as String,
+      if (!entry.key.startsWith('@'))
+        '$prefix:${entry.key}': entry.value as String,
   };
 }
 

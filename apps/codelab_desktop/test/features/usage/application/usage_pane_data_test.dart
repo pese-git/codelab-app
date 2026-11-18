@@ -19,6 +19,8 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show SessionId, ToolCallId, ToolKind;
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/usage/application/usage_pane_data.dart';
+import 'package:codelab_desktop/features/usage/presentation/usage_pane_view.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _sid = SessionId('s-1');
@@ -114,6 +116,21 @@ SessionView _view({
 
 UsagePaneData _of(SessionView view) => usagePaneDataOf(view, cwd: '/work');
 
+/// Английский эталон текстов, которые собирает presentation по значениям
+/// application (`add-desktop-localization`, D5 п. 4): прежние проверки
+/// текста остаются на `en`, а значения проверяются теми же функциями, что
+/// рисуют панель.
+final _en = AppLocalizationsEn();
+
+String? _detailText(UsagePaneCard card) =>
+    usageCardsOf(UsagePaneData(cards: [card]), _en).single.detail;
+
+String? _statusLine(UsagePaneData data) =>
+    usageLedgerStatusOf(data.ledgerLine, _en);
+
+String? _statusHint(UsagePaneData data) =>
+    usageLedgerHintOf(data.ledgerLine, _en);
+
 UsagePaneCard _card(UsagePaneData data, String id) =>
     data.cards.singleWhere((c) => c.id == id);
 
@@ -193,22 +210,22 @@ void main() {
 
     test('Input — input + cacheRead + cacheWrite, вторая строка — кэш', () {
       expect(_card(data, 'input').value, '950');
-      expect(_card(data, 'input').detail, 'cache read 400 · write 50');
+      expect(_detailText(_card(data, 'input')), 'cache read 400 · write 50');
     });
 
     test('Output — output и reasoning, если он известен', () {
       expect(_card(data, 'output').value, '300');
-      expect(_card(data, 'output').detail, 'reasoning 120');
+      expect(_detailText(_card(data, 'output')), 'reasoning 120');
     });
 
     test('Cost — деньги kit без «~» при полной сумме', () {
       expect(_card(data, 'cost').value, r'$1.20');
-      expect(_card(data, 'cost').detail, isNull);
+      expect(_detailText(_card(data, 'cost')), isNull);
     });
 
     test('Turns · steps — ходы · шаги и среднее в целых десятых', () {
       expect(_card(data, 'turns').value, '2 · 3');
-      expect(_card(data, 'turns').detail, 'avg 1.5 steps per turn');
+      expect(_detailText(_card(data, 'turns')), 'avg 1.5 steps per turn');
     });
 
     test('среднее: половина вверх, десятые считаются в целых', () {
@@ -223,9 +240,9 @@ void main() {
         ),
       );
 
-      expect(_card(avg(4, 7), 'turns').detail, 'avg 1.8 steps per turn');
-      expect(_card(avg(3, 5), 'turns').detail, 'avg 1.7 steps per turn');
-      expect(_card(avg(8, 3), 'turns').detail, 'avg 0.4 steps per turn');
+      expect(_detailText(_card(avg(4, 7), 'turns')), 'avg 1.8 steps per turn');
+      expect(_detailText(_card(avg(3, 5), 'turns')), 'avg 1.7 steps per turn');
+      expect(_detailText(_card(avg(8, 3), 'turns')), 'avg 0.4 steps per turn');
     });
 
     test('при нуле ходов среднего нет', () {
@@ -237,7 +254,7 @@ void main() {
         ),
       );
 
-      expect(_card(empty, 'turns').detail, isNull);
+      expect(_detailText(_card(empty, 'turns')), isNull);
     });
 
     test('без reasoning второй строки Output нет', () {
@@ -249,7 +266,7 @@ void main() {
         ),
       );
 
-      expect(_card(d, 'output').detail, isNull);
+      expect(_detailText(_card(d, 'output')), isNull);
     });
 
     test('большие числа форматирует kit: 184200 → 184.2k', () {
@@ -282,7 +299,10 @@ void main() {
       final d = costOf(cost: _usd(2260000), partial: {UsagePartial.noUsage});
 
       expect(_card(d, 'cost').value, r'~$2.26');
-      expect(_card(d, 'cost').detail, 'agent sent no usage for some steps');
+      expect(
+        _detailText(_card(d, 'cost')),
+        'agent sent no usage for some steps',
+      );
     });
 
     test('причины через запятую в порядке noUsage, noPrice, beforeLoad', () {
@@ -296,7 +316,7 @@ void main() {
       );
 
       expect(
-        _card(d, 'cost').detail,
+        _detailText(_card(d, 'cost')),
         'agent sent no usage for some steps, price unknown for some steps, '
         'before the session was loaded',
       );
@@ -306,7 +326,7 @@ void main() {
       final d = costOf();
 
       expect(_card(d, 'cost').value, '—');
-      expect(_card(d, 'cost').detail, 'price unknown');
+      expect(_detailText(_card(d, 'cost')), 'price unknown');
     });
 
     test('«~» перед токенами при noUsage и beforeLoad, но не при noPrice', () {
@@ -398,18 +418,21 @@ void main() {
       final steps = data.turns.first.steps;
 
       expect(
-        [for (final s in steps) s.label],
+        [
+          for (final s in steps)
+            _en.usageStepLabel(s.index + 1, usageStepTitleText(s.title, _en)),
+        ],
         ['step 1 · Read lib/a.dart', 'step 2 · reply', 'step 3 · 2 tool calls'],
       );
-      expect(steps.first.title, 'Read lib/a.dart');
+      expect(steps.first.title.englishText, 'Read lib/a.dart');
       expect(steps.first.model, 'openai/gpt-5');
       expect(steps.first.turn, 2);
       expect(steps.first.index, 0);
     });
 
     test('у хода с субагентами — строка subagents · N runs', () {
-      expect(data.turns.first.subagents, 'subagents · 2 runs');
-      expect(data.turns.last.subagents, isNull);
+      expect(data.turns.first.subagentRuns, 2);
+      expect(data.turns.last.subagentRuns, isNull);
     });
   });
 
@@ -557,11 +580,14 @@ void main() {
       );
 
       expect(
-        [for (final m in data.models) m.label],
-        ['openai / gpt-5', 'Subagents', 'Summaries'],
+        [
+          for (final m in data.models)
+            m.kind == UsageModelKind.model ? m.label : m.kind.name,
+        ],
+        ['openai / gpt-5', 'subagents', 'summaries'],
       );
-      expect(data.models[1].detail, '2 runs');
-      expect(data.models[2].detail, '3');
+      expect(data.models[1].count, 2);
+      expect(data.models[2].count, 3);
       expect(data.models[1].input, '10');
       expect(data.models[2].cost, '—');
     });
@@ -577,7 +603,7 @@ void main() {
 
   group('строка состояния журнала (Q3)', () {
     String? statusOf(UsageLedgerView ledger) =>
-        _of(_view(ledger: UsageLedgerState.loaded(ledger))).statusLine;
+        _statusLine(_of(_view(ledger: UsageLedgerState.loaded(ledger))));
 
     test('upToDate с числом записей', () {
       expect(
@@ -728,7 +754,7 @@ void main() {
 
     test('Turns · steps показывает только шаги, без среднего', () {
       expect(_card(data, 'turns').value, '3');
-      expect(_card(data, 'turns').detail, isNull);
+      expect(_detailText(_card(data, 'turns')), isNull);
     });
 
     test('таблиц, Export CSV и Rebuild нет, есть заметка noLedger', () {
@@ -789,7 +815,7 @@ void main() {
   // ---------------------------------------------------------------------------
   // Задача 1.3 change `fix-usage-pane-live-cards` (agent-workbench-ui «Панель
   // Usage»; design.md D1, D2, D7, D8, Q1 (в), Q5 (а), Q6 (а)). Красные до
-  // 1.2 и 1.4: нужны `UsageTotals.turns` (kit, D2) и `UsagePaneData.statusHint`
+  // 1.2 и 1.4: нужны `UsageTotals.turns` (kit, D2) и `_statusHint(UsagePaneData)`
   // (D7); пока их нет, файл не компилируется.
   // ---------------------------------------------------------------------------
 
@@ -891,9 +917,9 @@ void main() {
         );
 
         expect(_card(d, 'cost').value, r'$0.00038');
-        expect(_card(d, 'cost').detail, isNull);
+        expect(_detailText(_card(d, 'cost')), isNull);
         expect(_card(d, 'turns').value, '1 · 1');
-        expect(_card(d, 'turns').detail, 'avg 1.0 steps per turn');
+        expect(_detailText(_card(d, 'turns')), 'avg 1.0 steps per turn');
         expect(d.cards.map((c) => c.value), isNot(contains('0')));
       },
     );
@@ -1022,7 +1048,10 @@ void main() {
 
       expect(_card(d, 'cost').value, r'~$2.26');
       expect(_card(d, 'cost').approximate, isTrue);
-      expect(_card(d, 'cost').detail, 'agent sent no usage for some steps');
+      expect(
+        _detailText(_card(d, 'cost')),
+        'agent sent no usage for some steps',
+      );
     });
   });
 
@@ -1041,12 +1070,14 @@ void main() {
       final d = live(_totals(_tokens(10, 5), steps: 5, turns: 2));
 
       expect(_card(d, 'turns').value, '2 · 5');
-      expect(_card(d, 'turns').detail, 'avg 2.5 steps per turn');
+      expect(_detailText(_card(d, 'turns')), 'avg 2.5 steps per turn');
     });
 
     test('среднее — в целых десятых, половина вверх (как у журнала)', () {
       expect(
-        _card(live(_totals(_tokens(1, 1), steps: 7, turns: 4)), 'turns').detail,
+        _detailText(
+          _card(live(_totals(_tokens(1, 1), steps: 7, turns: 4)), 'turns'),
+        ),
         'avg 1.8 steps per turn',
       );
     });
@@ -1055,14 +1086,14 @@ void main() {
       final d = live(_totals(_tokens(10, 5), steps: 5));
 
       expect(_card(d, 'turns').value, '5');
-      expect(_card(d, 'turns').detail, isNull);
+      expect(_detailText(_card(d, 'turns')), isNull);
     });
 
     test('turns 0 — ходы показаны, среднего нет', () {
       final d = live(_totals(_tokens(0, 0), steps: 0, turns: 0));
 
       expect(_card(d, 'turns').value, '0 · 0');
-      expect(_card(d, 'turns').detail, isNull);
+      expect(_detailText(_card(d, 'turns')), isNull);
     });
   });
 
@@ -1089,7 +1120,7 @@ void main() {
         final d = emptyOf(_totals(_none, steps: 0), ledger: ledger);
 
         expect(_card(d, 'cost').value, '—', reason: 'ledger=$ledger');
-        expect(_card(d, 'cost').detail, 'no usage yet');
+        expect(_detailText(_card(d, 'cost')), 'no usage yet');
         expect(_card(d, 'cost').approximate, isFalse);
       }
     });
@@ -1099,7 +1130,7 @@ void main() {
 
       for (final card in d.cards) {
         expect(card.value, isNot(r'$0.00'));
-        expect('${card.detail}', isNot(contains('price unknown')));
+        expect('${_detailText(card)}', isNot(contains('price unknown')));
       }
     });
 
@@ -1109,7 +1140,7 @@ void main() {
       expect(_card(d, 'input').value, '0');
       expect(_card(d, 'output').value, '0');
       expect(_card(d, 'turns').value, '0 · 0');
-      expect(_card(d, 'turns').detail, isNull);
+      expect(_detailText(_card(d, 'turns')), isNull);
     });
 
     test('нулевые шаги с причиной noUsage — прежнее правило: `—` и текст '
@@ -1119,7 +1150,10 @@ void main() {
       );
 
       expect(_card(d, 'cost').value, '—');
-      expect(_card(d, 'cost').detail, 'agent sent no usage for some steps');
+      expect(
+        _detailText(_card(d, 'cost')),
+        'agent sent no usage for some steps',
+      );
     });
 
     test('нулевые шаги, но токены ненулевые — прежнее правило `price '
@@ -1133,7 +1167,7 @@ void main() {
         final d = emptyOf(_totals(tokens, steps: 0));
 
         expect(_card(d, 'cost').value, '—');
-        expect(_card(d, 'cost').detail, 'price unknown');
+        expect(_detailText(_card(d, 'cost')), 'price unknown');
       }
     });
 
@@ -1142,14 +1176,14 @@ void main() {
       final d = emptyOf(_totals(_tokens(0, 0, reasoning: 5), steps: 0));
 
       expect(_card(d, 'cost').value, '—');
-      expect(_card(d, 'cost').detail, 'price unknown');
+      expect(_detailText(_card(d, 'cost')), 'price unknown');
     });
 
     test('шаги есть, токены нули, цены нет — `price unknown`, не `no usage '
         'yet`', () {
       final d = emptyOf(_totals(_none, steps: 1));
 
-      expect(_card(d, 'cost').detail, 'price unknown');
+      expect(_detailText(_card(d, 'cost')), 'price unknown');
     });
 
     test('известная стоимость пустого по токенам агрегата показывается как '
@@ -1157,7 +1191,7 @@ void main() {
       final d = emptyOf(_totals(_none, cost: _usd(0), steps: 0));
 
       expect(_card(d, 'cost').value, r'$0.00');
-      expect(_card(d, 'cost').detail, isNull);
+      expect(_detailText(_card(d, 'cost')), isNull);
     });
   });
 
@@ -1175,30 +1209,30 @@ void main() {
     test('rebuilt со stale — как upToDate, причина в подсказке', () {
       final d = of(rebuilt('stale'));
 
-      expect(d.statusLine, 'Ledger: up to date · 12 records');
-      expect(d.statusHint, 'refreshed from the session journal (stale)');
+      expect(_statusLine(d), 'Ledger: up to date · 12 records');
+      expect(_statusHint(d), 'refreshed from the session journal (stale)');
     });
 
     test('rebuilt с missing — как upToDate, причина в подсказке', () {
       final d = of(rebuilt('missing'));
 
-      expect(d.statusLine, 'Ledger: up to date · 12 records');
-      expect(d.statusHint, 'refreshed from the session journal (missing)');
+      expect(_statusLine(d), 'Ledger: up to date · 12 records');
+      expect(_statusHint(d), 'refreshed from the session journal (missing)');
     });
 
     test('stale без числа записей — строка без хвоста, подсказка есть', () {
       final d = of(rebuilt('stale', records: null));
 
-      expect(d.statusLine, 'Ledger: up to date');
-      expect(d.statusHint, 'refreshed from the session journal (stale)');
+      expect(_statusLine(d), 'Ledger: up to date');
+      expect(_statusHint(d), 'refreshed from the session journal (stale)');
     });
 
     test('rebuilt с invalid и explicit — видны, без подсказки', () {
       for (final reason in ['invalid', 'explicit']) {
         final d = of(rebuilt(reason));
 
-        expect(d.statusLine, 'rebuilt from journal ($reason) · 12 records');
-        expect(d.statusHint, isNull, reason: reason);
+        expect(_statusLine(d), 'rebuilt from journal ($reason) · 12 records');
+        expect(_statusHint(d), isNull, reason: reason);
       }
     });
 
@@ -1208,12 +1242,12 @@ void main() {
       final none = of(rebuilt(null));
 
       expect(
-        unknown.statusLine,
+        _statusLine(unknown),
         'rebuilt from journal (disk-full) · 12 records',
       );
-      expect(unknown.statusHint, isNull);
-      expect(none.statusLine, 'rebuilt from journal · 12 records');
-      expect(none.statusHint, isNull);
+      expect(_statusHint(unknown), isNull);
+      expect(_statusLine(none), 'rebuilt from journal · 12 records');
+      expect(_statusHint(none), isNull);
     });
 
     test(
@@ -1226,7 +1260,9 @@ void main() {
           null,
         ]) {
           expect(
-            of(_ledger(status: status, reason: 'stale', records: 3)).statusHint,
+            _statusHint(
+              of(_ledger(status: status, reason: 'stale', records: 3)),
+            ),
             isNull,
             reason: '$status',
           );
@@ -1238,17 +1274,17 @@ void main() {
       'подсказка не мешает прежним текстам: upToDate, inMemory, notSaved',
       () {
         expect(
-          of(
-            _ledger(status: UsageLedgerStatus.upToDate, records: 1),
-          ).statusLine,
+          _statusLine(
+            of(_ledger(status: UsageLedgerStatus.upToDate, records: 1)),
+          ),
           'Ledger: up to date · 1 record',
         );
         expect(
-          of(_ledger(status: UsageLedgerStatus.inMemory)).statusLine,
+          _statusLine(of(_ledger(status: UsageLedgerStatus.inMemory))),
           'in memory',
         );
         expect(
-          of(_ledger(status: UsageLedgerStatus.notSaved)).statusLine,
+          _statusLine(of(_ledger(status: UsageLedgerStatus.notSaved))),
           'not saved',
         );
       },
@@ -1257,8 +1293,8 @@ void main() {
     test('журнала для показа нет — ни строки, ни подсказки', () {
       final d = _of(_view(ledger: const UsageLedgerState.loading()));
 
-      expect(d.statusLine, isNull);
-      expect(d.statusHint, isNull);
+      expect(_statusLine(d), isNull);
+      expect(_statusHint(d), isNull);
     });
 
     test('прежний журнал при loading сохраняет строку и подсказку', () {
@@ -1266,8 +1302,8 @@ void main() {
         _view(ledger: UsageLedgerState.loading(previous: rebuilt('stale'))),
       );
 
-      expect(d.statusLine, 'Ledger: up to date · 12 records');
-      expect(d.statusHint, 'refreshed from the session journal (stale)');
+      expect(_statusLine(d), 'Ledger: up to date · 12 records');
+      expect(_statusHint(d), 'refreshed from the session journal (stale)');
     });
   });
 }

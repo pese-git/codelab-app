@@ -6,10 +6,12 @@
 import 'package:codelab_desktop/features/workbench/application/shell_part.dart';
 import 'package:codelab_desktop/features/workbench/application/transcript_view_cubit.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/main_pane.dart';
+import 'package:codelab_desktop/l10n/app_localizations.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/l10n_app.dart';
 import '../../../support/transcript_rows.dart';
 import 'shell_cubit_characterization/harness.dart';
 
@@ -125,6 +127,8 @@ void main() {
 
     await tester.pumpWidget(
       FluentApp(
+        localizationsDelegates: l10nTestDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: WorkbenchMainPane(state: h.cubit.state, cubit: h.cubit),
       ),
     );
@@ -142,6 +146,8 @@ void main() {
 
     await tester.pumpWidget(
       FluentApp(
+        localizationsDelegates: l10nTestDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: WorkbenchMainPane(state: h.cubit.state, cubit: h.cubit),
       ),
     );
@@ -159,6 +165,8 @@ void main() {
 
     await tester.pumpWidget(
       FluentApp(
+        localizationsDelegates: l10nTestDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: WorkbenchMainPane(state: state, cubit: h.cubit),
       ),
     );

@@ -177,8 +177,8 @@ void main() {
     await pumpEventQueue();
 
     expect(
-      (cubit.state as SecretMigrationPlanFailed).message,
-      'config is invalid',
+      (cubit.state as SecretMigrationPlanFailed).failure,
+      const SecretMigrationPortProblem('config is invalid'),
     );
   });
 
@@ -190,9 +190,10 @@ void main() {
     );
     await pumpEventQueue();
 
-    final message = (cubit.state as SecretMigrationPlanFailed).message;
-    expect(message, contains('_LeakyError'));
-    expect(message, isNot(contains('sk-test-leak-0123456789')));
+    final failure = (cubit.state as SecretMigrationPlanFailed).failure;
+    // Только имя типа: текст исключения в состояние не попадает.
+    expect(failure, const SecretMigrationUnexpected('_LeakyError'));
+    expect('$failure', isNot(contains('sk-test-leak-0123456789')));
   });
 
   test('planFailed -> close возвращает offered', () async {
@@ -234,8 +235,8 @@ void main() {
     );
     await pumpEventQueue();
     expect(
-      (cubit.state as SecretMigrationApplyFailed).message,
-      'store write failed',
+      (cubit.state as SecretMigrationApplyFailed).failure,
+      const SecretMigrationPortProblem('store write failed'),
     );
 
     cubit.closeDialog();
@@ -247,9 +248,9 @@ void main() {
       _LeakyError('sk-test-leak-0123456789'),
     );
     await pumpEventQueue();
-    final message = (cubit.state as SecretMigrationApplyFailed).message;
-    expect(message, contains('_LeakyError'));
-    expect(message, isNot(contains('sk-test-leak-0123456789')));
+    final failure = (cubit.state as SecretMigrationApplyFailed).failure;
+    expect(failure, const SecretMigrationUnexpected('_LeakyError'));
+    expect('$failure', isNot(contains('sk-test-leak-0123456789')));
   });
 
   test('поздний план после closeDialog отбрасывается', () async {
@@ -452,7 +453,10 @@ void main() {
     test('applyFailed несёт перенесённое и признак movedAny', () async {
       await failPartially();
       final state = cubit.state as SecretMigrationApplyFailed;
-      expect(state.message, 'config.yaml: write failed');
+      expect(
+        state.failure,
+        const SecretMigrationPortProblem('config.yaml: write failed'),
+      );
       expect(state.items, _items);
       expect(state.movedAny, isTrue);
       expect(state.canRestart, isTrue);
