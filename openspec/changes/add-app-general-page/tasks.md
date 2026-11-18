@@ -39,7 +39,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - неизвестный ключ и ключ `fileOnly` — `UnknownSetting`;
   - `trusted_projects` — `TrustBoundarySetting`.
 - [x] 1.2 `[agent]` Реализация 1.1: `lib/src/views/setting_edit_rules.dart` (D6), экспорт из основного бареля; web-smoke (`test/web_smoke/main.dart`) вызывает `settingEditRefusalOf`. `packages/dart/codelab_setup/AGENTS.md` §1 — строка о правилах. 1.1 зелёный, `web-compile` зелёный.
-- [ ] 1.3 `[client]` Красный: `apps/codelab_cli/test/setup/settings_rows_test.dart` — сценарий «Тексты CLI не меняются»: все четыре текста отказа `/settings` для каждой ветки `SettingEditRefusal` побайтно, в том числе источники `config` и `env`.
+- [x] 1.3 `[client]` Красный: `apps/codelab_cli/test/setup/settings_rows_test.dart` — сценарий «Тексты CLI не меняются»: все четыре текста отказа `/settings` для каждой ветки `SettingEditRefusal` побайтно, в том числе источники `config` и `env`.
 - [x] 1.4 `[client]` Реализация 1.3: `settings_rows.dart` строит тексты по ветке моста, удаляет `isTrustBoundary`, `isSecretKey`, `isExternalSource`. `settingWriteLayerOf` и `applySetting` не меняются (D6). 1.3 и прежние тесты `/settings` REPL и TUI зелёные, `test:e2e:cli:dart-agent` зелёный.
 
 ## 2. Итерация 2 — блок «Agent defaults»
@@ -73,19 +73,19 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 3. Итерация 3 — «Reopen the last project and its tabs»
 
-- [ ] 3.1 `[client]` Красный: `packages/dart/codelab_client_core/test/restore/workspace_restorer_test.dart` и `test/workspace/client_workspace_restore_test.dart` — сценарии acp-client-kit «Старт без восстановления рабочего пространства»:
+- [x] 3.1 `[client]` Красный: `packages/dart/codelab_client_core/test/restore/workspace_restorer_test.dart` и `test/workspace/client_workspace_restore_test.dart` — сценарии acp-client-kit «Старт без восстановления рабочего пространства»:
   - «Снимок не восстанавливается» — `session/load` нет, сессий снимка в списке нет;
   - «Снимок пишется по ходу работы»;
   - повторный и перекрёстный вызовы `restoreProject` и `startWithoutRestore` — пустая операция.
 - [x] 3.2 `[client]` Реализация 3.1: `ClientWorkspace.startWithoutRestore()`, `WorkspaceRestorer.skip()` (запись разрешена, `_restoring` пуст, снимок не читается; D9). Фейки `ClientWorkspace` в тестах app и CLI получают метод. 3.1 зелёный.
-- [ ] 3.3 `[desktop]` Красный: `test/core/platform/startup_preferences_test.dart` — `load` не бросает (сбой хранилища и небулево значение дают `true` и признак), `save(true)` удаляет ключ, `save(false)` пишет `false`. `test/features/workbench/application/settings_cubit_startup_test.dart` — сценарии app-settings «Открытие последнего проекта при запуске»:
+- [x] 3.3 `[desktop]` Красный: `test/core/platform/startup_preferences_test.dart` — `load` не бросает (сбой хранилища и небулево значение дают `true` и признак), `save(true)` удаляет ключ, `save(false)` пишет `false`. `test/features/workbench/application/settings_cubit_startup_test.dart` — сценарии app-settings «Открытие последнего проекта при запуске»:
   - «По умолчанию проект прошлого запуска открывается»;
   - «Выключено — старт без проекта» (проект не выбран, `startOnLaunch` агента не стартует, `startWithoutRestore` вызван ровно раз);
   - «Выключено — снимок нового запуска пишется»;
   - сбой чтения — как при включённом, событие `app.reopen_last_project_unreadable`;
   - `app.reopen_last_project_skipped`.
 - [ ] 3.4 `[desktop]` Реализация 3.3: `core/platform/startup_preferences.dart` (`StartupPreferences`, `SharedPreferencesStartupPreferences`), `SettingsCubit._restoreProject` читает порт до восстановления, привязка в `app_scope.dart`, шов `createCodeLabRootScope(startupPreferences:)`. 3.3 зелёный.
-- [ ] 3.5 `[desktop]` Красный: `test/features/settings/application/startup_settings_cubit_test.dart` и дополнение `general_page_test.dart` — строка `settings-general-reopen-last-project`, сценарий «Переключение не трогает текущую работу», сбой записи с «Retry» (`settings-general-reopen-last-project-retry`), событие `settings.reopen_last_project_changed`.
+- [x] 3.5 `[desktop]` Красный: `test/features/settings/application/startup_settings_cubit_test.dart` и дополнение `general_page_test.dart` — строка `settings-general-reopen-last-project`, сценарий «Переключение не трогает текущую работу», сбой записи с «Retry» (`settings-general-reopen-last-project-retry`), событие `settings.reopen_last_project_changed`.
 - [ ] 3.6 `[desktop]` Реализация 3.5: `StartupSettingsCubit`, строка в блоке «Startup and files», ARB. 3.5 зелёный.
 
 ## 4. Итерация 4 — «Show ignored files» (после итерации 3 `add-file-preview-and-tree`)

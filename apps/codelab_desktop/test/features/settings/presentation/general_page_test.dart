@@ -31,6 +31,8 @@ import 'package:codelab_desktop/app/language/app_language_cubit.dart';
 import 'package:codelab_desktop/app/navigation/navigation_cubit.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
+import 'package:codelab_desktop/core/platform/startup_preferences.dart';
+import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_rows.dart';
 import 'package:codelab_desktop/features/settings/presentation/general_page.dart';
@@ -78,6 +80,27 @@ final class _FailsOncePreferences implements AppLanguagePreferences {
     if (_failed) return _real.save(preference);
     _failed = true;
     return Future.error(StateError('disk is read-only'));
+  }
+}
+
+/// Порт настроек запуска: запись [saves], сбой записи задаёт тест.
+final class _StartupPort implements StartupPreferences {
+  _StartupPort({this.failSaves = 0});
+
+  /// Сколько первых записей падает.
+  int failSaves;
+  final saves = <bool>[];
+
+  @override
+  Future<StartupLoad> load() async => const StartupLoad(true);
+
+  @override
+  Future<void> save(bool reopenLastProject) async {
+    saves.add(reopenLastProject);
+    if (failSaves > 0) {
+      failSaves--;
+      throw StateError('disk is read-only: /secret/path');
+    }
   }
 }
 
@@ -184,6 +207,8 @@ void main() {
   Future<CodeLabTestBinding> openGeneral(
     WidgetTester tester, {
     AppLanguagePreferences? languagePreferences,
+    StartupPreferences? startupPreferences,
+    Map<String, Object> preferences = const {},
   }) async {
     final binding = CodeLabTestBinding(
       project: '/workspace',
@@ -191,6 +216,8 @@ void main() {
         available: {SettingsPage.connection, SettingsPage.general},
       ),
       languagePreferences: languagePreferences,
+      startupPreferences: startupPreferences,
+      preferences: preferences,
     );
     await tester.pumpWidget(
       binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
@@ -1475,6 +1502,177 @@ void main() {
         expect(find.text('Умолчания агента'), findsNothing);
         await expectNoStaleLanguage(tester, from: ru, to: en);
       });
+    });
+  });
+
+  // --- «Reopen the last project and its tabs» (задача 3.5 change
+  // `add-app-general-page`; spec app-settings «Открытие последнего проекта при
+  // запуске»; design.md D9). Страница идёт через настоящее дерево app. ------
+
+  group('Reopen the last project and its tabs (D9)', () {
+    const rowKey = 'settings-general-reopen-last-project';
+    const failedKey = 'settings-general-reopen-last-project-save-failed';
+    const retryKey = 'settings-general-reopen-last-project-retry';
+
+    Finder toggle() =>
+        find.descendant(of: key(rowKey), matching: find.byType(ToggleSwitch));
+
+    bool checked(WidgetTester tester) =>
+        tester.widget<ToggleSwitch>(toggle()).checked;
+
+    Future<void> flip(WidgetTester tester) async {
+      expect(toggle(), findsOneWidget);
+      await tester.tap(toggle());
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('блок «Startup and files» со строкой и подписью идёт после '
+        'Interface; строки Show ignored files и About ещё нет', (tester) async {
+      await openGeneral(tester);
+
+      expect(key(rowKey), findsOneWidget);
+      expect(find.text('Startup and files'), findsOneWidget);
+      expect(find.text('Reopen the last project and its tabs'), findsOneWidget);
+      expect(
+        find.text(
+          'On: open the last project and its open sessions. Off: start with '
+          'recent projects in the sidebar. Applies at the next start.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(key('settings-general-language')).dy,
+        lessThan(tester.getTopLeft(key(rowKey)).dy),
+      );
+      expect(key('settings-general-show-ignored'), findsNothing);
+      expect(key('settings-general-about'), findsNothing);
+      expect(toggle(), findsOneWidget);
+      expect(checked(tester), isTrue);
+    });
+
+    testWidgets('сохранённое false показывается выключенным', (tester) async {
+      await openGeneral(tester, preferences: {kReopenLastProjectKey: false});
+
+      expect(toggle(), findsOneWidget);
+      expect(checked(tester), isFalse);
+    });
+
+    testWidgets('выключение пишет false, включение удаляет ключ', (
+      tester,
+    ) async {
+      await openGeneral(tester);
+
+      await flip(tester);
+      var prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(kReopenLastProjectKey), isFalse);
+      expect(checked(tester), isFalse);
+
+      await flip(tester);
+      prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey(kReopenLastProjectKey), isFalse);
+      expect(checked(tester), isTrue);
+    });
+
+    testWidgets('переключение не трогает текущую работу: проект, сессии, '
+        'подключение и кадры агенту не меняются', (tester) async {
+      final binding = await openGeneral(tester);
+      final shell = binding.scope.resolve<CodeLabShellCubit>();
+      final before = shell.state;
+      final sentBefore = binding.transport.sentMessages.length;
+      expect(before.selectedProjectPath, '/workspace');
+
+      await flip(tester);
+      await flip(tester);
+
+      expect(shell.state.selectedProjectPath, '/workspace');
+      expect(shell.state.connectionStatus, before.connectionStatus);
+      expect(shell.state.sessions, before.sessions);
+      expect(shell.state.activeSessionId, before.activeSessionId);
+      expect(binding.transport.sentMessages.length, sentBefore);
+      expect(key('settings-general-agent-defaults'), findsOneWidget);
+    });
+
+    testWidgets('сбой записи: переключатель в выбранном положении, '
+        'предупреждение без текста исключения и Retry', (tester) async {
+      final port = _StartupPort(failSaves: 1);
+      await openGeneral(tester, startupPreferences: port);
+
+      await flip(tester);
+
+      expect(port.saves, [false]);
+      expect(checked(tester), isFalse);
+      expect(key(failedKey), findsOneWidget);
+      expect(
+        find.text(
+          "Couldn't save this setting. The previous value applies at the "
+          'next start.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('/secret/path'), findsNothing);
+      expect(find.textContaining('read-only'), findsNothing);
+      expect(key(retryKey), findsOneWidget);
+      expect(
+        find.descendant(of: key(retryKey), matching: find.text('Retry')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Retry повторяет запись; успех скрывает предупреждение', (
+      tester,
+    ) async {
+      final port = _StartupPort(failSaves: 1);
+      await openGeneral(tester, startupPreferences: port);
+      await flip(tester);
+      expect(key(retryKey), findsOneWidget);
+
+      await tester.tap(key(retryKey));
+      await tester.pumpAndSettle();
+
+      expect(port.saves, [false, false]);
+      expect(key(failedKey), findsNothing);
+      expect(checked(tester), isFalse);
+    });
+
+    testWidgets('без сбоя предупреждения нет', (tester) async {
+      await openGeneral(tester);
+
+      await flip(tester);
+
+      expect(key(failedKey), findsNothing);
+      expect(key(retryKey), findsNothing);
+    });
+
+    testWidgets('на русском: блок, подпись строки и смена языка с '
+        'предупреждением не оставляют английского', (tester) async {
+      await openGeneral(tester, startupPreferences: _StartupPort(failSaves: 1));
+      await flip(tester);
+      expect(key(failedKey), findsOneWidget);
+
+      await choose(tester, 'settings-language-ru');
+
+      expect(find.text('Startup and files'), findsNothing);
+      expect(find.text('Запуск и файлы'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: key(rowKey),
+          matching: find.textContaining('Открывать последний проект'),
+        ),
+        findsWidgets,
+      );
+      expect(
+        find.text(
+          "Couldn't save this setting. The previous value applies at the "
+          'next start.',
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: key(retryKey), matching: find.text('Повторить')),
+        findsOneWidget,
+      );
+      expect(key(failedKey), findsOneWidget);
+      await expectNoStaleLanguage(tester, from: en, to: ru);
     });
   });
 }

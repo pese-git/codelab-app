@@ -65,6 +65,7 @@ import '../core/platform/project_folder_picker.dart';
 import '../core/platform/usage_csv_saver.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
+import '../core/platform/startup_preferences.dart';
 import '../core/platform/user_shell_launcher.dart';
 import '../features/project_files/application/project_files_cubit.dart';
 import '../features/settings/application/add_profile_cubit.dart';
@@ -119,6 +120,8 @@ Scope createCodeLabRootScope({
   // языке. Без шва — `en` (тесты и хосты без предпочтения).
   AppLanguageStart? language,
   AppLanguagePreferences? languagePreferences,
+  // Шов порта настроек запуска (D9); заглушка итерации 3, привязка — задача 3.4.
+  StartupPreferences? startupPreferences,
   CodeLabTransportFactory? transportFactory,
   CodeLabStdioTransportFactory? stdioTransportFactory,
   CodeLabWebSocketTransportFactory? webSocketTransportFactory,
