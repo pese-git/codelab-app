@@ -79,7 +79,7 @@ description: Стандарт сайта CodeLab на Astro в site/ — раз�
   - несуществующий файл, выход за корень, абсолютный путь, `file:`, другой регистр имени — ошибка с путём документа и строкой;
   - `http(s):`, `mailto:`, чистый `#якорь` не меняются.
 - **`repoRef`**: `SITE_GITHUB_REF` → `GITHUB_SHA` → `git rev-parse HEAD` → ошибка сборки. Окончательная цель выбирается вместе с хостингом.
-- **Ошибки сборки, которые чинятся в документе, а не в сайте:** битая ссылка, якорь, регистр; сырой HTML вне `details`, `summary`, `br`, `kbd`, `sub`, `sup`; личный путь (`/Users/<имя>/`, `/home/<имя>/`, `C:\Users\<имя>\`, кроме масок `user` и `me`). Чинит `docs-writer` в том же pull request; отключать проверку ради merge нельзя.
+- **Ошибки сборки, которые чинятся в документе, а не в сайте:** битая ссылка, якорь, регистр; сырой HTML вне `details`, `summary`, `br`, `kbd`, `sub`, `sup` или с атрибутами (кроме `open` у `details`); личный путь (`/Users/<имя>/`, `/home/<имя>/`, `C:\Users\<имя>\`, кроме масок `user` и `me`). Чинит `docs-writer` в том же pull request; отключать проверку ради merge нельзя.
 - `vite.server.fs.allow` разрешает корень репозитория: публикацию ограничивает allowlist загрузчика, а не файловый доступ.
 
 ## 5. Новости выпусков (D10)
@@ -109,6 +109,7 @@ description: Стандарт сайта CodeLab на Astro в site/ — раз�
 
 ## 8. Зависимости и лицензии (D2)
 
+- Markdown собирается конвейером unified (`@astrojs/markdown-remark`, `markdown.processor: unified(...)`), а не процессором Astro по умолчанию: на нём не работают плагины D5, D7, D11.
 - Только npm. Точные версии (`save-exact`, проверка в `npm run verify`), `package-lock.json` коммитится вместе с `package.json`. Установка — только `npm ci`; в CI — `npm ci --ignore-scripts`.
 - Прямые зависимости — минимум: `astro`, `@astrojs/check`, `typescript`, `mermaid`, `vitest`, `@types/node` и пакеты unified, которые плагины импортируют напрямую (объявляются явно). Новая зависимость — только по задаче `tasks.md`.
 - Лицензии: MIT, BSD, ISC, Apache-2.0, BlueOak-1.0.0, CC0-1.0, Unlicense, 0BSD; двойная с разрешительным вариантом допустима (DOMPurify в mermaid — `MPL-2.0 OR Apache-2.0`). Проверяется при добавлении и при обновлении lock-файла.
