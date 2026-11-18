@@ -317,4 +317,50 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsGeneralStartupSaveFailed =>
       'Couldn\'t save this setting. The previous value applies at the next start.';
+
+  @override
+  String get settingsGeneralSectionAbout => 'About';
+
+  @override
+  String settingsGeneralAboutSubtitle(String platform, String agentVersion) {
+    return '$platform · embedded agent $agentVersion';
+  }
+
+  @override
+  String get settingsGeneralAboutLicense => 'License';
+
+  @override
+  String get settingsGeneralAboutConfigFolder => 'Config folder';
+
+  @override
+  String get settingsGeneralAboutCopyDiagnostics => 'Copy diagnostics';
+
+  @override
+  String get settingsGeneralAboutThirdParty => 'Third-party notices';
+
+  @override
+  String get settingsGeneralAboutReleaseNotes => 'Release notes';
+
+  @override
+  String get settingsGeneralAboutOpenLogs => 'Open log folder';
+
+  @override
+  String get settingsGeneralAboutUpdates =>
+      'Updates come from the installer or your package manager — the app does not update itself.';
+
+  @override
+  String get settingsGeneralAboutCopied => 'Diagnostics copied.';
+
+  @override
+  String get settingsGeneralAboutReleaseNotesFailed =>
+      'Couldn\'t open the release notes.';
+
+  @override
+  String get settingsGeneralAboutLogsFailed => 'Couldn\'t open the log folder.';
+
+  @override
+  String get settingsGeneralAboutPackageLicenses => 'Package licenses';
+
+  @override
+  String get settingsGeneralAboutClose => 'Close';
 }

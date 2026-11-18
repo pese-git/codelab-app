@@ -320,4 +320,51 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsGeneralStartupSaveFailed =>
       'Не удалось сохранить настройку. При следующем запуске действует прежнее значение.';
+
+  @override
+  String get settingsGeneralSectionAbout => 'О программе';
+
+  @override
+  String settingsGeneralAboutSubtitle(String platform, String agentVersion) {
+    return '$platform · встроенный агент $agentVersion';
+  }
+
+  @override
+  String get settingsGeneralAboutLicense => 'Лицензия';
+
+  @override
+  String get settingsGeneralAboutConfigFolder => 'Папка настроек';
+
+  @override
+  String get settingsGeneralAboutCopyDiagnostics => 'Скопировать диагностику';
+
+  @override
+  String get settingsGeneralAboutThirdParty => 'Сторонние уведомления';
+
+  @override
+  String get settingsGeneralAboutReleaseNotes => 'Заметки о выпуске';
+
+  @override
+  String get settingsGeneralAboutOpenLogs => 'Открыть папку журналов';
+
+  @override
+  String get settingsGeneralAboutUpdates =>
+      'Обновления приходят из установщика или менеджера пакетов — приложение само не обновляется.';
+
+  @override
+  String get settingsGeneralAboutCopied => 'Диагностика скопирована.';
+
+  @override
+  String get settingsGeneralAboutReleaseNotesFailed =>
+      'Не удалось открыть заметки о выпуске.';
+
+  @override
+  String get settingsGeneralAboutLogsFailed =>
+      'Не удалось открыть папку журналов.';
+
+  @override
+  String get settingsGeneralAboutPackageLicenses => 'Лицензии пакетов';
+
+  @override
+  String get settingsGeneralAboutClose => 'Закрыть';
 }

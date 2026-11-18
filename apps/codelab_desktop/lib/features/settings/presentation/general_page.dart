@@ -17,6 +17,8 @@ import '../../../core/platform/app_language_preferences.dart';
 import '../../../l10n/l10n.dart';
 import '../application/agent_defaults_cubit.dart';
 import '../application/startup_settings_cubit.dart';
+import '../application/about_ports.dart';
+import 'about_section.dart';
 import 'agent_setting_labels.dart';
 
 /// Тело страницы «General» для таблицы `settingsPageBuilders`.
@@ -72,7 +74,7 @@ class _GeneralPageHostState extends State<GeneralPageHost> {
       BlocProvider<AgentDefaultsCubit>.value(value: _cubit!),
       BlocProvider<StartupSettingsCubit>.value(value: _startup!),
     ],
-    child: const GeneralPage(),
+    child: GeneralPage(about: codeLabDependenciesOf(context).aboutPorts),
   );
 }
 
@@ -98,7 +100,11 @@ class _GeneralPageHostState extends State<GeneralPageHost> {
 /// ближайших `BlocProvider`. Названия `English` и `Русский` — эндонимы, они не
 /// переводятся.
 class GeneralPage extends StatelessWidget {
-  const GeneralPage({super.key});
+  const GeneralPage({this.about, super.key});
+
+  /// Данные и порты раздела «About»; `null` — раздел не показывается (тесты
+  /// блоков «Agent defaults» на Cubit-двойниках).
+  final AboutPorts? about;
 
   @override
   Widget build(BuildContext context) {
@@ -167,6 +173,7 @@ class GeneralPage extends StatelessWidget {
             ],
           ),
           const _StartupSection(),
+          if (about case final ports?) AboutSection(ports: ports),
         ],
       ),
     );

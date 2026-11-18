@@ -2086,8 +2086,24 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(key('settings-general-third-party-dialog'), findsOneWidget);
-        expect(find.text('Third-party notices'), findsNothing);
-        await expectNoStaleLanguage(tester, from: en, to: ru);
+        // Заголовок самого THIRD_PARTY_NOTICES.md — содержимое юридического
+        // документа и не переводится, поэтому `expectNoStaleLanguage` для
+        // диалога дал бы ложное срабатывание: проверяем подписи диалога.
+        final dialog = key('settings-general-third-party-dialog');
+        expect(
+          find.descendant(
+            of: dialog,
+            matching: find.text('Сторонние уведомления'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: dialog, matching: find.text('Лицензии пакетов')),
+          findsOneWidget,
+        );
+        expect(find.text('Закрыть'), findsOneWidget);
+        expect(find.text('Close'), findsNothing);
+        expect(find.text('Package licenses'), findsNothing);
       });
     });
   });

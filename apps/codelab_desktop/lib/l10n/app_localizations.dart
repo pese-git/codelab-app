@@ -619,6 +619,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t save this setting. The previous value applies at the next start.'**
   String get settingsGeneralStartupSaveFailed;
+
+  /// Заголовок секции страницы General с версией сборки, лицензией и диагностикой.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get settingsGeneralSectionAbout;
+
+  /// Вторая строка заголовка раздела About: платформа и версия встроенного агента. {platform} — например macOS arm64, {agentVersion} — номер версии; не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{platform} · embedded agent {agentVersion}'**
+  String settingsGeneralAboutSubtitle(String platform, String agentVersion);
+
+  /// Подпись строки раздела About с названием лицензии. Значение MIT и строка авторского права не переводятся.
+  ///
+  /// In en, this message translates to:
+  /// **'License'**
+  String get settingsGeneralAboutLicense;
+
+  /// Подпись строки раздела About с папкой CODELAB_HOME; путь не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Config folder'**
+  String get settingsGeneralAboutConfigFolder;
+
+  /// Кнопка раздела About: копирует в буфер обмена диагностику без секретов и путей. Сам текст диагностики не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy diagnostics'**
+  String get settingsGeneralAboutCopyDiagnostics;
+
+  /// Кнопка раздела About и заголовок диалога со сторонними уведомлениями и лицензиями пакетов.
+  ///
+  /// In en, this message translates to:
+  /// **'Third-party notices'**
+  String get settingsGeneralAboutThirdParty;
+
+  /// Кнопка раздела About: открывает журнал изменений в браузере.
+  ///
+  /// In en, this message translates to:
+  /// **'Release notes'**
+  String get settingsGeneralAboutReleaseNotes;
+
+  /// Кнопка раздела About: открывает папку журналов app в файловом менеджере.
+  ///
+  /// In en, this message translates to:
+  /// **'Open log folder'**
+  String get settingsGeneralAboutOpenLogs;
+
+  /// InfoBar раздела About об источнике обновлений.
+  ///
+  /// In en, this message translates to:
+  /// **'Updates come from the installer or your package manager — the app does not update itself.'**
+  String get settingsGeneralAboutUpdates;
+
+  /// Подтверждение после копирования диагностики в буфер обмена.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics copied.'**
+  String get settingsGeneralAboutCopied;
+
+  /// Предупреждение раздела About, когда адрес журнала изменений не открылся.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open the release notes.'**
+  String get settingsGeneralAboutReleaseNotesFailed;
+
+  /// Предупреждение раздела About, когда папка журналов не открылась.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open the log folder.'**
+  String get settingsGeneralAboutLogsFailed;
+
+  /// Заголовок списка лицензий пакетов в диалоге сторонних уведомлений.
+  ///
+  /// In en, this message translates to:
+  /// **'Package licenses'**
+  String get settingsGeneralAboutPackageLicenses;
+
+  /// Кнопка закрытия диалога сторонних уведомлений.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get settingsGeneralAboutClose;
 }
 
 class _AppLocalizationsDelegate

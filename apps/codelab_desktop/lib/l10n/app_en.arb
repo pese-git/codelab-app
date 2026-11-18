@@ -398,5 +398,69 @@
   "settingsGeneralStartupSaveFailed": "Couldn't save this setting. The previous value applies at the next start.",
   "@settingsGeneralStartupSaveFailed": {
     "description": "Предупреждение на странице General, когда значение настройки запуска не удалось записать; кнопка Retry повторяет запись."
+  },
+  "settingsGeneralSectionAbout": "About",
+  "@settingsGeneralSectionAbout": {
+    "description": "Заголовок секции страницы General с версией сборки, лицензией и диагностикой."
+  },
+  "settingsGeneralAboutSubtitle": "{platform} · embedded agent {agentVersion}",
+  "@settingsGeneralAboutSubtitle": {
+    "description": "Вторая строка заголовка раздела About: платформа и версия встроенного агента. {platform} — например macOS arm64, {agentVersion} — номер версии; не переводить.",
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      },
+      "agentVersion": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralAboutLicense": "License",
+  "@settingsGeneralAboutLicense": {
+    "description": "Подпись строки раздела About с названием лицензии. Значение MIT и строка авторского права не переводятся."
+  },
+  "settingsGeneralAboutConfigFolder": "Config folder",
+  "@settingsGeneralAboutConfigFolder": {
+    "description": "Подпись строки раздела About с папкой CODELAB_HOME; путь не переводится."
+  },
+  "settingsGeneralAboutCopyDiagnostics": "Copy diagnostics",
+  "@settingsGeneralAboutCopyDiagnostics": {
+    "description": "Кнопка раздела About: копирует в буфер обмена диагностику без секретов и путей. Сам текст диагностики не переводится."
+  },
+  "settingsGeneralAboutThirdParty": "Third-party notices",
+  "@settingsGeneralAboutThirdParty": {
+    "description": "Кнопка раздела About и заголовок диалога со сторонними уведомлениями и лицензиями пакетов."
+  },
+  "settingsGeneralAboutReleaseNotes": "Release notes",
+  "@settingsGeneralAboutReleaseNotes": {
+    "description": "Кнопка раздела About: открывает журнал изменений в браузере."
+  },
+  "settingsGeneralAboutOpenLogs": "Open log folder",
+  "@settingsGeneralAboutOpenLogs": {
+    "description": "Кнопка раздела About: открывает папку журналов app в файловом менеджере."
+  },
+  "settingsGeneralAboutUpdates": "Updates come from the installer or your package manager — the app does not update itself.",
+  "@settingsGeneralAboutUpdates": {
+    "description": "InfoBar раздела About об источнике обновлений."
+  },
+  "settingsGeneralAboutCopied": "Diagnostics copied.",
+  "@settingsGeneralAboutCopied": {
+    "description": "Подтверждение после копирования диагностики в буфер обмена."
+  },
+  "settingsGeneralAboutReleaseNotesFailed": "Couldn't open the release notes.",
+  "@settingsGeneralAboutReleaseNotesFailed": {
+    "description": "Предупреждение раздела About, когда адрес журнала изменений не открылся."
+  },
+  "settingsGeneralAboutLogsFailed": "Couldn't open the log folder.",
+  "@settingsGeneralAboutLogsFailed": {
+    "description": "Предупреждение раздела About, когда папка журналов не открылась."
+  },
+  "settingsGeneralAboutPackageLicenses": "Package licenses",
+  "@settingsGeneralAboutPackageLicenses": {
+    "description": "Заголовок списка лицензий пакетов в диалоге сторонних уведомлений."
+  },
+  "settingsGeneralAboutClose": "Close",
+  "@settingsGeneralAboutClose": {
+    "description": "Кнопка закрытия диалога сторонних уведомлений."
   }
 }

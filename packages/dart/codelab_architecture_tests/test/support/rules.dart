@@ -414,6 +414,17 @@ const rules = [
     exclude: ['core/platform/'],
     sealExclude: false,
   ),
+  // Архитектуру процесса для раздела «About» даёт `Abi.current()` из
+  // `dart:ffi` (change `add-app-general-page`, D1): платформенный код app
+  // изолирован (AGENTS.md §11), поэтому `dart:ffi` разрешён только файлу
+  // `core/platform/build_info.dart`. Остальные файлы пользуются `BuildInfo`,
+  // поэтому исключение не запечатано.
+  PackageRule(
+    'apps/codelab_desktop/lib',
+    forbidden: ['dart:ffi'],
+    exclude: ['core/platform/build_info.dart'],
+    sealExclude: false,
+  ),
   // Панель Files: чтение файлов — порт `ProjectFiles` kit и `IoProjectFiles`
   // из `codelab_client_io`, который собирает только composition root
   // `lib/app/`; feature не знает `dart:io` во всех слоях (design.md change

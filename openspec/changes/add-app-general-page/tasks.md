@@ -98,11 +98,11 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 - [x] 5.1 `[agent]` Красный: `packages/dart/codelab_embedded/test/embedded_agent_version_test.dart` — сценарий embedded-agent «Константа совпадает с agentInfo» (сценарный открыватель, `initialize`); web-smoke читает константу.
 - [x] 5.2 `[agent]` Реализация 5.1: экспорт `embeddedAgentVersion` из `lib/codelab_embedded.dart`, строка в `packages/dart/codelab_embedded/AGENTS.md`. 5.1 зелёный, `web-compile` зелёный.
 - [x] 5.3 `[desktop]` Красный: `test/app/build_version_test.dart` — `codelabDesktopVersion` равен `version` из `pubspec.yaml`, `kCodeLabReleaseNotesUrl` начинается с `repoUrl` из `site/src/site.config.ts`. `test/app/legal_assets_test.dart` — сценарии licensing-and-attribution «Копия разошлась с корнем» и «Строка лицензии из ресурса». `test/core/platform/build_info_test.dart` — отображение `Abi` и ОС на `macOS arm64`, `Linux x64`, `Windows x64`.
-- [ ] 5.4 `[desktop]` Реализация 5.3: `lib/app/build_version.dart`, `core/platform/build_info.dart`, `assets/legal/` и раздел `flutter: assets:` в `pubspec.yaml`. 5.3 зелёный.
+- [x] 5.4 `[desktop]` Реализация 5.3: `lib/app/build_version.dart`, `core/platform/build_info.dart`, `assets/legal/` и раздел `flutter: assets:` в `pubspec.yaml`. 5.3 зелёный.
 - [x] 5.5 `[desktop]` Красный: `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` — `dart:ffi` в `apps/codelab_desktop/lib` вне `lib/core/platform/build_info.dart` запрещён (D1).
-- [ ] 5.6 `[desktop]` Реализация 5.5: правило в `test/support/rules.dart`. 5.5 зелёный, `guard` зелёный.
+- [x] 5.6 `[desktop]` Реализация 5.5: правило в `test/support/rules.dart`. 5.5 зелёный, `guard` зелёный.
 - [x] 5.7 `[desktop]` Красный: `test/features/settings/application/about_diagnostics_test.dart` — сценарии app-settings «Ничего лишнего в буфере» (маркеры в URL, id профиля, папке проекта, `CODELAB_HOME`, окружении) и «Текст не зависит от языка». Все поля из перечня требования для каждого вида подключения и доступа.
-- [ ] 5.8 `[desktop]` Реализация 5.7: `about_diagnostics.dart` (`AboutInfo`, `DiagnosticsContext`, `diagnosticsReportOf`), сборка `AboutInfo` в `app_scope.dart`. 5.7 зелёный.
+- [x] 5.8 `[desktop]` Реализация 5.7: `about_diagnostics.dart` (`AboutInfo`, `DiagnosticsContext`, `diagnosticsReportOf`), сборка `AboutInfo` в `app_scope.dart`. 5.7 зелёный.
 - [x] 5.9 `[desktop]` Красный: дополнение `general_page_test.dart` на `FakeExternalLinkOpener`, `FakeLocalFolderOpener` и двойнике буфера обмена:
   - сценарии «Версии в заголовке», «Сторонние уведомления офлайн», «Release notes через порт», «Каталог журналов не открылся»;
   - «Copy diagnostics» и `Diagnostics copied.`;
@@ -110,7 +110,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - нет строк «Channel» и «Signed by»;
   - события `settings.about_action`;
   - `expectNoStaleLanguage` с открытым «About» и диалогом уведомлений.
-- [ ] 5.10 `[desktop]` Реализация 5.9: раздел «About» (`Expander`), диалог `settings-general-third-party-dialog` (markdown `codelab_ui` и `LicenseRegistry`), ARB. 5.9 зелёный, `l10n:check` зелёный.
+- [x] 5.10 `[desktop]` Реализация 5.9: раздел «About» (`Expander`), диалог `settings-general-third-party-dialog` (markdown `codelab_ui` и `LicenseRegistry`), ARB. 5.9 зелёный, `l10n:check` зелёный.
 
 ## 6. Документация и приёмка
 

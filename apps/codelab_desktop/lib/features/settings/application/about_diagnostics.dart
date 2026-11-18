@@ -1,8 +1,12 @@
 /// Данные раздела «About» и текст «Copy diagnostics» (design.md change
 /// `add-app-general-page`, D11, D12).
 ///
-/// Заглушка итерации 5 (красные тесты 5.7): отчёт пустой, реализация — задача
-/// 5.8.
+/// Почему отбор по белому списку, а не дамп состояния и маскирование: в
+/// состоянии окна есть URL, id профилей, папка проекта и команды stdio;
+/// маскирование задним числом ловит только известные виды секретов и не
+/// скрывает пути пользователя. Отчёт строится из фиксированных строк и
+/// перечислений, поэтому утечка закрыта по построению (AGENTS.md §16;
+/// приоритет 1).
 library;
 
 import '../../../core/platform/app_language_preferences.dart';
@@ -94,4 +98,30 @@ final class DiagnosticsContext {
 }
 
 /// Текст «Copy diagnostics»: фиксированный набор строк на английском.
-String diagnosticsReportOf(AboutInfo about, DiagnosticsContext context) => '';
+///
+/// Для чего: отчёт об ошибке без секретов и путей (spec app-settings
+/// «Диагностика для отчёта без секретов и путей»). Не зависит от языка
+/// интерфейса: подписи не переводятся, язык показывает только строка
+/// `UI language`. Пути, URL, id профилей, значения конфигурации и тексты
+/// исключений в отчёт попасть не могут: у [DiagnosticsContext] таких полей нет,
+/// а из [AboutInfo] берутся версии и платформа.
+///
+/// Как использовать: страница зовёт функцию в момент нажатия и кладёт текст в
+/// буфер обмена; семь строк разделены `\n`.
+String diagnosticsReportOf(AboutInfo about, DiagnosticsContext context) {
+  final access = switch (context.access) {
+    DiagnosticsAccess.editable => 'editable',
+    DiagnosticsAccess.remoteReadOnly => 'remote-read-only',
+    DiagnosticsAccess.notManaged => 'not-managed',
+  };
+  return [
+    'CodeLab ${about.version}',
+    'OS: ${about.os} ${about.arch}',
+    'Embedded agent: ${about.embeddedAgentVersion}',
+    'UI language: ${context.locale} '
+        '(preference: ${context.languagePreference.name})',
+    'Connection: ${context.connection.name} · ${context.connectionState.name}',
+    'Agent settings: $access',
+    'Config folder: ${context.customConfigHome ? 'custom' : 'default'}',
+  ].join('\n');
+}

@@ -86,5 +86,19 @@
   "settingsGeneralSectionStartup": "Запуск и файлы",
   "settingsGeneralReopenTitle": "Открывать последний проект и его вкладки",
   "settingsGeneralReopenDescription": "Включено: открывать последний проект и его открытые сессии. Выключено: начинать с недавних проектов в боковой панели. Применяется при следующем запуске.",
-  "settingsGeneralStartupSaveFailed": "Не удалось сохранить настройку. При следующем запуске действует прежнее значение."
+  "settingsGeneralStartupSaveFailed": "Не удалось сохранить настройку. При следующем запуске действует прежнее значение.",
+  "settingsGeneralSectionAbout": "О программе",
+  "settingsGeneralAboutSubtitle": "{platform} · встроенный агент {agentVersion}",
+  "settingsGeneralAboutLicense": "Лицензия",
+  "settingsGeneralAboutConfigFolder": "Папка настроек",
+  "settingsGeneralAboutCopyDiagnostics": "Скопировать диагностику",
+  "settingsGeneralAboutThirdParty": "Сторонние уведомления",
+  "settingsGeneralAboutReleaseNotes": "Заметки о выпуске",
+  "settingsGeneralAboutOpenLogs": "Открыть папку журналов",
+  "settingsGeneralAboutUpdates": "Обновления приходят из установщика или менеджера пакетов — приложение само не обновляется.",
+  "settingsGeneralAboutCopied": "Диагностика скопирована.",
+  "settingsGeneralAboutReleaseNotesFailed": "Не удалось открыть заметки о выпуске.",
+  "settingsGeneralAboutLogsFailed": "Не удалось открыть папку журналов.",
+  "settingsGeneralAboutPackageLicenses": "Лицензии пакетов",
+  "settingsGeneralAboutClose": "Закрыть"
 }
