@@ -433,6 +433,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Verbosity of the agent log.'**
   String get agentSettingDescription_logging_level;
+
+  /// Заголовок блока страницы General со строками конфигурации агента, общими с CLI.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent defaults'**
+  String get settingsGeneralAgentDefaultsTitle;
+
+  /// Подпись под заголовком блока Agent defaults: запись идёт в пользовательский config.yaml, а не в проект.
+  ///
+  /// In en, this message translates to:
+  /// **'Changes are saved for all projects.'**
+  String get settingsGeneralAgentDefaultsCaption;
+
+  /// InfoBar над блоком Agent defaults. {home} — папка CODELAB_HOME с ~ вместо домашнего каталога (путь, не переводить). codelab и codelab /settings — имя и команда CLI, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared with the codelab CLI. Rows marked shared come from the agent\'s settings registry and are saved to {home}/config.yaml; codelab /settings shows them too.'**
+  String settingsGeneralSharedInfo(String home);
+
+  /// Тег строки реестра настроек агента, которую видит и CLI.
+  ///
+  /// In en, this message translates to:
+  /// **'shared'**
+  String get settingsGeneralTagShared;
+
+  /// Значение ключа, который нигде не задан и не имеет умолчания.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get settingsGeneralNotSet;
+
+  /// Пометка у ключа, изменение которого вступает в силу после перезапуска агента.
+  ///
+  /// In en, this message translates to:
+  /// **'(applies after restart)'**
+  String get settingsGeneralAppliesAfterRestart;
+
+  /// Подпись строки, значение которой задаёт проектный файл. {source} — слой конфигурации (project, local), не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'This project overrides it ({source}).'**
+  String settingsGeneralOverriddenBy(String source);
+
+  /// Причина, по которой строку нельзя править здесь: ключ хранит имя секрета. codelab secret set — команда CLI, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Change it with codelab secret set.'**
+  String get settingsGeneralRefusalSecret;
+
+  /// Причина, по которой строку нельзя править здесь: значение замаскировано.
+  ///
+  /// In en, this message translates to:
+  /// **'This value contains a secret; change it in the config file.'**
+  String get settingsGeneralRefusalMasked;
+
+  /// Причина, по которой строку нельзя править здесь: значение пришло из окружения или файла --config. {source} — env или config, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Set by {source}; it cannot be changed here.'**
+  String settingsGeneralRefusalExternal(String source);
+
+  /// Причина отказа в правке для ключа, которого нет на странице (запасной текст).
+  ///
+  /// In en, this message translates to:
+  /// **'This setting cannot be changed here.'**
+  String get settingsGeneralRefusalOther;
+
+  /// Подсказка формата под полем: целое число с нижней границей.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number of {min} or greater.'**
+  String settingsGeneralHintIntMin(String min);
+
+  /// Подсказка формата под полем: целое число в диапазоне.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number from {min} to {max}.'**
+  String settingsGeneralHintIntRange(String min, String max);
+
+  /// Подсказка формата под полем: целое число без границ.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number.'**
+  String get settingsGeneralHintInt;
+
+  /// Подсказка формата под полем: число.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a number.'**
+  String get settingsGeneralHintNumber;
+
+  /// Подсказка формата под полем: длительность. Примеры 500ms, 30s, 2m, 1h не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a duration like 500ms, 30s, 2m or 1h.'**
+  String get settingsGeneralHintDuration;
+
+  /// Баннер после записи ключа на странице General.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved.'**
+  String get settingsGeneralSaved;
+
+  /// Хвост баннера записи: ключ вступит в силу после действия Restart agent.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies after Restart agent.'**
+  String get settingsGeneralTailAfterRestart;
+
+  /// Хвост баннера записи: агент не подключён, ключ вступит в силу при его запуске.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies when the agent starts.'**
+  String get settingsGeneralTailWhenStarts;
+
+  /// Баннер записи, значение которой перекрыто другим слоем. {source} — слой (local, project, env, config), {effective} — действующее значение; оба не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to all projects; {source} overrides it: the agent uses {effective}.'**
+  String settingsGeneralSavedOverridden(String source, String effective);
+
+  /// Баннер записи, после которой конфигурацию не удалось перечитать. {home} — папка CODELAB_HOME с ~, путь не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to {home}/config.yaml.'**
+  String settingsGeneralSavedUnverified(String home);
+
+  /// Баннер конфликта записи: файл изменили вне app.
+  ///
+  /// In en, this message translates to:
+  /// **'The config file changed on disk; the page was reloaded. Try again.'**
+  String get settingsGeneralConflict;
+
+  /// Баннер ошибки записи, когда писатель не назвал проблему.
+  ///
+  /// In en, this message translates to:
+  /// **'The config was not saved.'**
+  String get settingsGeneralRejected;
+
+  /// Предупреждение блока Agent defaults для удалённого агента. {origin} — адрес вида wss://host:port, codelab config set — команда CLI; оба не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Read-only: this agent runs on {origin}. Change its settings on that host: codelab config set.'**
+  String settingsGeneralReadOnlyRemote(String origin);
+
+  /// Предупреждение блока Agent defaults для стороннего агента. {agent} — имя агента, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent settings are managed by {agent}.'**
+  String settingsGeneralReadOnlyManaged(String agent);
+
+  /// Заголовок InfoBar блока Agent defaults, когда config.yaml не разбирается; ниже проблемы загрузчика.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent config cannot be read.'**
+  String get settingsGeneralUnreadable;
+
+  /// Ключевые слова поиска по настройкам для страницы General, через запятую; на русском — переводы английских слов.
+  ///
+  /// In en, this message translates to:
+  /// **'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics'**
+  String get settingsSearchKeywordsGeneral;
 }
 
 class _AppLocalizationsDelegate

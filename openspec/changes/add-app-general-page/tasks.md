@@ -69,7 +69,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - строка «Language» и её ключи не изменились (существующие тесты языка зелёные);
   - `expectNoStaleLanguage` для страницы с баннером;
   - русская раскладка без переполнения при 760 px.
-- [ ] 2.6 `[desktop]` Реализация 2.5: блоки в `general_page.dart` (строка «Language» без изменений), ключевые слова `SettingsSearchIndex.keywords[SettingsPage.general]` в `en` и `ru`, сообщения ARB. 2.5 зелёный, `l10n:check` зелёный.
+- [x] 2.6 `[desktop]` Реализация 2.5: блоки в `general_page.dart` (строка «Language» без изменений), ключевые слова `SettingsSearchIndex.keywords[SettingsPage.general]` в `en` и `ru`, сообщения ARB. 2.5 зелёный, `l10n:check` зелёный.
 
 ## 3. Итерация 3 — «Reopen the last project and its tabs»
 

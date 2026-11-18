@@ -196,4 +196,113 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get agentSettingDescription_logging_level =>
       'Подробность журнала агента.';
+
+  @override
+  String get settingsGeneralAgentDefaultsTitle => 'Умолчания агента';
+
+  @override
+  String get settingsGeneralAgentDefaultsCaption =>
+      'Изменения сохраняются для всех проектов.';
+
+  @override
+  String settingsGeneralSharedInfo(String home) {
+    return 'Общие с CLI codelab. Строки с тегом «Общая» берутся из реестра настроек агента и сохраняются в $home/config.yaml; их показывает и codelab /settings.';
+  }
+
+  @override
+  String get settingsGeneralTagShared => 'Общая';
+
+  @override
+  String get settingsGeneralNotSet => 'Не задано';
+
+  @override
+  String get settingsGeneralAppliesAfterRestart =>
+      '(применится после перезапуска)';
+
+  @override
+  String settingsGeneralOverriddenBy(String source) {
+    return 'Этот проект переопределяет значение ($source).';
+  }
+
+  @override
+  String get settingsGeneralRefusalSecret =>
+      'Измените командой codelab secret set.';
+
+  @override
+  String get settingsGeneralRefusalMasked =>
+      'Значение содержит секрет; измените его в файле конфигурации.';
+
+  @override
+  String settingsGeneralRefusalExternal(String source) {
+    return 'Задано источником $source; изменить здесь нельзя.';
+  }
+
+  @override
+  String get settingsGeneralRefusalOther =>
+      'Эту настройку здесь изменить нельзя.';
+
+  @override
+  String settingsGeneralHintIntMin(String min) {
+    return 'Введите целое число не меньше $min.';
+  }
+
+  @override
+  String settingsGeneralHintIntRange(String min, String max) {
+    return 'Введите целое число от $min до $max.';
+  }
+
+  @override
+  String get settingsGeneralHintInt => 'Введите целое число.';
+
+  @override
+  String get settingsGeneralHintNumber => 'Введите число.';
+
+  @override
+  String get settingsGeneralHintDuration =>
+      'Введите длительность, например 500ms, 30s, 2m или 1h.';
+
+  @override
+  String get settingsGeneralSaved => 'Сохранено.';
+
+  @override
+  String get settingsGeneralTailAfterRestart =>
+      'Применится после «Перезапустить агента».';
+
+  @override
+  String get settingsGeneralTailWhenStarts => 'Применится при запуске агента.';
+
+  @override
+  String settingsGeneralSavedOverridden(String source, String effective) {
+    return 'Сохранено для всех проектов; $source переопределяет значение: агент использует $effective.';
+  }
+
+  @override
+  String settingsGeneralSavedUnverified(String home) {
+    return 'Сохранено в $home/config.yaml.';
+  }
+
+  @override
+  String get settingsGeneralConflict =>
+      'Файл конфигурации изменился на диске; страница перечитана. Повторите правку.';
+
+  @override
+  String get settingsGeneralRejected => 'Конфигурация не сохранена.';
+
+  @override
+  String settingsGeneralReadOnlyRemote(String origin) {
+    return 'Только чтение: агент работает на $origin. Измените его настройки на том хосте: codelab config set.';
+  }
+
+  @override
+  String settingsGeneralReadOnlyManaged(String agent) {
+    return 'Настройками агента управляет $agent.';
+  }
+
+  @override
+  String get settingsGeneralUnreadable =>
+      'Не удаётся прочитать конфигурацию агента.';
+
+  @override
+  String get settingsSearchKeywordsGeneral =>
+      'язык, бюджет, шаги, сжатие, субагент, уровень журнала, запуск, открывать, игнорируемые, о программе, версия, лицензия, диагностика';
 }

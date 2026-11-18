@@ -714,7 +714,7 @@ void main() {
         expect(editor<ToggleSwitch>('compaction.enabled'), findsOneWidget);
 
         await tester.tap(editor<ToggleSwitch>('compaction.enabled'));
-        await tester.pump();
+        await tester.pumpAndSettle();
 
         // Умолчание `true`: нажатие выключает.
         expect(cubit.calls, contains('submit:compaction.enabled=false'));

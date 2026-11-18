@@ -15,6 +15,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/platform/home_path_label.dart';
 import 'agent_defaults_rows.dart';
 import 'agent_defaults_state.dart';
 import 'provider_settings_session.dart';
@@ -280,7 +281,17 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
         context: {'error_type': 'ConfigIssue'},
       );
     }
-    _emit(AgentDefaultsUnreadable(problems: problems));
+    _emit(AgentDefaultsUnreadable(problems: problems, configHome: _homeLabel));
+  }
+
+  /// Метка `$CODELAB_HOME` для текстов страницы: `~` вместо домашнего
+  /// каталога, те же правила, что у диалога «Add connection profile»
+  /// (`homePathLabel`); без известной папки — `~/.codelab`.
+  String get _homeLabel {
+    final home = _codelabHome;
+    return home == null || home.isEmpty
+        ? '~/.codelab'
+        : homePathLabel(home, _environment);
   }
 
   AgentDefaultsReady _buildReady() => AgentDefaultsReady(
@@ -288,6 +299,7 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
     banner: _banner,
     saving: _saving,
     fieldErrors: Set.unmodifiable(_fieldErrors),
+    configHome: _homeLabel,
   );
 
   // --- Правка ----------------------------------------------------------------
@@ -473,6 +485,7 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
             AgentDefaultsBannerKind.savedUnverified,
             key: key,
           ),
+          configHome: _homeLabel,
         ),
       );
     }

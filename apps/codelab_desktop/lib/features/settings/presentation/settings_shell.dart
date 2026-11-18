@@ -126,6 +126,9 @@ class _SettingsShellState extends State<SettingsShell> {
         settingsPageTitleOf(l10n, page),
         settingsPageTitleOf(AppLocalizationsEn(), page),
       },
+      localizedKeywordsOf: (page) => page == SettingsPage.general
+          ? l10n.settingsSearchKeywordsGeneral.split(',').map((w) => w.trim())
+          : const [],
     );
     final body = builders[widget.selected];
 

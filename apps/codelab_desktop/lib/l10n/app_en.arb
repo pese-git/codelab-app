@@ -223,5 +223,164 @@
   "agentSettingDescription_logging_level": "Verbosity of the agent log.",
   "@agentSettingDescription_logging_level": {
     "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `logging.level`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "settingsGeneralAgentDefaultsTitle": "Agent defaults",
+  "@settingsGeneralAgentDefaultsTitle": {
+    "description": "Заголовок блока страницы General со строками конфигурации агента, общими с CLI."
+  },
+  "settingsGeneralAgentDefaultsCaption": "Changes are saved for all projects.",
+  "@settingsGeneralAgentDefaultsCaption": {
+    "description": "Подпись под заголовком блока Agent defaults: запись идёт в пользовательский config.yaml, а не в проект."
+  },
+  "settingsGeneralSharedInfo": "Shared with the codelab CLI. Rows marked shared come from the agent's settings registry and are saved to {home}/config.yaml; codelab /settings shows them too.",
+  "@settingsGeneralSharedInfo": {
+    "description": "InfoBar над блоком Agent defaults. {home} — папка CODELAB_HOME с ~ вместо домашнего каталога (путь, не переводить). codelab и codelab /settings — имя и команда CLI, не переводить.",
+    "placeholders": {
+      "home": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralTagShared": "shared",
+  "@settingsGeneralTagShared": {
+    "description": "Тег строки реестра настроек агента, которую видит и CLI."
+  },
+  "settingsGeneralNotSet": "Not set",
+  "@settingsGeneralNotSet": {
+    "description": "Значение ключа, который нигде не задан и не имеет умолчания."
+  },
+  "settingsGeneralAppliesAfterRestart": "(applies after restart)",
+  "@settingsGeneralAppliesAfterRestart": {
+    "description": "Пометка у ключа, изменение которого вступает в силу после перезапуска агента."
+  },
+  "settingsGeneralOverriddenBy": "This project overrides it ({source}).",
+  "@settingsGeneralOverriddenBy": {
+    "description": "Подпись строки, значение которой задаёт проектный файл. {source} — слой конфигурации (project, local), не переводить.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralRefusalSecret": "Change it with codelab secret set.",
+  "@settingsGeneralRefusalSecret": {
+    "description": "Причина, по которой строку нельзя править здесь: ключ хранит имя секрета. codelab secret set — команда CLI, не переводить."
+  },
+  "settingsGeneralRefusalMasked": "This value contains a secret; change it in the config file.",
+  "@settingsGeneralRefusalMasked": {
+    "description": "Причина, по которой строку нельзя править здесь: значение замаскировано."
+  },
+  "settingsGeneralRefusalExternal": "Set by {source}; it cannot be changed here.",
+  "@settingsGeneralRefusalExternal": {
+    "description": "Причина, по которой строку нельзя править здесь: значение пришло из окружения или файла --config. {source} — env или config, не переводить.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralRefusalOther": "This setting cannot be changed here.",
+  "@settingsGeneralRefusalOther": {
+    "description": "Причина отказа в правке для ключа, которого нет на странице (запасной текст)."
+  },
+  "settingsGeneralHintIntMin": "Enter a whole number of {min} or greater.",
+  "@settingsGeneralHintIntMin": {
+    "description": "Подсказка формата под полем: целое число с нижней границей.",
+    "placeholders": {
+      "min": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralHintIntRange": "Enter a whole number from {min} to {max}.",
+  "@settingsGeneralHintIntRange": {
+    "description": "Подсказка формата под полем: целое число в диапазоне.",
+    "placeholders": {
+      "min": {
+        "type": "String"
+      },
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralHintInt": "Enter a whole number.",
+  "@settingsGeneralHintInt": {
+    "description": "Подсказка формата под полем: целое число без границ."
+  },
+  "settingsGeneralHintNumber": "Enter a number.",
+  "@settingsGeneralHintNumber": {
+    "description": "Подсказка формата под полем: число."
+  },
+  "settingsGeneralHintDuration": "Enter a duration like 500ms, 30s, 2m or 1h.",
+  "@settingsGeneralHintDuration": {
+    "description": "Подсказка формата под полем: длительность. Примеры 500ms, 30s, 2m, 1h не переводить."
+  },
+  "settingsGeneralSaved": "Saved.",
+  "@settingsGeneralSaved": {
+    "description": "Баннер после записи ключа на странице General."
+  },
+  "settingsGeneralTailAfterRestart": "Applies after Restart agent.",
+  "@settingsGeneralTailAfterRestart": {
+    "description": "Хвост баннера записи: ключ вступит в силу после действия Restart agent."
+  },
+  "settingsGeneralTailWhenStarts": "Applies when the agent starts.",
+  "@settingsGeneralTailWhenStarts": {
+    "description": "Хвост баннера записи: агент не подключён, ключ вступит в силу при его запуске."
+  },
+  "settingsGeneralSavedOverridden": "Saved to all projects; {source} overrides it: the agent uses {effective}.",
+  "@settingsGeneralSavedOverridden": {
+    "description": "Баннер записи, значение которой перекрыто другим слоем. {source} — слой (local, project, env, config), {effective} — действующее значение; оба не переводить.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "effective": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralSavedUnverified": "Saved to {home}/config.yaml.",
+  "@settingsGeneralSavedUnverified": {
+    "description": "Баннер записи, после которой конфигурацию не удалось перечитать. {home} — папка CODELAB_HOME с ~, путь не переводить.",
+    "placeholders": {
+      "home": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralConflict": "The config file changed on disk; the page was reloaded. Try again.",
+  "@settingsGeneralConflict": {
+    "description": "Баннер конфликта записи: файл изменили вне app."
+  },
+  "settingsGeneralRejected": "The config was not saved.",
+  "@settingsGeneralRejected": {
+    "description": "Баннер ошибки записи, когда писатель не назвал проблему."
+  },
+  "settingsGeneralReadOnlyRemote": "Read-only: this agent runs on {origin}. Change its settings on that host: codelab config set.",
+  "@settingsGeneralReadOnlyRemote": {
+    "description": "Предупреждение блока Agent defaults для удалённого агента. {origin} — адрес вида wss://host:port, codelab config set — команда CLI; оба не переводить.",
+    "placeholders": {
+      "origin": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralReadOnlyManaged": "Agent settings are managed by {agent}.",
+  "@settingsGeneralReadOnlyManaged": {
+    "description": "Предупреждение блока Agent defaults для стороннего агента. {agent} — имя агента, не переводить.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralUnreadable": "The agent config cannot be read.",
+  "@settingsGeneralUnreadable": {
+    "description": "Заголовок InfoBar блока Agent defaults, когда config.yaml не разбирается; ниже проблемы загрузчика."
+  },
+  "settingsSearchKeywordsGeneral": "language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics",
+  "@settingsSearchKeywordsGeneral": {
+    "description": "Ключевые слова поиска по настройкам для страницы General, через запятую; на русском — переводы английских слов."
   }
 }
