@@ -963,7 +963,8 @@ D27; артборд 30 холста «CodeLab Desktop — Feature UI/UX», ут�
    `terminal-tab-close-<id>`, `terminal-new-tab`, `terminal-disclosure`, `palette-item-terminal`.
 
 **A17. Панель Usage (D-09, C-13; OpenSpec change `add-desktop-usage-pane`, решения пользователя
-2026-11-17, Q1–Q10 — все (а)).** Вкладка дока `ToolPane.usage` показывает расход сессии в фокусе
+2026-11-17, Q1–Q10 — все (а); поправки change `fix-usage-pane-live-cards`, решения пользователя
+2026-11-18, Q1–Q6 — все по рекомендации).** Вкладка дока `ToolPane.usage` показывает расход сессии в фокусе
 (экран 17, артборд «17 Usage pane»; блок «Session deadline» — change `add-session-deadline`).
 
 1. **Слои.** Как у Agents (A15), а не как у Files: своего порта данных нет, всё — из `SessionView`.
@@ -975,7 +976,7 @@ D27; артборд 30 холста «CodeLab Desktop — Feature UI/UX», ут�
    (A7); второй подписки нет. Ревизии `SessionView` приходят на каждый фрагмент ответа, поэтому
    данные панели кэшируются: `usagePaneDataOf` пересчитывается только при смене сессии, `cwd`,
    identity `usage` и `usageLedger` или ревизии транскрипта (её признак — identity всех `ToolCallItem` ленты;
-   индекс вызовов для подписей шагов строится один раз на ревизию, D4); для блока «Turn budget» ключ кэша расширяется статусом сессии и признаком ожидающих одобрений (заголовок и тик, п. 6). Сохранение CSV — порт
+   индекс вызовов для подписей шагов строится один раз на ревизию, D4); для блока «Turn budget» ключ кэша расширяется статусом сессии и списком ожиданий одобрений корня хода (`SessionView.approvalWaits`, сравнение по значению; заголовок, Time и тик, п. 6; D5 change `fix-usage-pane-live-cards`). Сохранение CSV — порт
    `UsageCsvSaver` в `lib/core/platform/` (`file_selector` и `dart:io`).
 2. **Доступность** (`usageAvailable`, Q7). `usageLedger` не `unavailable` — полная панель; есть
    только `usage` (`awaiting` или `reported`) — карточки из `usage.session`, заметка `This agent
@@ -985,11 +986,28 @@ D27; артборд 30 холста «CodeLab Desktop — Feature UI/UX», ут�
 3. **Состав** (Q3, Q8, Q9). Шапка `This session`, «Rebuild from log»
    (`refreshUsageLedger(rebuild: true)` без подтверждения), «Export CSV», строка состояния журнала
    (`Ledger: up to date · N records`, `rebuilt from journal (<reason>) · N records`, `in memory`,
-   `not saved`). Карточки — из `total` журнала, без журнала — из `usage.session`:
+   `not saved`). Пересборка с причиной `stale` или `missing` — штатное обновление ленивого кэша
+   `usage.json` после хода или у новой сессии — показывается как `Ledger: up to date · N records`,
+   причина — в подсказке строки `refreshed from the session journal (<reason>)`; `invalid`,
+   `explicit` и незнакомая причина — `rebuilt from journal (<reason>)` (D7, Q5 (а) change
+   `fix-usage-pane-live-cards`; причины на проводе и текст `/usage` не меняются).
+
+   Карточки строятся целиком из одного агрегата (D1, Q1 (в) change `fix-usage-pane-live-cards`):
+   из `total` журнала, если журнал для показа есть и `ledger.seq ≥ usage.lastSeq`; иначе из
+   `usage.session` (как строка статуса A7); без живых снимков — из журнала. Так во время хода и
+   пока журнал после хода `loading` или `failed` с отставшим журналом, карточки идут за снимками, а
+   после ответа журнала совпадают с таблицами и CSV. Журнал и снимки в одной карточке не
+   смешиваются; таблицы и CSV — только из журнала.
    * Input — `input + cacheRead + cacheWrite`, как A7; вторая строка `cache read N · write N`;
    * Output — `output`, вторая строка `reasoning N`;
-   * Cost — «~», `—` и `price unknown`, тексты причин A7;
-   * Turns · steps — `avg N.N steps per turn` в целых.
+   * Cost — «~», `—` и `price unknown`, тексты причин A7; у агрегата без шагов, с нулевыми
+     токенами и без причин неполноты — `—` и `no usage yet` (у пустой сессии агент не шлёт ни
+     `cost`, ни `currency`, поэтому `$0.00` не показывается; D8, Q6 (а));
+   * Turns · steps — `<ходы> · <шаги>` и `avg N.N steps per turn` в целых; ходы — `turnCount`
+     журнала или `usage.session.turns` (§12.1.5, п. 3); без числа ходов — только шаги. Число ходов
+     снимков может быть больше журнального (ход от уведомления субагента журнал сливает с
+     предыдущим, R2 change `add-usage-ledger`), поэтому во время хода карточка иногда показывает
+     на ход больше, чем строк в `Per turn` (R1 change `fix-usage-pane-live-cards`).
 
    Карточка с неполной суммой (значение с «~») рисуется тоном `warning`. Решение принимает
    application (`UsagePaneCard.approximate`, правила те же, что у «~»), виджет берёт тон из данных.
@@ -1029,12 +1047,20 @@ D27; артборд 30 холста «CodeLab Desktop — Feature UI/UX», ут�
    `used ≥ ⌈4·limit/5⌉` (`limit − limit ~/ 5`), `danger` при `used ≥ limit`; больше 100 % — в подписи как есть, полоса не
    длиннее 100 %, лимит 0 — полоса полная, `danger`. Без израсходованной стоимости — `— / $0.50`,
    `not checked: price unknown`, без тона; подсказка Tokens — `input + output, including subagents`;
-   под блоком — `When a limit is hit, the turn stops at the next step boundary.` Пока сессия
-   `running` без ожидающих одобрений и бюджет не итоговый, Time показывает `usedMs + (now − receivedAt)` (отрицательная
-   разность — ноль, сложение насыщающее до 2⁶³ − 1), иначе `usedMs` снимка. Тик — `Timer.periodic` раз в секунду в
-   `WorkbenchUsagePane`, как у Agents (A15): идёт, пока панель смонтирована, сессия `running`, нет
-   одобрений, бюджет не итоговый и есть `duration`; признак тика даёт application, часы виджета (`clock`) внедряют
-   тесты. Без `budget` блока нет.
+   под блоком — `When a limit is hit, the turn stops at the next step boundary.` Бюджет «живой»,
+   пока сессия `running` или `cancelling` и бюджет не итоговый. У живого бюджета Time —
+   `usedMs + max(0, (now − receivedAt) − W)`, где `W` — длительность объединения интервалов
+   ожидания одобрений корня текущего хода (`SessionView.approvalWaits`, §12.1.5, п. 3c), обрезанных
+   отрезком `(receivedAt, now]`; ожидающее одобрение — интервал до `now` (D4, Q2 (б) change
+   `fix-usage-pane-live-cards`). Поэтому Time не откатывается при запросе одобрения, стоит, пока оно
+   ждёт, и не прыгает вперёд после ответа; два одновременных одобрения вычитаются один раз, как в
+   цикле (§5.2 `05-agent-loop.md`). Одобрение субагента Time корня не останавливает: цикл корня это
+   время считает (Q4 (а)). Во время `cancelling` Time идёт до итогового снимка `turn`: цикл считает
+   время до `TurnEnded`. Отрицательная разность — ноль, сложение насыщающее до 2⁶³ − 1; у
+   неживого бюджета — `usedMs` снимка. Тик — `Timer.periodic` раз в секунду в
+   `WorkbenchUsagePane`, как у Agents (A15): идёт, пока панель смонтирована, бюджет живой, нет
+   ожидающего одобрения корня и есть `duration`; признак тика даёт application, часы виджета
+   (`clock`) внедряют тесты. Без `budget` блока нет.
 7. **CSV** (Q2). RFC 4180, разделитель `,`, CRLF, UTF-8 без BOM. Столбцы
    `kind,turn,step,title,model,input,output,cache_read,cache_write,reasoning,cost,currency,partial`.
    Строки хронологически: `turn`, его `step` и `subagents`, затем `model`, группы сессии
