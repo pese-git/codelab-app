@@ -1573,16 +1573,22 @@ CodeLab SHALL предлагать в доке панель Usage (`ToolPane.usa
 Предикат доступности панели (требование «Tool dock with closable pane tabs»): у сессии в фокусе `usageLedger` не `unavailable` или `usage.support` не `unknown` (D10, Q7). Недоступная панель не имеет переключателя, вкладки и пункта палитры и остаётся в сохранённой раскладке. Панель SHALL быть доступна из палитры пунктом хоста `Usage` с командой `/usage-pane`; имя `/usage` остаётся у команды агента (D11).
 
 Панель SHALL показывать:
-- шапку `This session` с кнопками `Rebuild from log` (`usage-rebuild`; есть при `usageLedger` не `unavailable`, недоступна во время `loading`) и `Export CSV` (`usage-export`; есть, когда есть журнал для показа) и строку состояния журнала (`usage-ledger-status`): `Ledger: up to date · N records`, `rebuilt from journal (<reason>) · N records`, `in memory`, `not saved` (Q3);
-- карточки Input, Output, Cost и Turns · steps (`usage-card-input`, `usage-card-output`, `usage-card-cost`, `usage-card-turns`) из `total` журнала, если журнал есть (`loaded` или прежний журнал в `loading` и `failed`), иначе из `usage.session`:
+- шапку `This session` с кнопками `Rebuild from log` (`usage-rebuild`; есть при `usageLedger` не `unavailable`, недоступна во время `loading`) и `Export CSV` (`usage-export`; есть, когда есть журнал для показа) и строку состояния журнала (`usage-ledger-status`) (Q3; design.md change `fix-usage-pane-live-cards`, D7, Q5 (а)):
+  - `upToDate` — `Ledger: up to date · N records`;
+  - `rebuilt` с причиной `stale` или `missing` — штатное обновление ленивого кэша `usage.json` — тоже `Ledger: up to date · N records`, а подсказка строки — `refreshed from the session journal (<reason>)`;
+  - `rebuilt` с иной причиной (`invalid`, `explicit`, незнакомая) или без причины — `rebuilt from journal (<reason>) · N records`;
+  - `inMemory` — `in memory`, `notSaved` — `not saved`;
+- карточки Input, Output, Cost и Turns · steps (`usage-card-input`, `usage-card-output`, `usage-card-cost`, `usage-card-turns`) из одного агрегата (design.md change `fix-usage-pane-live-cards`, D1, Q1 (в)): из `total` журнала, если журнал для показа есть (`loaded` или прежний журнал в `loading` и `failed`) и его `seq` не меньше `usage.lastSeq`; иначе из `usage.session`, если он есть; иначе из `total` журнала, если журнал для показа есть. Одна карточка НЕ SHALL складывать или смешивать журнал и живые снимки:
   - Input — `input + cacheRead + cacheWrite` (Q8) и вторая строка `cache read N · write N`;
   - Output — `output` и `reasoning N`, если `reasoning` известен;
-  - Cost — стоимость с «~» при любой причине неполноты, `—` и `price unknown` при неизвестной цене; при непустом `partial` вторая строка — тексты причин строки статуса;
-  - Turns · steps — `<ходы> · <шаги>` и `avg N.N steps per turn` (без журнала — только шаги, без среднего; при нуле ходов среднего нет);
+  - Cost — стоимость с «~» при любой причине неполноты. При непустом `partial` вторая строка — тексты причин строки статуса. При неизвестной цене — `—` и `price unknown`. Исключение — агрегат без шагов, со всеми счётчиками токенов, равными нулю, и без причин неполноты: `—` и `no usage yet` (D8, Q6 (а)). `$0.00` НЕ SHALL показываться, если в агрегате нет `cost`;
+  - Turns · steps — `<ходы> · <шаги>` и `avg N.N steps per turn`. Ходы — `turnCount` журнала или `turns` агрегата `usage.session` (D2). Если число ходов в источнике неизвестно — только шаги, без среднего; при нуле ходов среднего нет;
   - карточка, значение которой показано с «~», SHALL иметь тон `warning`; карточка со значением `—` тона НЕ SHALL получать; тон решает application, виджет получает его из данных;
 - таблицу `Per turn` (`usage-turn-<index>`): ходы от нового к старому, подпись `N · “<title>”` (без `title` — `N`), столбцы Input, Output, Cost, пометка `running` у идущего хода; ход раскрывается до шагов (`usage-step-<turn>-<index>`) с подписью `step <index + 1> · <подпись шага>` (требование «Подпись шага в панели Usage») и моделью шага в подсказке; у хода с субагентами в раскрытом виде после его шагов — строка `subagents · N runs`;
 - таблицу `Per model` (`usage-model-<n>`): модели журнала с подписью `<provider> / <id>`, ниже — строки `Subagents` и `Summaries`, если в журнале есть эти группы (Q9);
 - строку без usage (все счётчики нулевые и причина `noUsage`) как `—` во всех числовых столбцах; строку без цены — `—` в столбце Cost.
+
+Таблицы `Per turn`, `Per model` и экспорт CSV SHALL строиться только из журнала.
 
 Состояния журнала: `idle` и `loading` без прежнего журнала — индикатор вместо таблиц; `loading` с прежним журналом — прежний журнал и индикатор в шапке; `failed` — прежний журнал, если он был, и заметка `Couldn't load usage history.` с действием `Retry` (код ошибки — в подсказке); `unavailable` при `usage.support` не `unknown` — карточки из живых снимков, без таблиц, `Export CSV` и `Rebuild from log`, заметка `This agent does not provide usage history.` (D10).
 
@@ -1612,6 +1618,26 @@ CodeLab SHALL предлагать в доке панель Usage (`ToolPane.usa
 - **WHEN** пользователь нажимает `Rebuild from log`
 - **THEN** уходит запрос журнала с `rebuild: true`; после ответа строка состояния — `rebuilt from journal (explicit) · N records`
 
+#### Scenario: Журнал пересобран после хода
+- **WHEN** после хода автоматический запрос журнала получает ответ `ledger.status` `rebuilt` с причиной `stale` и 12 записями
+- **THEN** строка состояния — `Ledger: up to date · 12 records`, её подсказка — `refreshed from the session journal (stale)`; при причине `invalid` строка — `rebuilt from journal (invalid) · 12 records`
+
+#### Scenario: Карточки во время хода
+- **WHEN** панель показана, журнал загружен с `seq` 0 и `total` без шагов, затем идёт ход, и снимок `step` с `seq` 1 несёт `session` с `steps` 1, `turns` 1 и `cost` `"0.00038"`
+- **THEN** карточки показывают сумму снимка: Cost — `$0.00038`, Turns · steps — `1 · 1`; `price unknown` и `0` в карточках нет; таблица `Per turn` остаётся на журнале с `seq` 0
+
+#### Scenario: Карточки после ответа журнала
+- **WHEN** после хода `usage.lastSeq` — 3, журнал в `loading` с прежним журналом `seq` 0, затем приходит журнал с `seq` 3
+- **THEN** пока журнал `loading`, карточки показывают сумму снимка, а не прежний журнал; после ответа — `total` журнала с `seq` 3
+
+#### Scenario: Журнал отстал после сбоя
+- **WHEN** `usageLedger` — `failed` с прежним журналом `seq` 5, а `usage.lastSeq` — 9
+- **THEN** карточки показывают `usage.session`, таблицы — прежний журнал, заметка `Couldn't load usage history.`
+
+#### Scenario: Пустая сессия
+- **WHEN** журнал новой сессии без ходов загружен: `total` без шагов, с нулевыми токенами, без `cost` и без `partial`, снимков `usage` нет
+- **THEN** карточка Cost показывает `—` и `no usage yet` без тона; `price unknown` и `$0.00` нет; Input и Output — `0`, Turns · steps — `0 · 0` без среднего
+
 #### Scenario: Неизвестная цена и ход без usage
 - **WHEN** журнал содержит ход, у которого все счётчики нулевые и `partial` — `["noUsage"]`, и модель без цен
 - **THEN** строка хода показывает `—` в столбцах Input, Output и Cost, строка модели — `—` в столбце Cost; `0` и `$0.00` нет
@@ -1621,8 +1647,8 @@ CodeLab SHALL предлагать в доке панель Usage (`ToolPane.usa
 - **THEN** карточка Cost показывает `~$2.26` в тоне `warning` и строку `agent sent no usage for some steps`; при неизвестной `total.cost` карточка показывает `—` без тона
 
 #### Scenario: Агент без журнала
-- **WHEN** агент объявил `usage`, не объявил `usageLedger` и прислал снимок с суммой сессии
-- **THEN** панель доступна, карточки показывают сумму снимка, таблиц, `Export CSV` и `Rebuild from log` нет, показана заметка `This agent does not provide usage history.`
+- **WHEN** агент объявил `usage`, не объявил `usageLedger` и прислал снимок с суммой сессии, в которой `turns` 2 и `steps` 5
+- **THEN** панель доступна, карточки показывают сумму снимка, Turns · steps — `2 · 5` и `avg 2.5 steps per turn`, таблиц, `Export CSV` и `Rebuild from log` нет, показана заметка `This agent does not provide usage history.`; без `turns` в снимке карточка показывает только шаги
 
 #### Scenario: Агент без usage
 - **WHEN** агент не объявил ни `usage`, ни `usageLedger`, а панель Usage сохранена открытой в раскладке
@@ -1687,7 +1713,12 @@ CodeLab SHALL предлагать в доке панель Usage (`ToolPane.usa
 
 Тон полосы — `warning` от 80 % и `danger` от 100 %. Больше 100 % SHALL показываться в подписи как есть, а заполнение полосы ограничено 100 %. Под блоком — `When a limit is hit, the turn stops at the next step boundary.`
 
-Пока сессия `running`, у неё нет ожидающих одобрений, `budget` не итоговый и в нём есть `duration`, строка Time SHALL обновляться раз в секунду как `usedMs + (now − receivedAt)`; иначе она показывает `usedMs` последнего снимка. Таймер SHALL идти только пока панель показана и SHALL отменяться при скрытии панели и при смене условия. Без `budget` блока НЕ SHALL быть.
+Время между снимками (design.md change `fix-usage-pane-live-cards`, D3, D4, Q2 (б), Q4 (а)). Бюджет живой, пока сессия `running` или `cancelling` и `budget` не итоговый. У живого бюджета строка Time SHALL показывать `usedMs + max(0, (now − receivedAt) − W)`. Здесь `W` — длительность объединения интервалов ожидания одобрений корня текущего хода (`SessionView` из kit, требование `acp-client-kit` «Ожидания одобрений корня хода»), обрезанных отрезком от `receivedAt` до `now`. Ожидающее одобрение даёт интервал до `now`. Сложение насыщающее. Иначе Time показывает `usedMs` последнего снимка. Отсюда:
+- пока ждёт одобрение корня, значение Time НЕ SHALL меняться и НЕ SHALL уменьшаться;
+- после ответа на одобрение Time НЕ SHALL включать время ожидания;
+- одобрение субагента Time НЕ SHALL останавливать: цикл корня это время считает.
+
+Строка Time SHALL обновляться раз в секунду, пока бюджет живой, в нём есть `duration` и нет ожидающего одобрения корня. Таймер SHALL идти только пока панель показана и SHALL отменяться при скрытии панели и при смене условия. Без `budget` блока НЕ SHALL быть.
 
 #### Scenario: Прогресс во время хода
 - **WHEN** идёт ход, и последний снимок `step` несёт `budget` с `tokens {used 92000, limit 200000}`, `cost {used "0.41", limit "0.5"}`, `duration {usedMs 180000, limitMs 600000}`, `steps {used 3, limit 50}`
@@ -1695,7 +1726,23 @@ CodeLab SHALL предлагать в доке панель Usage (`ToolPane.usa
 
 #### Scenario: Время идёт между шагами
 - **WHEN** снимок применён с `duration.usedMs` 180000, сессия `running`, одобрений нет, прошло 5 с
-- **THEN** строка Time показывает `3:05 / 10:00`; при ожидающем одобрении — `3:00 / 10:00`
+- **THEN** строка Time показывает `3:05 / 10:00`
+
+#### Scenario: Одобрение не откатывает время
+- **WHEN** снимок применён с `duration.usedMs` 3000 в момент T, сессия `running`, в T + 2 с агент запрашивает одобрение корня, и до ответа проходит 60 с
+- **THEN** до запроса Time растёт до `0:05`; с T + 2 с до ответа Time стоит на `0:05` и не возвращается к `0:03`, тика нет; через 3 с после ответа Time — `0:08`, а не `1:08`
+
+#### Scenario: Два одобрения одновременно
+- **WHEN** после снимка с `duration.usedMs` 0 в момент T агент запрашивает два одобрения корня в T + 1 с и T + 2 с, оба получают ответ в T + 61 с, сейчас T + 64 с
+- **THEN** Time — `0:04`: ожидание с T + 1 с по T + 61 с вычтено один раз
+
+#### Scenario: Одобрение субагента
+- **WHEN** снимок применён с `duration.usedMs` 180000, сессия `running`, ожидает только одобрение субагента, прошло 5 с
+- **THEN** Time показывает `3:05 / 10:00` и тикает
+
+#### Scenario: Отмена хода
+- **WHEN** снимок применён с `duration.usedMs` 180000, через 5 с пользователь отменяет ход, сессия `cancelling`, прошло ещё 2 с
+- **THEN** Time показывает `3:07 / 10:00`, а не `3:00`; после снимка `turn` — его `usedMs` с заголовком `Last turn`
 
 #### Scenario: Таймер только при показанной панели
 - **WHEN** идёт ход с `duration` в `budget`, и пользователь переключает док на другую вкладку или ход завершается

@@ -275,7 +275,7 @@ PR в `develop`: итерации 1 и 2 независимы, готовы од
 
 **Отступление:** app открыл последний проект из общего списка недавних (папку прежнего прогона в scratchpad), а не новую папку. Журналы сессий при этом лежали в изолированном `CODELAB_HOME`; на проверяемые сценарии это не влияет.
 
-**Новое наблюдение** — SMK-46 в [`docs/backlog/smoke-2026-11-18-desktop-usage-pane.md`](../../../docs/backlog/smoke-2026-11-18-desktop-usage-pane.md). На одном кадре длинная подпись хода в `Per turn` подошла вплотную к столбцу Input без зазора («…the project7.5k»), на следующих кадрах перенос был правильный. Этот change раскладку таблиц не менял (`_measureColumns`, D16 change `add-desktop-usage-pane`). Наблюдение уходит в бэклог, change закрывается без него.
+**Новое наблюдение** — SMK-46 в [`docs/backlog/smoke-2026-11-18-desktop-usage-pane.md`](../../../../docs/backlog/smoke-2026-11-18-desktop-usage-pane.md). На одном кадре длинная подпись хода в `Per turn` подошла вплотную к столбцу Input без зазора («…the project7.5k»), на следующих кадрах перенос был правильный. Этот change раскладку таблиц не менял (`_measureColumns`, D16 change `add-desktop-usage-pane`). Наблюдение уходит в бэклог, change закрывается без него.
 
 ## Open Questions
 

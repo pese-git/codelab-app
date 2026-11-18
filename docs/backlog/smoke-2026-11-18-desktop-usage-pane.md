@@ -13,7 +13,7 @@
 пользователя 2026-11-18 по SMK-42 и SMK-43 — записать и закрыть отдельным change, кандидат
 `fix-usage-pane-live-cards`. SMK-44 и SMK-45 — UX-наблюдения 2026-11-17; их можно взять в тот же change.
 
-**Статус 2026-11-18:** открыт OpenSpec change `fix-usage-pane-live-cards` (`openspec/changes/fix-usage-pane-live-cards/`). Причины в коде — его design.md, раздел «Причины в коде». Решения пользователя 2026-11-18 (Q1–Q6 — все по рекомендации): SMK-44 и SMK-45 закрываются тем же change. SMK-44 — не дефект агента: `usage.json` пишется лениво, и после каждого хода он устарел по дизайну. SMK-45 — `cost` нет уже в ответе агента: у агрегата без шагов цены нет. При сверке найден дефект ядра, связанный с SMK-43: ожидания параллельных одобрений вычитаются из времени хода дважды (Q3).
+**Статус 2026-11-18:** открыт OpenSpec change `fix-usage-pane-live-cards` (`openspec/changes/archive/2026-11-18-fix-usage-pane-live-cards/`). Причины в коде — его design.md, раздел «Причины в коде». Решения пользователя 2026-11-18 (Q1–Q6 — все по рекомендации): SMK-44 и SMK-45 закрываются тем же change. SMK-44 — не дефект агента: `usage.json` пишется лениво, и после каждого хода он устарел по дизайну. SMK-45 — `cost` нет уже в ответе агента: у агрегата без шагов цены нет. При сверке найден дефект ядра, связанный с SMK-43: ожидания параллельных одобрений вычитаются из времени хода дважды (Q3).
 
 **Статус 2026-11-18 (закрытие):** change `fix-usage-pane-live-cards` влит в `develop` (PR #358). Ручная проверка на desktop прошла (design.md change, раздел «Итог ручной проверки»): SMK-42…SMK-45 закрыты. Новое наблюдение той же проверки — SMK-46.
 
@@ -60,7 +60,7 @@
 
 Не смешивать журнал и снимки в одной карточке: двойной учёт (R8 change `add-usage-ledger`).
 
-**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/fix-usage-pane-live-cards/design.md) (PR #358; D1, D2, решение пользователя Q1 (в)): карточки берутся из `total` журнала при `ledger.seq ≥ usage.lastSeq`, иначе из живых снимков `usage.session`. Карточка Turns · steps — по `UsageTotals.turns`. Ручная проверка 2026-11-18: во время хода карточки совпадают со строкой статуса, после хода — с `Per turn` и `Per model`. Регресс — группа `источник карточек: свежий из двух (D1, Q1 (в))` в `apps/codelab_desktop/test/features/usage/application/usage_pane_data_test.dart` и `packages/dart/codelab_client_core/test/usage/usage_totals_turns_test.dart`.
+**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/archive/2026-11-18-fix-usage-pane-live-cards/design.md) (PR #358; D1, D2, решение пользователя Q1 (в)): карточки берутся из `total` журнала при `ledger.seq ≥ usage.lastSeq`, иначе из живых снимков `usage.session`. Карточка Turns · steps — по `UsageTotals.turns`. Ручная проверка 2026-11-18: во время хода карточки совпадают со строкой статуса, после хода — с `Per turn` и `Per model`. Регресс — группа `источник карточек: свежий из двух (D1, Q1 (в))` в `apps/codelab_desktop/test/features/usage/application/usage_pane_data_test.dart` и `packages/dart/codelab_client_core/test/usage/usage_totals_turns_test.dart`.
 
 ### SMK-43. Время бюджета откатывается при запросе одобрения (P3)
 
@@ -86,7 +86,7 @@
 клиент знает сам (время применения запроса kit). Проверить в спецификации kit, есть ли этот момент в
 `SessionView`; если нет — добавить в дельту `acp-client-kit`. Поле ACP для этого не нужно.
 
-**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/fix-usage-pane-live-cards/design.md) (PR #358; D3–D6, решения пользователя Q2 (б), Q3 (а), Q4 (а)). Сделано иначе, чем предлагала карточка: Time вычитает объединение ожиданий одобрений корня (`SessionView.approvalWaits`), поэтому не откатывается и после ответа не прыгает. Во время `cancelling` Time идёт, одобрение потомка тик не останавливает. В ядре `ApprovalWaitMeter` считает объединение ожиданий, а не сумму. Ручная проверка 2026-11-18: одно и два одобрения, отмена — без отката. Регресс — `usage_budget_test.dart` и `usage_budget_tick_test.dart` в `apps/codelab_desktop/test/features/usage/`, `packages/dart/codelab_client_core/test/approvals/approval_waits_test.dart`, `packages/dart/codelab_agent_core/test/tools/approval_wait_meter_test.dart`, `test/loop/turn_budget_parallel_approvals_test.dart`, `test/permissions/approval_wait_policy_test.dart`.
+**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/archive/2026-11-18-fix-usage-pane-live-cards/design.md) (PR #358; D3–D6, решения пользователя Q2 (б), Q3 (а), Q4 (а)). Сделано иначе, чем предлагала карточка: Time вычитает объединение ожиданий одобрений корня (`SessionView.approvalWaits`), поэтому не откатывается и после ответа не прыгает. Во время `cancelling` Time идёт, одобрение потомка тик не останавливает. В ядре `ApprovalWaitMeter` считает объединение ожиданий, а не сумму. Ручная проверка 2026-11-18: одно и два одобрения, отмена — без отката. Регресс — `usage_budget_test.dart` и `usage_budget_tick_test.dart` в `apps/codelab_desktop/test/features/usage/`, `packages/dart/codelab_client_core/test/approvals/approval_waits_test.dart`, `packages/dart/codelab_agent_core/test/tools/approval_wait_meter_test.dart`, `test/loop/turn_budget_parallel_approvals_test.dart`, `test/permissions/approval_wait_policy_test.dart`.
 
 ### SMK-44. `rebuilt from journal (stale)` после каждого хода (P3)
 
@@ -102,7 +102,7 @@
 `up to date` (причина остаётся в подсказке) или переименовать подпись. Причины `stale` на проводе меняться не
 должны: их читает и `/usage`.
 
-**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/fix-usage-pane-live-cards/design.md) (PR #358; D7, решение пользователя Q5 (а)): `stale` и `missing` показываются как `Ledger: up to date · N records`, причина — в подсказке `refreshed from the session journal (<reason>)`. `invalid`, `explicit` и незнакомая причина — как раньше. Ручная проверка 2026-11-18: строка после каждого хода — `up to date`, «Rebuild from log» — `(explicit)`. Подсказку глазами не подтвердили (синтетическое наведение подсказок Flutter не показывает), её проверяет группа `подсказка строки состояния журнала (D7)` в `packages/flutter/codelab_ui/test/codelab_usage_pane_test.dart`.
+**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/archive/2026-11-18-fix-usage-pane-live-cards/design.md) (PR #358; D7, решение пользователя Q5 (а)): `stale` и `missing` показываются как `Ledger: up to date · N records`, причина — в подсказке `refreshed from the session journal (<reason>)`. `invalid`, `explicit` и незнакомая причина — как раньше. Ручная проверка 2026-11-18: строка после каждого хода — `up to date`, «Rebuild from log» — `(explicit)`. Подсказку глазами не подтвердили (синтетическое наведение подсказок Flutter не показывает), её проверяет группа `подсказка строки состояния журнала (D7)` в `packages/flutter/codelab_ui/test/codelab_usage_pane_test.dart`.
 
 ### SMK-45. Cost `—` у пустой сессии с моделью с ценами (P3)
 
@@ -117,7 +117,7 @@ Cost `price unknown` при `total.cost == null`; правило DSK-11 «неи
 маппер панели. Затем решить, показывать ли `$0.00` у сессии без шагов. DSK-11 при этом не нарушается: ноль
 здесь известен.
 
-**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/fix-usage-pane-live-cards/design.md) (PR #358; D8, решение пользователя Q6 (а)). `null` даёт агент: у агрегата без шагов нет ни `cost`, ни `currency`. Поэтому `$0.00` не показывается: валюта неизвестна. У агрегата без шагов, без `cost`, с нулевыми токенами и без причин неполноты карточка Cost показывает `—` и `no usage yet`. Ручная проверка 2026-11-18 это подтвердила. Регресс — группа `Cost пустой сессии (D8, Q6 (а); «Пустая сессия»)` в `usage_pane_data_test.dart`.
+**Закрыто** change [`fix-usage-pane-live-cards`](../../openspec/changes/archive/2026-11-18-fix-usage-pane-live-cards/design.md) (PR #358; D8, решение пользователя Q6 (а)). `null` даёт агент: у агрегата без шагов нет ни `cost`, ни `currency`. Поэтому `$0.00` не показывается: валюта неизвестна. У агрегата без шагов, без `cost`, с нулевыми токенами и без причин неполноты карточка Cost показывает `—` и `no usage yet`. Ручная проверка 2026-11-18 это подтвердила. Регресс — группа `Cost пустой сессии (D8, Q6 (а); «Пустая сессия»)` в `usage_pane_data_test.dart`.
 
 ### SMK-46. Подпись хода в `Per turn` подходит вплотную к столбцу Input (P3)
 
