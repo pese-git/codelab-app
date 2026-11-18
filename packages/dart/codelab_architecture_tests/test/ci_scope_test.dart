@@ -246,6 +246,48 @@ void main() {
     expect(dependent.keys, isNot(contains('web-compile')));
   });
 
+  test('l10n:check runs when a catalog or generated localization code of '
+      'the app or the kit changes (change add-desktop-localization, D3)', () {
+    for (final file in [
+      'apps/codelab_desktop/lib/l10n/app_en.arb',
+      'apps/codelab_desktop/lib/l10n/app_ru.arb',
+      'apps/codelab_desktop/l10n.yaml',
+      'apps/codelab_desktop/lib/l10n/app_localizations_ru.dart',
+      'packages/flutter/codelab_ui/lib/src/l10n/codelab_ui_en.arb',
+      'packages/flutter/codelab_ui/l10n.yaml',
+      'packages/flutter/codelab_ui/lib/src/l10n/codelab_localizations.dart',
+    ]) {
+      final jobs = _byName(_scope([file]));
+
+      expect(jobs['l10n']?.scripts, 'l10n:check', reason: file);
+    }
+  });
+
+  test('l10n:check does not run for ordinary code', () {
+    expect(
+      _byName(_scope(['apps/codelab_desktop/lib/a.dart'])).keys,
+      isNot(contains('l10n')),
+    );
+    expect(
+      _byName(_scope(['packages/dart/codelab_acp_protocol/lib/a.dart'])).keys,
+      isNot(contains('l10n')),
+    );
+  });
+
+  test('a change of the l10n:check script runs everything with l10n:check', () {
+    final scope = _scope(['tool/l10n_check.dart']);
+
+    expect(scope.full, isTrue);
+    expect(_byName(scope)['l10n']?.scripts, 'l10n:check');
+  });
+
+  test('the full run has the l10n job of the check script', () {
+    expect(
+      {for (final job in fullJobs) job.job: job}['l10n']?.scripts,
+      'l10n:check',
+    );
+  });
+
   test('a package pubspec lists workspace dependencies only', () {
     final package = WorkspacePackage.fromPubspec(
       'apps/codelab_cli',

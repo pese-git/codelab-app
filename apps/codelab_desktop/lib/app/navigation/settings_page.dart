@@ -2,15 +2,9 @@
 ///
 /// Группы и их порядок фиксированы `dart-agent-and-clients` §12.4.9; заголовок
 /// группы показывается, только если в ней есть видимая страница (SETUP-17).
-enum SettingsGroup {
-  agent('Agent'),
-  app('App');
-
-  const SettingsGroup(this.title);
-
-  /// Заголовок группы в навигации.
-  final String title;
-}
+/// Текст заголовка зависит от языка и берётся функцией presentation
+/// `settingsGroupTitleOf` (`add-desktop-localization`, D5, п. 8).
+enum SettingsGroup { agent, app }
 
 /// Страницы настроек codelab-app в фиксированном порядке §12.4.9.
 ///
@@ -27,33 +21,22 @@ enum SettingsGroup {
 /// composition root и в таблицу построителей `settingsPageBuilders`;
 /// значение enum и порядок не меняются.
 enum SettingsPage {
-  connection(SettingsGroup.agent, 'Connection', 'connection'),
-  providers(SettingsGroup.agent, 'Providers', 'providers'),
-  mcpServers(SettingsGroup.agent, 'MCP servers', 'mcp-servers'),
-  agentsAndModes(SettingsGroup.agent, 'Agents & modes', 'agents-and-modes'),
-  permissionsAndTools(
-    SettingsGroup.agent,
-    'Permissions & tools',
-    'permissions-and-tools',
-  ),
-  redaction(SettingsGroup.agent, 'Redaction', 'redaction'),
-  skillsAndExtensions(
-    SettingsGroup.agent,
-    'Skills & extensions',
-    'skills-and-extensions',
-  ),
-  codeAndWeb(SettingsGroup.agent, 'Code & web', 'code-and-web'),
-  general(SettingsGroup.app, 'General', 'general'),
-  appearance(SettingsGroup.app, 'Appearance', 'appearance'),
-  keyboard(SettingsGroup.app, 'Keyboard', 'keyboard');
+  connection(SettingsGroup.agent, 'connection'),
+  providers(SettingsGroup.agent, 'providers'),
+  mcpServers(SettingsGroup.agent, 'mcp-servers'),
+  agentsAndModes(SettingsGroup.agent, 'agents-and-modes'),
+  permissionsAndTools(SettingsGroup.agent, 'permissions-and-tools'),
+  redaction(SettingsGroup.agent, 'redaction'),
+  skillsAndExtensions(SettingsGroup.agent, 'skills-and-extensions'),
+  codeAndWeb(SettingsGroup.agent, 'code-and-web'),
+  general(SettingsGroup.app, 'general'),
+  appearance(SettingsGroup.app, 'appearance'),
+  keyboard(SettingsGroup.app, 'keyboard');
 
-  const SettingsPage(this.group, this.title, this.slug);
+  const SettingsPage(this.group, this.slug);
 
   /// Группа навигации, под заголовком которой стоит страница.
   final SettingsGroup group;
-
-  /// Заголовок пункта навигации и страницы.
-  final String title;
 
   /// Имя в kebab-case: суффикс ключа теста и значение
   /// `codelab.settings.last_page`.

@@ -26,4 +26,43 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsLanguageSaveFailed =>
       'Couldn\'t save the language. CodeLab will use the previous language after restart.';
+
+  @override
+  String get settingsGroupAgent => 'Agent';
+
+  @override
+  String get settingsGroupApp => 'App';
+
+  @override
+  String get settingsPageConnectionTitle => 'Connection';
+
+  @override
+  String get settingsPageProvidersTitle => 'Providers';
+
+  @override
+  String get settingsPageMcpServersTitle => 'MCP servers';
+
+  @override
+  String get settingsPageAgentsAndModesTitle => 'Agents & modes';
+
+  @override
+  String get settingsPagePermissionsAndToolsTitle => 'Permissions & tools';
+
+  @override
+  String get settingsPageRedactionTitle => 'Redaction';
+
+  @override
+  String get settingsPageSkillsAndExtensionsTitle => 'Skills & extensions';
+
+  @override
+  String get settingsPageCodeAndWebTitle => 'Code & web';
+
+  @override
+  String get settingsPageAppearanceTitle => 'Appearance';
+
+  @override
+  String get settingsPageKeyboardTitle => 'Keyboard';
+
+  @override
+  String get settingsGeneralSectionInterface => 'Interface';
 }

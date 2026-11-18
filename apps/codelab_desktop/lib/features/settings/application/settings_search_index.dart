@@ -8,7 +8,8 @@ import '../../../app/navigation/settings_page.dart';
 /// Для чего: чистая функция отбора страниц для навигации. Нечёткого поиска и
 /// поиска по значениям настроек нет.
 ///
-/// Как использовать: `SettingsSearchIndex.search(visiblePages, query)`;
+/// Как использовать: `SettingsSearchIndex.search(visiblePages, query,
+/// titleOf: …)`;
 /// совпадение — по подстроке без учёта регистра с заголовком страницы или её
 /// ключевыми словами. Пустой запрос возвращает все страницы. Ключевые слова
 /// новой страницы добавляются в [keywords] вместе со страницей.
@@ -53,17 +54,21 @@ final class SettingsSearchIndex {
     ],
   };
 
+  /// [titleOf] даёт заголовок страницы на текущем языке: поиск идёт по тому,
+  /// что видит пользователь (`add-desktop-localization`, D5, п. 8); ключевые
+  /// слова — английские и от языка не зависят.
   static List<SettingsPage> search(
     Iterable<SettingsPage> visible,
-    String query,
-  ) {
+    String query, {
+    required String Function(SettingsPage page) titleOf,
+  }) {
     final needle = query.trim().toLowerCase();
     if (needle.isEmpty) {
       return visible.toList();
     }
     return [
       for (final page in visible)
-        if (page.title.toLowerCase().contains(needle) ||
+        if (titleOf(page).toLowerCase().contains(needle) ||
             (keywords[page] ?? const []).any(
               (word) => word.toLowerCase().contains(needle),
             ))

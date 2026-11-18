@@ -23,5 +23,57 @@
   "settingsLanguageSaveFailed": "Couldn't save the language. CodeLab will use the previous language after restart.",
   "@settingsLanguageSaveFailed": {
     "description": "Ошибка на странице General, когда выбранный язык не удалось записать в хранилище. CodeLab — название продукта, не переводить."
+  },
+  "settingsGroupAgent": "Agent",
+  "@settingsGroupAgent": {
+    "description": "Заголовок группы «Agent» в навигации настроек."
+  },
+  "settingsGroupApp": "App",
+  "@settingsGroupApp": {
+    "description": "Заголовок группы «App» в навигации настроек."
+  },
+  "settingsPageConnectionTitle": "Connection",
+  "@settingsPageConnectionTitle": {
+    "description": "Пункт навигации и заголовок страницы настроек Connection."
+  },
+  "settingsPageProvidersTitle": "Providers",
+  "@settingsPageProvidersTitle": {
+    "description": "Пункт навигации страницы настроек Providers."
+  },
+  "settingsPageMcpServersTitle": "MCP servers",
+  "@settingsPageMcpServersTitle": {
+    "description": "Пункт навигации страницы настроек MCP servers. MCP — название протокола, не переводить."
+  },
+  "settingsPageAgentsAndModesTitle": "Agents & modes",
+  "@settingsPageAgentsAndModesTitle": {
+    "description": "Пункт навигации страницы настроек Agents & modes."
+  },
+  "settingsPagePermissionsAndToolsTitle": "Permissions & tools",
+  "@settingsPagePermissionsAndToolsTitle": {
+    "description": "Пункт навигации страницы настроек Permissions & tools."
+  },
+  "settingsPageRedactionTitle": "Redaction",
+  "@settingsPageRedactionTitle": {
+    "description": "Пункт навигации страницы настроек Redaction (скрытие секретов в тексте)."
+  },
+  "settingsPageSkillsAndExtensionsTitle": "Skills & extensions",
+  "@settingsPageSkillsAndExtensionsTitle": {
+    "description": "Пункт навигации страницы настроек Skills & extensions."
+  },
+  "settingsPageCodeAndWebTitle": "Code & web",
+  "@settingsPageCodeAndWebTitle": {
+    "description": "Пункт навигации страницы настроек Code & web."
+  },
+  "settingsPageAppearanceTitle": "Appearance",
+  "@settingsPageAppearanceTitle": {
+    "description": "Пункт навигации страницы настроек Appearance."
+  },
+  "settingsPageKeyboardTitle": "Keyboard",
+  "@settingsPageKeyboardTitle": {
+    "description": "Пункт навигации страницы настроек Keyboard."
+  },
+  "settingsGeneralSectionInterface": "Interface",
+  "@settingsGeneralSectionInterface": {
+    "description": "Заголовок секции страницы General, в которой выбирается язык интерфейса."
   }
 }

@@ -2,8 +2,21 @@
   "@@locale": "ru",
   "settingsPageGeneralTitle": "Общие",
   "settingsLanguageTitle": "Язык",
-  "settingsLanguageSystem": "Системный",
+  "settingsLanguageSystem": "Как в системе",
   "settingsLanguageEnglish": "English",
   "settingsLanguageRussian": "Русский",
-  "settingsLanguageSaveFailed": "Не удалось сохранить язык. После перезапуска CodeLab будет использовать прежний язык."
+  "settingsLanguageSaveFailed": "Не удалось сохранить язык. После перезапуска CodeLab будет использовать прежний язык.",
+  "settingsGroupAgent": "Агент",
+  "settingsGroupApp": "Приложение",
+  "settingsPageConnectionTitle": "Подключение",
+  "settingsPageProvidersTitle": "Провайдеры",
+  "settingsPageMcpServersTitle": "MCP-серверы",
+  "settingsPageAgentsAndModesTitle": "Агенты и режимы",
+  "settingsPagePermissionsAndToolsTitle": "Разрешения и инструменты",
+  "settingsPageRedactionTitle": "Маскирование",
+  "settingsPageSkillsAndExtensionsTitle": "Навыки и расширения",
+  "settingsPageCodeAndWebTitle": "Код и веб",
+  "settingsPageAppearanceTitle": "Оформление",
+  "settingsPageKeyboardTitle": "Клавиатура",
+  "settingsGeneralSectionInterface": "Интерфейс"
 }

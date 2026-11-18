@@ -126,6 +126,9 @@ const fullJobs = [
         'conformance:embedded',
   ),
   CiJob('guard', 'guard prompts:check'),
+  // Сгенерированный код локализации совпадает с ARB (change
+  // add-desktop-localization, D3).
+  CiJob('l10n', 'l10n:check'),
   CiJob('web-compile', 'web-compile'),
   // Тесты CLI против scripted-агента идут внутри `test`, здесь — те же
   // тесты против codelab-agent (change add-cli-e2e-agent-matrix).
@@ -148,6 +151,18 @@ const _cliE2e = {'codelab_cli', 'codelab_agent'};
 /// Пакеты, от которых зависит CLI со встроенным агентом: корпус фикстур и
 /// e2e `embedded` играет CLI (`conformance:embedded`, `test:e2e:cli:embedded`).
 const _embeddedCli = {'codelab_cli', 'codelab_embedded'};
+
+/// Пакеты с каталогами локализации (`l10n.yaml`, ARB, сгенерированный код);
+/// их правка запускает `l10n:check` (change add-desktop-localization, D3).
+const _l10nPackages = {'codelab_desktop', 'codelab_ui'};
+
+/// Файл каталога локализации или его сгенерированного кода.
+bool _isL10nFile(String file) {
+  final name = file.split('/').last;
+  return name == 'l10n.yaml' ||
+      name.endsWith('.arb') ||
+      RegExp(r'_localizations(_\w+)?\.dart$').hasMatch(name);
+}
 
 /// Точка входа `web-compile` собирает ядро агента и его зависимости.
 const _webSmoke = 'codelab_agent_core';
@@ -179,6 +194,7 @@ CiScope ciScope({
   }
 
   final changed = <String>{};
+  var l10nChanged = false;
   final outside = <String>[];
   var matrixChanged = false;
   for (final file in changedFiles) {
@@ -191,6 +207,9 @@ CiScope ciScope({
       outside.add(file);
     } else {
       changed.add(owner.name);
+      if (_l10nPackages.contains(owner.name) && _isL10nFile(file)) {
+        l10nChanged = true;
+      }
     }
   }
   if (outside.isNotEmpty) {
@@ -231,6 +250,7 @@ CiScope ciScope({
         'guard',
         changed.contains(_webSmoke) ? 'guard prompts:check' : 'guard',
       ),
+      if (l10nChanged) const CiJob('l10n', 'l10n:check'),
       if (changed.any(webDependencies.contains))
         const CiJob('web-compile', 'web-compile'),
       if (affected.any(_cliE2e.contains))
