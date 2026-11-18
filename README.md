@@ -27,6 +27,7 @@ Monorepo CodeLab на Dart и Flutter: desktop-клиент (`apps/codelab_deskt
 | [`packages/flutter/codelab_ui`](packages/flutter/codelab_ui/README.md) | Fluent UI виджеты рабочего места |
 | `openspec/` | спецификации поведения и активные изменения |
 | `docs/` | архитектура, спецификация ACP, интеграции |
+| `site/` | сайт CodeLab на Astro: главная, возможности, документация из `docs/user/`, `docs/ops/`, README и `doc/` приложений и пакетов без копий, новости; вне pub workspace (ADR-0003, `docs/architecture/adr/0003-build-project-site-with-astro-in-monorepo.md`) |
 
 Документация пакета и приложения — `README.md` в его каталоге; сквозные руководства — [`docs/user/README.md`](docs/user/README.md) и [`docs/ops/README.md`](docs/ops/README.md).
 
@@ -126,6 +127,10 @@ fvm dart run melos run check
 - Архитектура — `docs/architecture/README.md`; ядро агента — `docs/architecture/proposals/agent-core-architecture.md`.
 - Поведение продукта — `openspec/specs/`; изменения — через OpenSpec change (`AGENTS.md` §17).
 - Ветвление — git flow: `feature/*` от `develop`, pull request в `develop` (`AGENTS.md` §22).
+
+## История изменений
+
+Изменения по выпускам — [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Лицензия
 
