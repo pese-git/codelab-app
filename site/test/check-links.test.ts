@@ -212,3 +212,118 @@ describe('checkDist: ожидаемые страницы и лицензии', (
     ]);
   });
 });
+
+describe('checkDist: схемы ссылок <a> (D6, D11)', () => {
+  it('http, https, mailto, внутренние, относительные и #якорь — без нарушений', () => {
+    writeSite();
+    write(
+      'docs/ops/index.html',
+      page(
+        '<h2 id="раздел">Раздел</h2>' +
+          '<a href="http://example.com/">http</a>' +
+          '<a href="HTTPS://example.com/">https</a>' +
+          '<a href="mailto:team@example.com">mailto</a>' +
+          '<a href="/codelab-app/docs/user/">внутренняя</a>' +
+          '<a href="../user/configuration/">относительная</a>' +
+          '<a href="#раздел">якорь</a>',
+      ),
+    );
+    expect(checkDist({ dist, base })).toEqual([]);
+  });
+
+  it.each([
+    ['javascript:', 'javascript:alert(1)'],
+    ['JavaScript: в другом регистре', 'JavaScript:alert(1)'],
+    ['javascript: с табуляцией внутри схемы', 'java&#9;script:alert(1)'],
+    ['data:', 'data:text/html;base64,PHNjcmlwdD4='],
+    ['vbscript:', 'vbscript:msgbox(1)'],
+    ['file:', 'file:///etc/passwd'],
+    ['ftp:', 'ftp://example.com/a'],
+  ])('%s — нарушение', (_name, href) => {
+    writeSite();
+    write('docs/ops/index.html', page(`<a href="${href}">x</a>`));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', message: expect.stringContaining('scheme') }),
+    ]);
+  });
+});
+
+describe('checkDist: data: и атрибуты ресурсов (D2, D6, D8)', () => {
+  it('data: у img и source — без нарушений', () => {
+    writeSite();
+    write(
+      'docs/ops/index.html',
+      page(
+        '<img src="data:image/png;base64,AAAA" alt="a">' +
+          '<picture><source srcset="data:image/webp;base64,AAAA 1x"><img src="/codelab-app/_astro/command-palette.xyz.png" alt="b"></picture>',
+      ),
+    );
+    expect(checkDist({ dist, base })).toEqual([]);
+  });
+
+  it.each([
+    ['script', '<script src="data:text/javascript,alert(1)"></script>', 'data:text/javascript,alert(1)'],
+    ['iframe', '<iframe src="data:text/html,x"></iframe>', 'data:text/html,x'],
+    ['link', '<link rel="stylesheet" href="data:text/css,body{}">', 'data:text/css,body{}'],
+    ['object data', '<object data="data:text/html,x"></object>', 'data:text/html,x'],
+  ])('data: у %s — нарушение', (_name, html, link) => {
+    writeSite();
+    write('docs/ops/index.html', page(html));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', link }),
+    ]);
+  });
+
+  it.each([
+    ['object data', '<object data="https://example.com/a.swf"></object>', 'https://example.com/a.swf'],
+    ['form action', '<form action="https://example.com/collect"></form>', 'https://example.com/collect'],
+    ['video poster', '<video poster="https://example.com/p.png"></video>', 'https://example.com/p.png'],
+  ])('%s с чужого хоста — нарушение', (_name, html, link) => {
+    writeSite();
+    write('docs/ops/index.html', page(html));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', link }),
+    ]);
+  });
+
+  it.each([
+    ['object data', '<object data="/codelab-app/_astro/missing.svg"></object>', '/codelab-app/_astro/missing.svg'],
+    ['video poster', '<video poster="/codelab-app/_astro/missing.png"></video>', '/codelab-app/_astro/missing.png'],
+  ])('%s на несуществующий файл — нарушение', (_name, html, link) => {
+    writeSite();
+    write('docs/ops/index.html', page(html));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', link }),
+    ]);
+  });
+
+  it('video poster на существующий файл — без нарушений', () => {
+    writeSite();
+    write('docs/ops/index.html', page('<video poster="/codelab-app/_astro/command-palette.xyz.png"></video>'));
+    expect(checkDist({ dist, base })).toEqual([]);
+  });
+});
+
+describe('checkDist: страницы docs/ только из allowlist (обратная проверка D14)', () => {
+  it('страницы опубликованных файлов и оглавление /docs/ — без нарушений', () => {
+    writeSite();
+    write('docs/index.html', page('<h1 id="x">Документация</h1>'));
+    write('docs/apps/codelab_cli/index.html', page('<h1 id="x">CLI</h1>'));
+    write('docs/apps/codelab_cli/doc/user-guide/index.html', page('<h1 id="x">Руководство</h1>'));
+    write('docs/packages/dart/codelab_setup/index.html', page('<h1 id="x">setup</h1>'));
+    expect(checkDist({ dist, base })).toEqual([]);
+  });
+
+  it.each([
+    ['docs/architecture/testing/index.html', 'docs/architecture/'],
+    ['docs/backlog/x/index.html', 'docs/backlog/'],
+    ['docs/apps/codelab_cli/AGENTS/index.html', 'AGENTS.md'],
+    ['docs/openspec/specs/x/spec/index.html', 'openspec/'],
+  ])('лишняя страница %s — нарушение', (file) => {
+    writeSite();
+    write(file, page('<h1 id="x">Лишняя</h1>'));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file, message: expect.stringContaining('allowlist') }),
+    ]);
+  });
+});

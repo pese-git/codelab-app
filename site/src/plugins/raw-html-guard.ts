@@ -11,12 +11,15 @@
  * числе обработчик события, — ошибка. Удаляет HTML-комментарии (маркеры
  * скриншотов `codelab-docs`). Узлы плагинов (D7) сырым HTML не являются.
  *
- * Как использовать: `rehypeRawHtmlGuard` в rehype-плагинах процессора Markdown;
- * работает до `rehype-raw`, на узлах `raw`.
+ * Как использовать: `[rehypeRawHtmlGuard, { repoRoot }]` в rehype-плагинах
+ * процессора Markdown; работает до `rehype-raw`, на узлах `raw`. В сообщении —
+ * путь файла от корня репозитория и строка, как у `repoLinks` (D5).
  */
 import type { Root } from 'hast';
 import { SKIP, visit } from 'unist-util-visit';
 import type { VFile } from 'vfile';
+
+import { repoPath } from '../lib/repo-path';
 
 /** Элементы, которые автор документа может писать сырым HTML (D11). */
 const allowedElements = new Set(['details', 'summary', 'br', 'kbd', 'sub', 'sup']);
@@ -67,8 +70,14 @@ function findViolation(html: string): string | undefined {
   return undefined;
 }
 
-export function rehypeRawHtmlGuard() {
+export interface RawHtmlGuardOptions {
+  /** Абсолютный путь корня репозитория: от него считается путь в сообщении. */
+  readonly repoRoot: string;
+}
+
+export function rehypeRawHtmlGuard({ repoRoot }: RawHtmlGuardOptions) {
   return (tree: Root, file: VFile): void => {
+    const path = repoPath(repoRoot, file.path);
     visit(tree, 'raw', (node, index, parent) => {
       // Комментарии не нужны в HTML страницы: это служебные пометки авторов
       // (маркеры скриншотов `codelab-docs`), и на сайте их не видно.
@@ -76,7 +85,8 @@ export function rehypeRawHtmlGuard() {
       const violation = findViolation(value);
       if (violation) {
         file.fail(
-          `Raw HTML is not allowed in published documents: ${violation} in ${file.path}. ` +
+          `Raw HTML is not allowed in published documents: ${violation} ` +
+            `in ${path}:${node.position?.start.line ?? '?'}. ` +
             'Only <details>, <summary>, <br>, <kbd>, <sub>, <sup> without attributes ' +
             '(except "open" on <details>) are allowed (D11)',
           node,
