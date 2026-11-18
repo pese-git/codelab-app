@@ -43,16 +43,18 @@
 ### D2. Выбор языка, хранение и применение — сразу (решение пользователя Q1: сразу)
 
 - **Где.** Страница «Settings › General» (`SettingsPage.general`) — первое содержимое этой страницы. Страница входит в `defaultSettingsPages`. Строка «Language» собирается из `CodeLabSettingsRow`/`CodeLabSettingsSection` кита (`ComboBox` или радиогруппа Fluent), значения — `System`, `English`, `Русский`. Названия языков — эндонимы, они не переводятся.
-- **Хранение.** `shared_preferences`, ключ `codelab.app.language`, значения `en`/`ru`; для `System` ключа нет. Порт `AppLanguagePreferences` (`load()` → `AppLanguagePreference` `system | en | ru`; `save(…)`) лежит в `lib/core/platform/app_language_preferences.dart`. Реализация `SharedPreferencesAppLanguagePreferences` сделана по образцу `ConnectionPreferences` (`add-app-settings-shell`, D5). `config.yaml` и `profiles.json` не трогаются: это настройка app, а не агента и не CLI.
+- **Хранение.** `shared_preferences`, ключ `codelab.app.language`, значения `en`/`ru`; для `System` ключа нет. Порт `AppLanguagePreferences` (`load()` → `AppLanguageLoad(preference, storedValueInvalid, readFailure)`, где `preference` — `system | en | ru`; `save(…)`) лежит в `lib/core/platform/app_language_preferences.dart`. `load()` не бросает: повреждённое хранилище не должно мешать запуску app. Незнакомое или нестроковое значение даёт `system` и `storedValueInvalid`, сбой открытия хранилища (`SharedPreferences.getInstance`) — `system` и `readFailure` (имя типа ошибки, без текста исключения). Ошибки `save` порт не скрывает. Реализация `SharedPreferencesAppLanguagePreferences` сделана по образцу `ConnectionPreferences` (`add-app-settings-shell`, D5). `config.yaml` и `profiles.json` не трогаются: это настройка app, а не агента и не CLI.
 - **Разрешение языка.** Чистая функция `resolveAppLocale(AppLanguagePreference, List<Locale> systemLocales) → Locale` в `lib/app/language/app_locale.dart`:
   - явный `en`/`ru` — он и есть;
   - `system` — `ru`, если `languageCode` первого языка системы `ru`, иначе `en` (Q5 (а)). Берётся только первый язык списка;
-  - незнакомое сохранённое значение — `system`. Ключ не перезаписывается (целостность данных, `AGENTS.md` §2), в журнал пишется предупреждение без значения.
-- **Единственный владелец языка — `AppLanguageCubit`** (`lib/app/language/app_language_cubit.dart`, root scope, singleton). Состояние — `AppLanguageState(preference, locale, strings: AppLocalizations, saveFailed)`.
-  - `main` читает предпочтение и `PlatformDispatcher.instance.locales` до `runApp` и передаёт начальное состояние швом `CodeLabBootstrap(language:)`/`createCodeLabRootScope(language:)`. Первый кадр поэтому сразу на нужном языке, без мигания английского.
+  - незнакомое или нестроковое сохранённое значение — `system`. Ключ не перезаписывается (целостность данных, `AGENTS.md` §2), в журнал пишется предупреждение без значения (D13). Сбой чтения хранилища — тоже `system` с событием `app.language_preference_read_failed` (D13).
+- **Единственный владелец языка — `AppLanguageCubit`** (`lib/app/language/app_language_cubit.dart`, root scope, singleton; регистрирует его модуль `CodeLabLanguageModule` в `app_scope.dart` — им же порт `AppStrings`). Состояние — `AppLanguageState(preference, locale, strings: AppLocalizations, saveFailed)`.
+  - `main` читает предпочтение и `PlatformDispatcher.instance.locales` до `runApp` и передаёт начальный язык швом `CodeLabBootstrap(language:)`/`createCodeLabRootScope(language:)`. Тип шва — `AppLanguageStart` (`lib/app/language/app_language_start.dart`, фабрика `AppLanguageStart.fromLoad(load, systemLocales)`): `preference` и `locale` плюс диагностика чтения (`storedValueInvalid`, `readFailure`); каталог `AppLocalizations` по нему строит сам Cubit. Без шва — `AppLanguageStart.fallback` (`system`, `en`). Первый кадр поэтому сразу на нужном языке, без мигания английского. Журнал в `main` ещё не настроен, поэтому события о чтении пишет `CodeLabLanguageModule` при сборке root scope (D13).
   - `select(preference)` синхронно применяет язык, то есть делает `emit` нового состояния, и только потом пишет ключ. Записи идут по очереди. При двух быстрых выборах применяется и сохраняется последний: запись, которую обогнал более новый выбор, своё состояние не публикует.
-  - Если запись не удалась, язык остаётся применённым до конца сеанса, и выставляется `saveFailed`. Страница показывает `Couldn't save the language. CodeLab will use the previous language after restart.`. Откатывать язык на глазах у пользователя хуже: экран мигнул бы обратно, а выбор пользователя в этом сеансе ничему не мешает.
-  - `close()` закрывает Cubit вместе со scope, после `close` результат записи не применяется.
+  - Если запись не удалась, язык остаётся применённым до конца сеанса, и выставляется `saveFailed`. Страница показывает `Couldn't save the language. CodeLab will use the previous language after restart.`. В том же InfoBar кнопка `Retry` (ключ `settings-language-save-retry`) повторяет запись текущего выбора — `select(state.preference)`: `RadioGroup` не вызывает `onChanged` для уже выбранного значения. Откатывать язык на глазах у пользователя хуже: экран мигнул бы обратно, а выбор пользователя в этом сеансе ничему не мешает.
+  - Повторный `select` того же значения без `saveFailed` новой записи не ставит и завершается вместе с записью, которая ещё идёт.
+  - `close()` закрывает Cubit вместе со scope. Сначала ставится флаг закрытия: новые `select` и подписки на `changes` не принимаются. Затем слушатели `changes` закрываются без ожидания `done` (у подписчика на паузе `done` не приходит, и закрытие scope повисло бы). Потом `close()` ждёт запись в полёте не дольше `closeWriteTimeout` (по умолчанию 3 с), чтобы последний выбор дошёл до хранилища до выхода из app. Результат этой записи состояние не публикует (`concurrency.md` §47а).
+  - В закрытии root scope Cubit языка закрывает отдельная третья ветвь `CodeLabRootLifecycle`, параллельная веткам терминала и клиента: `_dispose()` → `Future.wait([_closeTerminal(), _closeClient(), _closeLanguage()])`. Почему не в шаге `cubits` клиентской ветки: ожидание записи до 3 с задержало бы рабочее пространство, встроенного агента и транспорт при общем пределе выхода 5 с (`add-client-process-shutdown-on-exit`, D2). По истечении `closeWriteTimeout` пишется `settings.language_save_timeout {timeout_ms}` (D13), и шаг завершается. Шаг называется `language`, он последний в закрытом наборе шагов и попадает в `pendingSteps` и `pending` события `app.exit_timeout`, только если у lifecycle есть Cubit языка (`add-client-process-shutdown-on-exit`, D10). Зависшая запись поэтому видна в журнале выхода как `language`.
 - **Кто читает язык.** Потребителей ровно два, и у каждого одна подписка:
   1. `CodeLabApp` — `BlocBuilder<AppLanguageCubit>` над `FluentApp`: `locale: state.locale`. Через `Localizations` (InheritedWidget) новый язык получают все виджеты, которые берут текст через `context.l10n` и `codeLabStringsOf(context)`, и Fluent. Своих подписок у виджетов нет.
   2. Cubit-ы, которые хранят текст в состоянии (D5). Они получают узкий порт `AppStrings` (`AppLocalizations get current`, `Stream<AppLocalizations> get changes`), его реализует `AppLanguageCubit`. Каждый такой Cubit подписывается один раз в конструкторе и отменяет подписку в `close()` (`AGENTS.md` §9, как `_viewSubscription` у `ActiveSessionCubit`). Порт нужен для тестов: Cubit-у подставляют `FixedAppStrings(AppLocalizationsEn())` или управляемый `TestAppStrings`. Без него Cubit-ы зависели бы от всего Cubit языка (§13 — абстракция оправдана независимым тестированием).
@@ -69,8 +71,8 @@
 ### D3. Каталоги, генерация и проверка
 
 - `apps/codelab_desktop/l10n.yaml`: `arb-dir: lib/l10n`, `template-arb-file: app_en.arb`, `output-localization-file: app_localizations.dart`, `output-class: AppLocalizations`, `nullable-getter: false`, `required-resource-attributes: true`, `untranslated-messages-file: build/l10n_untranslated.json`. В `pubspec.yaml` — `flutter: generate: true`, `flutter_localizations: sdk: flutter`, `intl: any`. Версию `intl` закрепляет `flutter_localizations` SDK, поэтому своя граница версии привела бы к конфликту решателя.
-- `packages/flutter/codelab_ui/l10n.yaml` — то же с `codelab_ui_en.arb`, `CodeLabLocalizations`, `codelab_localizations.dart`, `nullable-getter: true` (нужен фолбэк, D4).
-- **Сгенерированный код коммитится** (как `*.freezed.dart`): `dart analyze` в CI и у агентов работает без шага генерации. Скрипт Melos `l10n:check` по образцу `prompts:check` перегенерирует оба пакета во временный каталог и сравнивает с рабочими файлами. Скрипт входит в `check`, и в затронутые проверки §21 — при правке ARB.
+- `packages/flutter/codelab_ui/l10n.yaml` — то же с `arb-dir: lib/src/l10n`, `codelab_ui_en.arb`, `CodeLabLocalizations`, `codelab_localizations.dart`, `nullable-getter: true` (нужен фолбэк, D4).
+- **Сгенерированный код коммитится** (как `*.freezed.dart`): `dart analyze` в CI и у агентов работает без шага генерации. Скрипт Melos `l10n:check` по образцу `prompts:check` (`tool/l10n_check.dart`) перегенерирует оба пакета во временной копии и сравнивает с рабочими файлами. Скрипт входит в `check`, и в затронутые проверки §21 — при правке ARB. В CI на pull request скрипт идёт отдельным джобом `l10n` суженного прогона (решение пользователя 2026-11-18): `tool/ci/ci_scope.dart` включает его, если в `codelab_desktop` или `codelab_ui` изменён `l10n.yaml`, ARB, сгенерированный `*_localizations*.dart` или `pubspec.yaml` (в нём настройки генерации: `generate`, `flutter_localizations`, `intl`). Правка самого `tool/l10n_check.dart` — файл вне пакетов, она даёт полный прогон (`testing.md` §74).
 - **Ключи** — camelCase `<экран><элемент><смысл>`: `settingsLanguageTitle`, `workbenchSidebarNewSession`, `providersRemoveKeptSecret`. У каждого сообщения — `@key.description` с контекстом для переводчика (где показывается, что в плейсхолдерах). Плейсхолдеры типизированы (`String`, `int`); количество — только `plural`, без склейки `n == 1 ? … : …`.
 - **Эталон `en`.** Текст `en` каждого сообщения, приведённого в спецификации, совпадает со спецификацией символ в символ, поэтому существующие сценарии и тесты остаются верными.
 - **Согласованность.** Тест `l10n_catalogs_test.dart` в каждом пакете: наборы ключей `en` и `ru` равны, плейсхолдеры каждого сообщения совпадают, у `ru`-сообщений с `plural` есть формы `one`, `few`, `many`, `other`. `gen-l10n` сам такие ошибки не считает фатальными: он только пишет `untranslated-messages-file`.
@@ -110,7 +112,7 @@
 5. Ядро клиента текст не переводит (D6): app не разбирает английскую строку ядра.
 6. Текст интерфейса в журнал не попадает. События журнала и их поля английские и от языка не зависят.
 7. Тексты от агента подставляются плейсхолдером как есть (D7). Склейка фраз из частей запрещена: `'In $backendId as '` и подобное становится одним сообщением с плейсхолдерами.
-8. Enum с английским заголовком (`SettingsPage.title`, `SettingsGroup.title`, `ToolPane.label`) теряет поле заголовка. Текст по значению даёт функция presentation; `slug` и `navKey` остаются.
+8. Enum с английским заголовком (`SettingsPage.title`, `SettingsGroup.title`, `ToolPane.label`) теряет поле заголовка. Текст по значению даёт функция presentation; `slug` и `navKey` остаются. Для настроек это `settingsPageTitleOf(l10n, page)` и `settingsGroupTitleOf(l10n, group)` в `features/settings/presentation/settings_titles.dart` (итерация 1). Поиск настроек `SettingsSearchIndex.search(visible, query, titlesOf:)` получает параметром `titlesOf` заголовки страницы на текущем языке и на английском: пользователь ищет и по тому, что видит, и по английскому названию из документации. Ключевые слова поиска английские и от языка не зависят.
 9. Открытый диалог (подтверждение перезапуска агента, «Remove profile …?», мастер провайдера) пересобирается вместе с деревом. Его текст строится в `build` или берётся из состояния своего Cubit-а по правилам выше. Черновик, введённый пользователем, при смене языка не сбрасывается.
 
 **Почему (б), а не (в).** Оба варианта переключают язык сразу. Разовые сообщения в обоих типизированы, по `error-handling.md` §43.
@@ -154,7 +156,7 @@
 
 ### D9. Тесты
 
-- **Локаль по умолчанию — `en`.** `CodeLabTestBinding` получает параметр `locale` (по умолчанию `Locale('en')`) и передаёт начальное состояние языка в шов `createCodeLabRootScope(language:)`. Тестовые `FluentApp` в desktop без scope получают делегаты из одного помощника `test/support/l10n_app.dart` (`localizedFluentApp(child, locale: …)`). Существующие `find.text('…')` на английском не меняются: эталон `en` совпадает со спецификациями (D3).
+- **Локаль по умолчанию — `en`.** `CodeLabTestBinding` получает параметр `locale` (по умолчанию `Locale('en')`) и передаёт начальный язык `AppLanguageStart` в шов `createCodeLabRootScope(language:)`. Выбор в начальном состоянии задаёт `languagePreference` (по умолчанию `system`), целиком начальный язык с диагностикой чтения — `languageStart`, хранилище выбора — `languagePreferences`. Двойники порта `AppStrings` — `test/support/app_strings.dart` (`FixedAppStrings`, `TestAppStrings` с `hasListener`). Тестовые `FluentApp` в desktop без scope получают делегаты из одного помощника `test/support/l10n_app.dart` (`localizedFluentApp(child, locale: …)`). Существующие `find.text('…')` на английском не меняются: эталон `en` совпадает со спецификациями (D3).
 - **Тесты кита** без делегата продолжают работать (D4). Для каждого фиксированного словаря кита есть тест на `ru` с делегатом.
 - **Cubit-тесты.** Cubit-ы с текстом получают `FixedAppStrings(AppLocalizationsEn())`, поэтому проверки строк не меняются. Каждый Cubit с текстом в состоянии получает тест с `TestAppStrings`:
   - смена языка даёт новое состояние, в котором производный текст на `ru`;
@@ -165,7 +167,9 @@
   - `select` применяет язык до записи;
   - сбой записи оставляет язык и ставит `saveFailed`;
   - при двух быстрых выборах сохраняется последний;
-  - после `close` ничего не применяется;
+  - после `close` ничего не применяется: `select` и подписки отклоняются, запись в полёте ждётся не дольше `closeWriteTimeout` и состояние не публикует, `close` не виснет на подписчике на паузе;
+  - повтор записи кнопкой `Retry` после сбоя;
+  - `load()` не бросает: незнакомое и нестроковое значение, сбой открытия хранилища;
   - подписчиков `changes` ровно столько, сколько Cubit-ов с текстом, и повторное подключение не добавляет второй подписки (`AGENTS.md` §9).
 - **Тест смеси языков (главная защита D5).** Помощник `test/support/l10n_mix.dart`: `expectNoStaleLanguage(tester, from: AppLocalizationsEn(), to: AppLocalizationsRu())` собирает все видимые строки дерева (`Text`, `RichText`, `placeholder` полей, `Tooltip.message`, `Semantics.label`). Тест падает, если среди них есть значение сообщения без плейсхолдеров из каталога `from` (app или кита), у которого перевод в `to` отличается. Сценарий: экран в `en` с данными → `AppLanguageCubit.select(ru)` → `pumpAndSettle` → помощник. Ответы агента, пути и команды в каталог не входят, поэтому ложных срабатываний нет. Похожие строки (`OK`, `MCP`) помощник пропускает: их `ru` совпадает с `en`. Прогоны:
   - живое рабочее место: лента с ответом агента, вызовом инструмента в статусе `running`, заметками `turnStopped` и `error`, ожидающим одобрением; сайдбар с сессиями в разных статусах; шапка и строка статуса; баннер потери соединения; открытая палитра; доки Files, Agents, Usage (с «Turn budget»), Terminal;
@@ -178,7 +182,7 @@
   - текст ошибки подключения и InfoBar страницы пересобраны;
   - введённый текст композера и черновик диалога профиля сохранились;
   - фокус и прокрутка ленты не сбросились.
-- **Интеграционные тесты** (`integration_test/`, только `release/*`) не зависят от языка машины: `E2eLaunch` пишет `codelab.app.language = en` до старта app. Тест `settings_language_flow_test.dart`: выбор `Русский` на странице «General», затем возврат на рабочее место с живой сессией — тексты на русском без перезапуска; затем `English`.
+- **Интеграционные тесты** (`integration_test/`, только `release/*`) не зависят от языка машины: `integration_test/flutter_test_config.dart` в `setUp` каждого теста кладёт `codelab.app.language = en` в подменённое хранилище `SharedPreferences` (`setMockInitialValues`). `E2eLaunch` для этого не подходит: он готовит агента и `CODELAB_HOME`, а app не запускает. Тест `settings_language_flow_test.dart`: выбор `Русский` на странице «General», затем возврат на рабочее место с живой сессией — тексты на русском без перезапуска; затем `English`.
 - **Охват.** Тест литералов (D10) — регрессионная сетка для новых строк.
 
 ### D10. Пакеты, зависимости, сторож
@@ -202,7 +206,7 @@
 | Итерация | Что | Сообщений (оценка) | PR |
 |---|---|---|---|
 | 0 | документы | — | с итерацией 1 |
-| 1 | каркас: зависимости, `l10n.yaml`, делегаты, разрешение языка, порт, `AppLanguageCubit` и `AppStrings`, «General» с «Language», `l10n:check`, тест каталогов, помощники `localizedFluentApp` и `expectNoStaleLanguage`, `E2eLaunch` | ~15 | 1 |
+| 1 | каркас: зависимости, `l10n.yaml`, делегаты, разрешение языка, порт, `AppLanguageCubit` и `AppStrings`, «General» с «Language», `l10n:check`, тест каталогов, шаблон каталога кита, помощники `localizedFluentApp` и `expectNoStaleLanguage`, язык `en` в `integration_test/flutter_test_config.dart` | ~15 | 1 |
 | 2 | кит `codelab_ui` целиком | ~150 | 2 |
 | 3 | рабочее место: оболочка, сайдбар, композер, баннеры, лента и заметки (с `[client]` причиной заметок), одобрение, палитра, доки Files, Agents, Usage, Terminal, диалоги перезапуска и переноса секретов, навигация и поиск настроек | ~210 | 3 |
 | 4 | настройки I: Connection, «Add connection profile», Providers, мастер провайдера | ~200 | 4 |
@@ -219,12 +223,16 @@
 
 Логгер `codelab_desktop.settings`, компонент `settings`:
 - info `settings.language_changed {language, locale}` (`system | en | ru`; `locale` — применённый язык);
-- warning `settings.language_save_failed {error_class}` — только `runtimeType`.
+- warning `settings.language_save_failed {error_class}` — только `runtimeType`;
+- warning `settings.language_save_timeout {timeout_ms}` — `close()` не дождался записи выбора за `closeWriteTimeout` (D2): выбор мог не дойти до хранилища. Без значения выбора и текста ошибки.
 
-Логгер app, компонент `app`:
-- info `app.locale_resolved {preference, locale}` при старте;
-- warning `app.language_preference_invalid` — без значения ключа;
-- debug `app.locale_applied {locale, subscribers}` после каждой смены языка: по числу подписчиков `AppStrings.changes` видна утёкшая или пропущенная подписка.
+Логгер app `codeLabAppLogger()` (`codelab_desktop.app`, компонент `app`):
+- info `app.locale_resolved {preference, locale}` при старте — пишет `CodeLabLanguageModule` при сборке root scope;
+- warning `app.language_preference_invalid` — без значения ключа: в хранилище незнакомое или нестроковое значение;
+- warning `app.language_preference_read_failed {error_class}` — хранилище не открылось при старте, язык взят как при `System`; только `runtimeType` ошибки;
+- оба предупреждения пишет `CodeLabLanguageModule` вместе с `app.locale_resolved` по диагностике шва `AppLanguageStart`: порт читает язык в `main` до настройки журнала и сам не логирует;
+- шаг `language` в `pending` события `app.exit_timeout`, если запись выбора не завершилась к пределу выхода (D2);
+- debug `app.locale_applied {locale, subscribers}` после каждой смены языка: по числу подписчиков `AppStrings.changes` видна утёкшая или пропущенная подписка. Пишет `AppLanguageCubit` через параметр `appLogger`; события `settings.*` идут в его `logger`.
 
 Язык системы в события не пишется. Тексты интерфейса в события не попадают (D5, п. 6).
 
@@ -247,7 +255,7 @@
 - [R9] Переполнение раскладки русскими строками. → Тесты на `ru` в узких местах (D8), многоточие с подсказкой в ките.
 - [R10] Качество перевода, особенно предупреждений безопасности. → `@description`, вычитка пользователем сообщений с меткой security (D14, Q6).
 - [R11] Расхождение `en` с текстом спецификаций. → Эталон `en` = спецификация (D3); существующие тесты на английском это проверяют.
-- [R12] Сгенерированный код устарел. → `l10n:check` в `check` и в затронутых проверках при правке ARB.
+- [R12] Сгенерированный код устарел. → `l10n:check` в `check`, в затронутых проверках при правке ARB и в CI-джобе `l10n` суженного прогона (D3).
 - [R13] Конфликт версии `intl` с `flutter_localizations`. → `intl: any` (D3).
 - [R14] **Не следуют выбору сразу:** меню macOS и панели ОС (по языку системы), смена языка ОС при `System` (до перезапуска). Перечислено в spec и в документации пользователя (D2, D11).
 
@@ -267,6 +275,10 @@
 - **Q4. Меню macOS** — (а) `CFBundleLocalizations` и `ru.lproj`, меню по языку системы (D11).
 - **Q5. Язык системы не `en` и не `ru`** — (а) английский (D2).
 - **Q6. Перевод** — исполнитель по глоссарию `docs/architecture/l10n-glossary.md` («session — сессия», «turn — ход», «approval — одобрение», «prompt — промпт», «tool call — вызов инструмента»); сообщения с меткой security вычитывает пользователь (D14).
+- **CI-джоб `l10n`** — `l10n:check` включён в суженный прогон CI на pull request (`tool/ci/ci_scope.dart`) по путям каталогов desktop и кита (D3). Без этого устаревший сгенерированный код вскрывался бы только после merge в `develop`.
+- **Повтор записи и сбой чтения** — по итогам ревью итерации 1 дельта spec app-settings «Язык интерфейса app» дополнена: кнопка `Retry` рядом с ошибкой записи (сценарий «Сбой записи» и новый «Повтор записи после сбоя») и запуск на `System` с предупреждением без текста ошибки, если хранилище не прочиталось (новый сценарий «Сбой чтения хранилища»). Реализация — D2, события — D13.
+- **Закрытие владельца языка при выходе** — по итогам повторного ревью итерации 1 в change добавлена дельта spec agent-workbench-ui: MODIFIED «Выход из приложения завершает процессы клиента». Закрытие `AppLanguageCubit` — третья параллельная ветвь с ожиданием записи выбора не дольше 3 s; шаг `language` входит в закрытый набор `pending` события `app.exit_timeout` (в `pending` он есть, только если закрытие владельца языка не завершилось к пределу); по истечении 3 s — warning `settings.language_save_timeout {timeout_ms}`; новый сценарий «Запись выбора языка не завершилась к пределу» (D2, D13).
+- **Каталог кита — `packages/flutter/codelab_ui/lib/src/l10n/`** (вариант (а)): каталог кита — внутренняя реализация, как `strings.dart` (D4) и исключение `l10n/` теста литералов (D10). Путь в spec workspace-architecture «Ядро клиента не зависит от языка интерфейса» исправлен с `lib/l10n/` на `lib/src/l10n/` по коду итерации 1 (задача 1.8); каталог app остаётся в `apps/codelab_desktop/lib/l10n/`.
 
 ## Open Questions
 

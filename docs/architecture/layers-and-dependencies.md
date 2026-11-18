@@ -1806,7 +1806,7 @@ App НЕ ДОЛЖЕН переводить или разбирать англи�
 
 ### Зависимости
 
-`flutter_localizations` и `intl` — прямые зависимости только `codelab_desktop` и `codelab_ui`. Направление зависимостей и граф пакетов не меняются; новых пакетов нет. Каталоги ARB и сгенерированный код живут только в `apps/codelab_desktop/lib/l10n/` и `packages/flutter/codelab_ui/lib/l10n/` (spec `workspace-architecture` «Ядро клиента не зависит от языка интерфейса»).
+`flutter_localizations` и `intl` — прямые зависимости только `codelab_desktop` и `codelab_ui`. Направление зависимостей и граф пакетов не меняются; новых пакетов нет. Каталоги ARB и сгенерированный код живут только в `apps/codelab_desktop/lib/l10n/` и `packages/flutter/codelab_ui/lib/src/l10n/` (spec `workspace-architecture` «Ядро клиента не зависит от языка интерфейса»).
 
 ### Где проверяется
 

@@ -34,6 +34,7 @@
 - `app-settings`: новые требования «Язык интерфейса app» и «Локализация интерфейса app»; MODIFIED «Навигация настроек» (поиск по переведённому и английскому заголовку, переведённая строка «нет совпадений»).
 - `acp-client-kit`: новое требование «Типизированная причина заметки транскрипта» (аддитивное поле у `NoticeItem`; текст и CLI без изменений).
 - `workspace-architecture`: новое требование «Ядро клиента не зависит от языка интерфейса» (правило сторожа).
+- `agent-workbench-ui`: MODIFIED «Выход из приложения завершает процессы клиента» — закрытие владельца языка третьей параллельной ветвью с ожиданием записи выбора не дольше 3 s, шаг `language` в наборе `pending` события `app.exit_timeout`, сценарий «Запись выбора языка не завершилась к пределу».
 
 ## Не входит
 
@@ -58,9 +59,9 @@
   - тексты всех feature: `workbench`, `settings`, `usage`, `terminal`, `project_files`; подписка на `AppStrings` у Cubit-ов с текстом и типизированные разовые сообщения;
   - `test/support/` (`CodeLabTestBinding(locale:)`), `integration_test/support/e2e_agent.dart`;
   - `macos/Runner/Info.plist`, `macos/Runner/ru.lproj/`.
-- `packages/flutter/codelab_ui`: `pubspec.yaml`, `l10n.yaml`, `lib/l10n/`, барель, тексты виджетов, превью, тесты.
+- `packages/flutter/codelab_ui`: `pubspec.yaml`, `l10n.yaml`, `lib/src/l10n/`, барель, тексты виджетов, превью, тесты.
 - `packages/dart/codelab_client_core`: типизированная причина `NoticeItem` (аддитивно), барель; CLI без изменений.
 - `packages/dart/codelab_architecture_tests`: правило ядра клиента в `rules.dart`; тест литералов интерфейса.
-- Корневой `pubspec.yaml`: скрипт Melos `l10n:check` и его место в `check`.
+- Корневой `pubspec.yaml`: скрипт Melos `l10n:check` и его место в `check`; `tool/l10n_check.dart`; `tool/ci/ci_scope.dart` — джоб `l10n` суженного прогона CI.
 - Документы: `technology-stack.md` (строка «Локализация»), `layers-and-dependencies.md` и `error-handling.md` §43 (где собирается текст), `testing.md` (локаль в тестах, тест смеси языков), `state-management.md` и `concurrency.md` (владелец языка и подписки), `apps/codelab_desktop/AGENTS.md`, `packages/flutter/codelab_ui/AGENTS.md`, `12-4-first-run-and-settings.md` (страница «General»), `agent-parity-goals.md` (статус D-19), `docs/user/` (язык интерфейса).
 - `codelab_acp_protocol`, `codelab_acp_transports`, `codelab_client_acp`, `codelab_client_io`, пакеты `codelab_agent_*`: без изменений. ACP не меняется.
