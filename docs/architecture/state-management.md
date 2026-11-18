@@ -1067,6 +1067,19 @@ Settings чаще всего принадлежат отдельной feature.
 
 Они не обязаны быть одним типом.
 
+### 63а. Язык интерфейса app
+
+Источник — change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md), D2 и D5; spec `app-settings` «Язык интерфейса app». Это частный случай §2 и §19: у языка один владелец.
+
+* **Владелец — `AppLanguageCubit`** (`apps/codelab_desktop/lib/app/language/app_language_cubit.dart`, root scope, singleton). Состояние — `AppLanguageState(preference, locale, strings, saveFailed)`: `preference` — `system | en | ru`, `locale` — применённый язык, `strings` — `AppLocalizations` этого языка, `saveFailed` — признак неудачной записи. Отдельного `LanguageSettingsCubit` нет: страница «Settings › General» читает и вызывает `AppLanguageCubit` напрямую.
+* **Saved / effective.** Сохранённое значение (`shared_preferences`, ключ `codelab.app.language`, порт `AppLanguagePreferences`) и применённый язык различаются (§63): `locale` выводится чистой функцией `resolveAppLocale(preference, systemLocales)`. Незнакомое сохранённое значение читается как `system`, ключ не перезаписывается.
+* **Начальное состояние** (§21) приходит синхронно через шов `createCodeLabRootScope(language:)`: `main` читает предпочтение и языки системы до `runApp`, поэтому первый кадр уже на нужном языке и асинхронной загрузки нет.
+* **Переход `select(preference)`** — сначала `emit` нового состояния, потом запись ключа. Это не optimistic update с откатом (§67, §68): при сбое записи язык остаётся применённым, ставится `saveFailed`, страница показывает ошибку. Записи идут по очереди, побеждает последний выбор; обогнанная запись своё состояние не публикует (`concurrency.md` §47а).
+* **Потребители — ровно два вида.**
+  1. `CodeLabApp` — `BlocBuilder<AppLanguageCubit>` над `FluentApp` (`locale: state.locale`); виджеты получают язык через `Localizations` и своих подписок не держат.
+  2. Cubit-ы, у которых в состоянии есть производный текст (`layers-and-dependencies.md` §54). Они видят язык через узкий порт `AppStrings` (`current`, `changes`), который реализует `AppLanguageCubit`. Язык для них — явный вход проекции наравне с остальными; при его смене Cubit пересобирает всё производное состояние из последних входов (§5 — производное состояние не хранится отдельно от входов). Разовые сообщения хранятся типизированными, а не строкой.
+* Смена языка НЕ ДОЛЖНА менять состояние сессий, очереди, одобрений и соединения и НЕ ДОЛЖНА пересоздавать `FluentApp`: меняется только `locale`, поэтому `State` виджетов (ввод композера, черновики, фокус, прокрутка) сохраняется.
+
 ---
 
 ## 64. Form state

@@ -365,7 +365,8 @@ Package:
 
 * Flutter;
 * `fluent_ui`;
-* `flutter_bloc`.
+* `flutter_bloc`;
+* `flutter_localizations` и `intl` — только для собственного каталога сообщений кита (`CodeLabLocalizations`, раздел 54; change `add-desktop-localization`, D4).
 
 Dependency на `codelab_client_acp` или `codelab_acp_protocol` допустима только если reusable UI действительно должен понимать соответствующий public model.
 
@@ -1766,3 +1767,51 @@ apps/codelab_agent ──────── пакеты агента напря
 * границы импортов и allowlist зависимостей — `melos run guard` (`packages/dart/codelab_architecture_tests`, правила в `test/support/rules.dart`);
 * web-безопасность ядра и основных барелей мостов `codelab_embedded` и `codelab_setup` (web-smoke точки входа) — `melos run web-compile`;
 * новый пакет агентской стороны получает правило сторожа вместе с пакетом (раздел 43).
+
+---
+
+## 54. Текст интерфейса и локализация
+
+Источник решений — change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md) (D2, D4–D7, D10); требование — spec `app-settings` «Язык интерфейса app» и «Локализация интерфейса app». Технология — `technology-stack.md` §20ж, термины перевода — `l10n-glossary.md`.
+
+### Кто строит текст
+
+| Слой | Строит переведённый текст | Как |
+|---|---|---|
+| `codelab_client_core`, `codelab_client_acp` | нет | отдаёт типизированные данные: коды, виды, причины (`NoticeReason`, `ProfileDraftIssueCode`, `ToolKind`, `PromptFailure`); английские `text`/`message` остаются для CLI и диагностики; `intl` и `flutter_localizations` запрещены сторожем |
+| `codelab_ui` | только свои фиксированные словари (статусы, риски, тоны, вкладки `ToolPane`, подписи кнопок по умолчанию) | `codeLabStringsOf(context)` по каталогу `CodeLabLocalizations`; без делегата — английский; app выбирает значение enum, а не текст (`codelab_ui/AGENTS.md` §5) |
+| `codelab_desktop` presentation | всё остальное | `context.l10n` (`AppLocalizations`) |
+| `codelab_desktop` application (Cubit-ы, мапперы) | производный текст моделей кита | по явному входу `AppStrings` (см. ниже) |
+| `features/usage/application`, `features/terminal/application` | нет | эти каталоги без Flutter (правило сторожа); отдают типизированные значения (`UsageBudgetRowKind`, `UsageBudgetTitle`, статус вкладки), текст собирает presentation |
+
+App НЕ ДОЛЖЕН переводить или разбирать английскую строку ядра клиента: если для перевода не хватает данных, ядро получает аддитивное типизированное поле (как `NoticeReason`, spec `acp-client-kit` «Типизированная причина заметки транскрипта»). Это частный случай `error-handling.md` §43 и §98.
+
+### Три вида текста
+
+| Вид | Примеры | Где живёт | Пересборка при смене языка |
+|---|---|---|---|
+| **Текст виджета** | подписи, кнопки, пустые состояния, InfoBar с постоянным текстом, словари кита | `build` виджета | `context.l10n` / `codeLabStringsOf(context)`; Flutter пересобирает через `Localizations`, своих подписок нет |
+| **Производный текст в состоянии** | строки ленты и заметки, сайдбар, шапка, строка статуса, палитра, строки страниц настроек | модели кита в состоянии Cubit-а | язык — **явный вход** Cubit-а, как `usage` или статус сессии; по событию `AppStrings.changes` Cubit пересобирает всю проекцию из последних входов и сбрасывает кэши, ключ которых не учитывает язык |
+| **Разовое сообщение** | исход действия («provider removed»), ошибка записи конфига, отказ подключения | состояние Cubit-а | хранится **типизированным сообщением** (sealed-класс с аргументами); текст собирает presentation по `context.l10n`, поэтому он пересобирается как текст виджета. Хранить готовую строку ЗАПРЕЩЕНО: входа, из которого её можно пересобрать, уже нет |
+
+### Правила
+
+1. Состояние, построенное из входов, — функция `(входы, язык)`. Cubit НЕ ДОЛЖЕН хранить переведённую строку, которую нельзя пересобрать из его входов.
+2. `AppStrings.current` читается только внутри проекции; при смене языка пересобирается вся проекция, а не отдельные поля.
+3. Единственный источник языка — `AppLanguageCubit` (`state-management.md` §63а). Cubit с текстом получает узкий порт `AppStrings` (`current`, `changes`), а не сам `AppLanguageCubit`: порт нужен для независимого тестирования (`AGENTS.md` §13). Подписка — одна на Cubit, в конструкторе, отмена в `close()` (`concurrency.md` §47а).
+4. Склейка фразы из частей ЗАПРЕЩЕНА: текст от агента, путь, id, команда подставляются плейсхолдером одного сообщения. Количество — только ICU `plural`.
+5. Enum НЕ ДОЛЖЕН хранить английский заголовок для показа (`SettingsPage.title`, `SettingsGroup.title`, `ToolPane.label` теряют поле); текст по значению даёт функция presentation, `slug` и `navKey` остаются.
+6. Ключи тестов (`ValueKey`), события журнала и их поля от языка не зависят; текст интерфейса в журнал не попадает.
+7. Что не переводится (содержимое агента, протокольные значения, пути, команды, продукты, клавиши, «Debug log» и «Inspector», числа usage) — spec `app-settings` «Локализация интерфейса app» и `l10n-glossary.md`.
+
+### Зависимости
+
+`flutter_localizations` и `intl` — прямые зависимости только `codelab_desktop` и `codelab_ui`. Направление зависимостей и граф пакетов не меняются; новых пакетов нет. Каталоги ARB и сгенерированный код живут только в `apps/codelab_desktop/lib/l10n/` и `packages/flutter/codelab_ui/lib/l10n/` (spec `workspace-architecture` «Ядро клиента не зависит от языка интерфейса»).
+
+### Где проверяется
+
+* `intl` и `flutter_localizations` в `codelab_client_core` и `codelab_client_acp` — `melos run guard` (правило в `test/support/rules.dart`);
+* совпадение сгенерированного кода с ARB — `melos run l10n:check`;
+* согласованность каталогов `en`/`ru` — `l10n_catalogs_test.dart` каждого пакета;
+* смесь языков после переключения — помощник `expectNoStaleLanguage` (`testing.md`, раздел о локали);
+* литералы мимо каталога в presentation — `ui_literals_test.dart` сторожа (эвристика по узкому списку позиций; литералы в `application/` проверяет ревью).

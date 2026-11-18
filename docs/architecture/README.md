@@ -420,6 +420,18 @@ Abstraction вводится тогда, когда существует реа�
 
 ---
 
+### `l10n-glossary.md`
+
+Глоссарий перевода интерфейса desktop и `codelab_ui` (en → ru; change `add-desktop-localization`):
+
+* правила перевода (регистр, кавычки, `plural`, плейсхолдеры);
+* что не переводится;
+* термины рабочего места, настроек и подписей кита.
+
+Читать при добавлении или переводе текста интерфейса app.
+
+---
+
 ### `../integrations/claude-code.md`
 
 Описывает интеграцию с агентом Claude Code по ACP:
@@ -498,6 +510,7 @@ state-management.md
 
 ```text id="3h5jzq"
 layers-and-dependencies.md
+l10n-glossary.md        # если добавляется текст интерфейса
 ```
 
 ---
