@@ -173,6 +173,7 @@ AI-agent обязан интерпретировать эти формулиро
 │   ├── codelab_desktop/
 │   ├── codelab_agent/
 │   └── codelab_cli/
+├── site/                 # сайт CodeLab на Astro (ADR-0003), вне pub workspace и Melos
 └── packages/
     ├── dart/
     │   ├── codelab_acp_protocol/
@@ -225,6 +226,7 @@ AI-agent обязан интерпретировать эти формулиро
 * Клиенты (`apps/*`) НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*` напрямую. Агентскую сторону клиенты получают только через мосты `codelab_setup` и `codelab_embedded`; пакеты `codelab_agent_*` НЕ ДОЛЖНЫ появляться в `dependencies` `apps/codelab_desktop` и `apps/codelab_cli` (allowlist сторожа, `pubspec_allowlist_test.dart`).
 * `package:codelab_embedded/codelab_embedded.dart` ДОЛЖЕН оставаться web-безопасным. `package:codelab_embedded/io.dart` ДОЛЖЕН импортироваться только composition root клиента (`apps/codelab_cli/lib/src/composition_root.dart`, `apps/codelab_desktop/lib/app/`) и тестами. `package:codelab_embedded/testing.dart` ДОЛЖЕН импортироваться только тестами и `apps/codelab_cli/lib/src/scenario/` (драйвер фикстур `test-scenario`); в `lib/` `apps/codelab_desktop` его импорт ЗАПРЕЩЁН — сценарий модели не попадает в релизную сборку app. Проверяет сторож (`openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md`, D3).
 * Границы пакетов проверяет тест-сторож `packages/dart/codelab_architecture_tests` (`melos run guard`): правило нового пакета добавляется в `test/support/rules.dart` вместе с пакетом.
+* `site/` — сайт CodeLab на Astro (ADR-0003, `docs/architecture/adr/0003-build-project-site-with-astro-in-monorepo.md`): главная, возможности, документация из `docs/user/`, `docs/ops/`, README и `doc/` приложений и пакетов без копий, новости выпусков. Он вне pub workspace и Melos; Node и npm используются только в `site/`; сторож его не проверяет. Стандарт — `.claude/skills/codelab-site/SKILL.md`.
 
 Архитектура Dart-агента — `docs/architecture/proposals/agent-core-architecture.md` (принята ADR-0001); план по этапам — `docs/architecture/proposals/dart-agent-and-clients.md`, дорожная карта — `docs/architecture/proposals/delivery-roadmap.md`.
 
@@ -760,8 +762,9 @@ melos run check
    * `prompts:check` — если изменены промпты агента;
    * `test:e2e:cli:dart-agent` — если изменены `apps/codelab_cli`, `apps/codelab_agent` или клиентский слой, через который они работают;
    * `web-compile` — если изменён web-безопасный пакет или его импорты.
+5. `cd site && npm ci && npm run verify` — если изменён `site/**`; СЛЕДУЕТ — если изменены опубликованные на сайте документы (`README.md` и `doc/` приложений и пакетов, `docs/user/`, `docs/ops/`) и установлен Node.
 
-Изменение только документации (`docs/`, `openspec/`, `*.md`) кодовых проверок не требует; для OpenSpec — `openspec validate --strict`.
+Изменение только документации (`docs/`, `openspec/`, `*.md`) кодовых проверок не требует; для OpenSpec — `openspec validate --strict`. Правка опубликованных на сайте документов и `openspec/` проверяется ещё и джобом `site` в CI.
 
 Полный `melos run check` перед pull request из `feature/*` и `hotfix/*` агент запускает только по просьбе пользователя. Агент МОЖЕТ предложить полный прогон, если изменение задевает много пакетов и состав затронутого не очевиден, но не запускает его сам.
 
@@ -798,7 +801,7 @@ GitHub CI на pull request из `feature/*` и `hotfix/*` в `develop` тоже
 | Ветка | Создаётся от | Вливается в | Назначение |
 |---|---|---|---|
 | `feature/<name>` | `develop` | `develop` | новая функциональность, документация, рефакторинг, OpenSpec changes |
-| `release/<version>` | `develop` | `master` и `develop` | подготовка выпуска: версия, changelog, исправления только для выпуска, прогон тестов на устройстве или симуляторе (§21) |
+| `release/<version>` | `develop` | `master` и `develop` | подготовка выпуска: версия, раздел выпуска в `CHANGELOG.md`, новость на сайте (`site/src/content/news/`), исправления только для выпуска, прогон тестов на устройстве или симуляторе (§21) |
 | `hotfix/<name>` | `master` | `master` и `develop` | срочное исправление выпущенной версии |
 
 Правила:
@@ -811,6 +814,7 @@ GitHub CI на pull request из `feature/*` и `hotfix/*` в `develop` тоже
 * Перед pull request ветку СЛЕДУЕТ обновить от `develop`; проверки §21 («Проверка перед pull request») ДОЛЖНЫ проходить на обновлённой ветке — локально и в CI.
 * Слияние в `develop` выполняется после ревью; агент НЕ ДОЛЖЕН сливать pull request без явного разрешения пользователя.
 * После слияния ветку `feature/*` СЛЕДУЕТ удалить локально и в `origin`.
+* Подготовка выпуска в `release/<version>`: сначала раздел выпуска в `CHANGELOG.md`, затем новость на сайте — её пишет `docs-writer` по этому разделу и `proposal.md` архивированных changes выпуска (`add-astro-site` D10).
 * Выпуск: `release/<version>` вливается в `master`, merge commit в `master` помечается тегом версии, затем `release/<version>` вливается обратно в `develop`.
 * `hotfix/*` после слияния в `master` ДОЛЖЕН быть влит и в `develop` (или в активную `release/*`, если она существует).
 * Сообщения commits — Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`), как в существующей истории.

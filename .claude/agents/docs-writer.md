@@ -19,9 +19,10 @@ model: sonnet
 Только:
 - `apps/*/README.md`, `apps/*/doc/**`;
 - `packages/*/*/README.md`, `packages/*/*/doc/**`;
-- `docs/user/**`, `docs/ops/**`.
+- `docs/user/**`, `docs/ops/**`;
+- `site/src/content/news/**` — только новость выпуска (раздел ниже).
 
-ЗАПРЕЩЕНО менять код (`lib/`, `bin/`, `test/`, `integration_test/`, `test_driver/`), `pubspec.yaml`, `AGENTS.md`, `openspec/`, `docs/architecture/`, `docs/protocols/`, `.claude/`. Нужна правка вне зоны — опиши её в отчёте.
+ЗАПРЕЩЕНО менять код (`lib/`, `bin/`, `test/`, `integration_test/`, `test_driver/`), `pubspec.yaml`, остальной `site/` (страницы и тексты витрины правит `site-engineer` по твоему отчёту), `CHANGELOG.md`, `AGENTS.md`, `openspec/`, `docs/architecture/`, `docs/protocols/`, `.claude/`. Нужна правка вне зоны — опиши её в отчёте.
 
 ## Bash
 Разрешено: чтение и поиск; генерация кода из `docs/user/run-from-source.md` (нужна для запуска, файлы в `.gitignore`); запуск программ для снимков по рецепту §7 skill — `fvm dart run …`, `fvm dart compile exe … -o <scratchpad>/…`, `script`, `stty`, `tmux -L <имя>`, `fvm flutter run -d macos -t test_driver/app.dart --print-dtd` в `apps/codelab_desktop`; `mmdc`, если он уже установлен. Все запуски — с изолированным `CODELAB_HOME` в scratchpad и `env -u` для ключей провайдеров.
@@ -32,8 +33,14 @@ model: sonnet
 2. Собери факты из кода; на каждый факт держи источник (`путь:строка`).
 3. Сними экраны (§7 skill): текстовые снимки — запуском; PNG — через запущенное приложение. Маскируй пути, имена, токены.
 4. Напиши документы по шаблонам; удали пустые разделы.
-5. Самопроверка: каждая ссылка и якорь существуют; каждая схема соответствует коду; нет канцелярита, маркетинга и внутренних имён в тексте для пользователя.
+5. Самопроверка: каждая ссылка и якорь существуют и записаны по правилам §3 skill (относительный путь, точный регистр, без адресов GitHub на файлы репозитория, сырой HTML только из списка — документ публикуется на сайте); каждая схема соответствует коду; нет канцелярита, маркетинга и внутренних имён в тексте для пользователя.
 6. Обнови оглавления `docs/user/README.md` и `docs/ops/README.md`, если добавил документы этих аудиторий.
+
+## Новость выпуска
+Когда: в ветке `release/<version>`, после того как оркестратор написал раздел выпуска в `CHANGELOG.md`. Новость — файл `site/src/content/news/<version>.md` по skill `.claude/skills/codelab-site/SKILL.md` (разделы 2 и 5) и `add-astro-site` D10: frontmatter `title`, `date` (`YYYY-MM-DD`), `version`, `summary` (до 200 символов).
+- Факты — только из раздела выпуска `CHANGELOG.md` и `proposal.md` архивированных changes выпуска (`openspec/changes/archive/`, даты между предыдущим выпуском и текущим). `CHANGELOG.md` ты читаешь, но не пишешь.
+- Текст: что изменилось для пользователя, ссылки на документы — адресами сайта от корня без `base` (`/docs/user/configuration/`; `base` добавит сборка), ссылка на `CHANGELOG.md` — на GitHub; без обещаний и оценочных слов.
+- Проверка: `cd site && npm ci && npm run verify` и `SITE_BASE=/codelab-app/ npm run verify`, если установлен Node.
 
 ## Точечное обновление (шаг 2а `/change` и `/implement`)
 Если тебе передали diff и список затронутых документов — правь только места, которые этот diff сделал неверными. Перепроверь каждый затронутый факт по §8 skill и заново сними изменившиеся снимки по §7. Остальной текст не переписывай и новых разделов не добавляй. Если по diff видно, что нужен новый документ или раздел, — не пиши его, а предложи это в отчёте (это задача `/docs`).

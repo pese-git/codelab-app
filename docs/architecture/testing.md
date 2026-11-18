@@ -1149,21 +1149,35 @@ CI разделён на два уровня (`.github/workflows/ci.yml`, `AGENT
                      *_localizations*.dart
   web-compile        если изменено ядро агента или его зависимость
   e2e-cli-dart       если затронуты codelab_cli или codelab_agent
-  только документация — без джобов
+  site               если изменён site/ или источник страниц сайта (признак site)
+  только документация — без Dart-джобов; site — если документ влияет на сайт
 
 Полностью — push в develop и master, pull request из release/* или в master,
 ночной запуск, workflow_dispatch:
   все шаги melos run check
+  site               всегда
 ```
 
 Матрицу считает `tool/ci/affected.dart` (логика — `tool/ci/ci_scope.dart`, тесты —
 `codelab_architecture_tests/test/ci_scope_test.dart`). Затронутое — пакеты pub workspace с
-изменёнными файлами и их зависимые по `dependencies` и `dev_dependencies`. Файл вне пакетов и вне
-документации (`pubspec.lock`, `analysis_options.yaml`, `.github/`, `tool/`) включает полный прогон.
+изменёнными файлами и их зависимые по `dependencies` и `dev_dependencies`. Файл вне пакетов, вне
+документации и вне `site/` (`pubspec.lock`, `analysis_options.yaml`, `.github/`, `tool/`) включает
+полный прогон.
 Документацией внутри пакета считаются только `AGENTS.md`, `README.md` и `CHANGELOG.md`: остальные
 `*.md` там — данные, например промпты ядра агента. Файлы каталогов локализации для джоба `l10n`
 определяют `_l10nPackages` и `_isL10nFile` в `ci_scope.dart`; правка самого `tool/l10n_check.dart`
 лежит вне пакетов и даёт полный прогон (change `add-desktop-localization`, D3).
+
+Сайт (`site/`, ADR-0003) проверяет отдельный джоб `site` на Node: `npm ci --ignore-scripts` и
+`npm run verify` в `site/`, параллельно с Dart-джобами (change `add-astro-site`, D13). Запускает его
+признак `site`, который `ci_scope.dart` считает независимо от Dart-матрицы (`CiScope.site`, предикат
+`_affectsSite`), а `affected.dart` пишет в `$GITHUB_OUTPUT` как `site=true|false`. Признак включают
+файлы `site/**`, `docs/**`, `openspec/**`, `apps/*/README.md`, `apps/*/doc/**`,
+`packages/**/README.md` и `packages/**/doc/**`, а также любой полный прогон. Весь `openspec/**`, а не
+только файлы, на которые ссылаются опубликованные документы: точный разбор ссылок на Dart был бы
+второй реализацией плагина ссылок сайта (D13). Классификацию для Dart-матрицы признак не меняет:
+`docs/**` и `openspec/**` по-прежнему документация, а файл `site/` не считается «вне пакетов» и не
+попадает в матрицу, поэтому правка только `site/` Dart-джобов не запускает.
 
 Связь, которой нет в графе пакетов (тест читает файл другого пакета по пути), суженный прогон может
 пропустить; её ловит полный прогон после merge в `develop` и ночной запуск. Полный прогон ветки по
@@ -1176,7 +1190,10 @@ MVP (change `switch-default-agent-to-dart`, задача 4.1), а запуск �
 Ночь по `cron` стартует с задержкой GitHub, иногда на часы, поэтому окно «без merge» не задаётся.
 
 Обязательной проверкой в защите ветки СЛЕДУЕТ делать только итоговый джоб `ci`: пропущенные джобы
-матрицы не должны блокировать merge.
+матрицы не должны блокировать merge. Джоб `site` обязательный, но отдельным статусом в защиту ветки не
+добавляется: итоговый `ci` ждёт его вместе с `checks` и `parity` и принимает только `success` или
+`skipped`, поэтому красный `site` при зелёных Dart-джобах делает `ci` красным. Обязательный статус
+по-прежнему один.
 
 В ночном запуске и в `workflow_dispatch` к полному прогону добавляются машинные отчёты тестов
 (`CODELAB_TEST_REPORT_DIR`) и джоб `parity` — статус доказательств строк Must (§74.1; change

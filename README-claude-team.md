@@ -6,9 +6,9 @@
 codelab-app/
 ├── CLAUDE.md          ← таблица зон и команды; правила подключает через @AGENTS.md
 └── .claude/
-    ├── agents/        ← 8 субагентов
-    ├── commands/      ← /change, /implement, /codelab-review, /check и opsx/
-    └── skills/        ← openspec-*
+    ├── agents/        ← 10 субагентов
+    ├── commands/      ← /change, /implement, /codelab-review, /check, /docs и opsx/
+    └── skills/        ← openspec-*, codelab-docs, codelab-site
 ```
 `AGENTS.md` остаётся единым источником правил для всех AI-агентов; `CLAUDE.md` правила не дублирует, а только подключает их и описывает команду.
 
@@ -26,7 +26,7 @@ codelab-app/
 
 ## Модели
 - `opus` — codelab-architect, architecture-reviewer, acp-safety-reviewer (дизайн, ACP, безопасность).
-- `sonnet` — четыре инженера.
+- `sonnet` — пять инженеров (acp-protocol-engineer, agent-core-engineer, client-engineer, desktop-engineer, site-engineer) и docs-writer.
 - `haiku` — check-runner (только запуск и сводка проверок).
 Для сложных изменений ядра или протокола можно поднять модель инженера до `opus` в его файле.
 

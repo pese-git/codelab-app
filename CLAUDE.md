@@ -14,7 +14,7 @@
 | `client-engineer` | `codelab_client_acp`, `codelab_client_core`, `codelab_client_io`, `apps/codelab_cli` | да |
 | `desktop-engineer` | `apps/codelab_desktop`, `packages/flutter/codelab_ui` | да |
 | `site-engineer` | `site/` (сайт на Astro), джоб `site` в CI, ветка сайта в `tool/ci/ci_scope.dart` | да |
-| `docs-writer` | `README.md` и `doc/` пакетов и приложений, `docs/user/`, `docs/ops/` | только документацию |
+| `docs-writer` | `README.md` и `doc/` пакетов и приложений, `docs/user/`, `docs/ops/`, новости сайта `site/src/content/news/` | только документацию |
 | `check-runner` | проверки затронутого; полный `melos run check` — по просьбе | нет |
 | `architecture-reviewer` | спецификации, границы, слои, паттерны, тесты, комментарии | нет |
 | `acp-safety-reviewer` | безопасность, ACP, данные, состояние, наблюдаемость (§2, приоритеты 1–5) | нет |
