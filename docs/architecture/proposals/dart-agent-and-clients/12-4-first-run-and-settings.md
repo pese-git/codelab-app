@@ -54,6 +54,16 @@
 (`features/workbench/presentation/widgets/`). Строки UI app — английские литералы, как в
 существующих виджетах: слоя локализации в app нет, и его введение — отдельное решение.
 
+**Слой локализации (D-19)** вводит change
+[`add-desktop-localization`](../../../../openspec/changes/add-desktop-localization/design.md):
+каталоги ARB `en` и `ru` у app и у `codelab_ui` (`flutter_localizations`, `gen-l10n`;
+`technology-stack.md` §20ж), выбор языка — строка «Language» страницы «Settings › General»
+(`System`, `English`, `Русский`; ключ `codelab.app.language` в `shared_preferences`).
+Язык применяется сразу, без перезапуска; исключения — меню macOS и системные панели (по языку
+системы). Тексты спецификаций этого раздела остаются эталоном языка `en`; правила текста в
+слоях — `layers-and-dependencies.md` §54, термины перевода — `l10n-glossary.md`. Ядро клиента и
+CLI остаются английскими, тексты для модели — тоже (`agent-core-architecture` §12.2).
+
 Мастер и страницы пишут только схему ядра (§15.4): `providers.<id>` с `kind`,
 `agent.default_model`, файл `config.yaml` (YAML). TOML клиенты не пишут никогда. Старый
 Старый `codelab.toml` Python-агента не читается и не переводится (решение 2026-10-29, change
@@ -1055,7 +1065,7 @@ sequenceDiagram
 | Agent | Redaction (23) | D-24, P-10, P-14, P-18, P-19 | ниже | `ConfigWriter` |
 | Agent | Skills & extensions (24) | E-01, E-06, E-07 | §12.4.6а (change [`add-app-skills-page`](../../../../openspec/changes/add-app-skills-page/proposal.md)): цепочка `AGENTS.md` и шаблоны — только чтение; навыки с выключателями (`skills.disabled`) и согласием на каталоги другого агента (`skills.extra_roots`); «Open» открывает каталог. Будущие: E-08, E-09, E-10, E-17…E-19 — строки появятся с их changes | `ConfigWriter` |
 | Agent | Code & web (25) | T-13, T-14, T-15, T-17, T-31, E-12 | языковые серверы, память, web-инструменты | `ConfigWriter` |
-| App | General (26) | E-15, D-18, D-19 | `SettingsRegistry` `scope: shared` (как `/settings`), `codelab.file_browser.show_ignored`, `codelab.input.enter_while_running` (§12.3, A11); язык — после слоя локализации (D-19); «About»: версия, канал, лицензия, сторонние уведомления, политика конфиденциальности (§12.7.7). App не обновляет себя сам: строка «Updates come from the installer or your package manager» | `ConfigWriter` (shared), `shared_preferences` |
+| App | General (26) | E-15, D-18, D-19 | `SettingsRegistry` `scope: shared` (как `/settings`), `codelab.file_browser.show_ignored`, `codelab.input.enter_while_running` (§12.3, A11); строка «Language» (`System`, `English`, `Русский`; `codelab.app.language`, применяется сразу) — первое содержимое страницы, change `add-desktop-localization`, D2 (D-19); «About»: версия, канал, лицензия, сторонние уведомления, политика конфиденциальности (§12.7.7). App не обновляет себя сам: строка «Updates come from the installer or your package manager» | `ConfigWriter` (shared), `shared_preferences` |
 | App | Appearance (10) | D-20 | §12.6.3 | `shared_preferences`, файлы тем |
 | App | Keyboard (27) | — | сочетания app по группам, только для чтения, с поиском; переназначение в app не вводится | — |
 

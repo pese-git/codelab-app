@@ -44,6 +44,7 @@
 | Markdown ответа агента в ленте (`codelab_ui`, только `lib/src/rendering/`) | `gpt_markdown` (change [`add-desktop-markdown`](../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md), D1; без Material-предка, свои builder'ы) |
 | Подсветка кода (`codelab_ui`, только `lib/src/rendering/`) | `val_highlight` (change `add-desktop-markdown`, D4) |
 | Открытие внешних ссылок (`codelab_desktop`, только `lib/core/platform/`) | `url_launcher` (change `add-desktop-markdown`, D5) |
+| Локализация интерфейса (`codelab_desktop`, `codelab_ui`) | `flutter_localizations`, `gen-l10n` (ARB), `intl` для сгенерированного кода (change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md), D1; §20ж) |
 
 Технологии из этой таблицы считаются **утверждёнными решениями проекта**.
 
@@ -927,6 +928,25 @@ Architectural dependency rules важнее технической доступ�
 2. **Потребители.** Ссылки в ответе агента (markdown, политика `isOpenableLink`) и ссылки OSC 8 в терминале (Q14).
 3. **Безопасность терминала.** Первая линия — application (`terminalLinkDecision`: только `http`/`https`; адрес с bidi, нулевой шириной или управляющими C0/C1 — «нельзя» при любой схеме, Q21); диалог показывает нормализованный адрес — ровно тот, что уходит в порт; вторая линия — политика адаптера (`isOpenableLink`); адрес в журнал не пишется — только схема (`observability.md` §35). OSC 1337 `OpenURL` (`Terminal.onOpenUrl`) не подключается.
 4. **Заменяет ли существующую технологию.** Нет. **Migration** — нет. **ADR** — нет (Q3, прецедент §20а).
+
+---
+
+## 20ж. `codelab_desktop` и `codelab_ui`: локализация интерфейса — `flutter_localizations`, `gen-l10n`, `intl`
+
+**Статус: утверждено.** Решение — change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md), D1, D3, D4, D10; требование — D-19 матрицы паритета (`proposals/agent-parity-goals.md`). До этого change утверждённого решения для i18n в стеке не было.
+
+Технология: стандартная локализация Flutter. `flutter_localizations` — часть SDK; классы сообщений генерирует `fvm flutter gen-l10n` из каталогов ARB; сообщения — ICU (`plural`, `select`, типизированные плейсхолдеры); `intl` нужен сгенерированному коду для `plural` и `Intl.message`.
+
+1. **Где.** Только два пакета:
+   * `apps/codelab_desktop` — `l10n.yaml`, каталоги `lib/l10n/app_en.arb` и `app_ru.arb`, класс `AppLocalizations` (`nullable-getter: false`), доступ из виджетов — `context.l10n`;
+   * `packages/flutter/codelab_ui` — свой каталог `codelab_ui_en.arb`/`codelab_ui_ru.arb`, класс `CodeLabLocalizations` (`nullable-getter: true`); без делегата в дереве кит показывает английский (D4).
+2. **Версии.** В `pubspec.yaml` — `flutter_localizations: sdk: flutter` и `intl: any`: версию `intl` закрепляет `flutter_localizations` SDK, своя граница привела бы к конфликту решателя (D3). Новых пакетов в `pubspec.lock` нет: `intl` и `flutter_localizations` уже приходили транзитивно через `fluent_ui`.
+3. **Сгенерированный код коммитится**, как `*.freezed.dart` (§13): `dart analyze` работает без шага генерации. Совпадение кода с ARB проверяет скрипт Melos `l10n:check` (перегенерация во временный каталог и сравнение) — в составе `check` и в затронутых проверках при правке ARB или `l10n.yaml`. Править сгенерированные `app_localizations*.dart` вручную ЗАПРЕЩЕНО.
+4. **Где НЕ используется.** `codelab_client_core` и `codelab_client_acp` НЕ ДОЛЖНЫ импортировать `package:intl/` и `package:flutter_localizations/` — правило сторожа (D10; spec `workspace-architecture` «Ядро клиента не зависит от языка интерфейса»). Пакеты `codelab_agent_*` и тексты, которые видит модель, остаются английскими (`agent-core-architecture` §12.2). Форматы usage (`usage_format.dart`) остаются без `intl` и локали (D8).
+5. **Fluent.** `FluentApp` сам добавляет `FluentLocalizations.delegate`; делегаты app и кита складываются с ним в один список `localizationsDelegates` у `FluentApp`; `supportedLocales` — только `en` и `ru` (spec `app-settings` «Локализация интерфейса app»).
+6. **Заменяет ли существующую технологию.** Нет. **Альтернативы** — `easy_localization`, `slang`, рукописные таблицы — отклонены (D1). **ADR** — нет: технология не меняет архитектуру приложения, а входит в Flutter SDK.
+
+Правила слоёв для текста (где собирается текст и как он пересобирается при смене языка) — `layers-and-dependencies.md`, раздел «Текст интерфейса и локализация»; термины перевода — `l10n-glossary.md`.
 
 ---
 

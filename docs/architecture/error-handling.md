@@ -781,6 +781,14 @@ Presentation mapping
 localized message
 ```
 
+В CodeLab эта граница реализована change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md) (D5, D6; правила — `layers-and-dependencies.md` §54):
+
+* **Ядро клиента** (`codelab_client_core`, `codelab_client_acp`) отдаёт типизированную причину и сбой: `PromptFailure`, `ProfileDraftIssueCode`, sealed-результаты `ProfileCommitter`, причина заметки транскрипта `NoticeReason` (spec `acp-client-kit` «Типизированная причина заметки транскрипта»). Английские `text`/`message` ядра остаются для CLI и диагностики; `intl` в ядре клиента запрещён сторожем.
+* **App** строит переведённый текст по варианту и коду (`context.l10n`) и НЕ ДОЛЖЕН разбирать английскую строку ядра. Не хватает данных — ядро получает аддитивное типизированное поле.
+* **Разовое сообщение об ошибке или исходе** (ошибка записи конфига, отказ подключения, исход удаления) хранится в состоянии Cubit-а типизированным значением с аргументами, а не готовой строкой: текст собирает presentation, поэтому при смене языка он пересобирается.
+* **Не переводятся** (D7): тексты ошибок от агента и бэкендов (тело `PromptFailure`, причина хранилища секретов), диагностика (`WorkspaceDiagnostic.message`, `ClientWorkspaceException.message`, «Debug log», «Inspector»), события журнала. Они подставляются в переведённую фразу плейсхолдером как есть (§99 — diagnostic message vs user message).
+* Текст исключения пользователю не показывается и в переводимые сообщения не попадает; в журнал пишется только `runtimeType` (`observability.md`).
+
 ---
 
 ## 44. BLoC error handling
