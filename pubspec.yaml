@@ -99,6 +99,10 @@ melos:
       description: Check that the generated prompt constants of the agent core match prompts/**/*.md.
       run: cd packages/dart/codelab_agent_core && fvm dart run tool/gen_prompts.dart --check
 
+    l10n:check:
+      description: Check that the generated localization code of codelab_desktop and codelab_ui matches their ARB catalogs.
+      run: fvm dart run tool/l10n_check.dart
+
     web-compile:
       description: Compile the web-smoke entry points of the agent core, the embedded agent and the setup bridge to JavaScript and WebAssembly.
       run: >-
@@ -255,6 +259,7 @@ melos:
         - analyze
         - guard
         - prompts:check
+        - l10n:check
         - test
         - test:e2e:cli:dart-agent
         - test:e2e:cli:embedded

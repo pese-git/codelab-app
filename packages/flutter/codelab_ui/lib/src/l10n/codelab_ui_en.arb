@@ -1,0 +1,7 @@
+{
+  "@@locale": "en",
+  "codeLabApprovalAwaiting": "Awaiting approval",
+  "@codeLabApprovalAwaiting": {
+    "description": "Подпись ожидающего решения одобрения в ките. Шаблон каталога кита: остальные сообщения добавляются в итерации 2."
+  }
+}
