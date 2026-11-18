@@ -16,6 +16,18 @@
 // offset`. Так «один источник» достигается без второго поддельного таймера
 // в kit. Время Flutter-таймера ведёт `tester.pump(Duration)`.
 //
+// Задача 2.5 change `fix-usage-pane-live-cards` (agent-workbench-ui «Бюджет
+// хода в панели Usage»: «Одобрение не откатывает время», «Одобрение
+// субагента», «Отмена хода»; design.md D3–D5, Q2 (б), Q4 (а)): запрос
+// одобрения корня останавливает тик, а Time не уменьшается; ответ возобновляет
+// тик без прыжка на длину ожидания; одобрение потомка тик не останавливает;
+// `cancelling` тикает до снимка `turn`. Метки ожиданий ставит `AcpClientApplication`
+// по системным часам, поэтому тесты этой группы работают на настоящем времени
+// (`realClock`, короткие реальные паузы через `runAsync`): с условными часами
+// виджета метки одобрений и `receivedAt` разошлись бы. Точные секунды и
+// объединения интервалов проверяет `usage_budget_test.dart` на собранных
+// вручную `SessionView`.
+//
 // Панель монтируется напрямую (без дока): «показана» значит «смонтирована»
 // (D3), а скрытие — размонтирование. Решение «тикать ли» принимает application
 // (`UsageBudgetData.ticking`), виджет только следует ему; его проверяют тесты
@@ -23,6 +35,8 @@
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_client_acp/codelab_client_acp.dart'
+    show ApprovalRequestId;
 import 'package:codelab_desktop/features/usage/presentation/workbench_usage_pane.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -103,11 +117,16 @@ final class _Scene {
   /// Сдвиг часов виджета от [_base]; тест двигает его вместе с `pump`.
   Duration offset = Duration.zero;
 
+  /// Часы виджета — настоящее время: метки одобрений kit тоже настоящие,
+  /// поэтому тесты ожиданий не смешивают условное и системное время.
+  bool realClock = false;
+
   JsonRpcRequest? _prompt;
   Future<void>? _turnDone;
 
   DateTime _clock() {
     clockCalls++;
+    if (realClock) return DateTime.now();
     return (_base ?? DateTime.now()).add(offset);
   }
 
@@ -227,22 +246,25 @@ final class _Scene {
     }
   }
 
-  /// Запрос разрешения у агента: у сессии появляется ожидающее одобрение.
-  Future<void> ask() async {
+  /// Запрос разрешения у агента: у сессии появляется ожидающее одобрение;
+  /// [meta] — `_meta` вызова (`null` — спрашивает корень, иначе потомок).
+  /// Идентификатор одобрения — `permission-<rpcId>`.
+  Future<void> ask({int rpcId = 100, Map<String, Object?>? meta}) async {
     agent.emitInbound(
       JsonRpcMessage.request(
-        id: JsonRpcId.integer(100),
+        id: JsonRpcId.integer(rpcId),
         method: sessionRequestPermissionMethod,
-        params: const RequestPermissionRequest(
-          sessionId: SessionId('s1'),
+        params: RequestPermissionRequest(
+          sessionId: const SessionId('s1'),
           toolCall: ToolCallUpdate(
-            toolCallId: ToolCallId('call-1'),
+            toolCallId: ToolCallId('call-$rpcId'),
             title: 'Run ls',
             kind: ToolKind.execute,
             status: ToolCallStatus.pending,
-            rawInput: {'command': 'ls'},
+            rawInput: const {'command': 'ls'},
+            meta: meta,
           ),
-          options: [
+          options: const [
             PermissionOption(
               optionId: PermissionOptionId('allow-once'),
               name: 'Allow',
@@ -253,6 +275,39 @@ final class _Scene {
       ),
     );
     await flush();
+  }
+
+  /// Ответ пользователя на одобрение [rpcId]: интервал ожидания закрывается.
+  Future<void> respond({int rpcId = 100}) async {
+    await tester.runAsync(
+      () => cubit.respondToApproval(
+        approvalId: ApprovalRequestId('permission-$rpcId'),
+        sessionId: const SessionId('s1'),
+        optionId: 'allow-once',
+      ),
+    );
+    await flush();
+  }
+
+  /// Отмена хода пользователем: сессия `cancelling` до ответа на промпт.
+  Future<void> cancel() async {
+    await tester.runAsync(cubit.cancelTurn);
+    await flush();
+  }
+
+  /// Реальная пауза: системные часы идут, а таймеры теста стоят.
+  Future<void> realWait(int ms) =>
+      tester.runAsync(() => Future<void>.delayed(Duration(milliseconds: ms)));
+
+  /// Секунды из подписи Time (`m:ss / …`); `null` — строки Time нет.
+  int? get timeSeconds {
+    // В `time` перед числами стоит подпись строки (`Time | 3:00 / 10:00`).
+    final match = RegExp(r'(\d+(?::\d\d)+) / ').firstMatch(time);
+    if (match == null) return null;
+    final parts = match.group(1)!.split(':').map(int.parse).toList();
+    return parts.length == 2
+        ? parts[0] * 60 + parts[1]
+        : parts[0] * 3600 + parts[1] * 60 + parts[2];
   }
 
   /// Проходит [seconds] секунд по одной: часы виджета и таймер двигаются
@@ -529,6 +584,150 @@ void main() {
     expect(scene.time, contains('0:04 / 10:00'));
     expect(await scene.ticksIn(3), greaterThanOrEqualTo(3));
     expect(scene.time, contains('0:07 / 10:00'));
+
+    await scene.close();
+  });
+
+  /// Ход идёт, снимок `step` применён: `usedMs` 180000 (`3:00`); часы виджета
+  /// — настоящее время.
+  Future<_Scene> runningTurn(WidgetTester tester) async {
+    final scene = await _Scene.open(tester);
+    await scene.startTurn();
+    scene.realClock = true;
+    await scene.snapshot(
+      _snapshot(
+        seq: 1,
+        trigger: 'step',
+        turnId: 'turn-1',
+        budget: _budgetJson(),
+      ),
+    );
+    return scene;
+  }
+
+  Map<String, Object?> subagentMeta() => {
+    'codelab': {
+      'subagent': {
+        'id': 'sub_aaaaaaaa',
+        'type': 'explore',
+        'description': 'Find callers',
+        'depth': 1,
+        'path': const <String>[],
+        'parentToolCallId': 'call_1',
+      },
+    },
+  };
+
+  testWidgets('«Одобрение не откатывает время»: запрос одобрения корня '
+      'останавливает тик, а Time не уменьшается (SMK-43)', (tester) async {
+    final scene = await runningTurn(tester);
+    await scene.realWait(2200);
+    await scene.tester.pump(const Duration(seconds: 1));
+    final before = scene.timeSeconds!;
+    expect(before, greaterThanOrEqualTo(182), reason: 'Time шёл к 3:02');
+
+    await scene.ask();
+
+    expect(await scene.ticksIn(5), 0, reason: 'одобрение ждёт пользователя');
+    expect(
+      scene.timeSeconds,
+      greaterThanOrEqualTo(before),
+      reason: 'Time не возвращается к usedMs снимка (3:00)',
+    );
+    expect(scene.title, contains('This turn'));
+
+    await scene.close();
+  });
+
+  testWidgets('«Одобрение не откатывает время»: ответ возобновляет тик без '
+      'прыжка на длину ожидания', (tester) async {
+    final scene = await runningTurn(tester);
+    await scene.ask();
+    expect(await scene.ticksIn(2), 0);
+    final frozen = scene.timeSeconds!;
+
+    // Пользователь думает 2,5 с: время ожидания в Time попадать не должно.
+    await scene.realWait(2500);
+    await scene.respond();
+
+    expect(
+      scene.timeSeconds,
+      lessThanOrEqualTo(frozen + 1),
+      reason: 'без вычитания ожидания Time прыгнул бы на 2–3 с',
+    );
+    expect(
+      await scene.ticksIn(3),
+      greaterThanOrEqualTo(3),
+      reason: 'после ответа тик возобновляется',
+    );
+
+    // После ответа время снова идёт.
+    final resumed = scene.timeSeconds!;
+    await scene.realWait(1200);
+    await scene.tester.pump(const Duration(seconds: 1));
+    expect(scene.timeSeconds, greaterThan(resumed));
+
+    await scene.close();
+  });
+
+  testWidgets('«Одобрение субагента»: ожидающее одобрение потомка тик не '
+      'останавливает, Time идёт', (tester) async {
+    final scene = await runningTurn(tester);
+    await scene.ask(meta: subagentMeta());
+    final start = scene.timeSeconds!;
+
+    expect(
+      await scene.ticksIn(3),
+      greaterThanOrEqualTo(3),
+      reason: 'цикл корня время потомка считает',
+    );
+    await scene.realWait(1200);
+    await scene.tester.pump(const Duration(seconds: 1));
+
+    expect(scene.timeSeconds, greaterThan(start));
+
+    await scene.close();
+  });
+
+  testWidgets('«Одобрение субагента» при ожидании корня: тик стоит, пока '
+      'ждёт корень, и возвращается после его ответа', (tester) async {
+    final scene = await runningTurn(tester);
+    await scene.ask(rpcId: 101, meta: subagentMeta());
+    await scene.ask(rpcId: 102);
+
+    expect(await scene.ticksIn(3), 0);
+
+    await scene.respond(rpcId: 102);
+
+    expect(await scene.ticksIn(3), greaterThanOrEqualTo(3));
+
+    await scene.close();
+  });
+
+  testWidgets('«Отмена хода»: cancelling тикает до снимка `turn`, Time '
+      'идёт, а не стоит на `3:00`', (tester) async {
+    final scene = await runningTurn(tester);
+    await scene.cancel();
+
+    expect(scene.title, contains('This turn'));
+    expect(await scene.ticksIn(3), greaterThanOrEqualTo(3));
+    await scene.realWait(1200);
+    await scene.tester.pump(const Duration(seconds: 1));
+    expect(scene.timeSeconds, greaterThanOrEqualTo(181));
+
+    await scene.endTurn();
+    await scene.snapshot(
+      _snapshot(
+        seq: 2,
+        trigger: 'turn',
+        turnId: 'turn-1',
+        budget: _budgetJson(usedMs: 187000),
+      ),
+    );
+
+    expect(scene.title, contains('Last turn'));
+    expect(scene.time, contains('3:07 / 10:00'));
+    expect(await scene.ticksIn(3), 0, reason: 'после `turn` тика нет');
 
     await scene.close();
   });

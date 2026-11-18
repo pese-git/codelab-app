@@ -45,7 +45,14 @@ UsageTotals _totals(
   Money? cost,
   int steps = 1,
   Set<UsagePartial> partial = const {},
-}) => UsageTotals(tokens: tokens, cost: cost, steps: steps, partial: partial);
+  int? turns,
+}) => UsageTotals(
+  tokens: tokens,
+  cost: cost,
+  steps: steps,
+  partial: partial,
+  turns: turns,
+);
 
 UsageLedgerStep _step(
   int index, {
@@ -776,6 +783,483 @@ void main() {
       );
 
       expect(_card(d, 'input').approximate, isTrue);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Задача 1.3 change `fix-usage-pane-live-cards` (agent-workbench-ui «Панель
+  // Usage»; design.md D1, D2, D7, D8, Q1 (в), Q5 (а), Q6 (а)). Красные до
+  // 1.2 и 1.4: нужны `UsageTotals.turns` (kit, D2) и `UsagePaneData.statusHint`
+  // (D7); пока их нет, файл не компилируется.
+  // ---------------------------------------------------------------------------
+
+  group('источник карточек: свежий из двух (D1, Q1 (в))', () {
+    // Журнал и снимок различаются во всех четырёх карточках, поэтому по
+    // значению видно, из какого агрегата собрана карточка.
+    UsageTotals ledgerTotal() => _totals(
+      _tokens(500, 300, cacheRead: 400, cacheWrite: 50),
+      cost: _usd(1200000),
+      steps: 9,
+    );
+    UsageTotals liveTotal({int? turns = 2}) =>
+        _totals(_tokens(70, 30), cost: _usd(380), steps: 5, turns: turns);
+
+    UsagePaneData of({
+      required UsageLedgerState ledger,
+      UsageTotals? session,
+      int lastSeq = 5,
+    }) => _of(
+      _view(
+        ledger: ledger,
+        usage: UsageView(
+          support: UsageSupport.reported,
+          session: session,
+          lastSeq: lastSeq,
+        ),
+      ),
+    );
+
+    UsageLedgerView ledgerAt(int seq) =>
+        _ledger(seq: seq, total: ledgerTotal(), turnCount: 4);
+
+    void expectLedgerCards(UsagePaneData d) {
+      expect(_card(d, 'input').value, '950');
+      expect(_card(d, 'output').value, '300');
+      expect(_card(d, 'cost').value, r'$1.20');
+      expect(_card(d, 'turns').value, '4 · 9');
+    }
+
+    void expectLiveCards(UsagePaneData d) {
+      expect(_card(d, 'input').value, '70');
+      expect(_card(d, 'output').value, '30');
+      expect(_card(d, 'cost').value, r'$0.00038');
+      expect(_card(d, 'turns').value, '2 · 5');
+    }
+
+    test('ledger.seq равен usage.lastSeq — журнал', () {
+      expectLedgerCards(
+        of(ledger: UsageLedgerState.loaded(ledgerAt(5)), session: liveTotal()),
+      );
+    });
+
+    test('ledger.seq больше usage.lastSeq — журнал', () {
+      expectLedgerCards(
+        of(ledger: UsageLedgerState.loaded(ledgerAt(7)), session: liveTotal()),
+      );
+    });
+
+    test('ledger.seq меньше usage.lastSeq — живые снимки («Карточки во время '
+        'хода»)', () {
+      expectLiveCards(
+        of(ledger: UsageLedgerState.loaded(ledgerAt(4)), session: liveTotal()),
+      );
+    });
+
+    test('таблицы остаются на журнале, даже когда карточки — из снимков', () {
+      final d = of(
+        ledger: UsageLedgerState.loaded(
+          _ledger(
+            seq: 4,
+            total: ledgerTotal(),
+            turns: [UsageLedgerTurn(index: 1, total: _totals(_tokens(1, 1)))],
+          ),
+        ),
+        session: liveTotal(),
+      );
+
+      expectLiveCards(d);
+      expect(d.turns, hasLength(1));
+      expect(d.ledger?.seq, 4);
+      expect(d.canExport, isTrue);
+    });
+
+    test(
+      '«Карточки во время хода»: журнал seq 0 без шагов, снимок step с '
+      'seq 1 — Cost `\$0.00038`, Turns · steps `1 · 1`, без `price unknown`',
+      () {
+        final d = of(
+          ledger: UsageLedgerState.loaded(
+            _ledger(seq: 0, turnCount: 0, total: _totals(_none, steps: 0)),
+          ),
+          session: _totals(
+            _tokens(100, 20),
+            cost: _usd(380),
+            steps: 1,
+            turns: 1,
+          ),
+          lastSeq: 1,
+        );
+
+        expect(_card(d, 'cost').value, r'$0.00038');
+        expect(_card(d, 'cost').detail, isNull);
+        expect(_card(d, 'turns').value, '1 · 1');
+        expect(_card(d, 'turns').detail, 'avg 1.0 steps per turn');
+        expect(d.cards.map((c) => c.value), isNot(contains('0')));
+      },
+    );
+
+    test('без usage.session карточки — из журнала, каким бы старым он ни '
+        'был', () {
+      expectLedgerCards(
+        of(ledger: UsageLedgerState.loaded(ledgerAt(0)), lastSeq: 5),
+      );
+    });
+
+    test('«Карточки после ответа журнала»: loading с прежним журналом seq 0 '
+        'при lastSeq 3 — снимок, а не прежний журнал', () {
+      final d = of(
+        ledger: UsageLedgerState.loading(previous: ledgerAt(0)),
+        session: liveTotal(),
+        lastSeq: 3,
+      );
+
+      expectLiveCards(d);
+      expect(d.busy, isTrue);
+      expect(d.ledger?.seq, 0, reason: 'таблицы — прежний журнал');
+    });
+
+    test('«Карточки после ответа журнала»: журнал с seq 3 при lastSeq 3 — '
+        'total журнала', () {
+      expectLedgerCards(
+        of(
+          ledger: UsageLedgerState.loaded(ledgerAt(3)),
+          session: liveTotal(),
+          lastSeq: 3,
+        ),
+      );
+    });
+
+    test('loading с прежним журналом, который свеж (Rebuild при seq == '
+        'lastSeq) — журнал', () {
+      expectLedgerCards(
+        of(
+          ledger: UsageLedgerState.loading(previous: ledgerAt(5)),
+          session: liveTotal(),
+        ),
+      );
+    });
+
+    test('«Журнал отстал после сбоя»: failed с прежним журналом seq 5 при '
+        'lastSeq 9 — usage.session, таблицы — прежний журнал, заметка', () {
+      final d = of(
+        ledger: UsageLedgerState.failed(
+          const UsageLedgerFailure(
+            kind: UsageLedgerFailureKind.agentError,
+            code: -32603,
+          ),
+          previous: ledgerAt(5),
+        ),
+        session: liveTotal(),
+        lastSeq: 9,
+      );
+
+      expectLiveCards(d);
+      expect(d.notice, UsagePaneNotice.ledgerFailed);
+      expect(d.ledger?.seq, 5);
+      expect(d.turns, isEmpty, reason: 'у журнала теста нет ходов');
+    });
+
+    test('failed со свежим прежним журналом — журнал', () {
+      expectLedgerCards(
+        of(
+          ledger: UsageLedgerState.failed(
+            const UsageLedgerFailure(kind: UsageLedgerFailureKind.request),
+            previous: ledgerAt(9),
+          ),
+          session: liveTotal(),
+          lastSeq: 9,
+        ),
+      );
+    });
+
+    test('журнала для показа нет (idle, loading без прежнего, failed без '
+        'прежнего) — карточки из снимков', () {
+      for (final state in [
+        const UsageLedgerState.idle(),
+        const UsageLedgerState.loading(),
+        const UsageLedgerState.failed(
+          UsageLedgerFailure(kind: UsageLedgerFailureKind.request),
+        ),
+      ]) {
+        expectLiveCards(of(ledger: state, session: liveTotal()));
+      }
+    });
+
+    test('ни журнала, ни снимков — карточек нет', () {
+      expect(of(ledger: const UsageLedgerState.idle()).cards, isEmpty);
+      expect(of(ledger: const UsageLedgerState.unavailable()).cards, isEmpty);
+    });
+
+    test('в одной карточке числа одного агрегата: журнал и снимок не '
+        'складываются и не смешиваются', () {
+      final d = of(
+        ledger: UsageLedgerState.loaded(ledgerAt(4)),
+        session: liveTotal(),
+      );
+
+      // Ни одно значение карточек не равно сумме агрегатов и не взято у
+      // журнала (950 / 300 / `$1.20` / `4 · 9`).
+      expect(_card(d, 'input').value, isNot('1.0k'));
+      expect(_card(d, 'input').value, isNot('950'));
+      expect(_card(d, 'output').value, isNot('300'));
+      expect(_card(d, 'cost').value, isNot(r'$1.20'));
+      expect(_card(d, 'turns').value, isNot('4 · 9'));
+      expectLiveCards(d);
+    });
+
+    test('Cost из снимка с причиной неполноты — «~» и тон по правилу '
+        'агрегата, а не журнала', () {
+      final d = of(
+        ledger: UsageLedgerState.loaded(ledgerAt(4)),
+        session: _totals(
+          _tokens(70, 30),
+          cost: _usd(2260000),
+          steps: 5,
+          partial: {UsagePartial.noUsage},
+          turns: 2,
+        ),
+      );
+
+      expect(_card(d, 'cost').value, r'~$2.26');
+      expect(_card(d, 'cost').approximate, isTrue);
+      expect(_card(d, 'cost').detail, 'agent sent no usage for some steps');
+    });
+  });
+
+  group('Turns · steps из снимка (D2; «Агент без журнала»)', () {
+    UsagePaneData live(UsageTotals session) => _of(
+      _view(
+        usage: UsageView(
+          support: UsageSupport.reported,
+          session: session,
+          lastSeq: 4,
+        ),
+      ),
+    );
+
+    test('turns 2 и steps 5 — `2 · 5` и `avg 2.5 steps per turn`', () {
+      final d = live(_totals(_tokens(10, 5), steps: 5, turns: 2));
+
+      expect(_card(d, 'turns').value, '2 · 5');
+      expect(_card(d, 'turns').detail, 'avg 2.5 steps per turn');
+    });
+
+    test('среднее — в целых десятых, половина вверх (как у журнала)', () {
+      expect(
+        _card(live(_totals(_tokens(1, 1), steps: 7, turns: 4)), 'turns').detail,
+        'avg 1.8 steps per turn',
+      );
+    });
+
+    test('без turns в снимке — только шаги и без среднего', () {
+      final d = live(_totals(_tokens(10, 5), steps: 5));
+
+      expect(_card(d, 'turns').value, '5');
+      expect(_card(d, 'turns').detail, isNull);
+    });
+
+    test('turns 0 — ходы показаны, среднего нет', () {
+      final d = live(_totals(_tokens(0, 0), steps: 0, turns: 0));
+
+      expect(_card(d, 'turns').value, '0 · 0');
+      expect(_card(d, 'turns').detail, isNull);
+    });
+  });
+
+  group('Cost пустой сессии (D8, Q6 (а); «Пустая сессия»)', () {
+    UsagePaneData emptyOf(UsageTotals total, {bool ledger = true}) => _of(
+      ledger
+          ? _view(
+              ledger: UsageLedgerState.loaded(
+                _ledger(turnCount: 0, total: total),
+              ),
+            )
+          : _view(
+              usage: UsageView(
+                support: UsageSupport.reported,
+                session: total,
+                lastSeq: 1,
+              ),
+            ),
+    );
+
+    test('агрегат без шагов, токены нули, без cost и partial: `—` и '
+        '`no usage yet`, без тона', () {
+      for (final ledger in [true, false]) {
+        final d = emptyOf(_totals(_none, steps: 0), ledger: ledger);
+
+        expect(_card(d, 'cost').value, '—', reason: 'ledger=$ledger');
+        expect(_card(d, 'cost').detail, 'no usage yet');
+        expect(_card(d, 'cost').approximate, isFalse);
+      }
+    });
+
+    test('`price unknown` и `\$0.00` у пустой сессии не показываются', () {
+      final d = emptyOf(_totals(_none, steps: 0));
+
+      for (final card in d.cards) {
+        expect(card.value, isNot(r'$0.00'));
+        expect('${card.detail}', isNot(contains('price unknown')));
+      }
+    });
+
+    test('Input, Output и Turns · steps пустой сессии — известные нули', () {
+      final d = emptyOf(_totals(_none, steps: 0));
+
+      expect(_card(d, 'input').value, '0');
+      expect(_card(d, 'output').value, '0');
+      expect(_card(d, 'turns').value, '0 · 0');
+      expect(_card(d, 'turns').detail, isNull);
+    });
+
+    test('нулевые шаги с причиной noUsage — прежнее правило: `—` и текст '
+        'причины', () {
+      final d = emptyOf(
+        _totals(_none, steps: 0, partial: {UsagePartial.noUsage}),
+      );
+
+      expect(_card(d, 'cost').value, '—');
+      expect(_card(d, 'cost').detail, 'agent sent no usage for some steps');
+    });
+
+    test('нулевые шаги, но токены ненулевые — прежнее правило `price '
+        'unknown`', () {
+      for (final tokens in [
+        _tokens(1, 0),
+        _tokens(0, 1),
+        _tokens(0, 0, cacheRead: 1),
+        _tokens(0, 0, cacheWrite: 1),
+      ]) {
+        final d = emptyOf(_totals(tokens, steps: 0));
+
+        expect(_card(d, 'cost').value, '—');
+        expect(_card(d, 'cost').detail, 'price unknown');
+      }
+    });
+
+    test('шаги есть, токены нули, цены нет — `price unknown`, не `no usage '
+        'yet`', () {
+      final d = emptyOf(_totals(_none, steps: 1));
+
+      expect(_card(d, 'cost').detail, 'price unknown');
+    });
+
+    test('известная стоимость пустого по токенам агрегата показывается как '
+        'есть', () {
+      final d = emptyOf(_totals(_none, cost: _usd(0), steps: 0));
+
+      expect(_card(d, 'cost').value, r'$0.00');
+      expect(_card(d, 'cost').detail, isNull);
+    });
+  });
+
+  group('строка состояния и подсказка (D7, Q5 (а); «Журнал пересобран после '
+      'хода», «Rebuild from log»)', () {
+    UsagePaneData of(UsageLedgerView ledger) =>
+        _of(_view(ledger: UsageLedgerState.loaded(ledger)));
+
+    UsageLedgerView rebuilt(String? reason, {int? records = 12}) => _ledger(
+      status: UsageLedgerStatus.rebuilt,
+      reason: reason,
+      records: records,
+    );
+
+    test('rebuilt со stale — как upToDate, причина в подсказке', () {
+      final d = of(rebuilt('stale'));
+
+      expect(d.statusLine, 'Ledger: up to date · 12 records');
+      expect(d.statusHint, 'refreshed from the session journal (stale)');
+    });
+
+    test('rebuilt с missing — как upToDate, причина в подсказке', () {
+      final d = of(rebuilt('missing'));
+
+      expect(d.statusLine, 'Ledger: up to date · 12 records');
+      expect(d.statusHint, 'refreshed from the session journal (missing)');
+    });
+
+    test('stale без числа записей — строка без хвоста, подсказка есть', () {
+      final d = of(rebuilt('stale', records: null));
+
+      expect(d.statusLine, 'Ledger: up to date');
+      expect(d.statusHint, 'refreshed from the session journal (stale)');
+    });
+
+    test('rebuilt с invalid и explicit — видны, без подсказки', () {
+      for (final reason in ['invalid', 'explicit']) {
+        final d = of(rebuilt(reason));
+
+        expect(d.statusLine, 'rebuilt from journal ($reason) · 12 records');
+        expect(d.statusHint, isNull, reason: reason);
+      }
+    });
+
+    test('rebuilt с незнакомой причиной или без неё — как invalid, без '
+        'подсказки', () {
+      final unknown = of(rebuilt('disk-full'));
+      final none = of(rebuilt(null));
+
+      expect(
+        unknown.statusLine,
+        'rebuilt from journal (disk-full) · 12 records',
+      );
+      expect(unknown.statusHint, isNull);
+      expect(none.statusLine, 'rebuilt from journal · 12 records');
+      expect(none.statusHint, isNull);
+    });
+
+    test(
+      'upToDate, inMemory, notSaved и отсутствие статуса — без подсказки',
+      () {
+        for (final status in [
+          UsageLedgerStatus.upToDate,
+          UsageLedgerStatus.inMemory,
+          UsageLedgerStatus.notSaved,
+          null,
+        ]) {
+          expect(
+            of(_ledger(status: status, reason: 'stale', records: 3)).statusHint,
+            isNull,
+            reason: '$status',
+          );
+        }
+      },
+    );
+
+    test(
+      'подсказка не мешает прежним текстам: upToDate, inMemory, notSaved',
+      () {
+        expect(
+          of(
+            _ledger(status: UsageLedgerStatus.upToDate, records: 1),
+          ).statusLine,
+          'Ledger: up to date · 1 record',
+        );
+        expect(
+          of(_ledger(status: UsageLedgerStatus.inMemory)).statusLine,
+          'in memory',
+        );
+        expect(
+          of(_ledger(status: UsageLedgerStatus.notSaved)).statusLine,
+          'not saved',
+        );
+      },
+    );
+
+    test('журнала для показа нет — ни строки, ни подсказки', () {
+      final d = _of(_view(ledger: const UsageLedgerState.loading()));
+
+      expect(d.statusLine, isNull);
+      expect(d.statusHint, isNull);
+    });
+
+    test('прежний журнал при loading сохраняет строку и подсказку', () {
+      final d = _of(
+        _view(ledger: UsageLedgerState.loading(previous: rebuilt('stale'))),
+      );
+
+      expect(d.statusLine, 'Ledger: up to date · 12 records');
+      expect(d.statusHint, 'refreshed from the session journal (stale)');
     });
   });
 }
