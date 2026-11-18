@@ -1,6 +1,6 @@
 # ADR-0003: Build the CodeLab site with Astro in `site/` of the monorepo
 
-Status: Proposed
+Status: Accepted
 
 Date: 2026-11-17
 
@@ -180,7 +180,7 @@ SVG готов в HTML, JavaScript не нужен.
 
 ### OpenSpec
 
-* `openspec/changes/add-astro-site/`
+* `openspec/changes/archive/2026-11-18-add-astro-site/`
 
 ### ADR
 

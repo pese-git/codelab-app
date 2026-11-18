@@ -1153,7 +1153,7 @@ Architecture Decision Record требуется при значимом изме
 
 ## 28. Сайт `site/`: Astro, Node и npm
 
-**Статус: предложено** (ADR-0003, `Proposed` до одобрения change пользователем; 2026-11-17). Реализация — change [`add-astro-site`](../../openspec/changes/add-astro-site/design.md).
+**Статус: утверждено.** ADR-0003 принят 2026-11-18 после одобрения и реализации change [`add-astro-site`](../../openspec/changes/archive/2026-11-18-add-astro-site/design.md) (PR #363).
 
 1. **Назначение.** Статический сайт-визитка CodeLab: главная, возможности трёх продуктов, установка, документация, новости выпусков. Документация читается из репозитория на месте (content collections Astro), а не копируется.
 2. **Где.** Только каталог `site/` и джоб `site` в `.github/workflows/ci.yml`. Версия Node — `site/.nvmrc`, зависимости — `site/package.json` с точными версиями и закоммиченный `site/package-lock.json`; установка — `npm ci`.

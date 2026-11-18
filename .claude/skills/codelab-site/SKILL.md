@@ -5,7 +5,7 @@ description: Стандарт сайта CodeLab на Astro в site/ — раз�
 
 # Сайт CodeLab
 
-Сайт — статический Astro-проект в `site/` (ADR-0003, `docs/architecture/adr/0003-build-project-site-with-astro-in-monorepo.md`). Решения и их обоснование — `openspec/changes/add-astro-site/design.md` (после архивирования — `openspec/changes/archive/*-add-astro-site/`) и спецификация `project-site`. Этот skill — рабочие правила; при расхождении с design.md правда за design.md, а skill исправляется.
+Сайт — статический Astro-проект в `site/` (ADR-0003, `docs/architecture/adr/0003-build-project-site-with-astro-in-monorepo.md`). Решения и их обоснование — `openspec/changes/archive/2026-11-18-add-astro-site/design.md` (после архивирования — `openspec/changes/archive/*-add-astro-site/`) и спецификация `project-site`. Этот skill — рабочие правила; при расхождении с design.md правда за design.md, а skill исправляется.
 
 Язык текстов и проверка фактов — по `.claude/skills/codelab-docs/SKILL.md` §4 и §8. Здесь они не пересказываются.
 
