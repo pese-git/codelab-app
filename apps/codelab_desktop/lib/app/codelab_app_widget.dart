@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../l10n/l10n.dart';
 import '../features/settings/presentation/settings_shell.dart';
 import '../features/workbench/application/shell_cubit.dart';
 import '../features/workbench/presentation/widgets/restart_confirmation_dialog.dart';
@@ -43,6 +44,11 @@ class CodeLabApp extends StatelessWidget {
       ],
       child: FluentApp(
         title: 'CodeLab',
+        // Делегаты app и Fluent; язык приложения подключается в 1.5/1.6
+        // (add-desktop-localization, D2). До тех пор locale берётся системный
+        // и сводится к en/ru, иначе en.
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: _CodeLabHome(startOnLaunch: startOnLaunch),
       ),
     );

@@ -1,0 +1,27 @@
+{
+  "@@locale": "en",
+  "settingsPageGeneralTitle": "General",
+  "@settingsPageGeneralTitle": {
+    "description": "Заголовок страницы настроек General и пункта навигации."
+  },
+  "settingsLanguageTitle": "Language",
+  "@settingsLanguageTitle": {
+    "description": "Подпись строки выбора языка интерфейса на странице General."
+  },
+  "settingsLanguageSystem": "System",
+  "@settingsLanguageSystem": {
+    "description": "Значение выбора языка: язык системы."
+  },
+  "settingsLanguageEnglish": "English",
+  "@settingsLanguageEnglish": {
+    "description": "Значение выбора языка: английский. Эндоним, не переводить."
+  },
+  "settingsLanguageRussian": "Русский",
+  "@settingsLanguageRussian": {
+    "description": "Значение выбора языка: русский. Эндоним, не переводить."
+  },
+  "settingsLanguageSaveFailed": "Couldn't save the language. CodeLab will use the previous language after restart.",
+  "@settingsLanguageSaveFailed": {
+    "description": "Ошибка на странице General, когда выбранный язык не удалось записать в хранилище. CodeLab — название продукта, не переводить."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "@@locale": "ru",
+  "settingsPageGeneralTitle": "Общие",
+  "settingsLanguageTitle": "Язык",
+  "settingsLanguageSystem": "Системный",
+  "settingsLanguageEnglish": "English",
+  "settingsLanguageRussian": "Русский",
+  "settingsLanguageSaveFailed": "Не удалось сохранить язык. После перезапуска CodeLab будет использовать прежний язык."
+}

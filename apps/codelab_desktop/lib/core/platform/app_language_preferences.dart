@@ -12,28 +12,48 @@ enum AppLanguagePreference { system, en, ru }
 
 /// Порт хранения выбранного языка интерфейса.
 ///
-/// ЗАГЛУШКА красного теста задачи 1.1: реализация — задача 1.2
-/// (`add-desktop-localization`, D2).
+/// Почему отдельный порт: язык — настройка app, а не профиля и не агента, поэтому
+/// `config.yaml` и `profiles.json` не трогаются (add-desktop-localization, D2;
+/// образец — `ConnectionPreferences`).
+///
+/// Как использовать: `load` читает значение до `runApp`; `save(system)`
+/// удаляет ключ. Ошибки хранилища порт не скрывает — вызывающий
+/// (`AppLanguageCubit`) выставляет `saveFailed`.
 abstract interface class AppLanguagePreferences {
   Future<AppLanguagePreference> load();
 
   Future<void> save(AppLanguagePreference preference);
 }
 
-/// [AppLanguagePreferences] в `shared_preferences` (заглушка до задачи 1.2).
+/// [AppLanguagePreferences] в `shared_preferences` под ключом
+/// [kAppLanguageKey].
+///
+/// Незнакомое сохранённое значение читается как `system` и НЕ
+/// перезаписывается: данные пользователя не портятся молча (`AGENTS.md` §2).
 final class SharedPreferencesAppLanguagePreferences
     implements AppLanguagePreferences {
   const SharedPreferencesAppLanguagePreferences();
 
   @override
   Future<AppLanguagePreference> load() async {
-    // Заглушка: чтобы тест падал по делу, а не по компиляции.
-    await SharedPreferences.getInstance();
-    throw UnimplementedError('add-desktop-localization 1.2');
+    final prefs = await SharedPreferences.getInstance();
+    return switch (prefs.getString(kAppLanguageKey)) {
+      'en' => AppLanguagePreference.en,
+      'ru' => AppLanguagePreference.ru,
+      _ => AppLanguagePreference.system,
+    };
   }
 
   @override
   Future<void> save(AppLanguagePreference preference) async {
-    throw UnimplementedError('add-desktop-localization 1.2');
+    final prefs = await SharedPreferences.getInstance();
+    switch (preference) {
+      case AppLanguagePreference.system:
+        await prefs.remove(kAppLanguageKey);
+      case AppLanguagePreference.en:
+        await prefs.setString(kAppLanguageKey, 'en');
+      case AppLanguagePreference.ru:
+        await prefs.setString(kAppLanguageKey, 'ru');
+    }
   }
 }
