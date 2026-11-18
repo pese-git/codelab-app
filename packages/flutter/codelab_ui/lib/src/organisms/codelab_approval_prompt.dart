@@ -1,6 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/codelab_localizations.dart';
+import '../l10n/strings.dart';
 import '../molecules/molecules.dart';
 
 /// Риск действия, о котором агент спрашивает разрешения; его определяет
@@ -22,7 +24,17 @@ enum CodeLabApprovalRisk {
 
 /// Подпись и тон тега риска в шапке строки вызова (change
 /// `lighten-approval-block`, D6).
+///
+/// Подпись — пара «риск — текст» внутри кита (D4): на экране её показывает
+/// [labelOf] на языке интерфейса, а [label] — английский эталон из
+/// спецификаций без контекста (тесты, диагностика). Метка security (D14):
+/// перевод не смягчает смысл риска.
 extension CodeLabApprovalRiskTag on CodeLabApprovalRisk {
+  /// Английская подпись без контекста; в UI используется [labelOf].
+  ///
+  /// Независимый switch по литералам, а не чтение каталога: это эталон
+  /// спецификаций, с которым `codelab_l10n_en_reference_test.dart` сверяет
+  /// английский каталог. Читай он каталог, тест был бы тавтологией.
   String get label => switch (this) {
     CodeLabApprovalRisk.readOnly => 'Read-only',
     CodeLabApprovalRisk.unknown => 'Unknown risk',
@@ -30,6 +42,18 @@ extension CodeLabApprovalRiskTag on CodeLabApprovalRisk {
     CodeLabApprovalRisk.network => 'Network',
     CodeLabApprovalRisk.shell => 'Shell',
     CodeLabApprovalRisk.destructive => 'Destructive',
+  };
+
+  /// Подпись риска на языке интерфейса; без делегата кита — английская.
+  String labelOf(BuildContext context) => _labelIn(codeLabStringsOf(context));
+
+  String _labelIn(CodeLabLocalizations strings) => switch (this) {
+    CodeLabApprovalRisk.readOnly => strings.codeLabRiskReadOnly,
+    CodeLabApprovalRisk.unknown => strings.codeLabRiskUnknown,
+    CodeLabApprovalRisk.localWrite => strings.codeLabRiskLocalWrite,
+    CodeLabApprovalRisk.network => strings.codeLabRiskNetwork,
+    CodeLabApprovalRisk.shell => strings.codeLabRiskShell,
+    CodeLabApprovalRisk.destructive => strings.codeLabRiskDestructive,
   };
 
   CodeLabTone get tone => switch (this) {
@@ -84,8 +108,13 @@ class CodeLabApprovalPrompt extends StatefulWidget {
   static const viewRawInputKey = ValueKey('approval-view-raw-input');
   static const rawInputKey = ValueKey('approval-raw-input');
 
-  /// Подпись недоступной кнопки, когда у агента нет варианта для выбранного
-  /// охвата.
+  /// Английский эталон подсказки недоступной кнопки, когда у агента нет
+  /// варианта для выбранного охвата.
+  ///
+  /// Почему константа осталась: на неё ссылаются тесты и спецификации. На
+  /// экране текст берётся из каталога (`codeLabApprovalNoSuchOption`, метка
+  /// security, D14) и в `en` совпадает с этой константой; расхождение ловит
+  /// `codelab_l10n_en_reference_test.dart`.
   static const noSuchOption = 'The agent offers no such option';
 
   final List<CodeLabApprovalOption> options;
@@ -142,11 +171,12 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
         ? shortcuts.labelFor(optionId)
         : null;
 
+    final strings = codeLabStringsOf(context);
     final allow = _DecisionButton(
       key: CodeLabApprovalPrompt.allowKey,
       icon: FluentIcons.check_mark,
       tone: CodeLabTone.success,
-      label: 'Allow',
+      label: strings.codeLabApprovalAllow,
       shortcut: hint(allowId),
       unavailable: allowId == null,
       onPressed: _onPressed(allowId),
@@ -155,7 +185,7 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
       key: CodeLabApprovalPrompt.rejectKey,
       icon: FluentIcons.cancel,
       tone: CodeLabTone.danger,
-      label: 'Reject',
+      label: strings.codeLabApprovalReject,
       shortcut: hint(rejectId),
       unavailable: rejectId == null,
       onPressed: _onPressed(rejectId),
@@ -163,9 +193,11 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
     final viewRawInput = rawInput == null
         ? null
         : Tooltip(
-            message: _rawInputShown ? 'Hide raw input' : 'View raw input',
+            message: _rawInputShown
+                ? strings.codeLabApprovalHideRawInput
+                : strings.codeLabApprovalViewRawInput,
             child: Semantics(
-              label: 'View raw input',
+              label: strings.codeLabApprovalViewRawInput,
               child: IconButton(
                 key: CodeLabApprovalPrompt.viewRawInputKey,
                 icon: const Icon(FluentIcons.code, size: 14),
@@ -266,7 +298,7 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
       return Padding(
         key: CodeLabApprovalPrompt.scopeKey,
         padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: CodeLabText(_scopeLabel(scope), color: muted),
+        child: CodeLabText(_scopeLabel(context, scope), color: muted),
       );
     }
     final alwaysNames = [
@@ -277,10 +309,10 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
     ];
     return DropDownButton(
       key: CodeLabApprovalPrompt.scopeKey,
-      title: CodeLabText(_scopeLabel(scope), color: muted),
+      title: CodeLabText(_scopeLabel(context, scope), color: muted),
       items: [
         MenuFlyoutItem(
-          text: Text(_scopeLabel(_Scope.once)),
+          text: Text(_scopeLabel(context, _Scope.once)),
           selected: scope == _Scope.once,
           onPressed: () => setState(() => _chosenScope = _Scope.once),
         ),
@@ -291,7 +323,7 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_scopeLabel(_Scope.always)),
+              Text(_scopeLabel(context, _Scope.always)),
               for (final name in alwaysNames)
                 CodeLabText(name, role: CodeLabTextRole.caption, color: muted),
             ],
@@ -303,10 +335,13 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
     );
   }
 
-  static String _scopeLabel(_Scope scope) => switch (scope) {
-    _Scope.once => 'Only this time',
-    _Scope.always => 'Always',
-  };
+  static String _scopeLabel(BuildContext context, _Scope scope) {
+    final strings = codeLabStringsOf(context);
+    return switch (scope) {
+      _Scope.once => strings.codeLabApprovalScopeOnce,
+      _Scope.always => strings.codeLabApprovalScopeAlways,
+    };
+  }
 
   VoidCallback? _onPressed(String? optionId) =>
       widget.enabled && optionId != null ? () => _select(optionId) : null;
@@ -390,6 +425,9 @@ class _DecisionButton extends StatelessWidget {
     if (!unavailable) {
       return button;
     }
-    return Tooltip(message: CodeLabApprovalPrompt.noSuchOption, child: button);
+    return Tooltip(
+      message: codeLabStringsOf(context).codeLabApprovalNoSuchOption,
+      child: button,
+    );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import 'codelab_view_mode.dart';
 
 enum CodeLabToolCallStatus { queued, running, succeeded, failed, cancelled }
@@ -31,16 +32,16 @@ class CodeLabToolCallSummary extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: viewMode == CodeLabViewMode.verbose
-            ? _buildVerbose()
-            : _buildCompact(),
+            ? _buildVerbose(context)
+            : _buildCompact(context),
       ),
     );
   }
 
-  Widget _buildCompact() {
+  Widget _buildCompact(BuildContext context) {
     return Row(
       children: [
-        CodeLabStatusIndicator(label: _statusLabel, tone: _statusTone),
+        CodeLabStatusIndicator(label: _statusLabel(context), tone: _statusTone),
         const SizedBox(width: 10),
         Expanded(
           child: CodeLabText(
@@ -65,13 +66,16 @@ class CodeLabToolCallSummary extends StatelessWidget {
     );
   }
 
-  Widget _buildVerbose() {
+  Widget _buildVerbose(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            CodeLabStatusIndicator(label: _statusLabel, tone: _statusTone),
+            CodeLabStatusIndicator(
+              label: _statusLabel(context),
+              tone: _statusTone,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: CodeLabText(
@@ -113,13 +117,14 @@ class CodeLabToolCallSummary extends StatelessWidget {
     return '$name - $target';
   }
 
-  String get _statusLabel {
+  String _statusLabel(BuildContext context) {
+    final strings = codeLabStringsOf(context);
     return switch (status) {
-      CodeLabToolCallStatus.queued => 'Queued',
-      CodeLabToolCallStatus.running => 'Running',
-      CodeLabToolCallStatus.succeeded => 'Done',
-      CodeLabToolCallStatus.failed => 'Failed',
-      CodeLabToolCallStatus.cancelled => 'Cancelled',
+      CodeLabToolCallStatus.queued => strings.codeLabCallQueued,
+      CodeLabToolCallStatus.running => strings.codeLabCallRunning,
+      CodeLabToolCallStatus.succeeded => strings.codeLabCallDone,
+      CodeLabToolCallStatus.failed => strings.codeLabCallFailed,
+      CodeLabToolCallStatus.cancelled => strings.codeLabCallCancelled,
     };
   }
 

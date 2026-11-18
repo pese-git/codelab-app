@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import '../molecules/molecules.dart';
 import '../rendering/rendering.dart';
 import 'codelab_tool_call_tile.dart';
@@ -74,7 +75,7 @@ class CodeLabTranscriptPanel extends StatefulWidget {
     required this.rows,
     this.expansionOverrides = const {},
     this.onExpansionChanged,
-    this.emptyLabel = 'No transcript yet',
+    this.emptyLabel,
     this.viewMode = CodeLabViewMode.normal,
     this.showRequest,
     this.onShowRequestDone,
@@ -106,7 +107,10 @@ class CodeLabTranscriptPanel extends StatefulWidget {
   final List<CodeLabTranscriptRow> rows;
   final Map<String, bool> expansionOverrides;
   final ValueChanged<({String rowId, bool expanded})>? onExpansionChanged;
-  final String emptyLabel;
+
+  /// Текст пустой ленты; `null` — текст кита («No transcript yet»,
+  /// `add-desktop-localization`, D4).
+  final String? emptyLabel;
   final CodeLabViewMode viewMode;
 
   @override
@@ -488,7 +492,11 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: CodeLabText(widget.emptyLabel, role: CodeLabTextRole.caption),
+          child: CodeLabText(
+            widget.emptyLabel ??
+                codeLabStringsOf(context).codeLabTranscriptEmpty,
+            role: CodeLabTextRole.caption,
+          ),
         ),
       );
     }

@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import '../molecules/molecules.dart';
 
 /// App bar рабочего места: название, поиск палитры, переключатели панелей,
@@ -92,7 +93,9 @@ class CodeLabAppBar extends StatelessWidget {
               const SizedBox(width: 12),
               if (minimal)
                 Tooltip(
-                  message: 'Search or run a command ($searchShortcutLabel)',
+                  message: codeLabStringsOf(
+                    context,
+                  ).codeLabAppBarSearchTooltip(searchShortcutLabel),
                   child: IconButton(
                     key: searchKey,
                     icon: const Icon(FluentIcons.search, size: 14),
@@ -164,8 +167,9 @@ class _PaneToggleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final title = toolPaneTitleOf(context, toggle.pane);
     return Tooltip(
-      message: toggle.pane.label,
+      message: title,
       child: ToggleButton(
         key: CodeLabAppBar.toggleKey(toggle.pane),
         checked: toggle.selected,
@@ -176,10 +180,7 @@ class _PaneToggleButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(toggle.pane.icon, size: 14),
-            if (showLabel) ...[
-              const SizedBox(width: 6),
-              Text(toggle.pane.label),
-            ],
+            if (showLabel) ...[const SizedBox(width: 6), Text(title)],
           ],
         ),
       ),
@@ -210,9 +211,9 @@ class _SearchField extends StatelessWidget {
       onPressed: onPressed,
       child: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: CodeLabText(
-              'Search or run a command',
+              codeLabStringsOf(context).codeLabAppBarSearch,
               role: CodeLabTextRole.caption,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -251,29 +252,30 @@ class _ConnectionBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = codeLabStringsOf(context);
     final (label, tone) = switch (status) {
       CodeLabConnectionStatus.connected => (
-        'Connected',
+        strings.codeLabConnectionConnected,
         CodeLabStatusTone.active,
       ),
       CodeLabConnectionStatus.connecting => (
-        'Connecting…',
+        strings.codeLabAppBarConnecting,
         CodeLabStatusTone.warning,
       ),
       CodeLabConnectionStatus.reconnecting => (
-        'Reconnecting…',
+        strings.codeLabAppBarReconnecting,
         CodeLabStatusTone.warning,
       ),
       CodeLabConnectionStatus.lost => (
-        'Connection lost',
+        strings.codeLabConnectionLost,
         CodeLabStatusTone.danger,
       ),
       CodeLabConnectionStatus.failed => (
-        'Connection failed',
+        strings.codeLabAppBarConnectionFailed,
         CodeLabStatusTone.danger,
       ),
       CodeLabConnectionStatus.idle || CodeLabConnectionStatus.disconnected => (
-        'Disconnected',
+        strings.codeLabConnectionDisconnected,
         CodeLabStatusTone.idle,
       ),
     };
@@ -326,7 +328,7 @@ class _ConnectionBadge extends StatelessWidget {
           Button(
             key: CodeLabAppBar.connectionRetryKey,
             onPressed: onRetry,
-            child: const Text('Retry'),
+            child: Text(strings.codeLabActionRetry),
           ),
         ],
         if (canConnect && onConnect != null) ...[
@@ -334,7 +336,7 @@ class _ConnectionBadge extends StatelessWidget {
           FilledButton(
             key: CodeLabAppBar.connectionConnectKey,
             onPressed: onConnect,
-            child: const Text('Connect'),
+            child: Text(strings.codeLabActionConnect),
           ),
         ],
       ],

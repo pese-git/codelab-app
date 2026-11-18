@@ -2,6 +2,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
 import '../atomics/codelab_pressable.dart';
+import '../l10n/codelab_localizations.dart';
+import '../l10n/strings.dart';
 import '../rendering/escape_for_display.dart';
 import 'codelab_compact_call_line.dart';
 import 'codelab_tool_call_tile.dart';
@@ -141,13 +143,15 @@ class CodeLabAgentsPane extends StatelessWidget {
   final ValueChanged<String>? onShowInTranscript;
 
   /// Заголовок со счётчиками: нули опускаются, порядок задаёт перечисление
-  /// [CodeLabAgentRowState].
-  String get _header {
+  /// [CodeLabAgentRowState]. Счётчик — отдельное сообщение каталога с ICU
+  /// `plural`, а не склейка числа и слова (D8).
+  String _header(BuildContext context) {
+    final strings = codeLabStringsOf(context);
     final parts = [
       for (final state in CodeLabAgentRowState.values)
-        if ((counts[state] ?? 0) > 0) '${counts[state]} ${state.word}',
+        if ((counts[state] ?? 0) > 0) state.countLabel(strings, counts[state]!),
     ];
-    return ['Subagents', ...parts].join(' · ');
+    return [strings.codeLabAgentsTitle, ...parts].join(' · ');
   }
 
   @override
@@ -157,7 +161,7 @@ class CodeLabAgentsPane extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: CodeLabText(_header, role: CodeLabTextRole.strong),
+          child: CodeLabText(_header(context), role: CodeLabTextRole.strong),
         ),
         Expanded(
           child: SingleChildScrollView(
@@ -188,13 +192,26 @@ class CodeLabAgentsPane extends StatelessWidget {
 }
 
 extension on CodeLabAgentRowState {
-  /// Слово состояния: и в заголовке, и в строке (смысл не только цветом).
-  String get word => switch (this) {
-    CodeLabAgentRowState.running => 'running',
-    CodeLabAgentRowState.waitingForApproval => 'waiting for approval',
-    CodeLabAgentRowState.done => 'done',
-    CodeLabAgentRowState.failed => 'failed',
-    CodeLabAgentRowState.cancelled => 'cancelled',
+  /// Слово состояния в строке (смысл не только цветом).
+  String word(CodeLabLocalizations strings) => switch (this) {
+    CodeLabAgentRowState.running => strings.codeLabAgentsStateRunning,
+    CodeLabAgentRowState.waitingForApproval =>
+      strings.codeLabAgentsStateWaiting,
+    CodeLabAgentRowState.done => strings.codeLabAgentsStateDone,
+    CodeLabAgentRowState.failed => strings.codeLabAgentsStateFailed,
+    CodeLabAgentRowState.cancelled => strings.codeLabAgentsStateCancelled,
+  };
+
+  /// Счётчик состояния для заголовка: «2 running», «2 выполняются».
+  String countLabel(CodeLabLocalizations strings, int count) => switch (this) {
+    CodeLabAgentRowState.running => strings.codeLabAgentsCountRunning(count),
+    CodeLabAgentRowState.waitingForApproval =>
+      strings.codeLabAgentsCountWaiting(count),
+    CodeLabAgentRowState.done => strings.codeLabAgentsCountDone(count),
+    CodeLabAgentRowState.failed => strings.codeLabAgentsCountFailed(count),
+    CodeLabAgentRowState.cancelled => strings.codeLabAgentsCountCancelled(
+      count,
+    ),
   };
 
   CodeLabTone get tone => switch (this) {
@@ -277,7 +294,7 @@ class _AgentRowView extends StatelessWidget {
                       // (у бейджа ellipsis), а не вылезает за строку.
                       Flexible(
                         child: CodeLabBadge(
-                          label: row.state.word,
+                          label: row.state.word(codeLabStringsOf(context)),
                           tone: row.state.tone,
                         ),
                       ),
@@ -313,14 +330,18 @@ class _AgentRowView extends StatelessWidget {
                       if (row.state == CodeLabAgentRowState.waitingForApproval)
                         _ActionLink(
                           key: CodeLabAgentsPane.goToApprovalKey(row.id),
-                          label: 'Go to approval',
+                          label: codeLabStringsOf(
+                            context,
+                          ).codeLabActionGoToApproval,
                           onPressed: onGoToApproval == null
                               ? null
                               : () => onGoToApproval!(row.id),
                         ),
                       _ActionLink(
                         key: CodeLabAgentsPane.showInTranscriptKey(row.id),
-                        label: 'Show in transcript',
+                        label: codeLabStringsOf(
+                          context,
+                        ).codeLabActionShowInTranscript,
                         onPressed: onShowInTranscript == null
                             ? null
                             : () => onShowInTranscript!(row.id),
@@ -426,13 +447,17 @@ class _StepsTree extends StatelessWidget {
                       spacing: 8,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        const CodeLabBadge(
-                          label: 'Awaiting approval',
+                        CodeLabBadge(
+                          label: codeLabStringsOf(
+                            context,
+                          ).codeLabApprovalAwaiting,
                           tone: CodeLabTone.accent,
                         ),
                         _ActionLink(
                           key: CodeLabAgentsPane.stepGoToApprovalKey(call.id),
-                          label: 'Go to approval',
+                          label: codeLabStringsOf(
+                            context,
+                          ).codeLabActionGoToApproval,
                           onPressed: onGoToApproval == null
                               ? null
                               : () => onGoToApproval!(call.id),
@@ -469,7 +494,10 @@ class _StepsTree extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const CodeLabText('Steps', role: CodeLabTextRole.caption),
+          CodeLabText(
+            codeLabStringsOf(context).codeLabAgentsSteps,
+            role: CodeLabTextRole.caption,
+          ),
           const SizedBox(height: 4),
           ...lines,
         ],

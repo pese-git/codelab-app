@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 
 /// Вид строки дерева файлов.
 ///
@@ -267,7 +268,7 @@ class _FileTreeRow extends StatelessWidget {
           const SizedBox(width: 4),
           Flexible(
             child: CodeLabText(
-              'outside, not opened',
+              codeLabStringsOf(context).codeLabFileOutsideLink,
               role: CodeLabTextRole.caption,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

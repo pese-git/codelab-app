@@ -134,7 +134,7 @@ class _DockTabButton extends StatelessWidget {
                 Icon(pane.icon, size: 12),
                 const SizedBox(width: 6),
                 CodeLabText(
-                  pane.label,
+                  toolPaneTitleOf(context, pane),
                   role: selected
                       ? CodeLabTextRole.strong
                       : CodeLabTextRole.body,

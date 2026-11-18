@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 
 /// Сворачиваемый блок мыслей модели.
 ///
@@ -38,13 +39,16 @@ class CodeLabThoughtBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final muted = FluentTheme.of(context).resources.textFillColorSecondary;
+    final strings = codeLabStringsOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Semantics(
           button: true,
           expanded: expanded,
-          label: streaming ? 'Thinking' : 'Thoughts',
+          label: streaming
+              ? strings.codeLabThoughtThinkingSemantics
+              : strings.codeLabThoughtThoughts,
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
@@ -64,7 +68,9 @@ class CodeLabThoughtBlock extends StatelessWidget {
                       Icon(FluentIcons.lightbulb, size: 14, color: muted),
                     const SizedBox(width: 8),
                     CodeLabText(
-                      streaming ? 'Thinking…' : 'Thoughts',
+                      streaming
+                          ? strings.codeLabThoughtThinking
+                          : strings.codeLabThoughtThoughts,
                       role: CodeLabTextRole.caption,
                       color: muted,
                     ),

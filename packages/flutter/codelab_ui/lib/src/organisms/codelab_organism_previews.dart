@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/widget_previews.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/codelab_localizations.dart';
 import '../molecules/molecules.dart';
 import 'codelab_activity_bar.dart';
 import 'codelab_agents_pane.dart';
@@ -400,6 +401,50 @@ Widget codelabTranscriptPanelEmbeddedApprovalPreview() {
 )
 Widget codelabApprovalPromptPreview() {
   return const _AcpOrganismPreviewSurface(
+    child: SizedBox(
+      width: 620,
+      child: CodeLabApprovalPrompt(
+        reason: 'The agent wants to verify the Flutter UI package.',
+        rawInput: '{\n  "command": "fvm dart run melos run analyze"\n}',
+        onOptionSelected: codelabPreviewApprovalSelected,
+        options: [
+          CodeLabApprovalOption(
+            id: 'allow_once',
+            label: 'Allow once',
+            kind: CodeLabApprovalOptionKind.allowOnce,
+          ),
+          CodeLabApprovalOption(
+            id: 'allow_always',
+            label: 'Always allow melos run analyze',
+            kind: CodeLabApprovalOptionKind.allowAlways,
+          ),
+          CodeLabApprovalOption(
+            id: 'reject_once',
+            label: 'Reject',
+            kind: CodeLabApprovalOptionKind.rejectOnce,
+          ),
+          CodeLabApprovalOption(
+            id: 'reject_always',
+            label: 'Always reject',
+            kind: CodeLabApprovalOptionKind.rejectAlways,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Пример экрана на русском: полоса одобрения с делегатом кита и `ru`
+/// (`add-desktop-localization`, D4). Подписи вариантов — текст агента, они
+/// остаются как пришли.
+@Preview(
+  name: 'Approval prompt (ru)',
+  group: codelabOrganismPreviewGroup,
+  size: Size(620, 160),
+)
+Widget codelabApprovalPromptRuPreview() {
+  return const _AcpOrganismPreviewSurface(
+    locale: Locale('ru'),
     child: SizedBox(
       width: 620,
       child: CodeLabApprovalPrompt(
@@ -1015,9 +1060,14 @@ class _AcpOrganismPreviewSurface extends StatelessWidget {
   const _AcpOrganismPreviewSurface({
     required this.child,
     this.brightness = Brightness.light,
+    this.locale = const Locale('en'),
   });
 
   final Widget child;
+
+  /// Язык превью: `en` по умолчанию, `ru` — пример экрана с делегатом кита
+  /// (`add-desktop-localization`, D4).
+  final Locale locale;
 
   /// Тема превью: тёмный вариант нужен таблице с тегами и обводками (D19).
   final Brightness brightness;
@@ -1027,8 +1077,9 @@ class _AcpOrganismPreviewSurface extends StatelessWidget {
     // `InfoBar` заметок ленты читает `FluentLocalizations`; превью
     // рендерятся без `FluentApp`, поэтому локализации подключаются здесь.
     return Localizations(
-      locale: const Locale('en'),
+      locale: locale,
       delegates: const [
+        CodeLabLocalizations.delegate,
         FluentLocalizations.delegate,
         DefaultWidgetsLocalizations.delegate,
       ],

@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import 'codelab_activity_bar.dart';
 
 /// Mirrors the ACP protocol's `PlanEntryStatus` — kept as its own
@@ -84,6 +85,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = codeLabStringsOf(context);
     final total = entries.length;
     final completed = entries
         .where((entry) => entry.status == CodeLabPlanEntryStatus.completed)
@@ -103,7 +105,10 @@ class _Header extends StatelessWidget {
     if (!expanded && inProgress != null) {
       title = Row(
         children: [
-          const CodeLabText('Current:', role: CodeLabTextRole.caption),
+          CodeLabText(
+            strings.codeLabPlanCurrent,
+            role: CodeLabTextRole.caption,
+          ),
           const SizedBox(width: 6),
           Expanded(
             child: CodeLabText(
@@ -114,16 +119,24 @@ class _Header extends StatelessWidget {
           ),
           if (pending > 0) ...[
             const SizedBox(width: 6),
-            CodeLabText('$pending left', role: CodeLabTextRole.caption),
+            CodeLabText(
+              strings.codeLabPlanLeft(pending),
+              role: CodeLabTextRole.caption,
+            ),
           ],
         ],
       );
     } else {
-      final statusLabel = completed == 0 ? '$total Tasks' : '$completed/$total';
+      final statusLabel = completed == 0
+          ? strings.codeLabPlanTasks(total)
+          : '$completed/$total';
       title = Row(
         children: [
-          const Expanded(
-            child: CodeLabText('Plan', role: CodeLabTextRole.caption),
+          Expanded(
+            child: CodeLabText(
+              strings.codeLabPlanTitle,
+              role: CodeLabTextRole.caption,
+            ),
           ),
           CodeLabText(statusLabel, role: CodeLabTextRole.caption),
         ],
@@ -136,7 +149,7 @@ class _Header extends StatelessWidget {
         const SizedBox(width: 8),
         CodeLabIconButton(
           icon: FluentIcons.chrome_close,
-          tooltip: 'Clear plan',
+          tooltip: strings.codeLabPlanClear,
           onPressed: onDismiss,
         ),
       ],
@@ -200,7 +213,9 @@ class _EntryRow extends StatelessWidget {
               ),
               if (entry.blockedBy.isNotEmpty)
                 CodeLabText(
-                  'blocked by ${entry.blockedBy.map((id) => '#$id').join(', ')}',
+                  codeLabStringsOf(context).codeLabPlanBlockedBy(
+                    entry.blockedBy.map((id) => '#$id').join(', '),
+                  ),
                   role: CodeLabTextRole.caption,
                 ),
             ],
@@ -211,7 +226,7 @@ class _EntryRow extends StatelessWidget {
           CodeLabBadge(label: entry.ownerLabel!),
         ],
         const SizedBox(width: 8),
-        CodeLabBadge(label: _priorityLabel, tone: _priorityTone),
+        CodeLabBadge(label: _priorityLabel(context), tone: _priorityTone),
       ],
     );
   }
@@ -228,11 +243,14 @@ class _EntryRow extends StatelessWidget {
     CodeLabPlanEntryStatus.completed => CodeLabTone.success,
   };
 
-  String get _priorityLabel => switch (entry.priority) {
-    CodeLabPlanEntryPriority.high => 'High',
-    CodeLabPlanEntryPriority.medium => 'Medium',
-    CodeLabPlanEntryPriority.low => 'Low',
-  };
+  String _priorityLabel(BuildContext context) {
+    final strings = codeLabStringsOf(context);
+    return switch (entry.priority) {
+      CodeLabPlanEntryPriority.high => strings.codeLabPlanPriorityHigh,
+      CodeLabPlanEntryPriority.medium => strings.codeLabPlanPriorityMedium,
+      CodeLabPlanEntryPriority.low => strings.codeLabPlanPriorityLow,
+    };
+  }
 
   CodeLabTone get _priorityTone => switch (entry.priority) {
     CodeLabPlanEntryPriority.high => CodeLabTone.danger,

@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 
 /// Состояние хода для чипа в шапке панели сессии (требование «Session pane
 /// header», change `redesign-transcript-rows`).
@@ -103,10 +104,11 @@ class _TurnChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = codeLabStringsOf(context);
     final label = switch (state) {
-      CodeLabTurnState.running => 'Turn running',
-      CodeLabTurnState.awaitingApproval => 'Waiting for approval',
-      CodeLabTurnState.cancelling => 'Cancelling…',
+      CodeLabTurnState.running => strings.codeLabTurnRunning,
+      CodeLabTurnState.awaitingApproval => strings.codeLabTurnWaitingApproval,
+      CodeLabTurnState.cancelling => strings.codeLabTurnCancelling,
     };
     return Row(
       mainAxisSize: MainAxisSize.min,

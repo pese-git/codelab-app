@@ -1,10 +1,12 @@
 import 'package:codelab_desktop/l10n/app_localizations.dart';
+import 'package:codelab_ui/codelab_ui.dart' show CodeLabLocalizations;
 import 'package:fluent_ui/fluent_ui.dart';
 
-/// `FluentApp` с делегатами app и Fluent для тестов виджетов без scope.
+/// `FluentApp` с делегатами app, кита и Fluent для тестов виджетов без scope.
 ///
 /// Почему: тестовые экраны берут текст через `context.l10n`, а без делегатов
-/// `AppLocalizations.of` падает (`add-desktop-localization`, D9). Язык по
+/// `AppLocalizations.of` падает (`add-desktop-localization`, D9). Делегат кита
+/// подключён, как в `CodeLabApp`: с `ru` тексты кита переводятся. Язык по
 /// умолчанию — `en`, поэтому `find.text('…')` на английском остаются верными.
 ///
 /// Как использовать: `tester.pumpWidget(localizedFluentApp(child))`; для
@@ -12,7 +14,10 @@ import 'package:fluent_ui/fluent_ui.dart';
 Widget localizedFluentApp(Widget child, {Locale locale = const Locale('en')}) =>
     FluentApp(
       locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: const [
+        ...AppLocalizations.localizationsDelegates,
+        CodeLabLocalizations.delegate,
+      ],
       supportedLocales: AppLocalizations.supportedLocales,
       home: child,
     );

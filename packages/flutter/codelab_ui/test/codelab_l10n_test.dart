@@ -16,17 +16,15 @@
 //
 // Точные русские строки сверены с `docs/architecture/l10n-glossary.md` §3–§5.
 // Для подписей, которых в глоссарии нет, тест требует только «перевод есть»
-// (кириллица, английской подписи нет): точную формулировку выбирает задача 2.2
-// и дописывает её в глоссарий.
+// (кириллица, английской подписи нет): точная формулировка выбрана в задаче 2.2
+// и записана в каталог кита.
 //
-// Заглушки красной фазы (без логики, их заменяет задача 2.2):
-// `toolPaneTitleOf` в `codelab_tool_pane.dart` и экспорт `CodeLabLocalizations`
-// из `codelab_ui.dart`. Остальное API (`codeLabStringsOf`) внутреннее и
-// проверяется через виджеты.
+// Публичное API каталога — `toolPaneTitleOf` (`codelab_tool_pane.dart`) и
+// экспорт `CodeLabLocalizations` из `codelab_ui.dart`; остальное
+// (`codeLabStringsOf`) внутреннее и проверяется через виджеты.
 //
-// Красные причины: в ru-прогонах виджеты показывают английские литералы, а
-// каталог кита пока содержит одно сообщение. Прогоны `en` без делегата и
-// явные строки (`placeholder: 'X'`) сегодня зелёные и охраняют «как раньше».
+// Прогоны `ru` с делегатом проверяют перевод, а прогоны `en` без делегата и
+// явные строки (`placeholder: 'X'`) охраняют поведение «как раньше».
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -797,6 +795,68 @@ void main() {
     });
   });
 
+  // --- Просмотр файла и дерево: подписи кита ---------------------------
+
+  group('Файлы: предупреждение о секретах и внешняя ссылка (security)', () {
+    Widget preview() => const SizedBox(
+      width: 480,
+      height: 300,
+      child: CodeLabFilePreview(
+        relativePath: '.env',
+        content: CodeLabFilePreviewContent.text('KEY=value'),
+        maybeSecret: true,
+      ),
+    );
+    Widget tree() => const SizedBox(
+      width: 320,
+      height: 200,
+      child: CodeLabFileTree(
+        rows: [
+          CodeLabFileTreeRowData(
+            relativePath: 'link',
+            name: 'link',
+            kind: CodeLabFileTreeRowKind.outsideLink,
+            depth: 0,
+          ),
+        ],
+      ),
+    );
+
+    testWidgets('предупреждение о секретах: en без делегата', (tester) async {
+      await tester.pumpWidget(_enHost(preview()));
+
+      expect(find.text('This file may contain secrets.'), findsOneWidget);
+    });
+
+    testWidgets('предупреждение о секретах: ru без английского текста', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_ruHost(preview()));
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('file-preview-secret-warning')),
+          matching: find.text('Этот файл может содержать секреты.'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('This file may contain secrets.'), findsNothing);
+    });
+
+    testWidgets('внешняя ссылка: en без делегата', (tester) async {
+      await tester.pumpWidget(_enHost(tree()));
+
+      expect(find.text('outside, not opened'), findsOneWidget);
+    });
+
+    testWidgets('внешняя ссылка: ru без английского текста', (tester) async {
+      await tester.pumpWidget(_ruHost(tree()));
+
+      expect(find.text('за пределами проекта, не открыт'), findsOneWidget);
+      expect(find.text('outside, not opened'), findsNothing);
+    });
+  });
+
   // --- Навигация настроек: подписи кита ---------------------------------
 
   group('Навигация настроек: собственные подписи кита', () {
@@ -870,7 +930,11 @@ void main() {
       await tester.pump();
 
       expect(find.textContaining('No settings match'), findsNothing);
-      expect(find.textContaining('zzz'), findsOneWidget);
+      // Запрос лежит и в поле поиска (`EditableText`), поэтому сообщение
+      // ищется по русскому тексту: ровно один `Text`, и запрос в кавычках.
+      final message = find.textContaining('Нет настроек по запросу');
+      expect(message, findsOneWidget);
+      expect(tester.widget<Text>(message).data, contains('«zzz»'));
     });
   });
 
@@ -972,6 +1036,59 @@ void main() {
       expect(_statusTag(tester).label, 'Разрушительное');
     });
 
+    testWidgets('бейдж «Ждёт одобрения» в сайдбаре и тег «Требует проверки»', (
+      tester,
+    ) async {
+      _setWindow(tester, const Size(760, 600));
+      await tester.pumpWidget(
+        _ruHost(
+          const Row(
+            children: [
+              SizedBox(
+                width: 240,
+                height: 400,
+                child: CodeLabSessionSidebar(
+                  projects: [
+                    CodeLabSidebarProject(
+                      path: '/work/app',
+                      name: 'app',
+                      current: true,
+                      sessions: [
+                        CodeLabSessionListItem(
+                          id: 's1',
+                          title: 'Исправить ошибку в длинном названии сессии',
+                          status: CodeLabSessionStatus.awaitingApproval,
+                        ),
+                      ],
+                    ),
+                  ],
+                  onSessionSelected: _ignore,
+                ),
+              ),
+              SizedBox(
+                width: 500,
+                child: CodeLabApprovalOptionGroup(
+                  options: [
+                    CodeLabApprovalOption(
+                      id: 'a1',
+                      label: 'Allow once',
+                      kind: CodeLabApprovalOptionKind.allowOnce,
+                      tone: CodeLabTone.warning,
+                    ),
+                  ],
+                  onSelected: _ignore,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Ждёт одобрения'), findsOneWidget);
+      expect(find.text('Требует проверки'), findsOneWidget);
+    });
+
     testWidgets('навигация настроек слева, 760 px', (tester) async {
       _setWindow(tester, const Size(760, 700));
       await tester.pumpWidget(
@@ -993,6 +1110,8 @@ void main() {
     });
   });
 }
+
+void _ignore(Object? _) {}
 
 /// Навигация с русскими заголовками страниц и групп, как их даст app (D8).
 Widget _settingsNav(CodeLabSettingsNavMode mode) => CodeLabSettingsNavigation(

@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import '../molecules/molecules.dart';
 import 'codelab_transcript_row.dart';
 
@@ -60,7 +61,10 @@ class CodeLabTranscriptNotice extends StatelessWidget {
           Text(row.body),
           if (details != null) ...[
             const SizedBox(height: 6),
-            CodeLabTextDisclosure(label: 'Details', text: details),
+            CodeLabTextDisclosure(
+              label: codeLabStringsOf(context).codeLabTranscriptNoticeDetails,
+              text: details,
+            ),
           ],
           if (action != null) ...[
             const SizedBox(height: 8),

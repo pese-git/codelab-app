@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import '../molecules/molecules.dart';
 import '../rendering/escape_for_display.dart';
 import 'codelab_approval_prompt.dart';
@@ -97,8 +98,8 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
         ? approval
         : null;
     final (statusLabel, statusTone) = pending == null
-        ? _statusTag
-        : (pending.risk.label, pending.risk.tone);
+        ? _statusTag(context)
+        : (pending.risk.labelOf(context), pending.risk.tone);
 
     final body = showBody
         ? Column(
@@ -276,7 +277,9 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
             Padding(
               padding: const EdgeInsets.only(left: 24, top: 2),
               child: CodeLabText(
-                '+${subagent.tailMore} more tool calls',
+                codeLabStringsOf(
+                  context,
+                ).codeLabCallMoreToolCalls(subagent.tailMore),
                 role: CodeLabTextRole.caption,
               ),
             ),
@@ -356,7 +359,11 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
               ),
               onPressed: () =>
                   setState(() => _showFullDetail = !_showFullDetail),
-              child: Text(_showFullDetail ? 'Show less' : 'Show full command'),
+              child: Text(
+                _showFullDetail
+                    ? codeLabStringsOf(context).codeLabCallShowLess
+                    : codeLabStringsOf(context).codeLabCallShowFullCommand,
+              ),
             ),
           ],
         );
@@ -364,18 +371,34 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
     );
   }
 
-  (String, CodeLabTone) get _statusTag {
+  (String, CodeLabTone) _statusTag(BuildContext context) {
+    final strings = codeLabStringsOf(context);
     // Вложенный вызов ждёт решения в блоке под строкой корня: тег говорит
     // об ожидании, а кнопок у строки нет (D27 п. 4).
     if (row.awaitsRootDecision) {
-      return ('Awaiting approval', CodeLabTone.accent);
+      return (strings.codeLabApprovalAwaiting, CodeLabTone.accent);
     }
     return switch (row.status) {
-      CodeLabToolCallStatus.queued => ('Queued', CodeLabTone.neutral),
-      CodeLabToolCallStatus.running => ('Running', CodeLabTone.accent),
-      CodeLabToolCallStatus.succeeded => ('Done', CodeLabTone.success),
-      CodeLabToolCallStatus.failed => ('Failed', CodeLabTone.danger),
-      CodeLabToolCallStatus.cancelled => ('Cancelled', CodeLabTone.warning),
+      CodeLabToolCallStatus.queued => (
+        strings.codeLabCallQueued,
+        CodeLabTone.neutral,
+      ),
+      CodeLabToolCallStatus.running => (
+        strings.codeLabCallRunning,
+        CodeLabTone.accent,
+      ),
+      CodeLabToolCallStatus.succeeded => (
+        strings.codeLabCallDone,
+        CodeLabTone.success,
+      ),
+      CodeLabToolCallStatus.failed => (
+        strings.codeLabCallFailed,
+        CodeLabTone.danger,
+      ),
+      CodeLabToolCallStatus.cancelled => (
+        strings.codeLabCallCancelled,
+        CodeLabTone.warning,
+      ),
     };
   }
 
