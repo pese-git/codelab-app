@@ -999,7 +999,10 @@ D27; артборд 30 холста «CodeLab Desktop — Feature UI/UX», ут�
    `running`, раскрытие до шагов `step <index + 1> · <подпись>` (модель — в подсказке), строка
    `subagents · N runs` — в раскрытом ходе после его шагов. «Per model» — модели журнала (`<provider> / <id>`) и строки `Subagents` и
    `Summaries`. Строка без usage — `—` во всех столбцах, без цены — `—` в Cost; нулей вместо
-   неизвестного нет (DSK-11). Числа — функции kit `usage_format.dart`. Отступления от артборда:
+   неизвестного нет (DSK-11). Числа — функции kit `usage_format.dart`. Ширина столбцов Input, Output,
+   Cost — по самому широкому значению таблицы, общая для шапки и всех строк: значение не обрезается
+   (фиксированные 64 px резали `$0.00058` до `$0.0005` — ручная проверка 4.1, design.md change, D16).
+   Отступления от артборда:
    нет пометки `fallback` (её нет в журнале), есть строки `Subagents` и `Summaries` и строка
    состояния журнала.
 4. **Обновление журнала** (Q4). `refreshUsageLedger(id)` без `rebuild` уходит, когда панель
@@ -1282,6 +1285,7 @@ macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка
 | `codelab_usage_pane_test.dart: turns keep the order of the data; the running mark and the dashes are shown as given`; `a turn expands to its steps on tap and collapses on the second tap`; `the subagents line of an expanded turn goes after its steps (D2 item 4)`; `the model of a step is the tooltip of its row`; `a turn without steps does not expand`; `models are numbered by position and carry the group note` | D-09 (A17 п. 3) |
 | `codelab_usage_pane_test.dart: without a ledger yet an indicator replaces the tables`; `refreshing keeps the old tables and shows the indicator in the header`; `no indicator when the journal is idle of work`; `a failure note shows the text and Retry, and the hint is its tooltip`; `the no-history note has no Retry action` | D-09, DSK-11 (A17 пп. 2–3) |
 | `codelab_usage_pane_test.dart: Rebuild from log and Export CSV report taps`; `a button without a callback is disabled, not hidden`; `buttons the data does not offer are absent` | D-09 (A17 пп. 3, 7) |
+| `codelab_usage_pane_test.dart`, группа `числа в столбцах не обрезаются на ширине дока`: `значения целиком, без overflow, подпись переносится`; `столбцы Input/Output/Cost выровнены между строками и шапкой` | D-09 (A17 п. 3; D16 change `add-desktop-usage-pane`) |
 | `acp_prompt_composer_test.dart: chips render delivery and warnings and remove by button and Delete` | D-12 |
 | `acp_prompt_composer_test.dart: Cmd+Backspace still rejects approval and does not remove chip` | DSK-18 |
 | `acp_transcript_panel_test.dart: pending approval auto-scroll unchanged with row model` | DSK-17 |
