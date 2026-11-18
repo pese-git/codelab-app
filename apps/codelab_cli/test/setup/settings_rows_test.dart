@@ -75,4 +75,74 @@ void main() {
       for (final item in spec.items) item.line.replaceFirst('/settings ', ''),
     ], keys(snap));
   });
+
+  // Задача 1.3 change `add-app-general-page` (spec client-agent-setup «Тексты
+  // CLI не меняются», D6): тексты отказов `/settings` фиксируются побайтно до
+  // перевода CLI на мост `settingEditRefusalOf`; после 1.4 остаются теми же.
+  group('тексты отказов /settings не меняются', () {
+    const secretText = 'Use codelab secret set <name>';
+
+    SettingFieldView row(AgentConfigSnapshot snap, String key) =>
+        settingRowsOf(snap).singleWhere((r) => r.key == key);
+
+    test('UnknownSetting: неизвестный ключ и ключ не из shared', () {
+      expect(
+        settingKeyRefusal('no.such.key'),
+        'Unknown setting no.such.key. Run /settings to list them.',
+      );
+    });
+
+    test('TrustBoundarySetting', () {
+      expect(
+        settingKeyRefusal('trusted_projects'),
+        'trusted_projects is a trust boundary; it cannot be changed here.',
+      );
+    });
+
+    test('SecretSetting: ключ с именем секрета', () {
+      expect(settingKeyRefusal('providers.gw.api_key_secret'), secretText);
+    });
+
+    test('ExternalSourceSetting: источники config и env', () {
+      final snap = snapshotOf(
+        values: const {'budget.max_steps': 9, 'agent.effort': 'high'},
+        external: const {
+          'budget.max_steps': ConfigSourceKind.environment,
+          'agent.effort': ConfigSourceKind.extraFile,
+        },
+      );
+
+      expect(
+        settingRowRefusal(row(snap, 'budget.max_steps')),
+        'budget.max_steps is set by env; it cannot be changed here.',
+      );
+      expect(
+        settingRowRefusal(row(snap, 'agent.effort')),
+        'agent.effort is set by config; it cannot be changed here.',
+      );
+    });
+
+    test('MaskedSetting: замаскированное значение', () {
+      const leaking = 'bash:curl -H "Authorization: Bearer sk-test-leak-1"';
+      final snap = snapshotOf(
+        user: {
+          'permissions': {
+            'deny': [leaking],
+          },
+        },
+        values: const {
+          'permissions.deny': [leaking],
+        },
+      );
+
+      expect(settingRowRefusal(row(snap, 'permissions.deny')), secretText);
+    });
+
+    test('обычный ключ: отказа нет', () {
+      final snap = snapshotOf();
+
+      expect(settingKeyRefusal('compaction.enabled'), isNull);
+      expect(settingRowRefusal(row(snap, 'compaction.enabled')), isNull);
+    });
+  });
 }

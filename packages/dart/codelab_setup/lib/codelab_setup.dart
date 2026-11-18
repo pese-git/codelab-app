@@ -119,4 +119,5 @@ export 'src/views/mcp_server_entry_view.dart';
 export 'src/views/provider_entry_view.dart'
     show ProviderEntryView, providerEntriesOf;
 export 'src/views/session_defaults_view.dart';
+export 'src/views/setting_edit_rules.dart';
 export 'src/views/setting_field_view.dart';

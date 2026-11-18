@@ -2,6 +2,7 @@
 // `add-session-list-and-reload`; spec acp-client-kit «Восстановление после
 // перезапуска»; design D6).
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
@@ -269,4 +270,64 @@ void main() {
     expect(sentMethods(), [initializeMethod, sessionLoadMethod]);
     expect(agent.transport.sentMessages.whereType<JsonRpcResponse>(), isEmpty);
   });
+
+  // Старт без восстановления (задача 3.1 change `add-app-general-page`; spec
+  // acp-client-kit «Старт без восстановления рабочего пространства», D9).
+  group('startWithoutRestore', () {
+    test('снимок не восстанавливается: нет session/load, сессий снимка нет в '
+        'списке', () async {
+      store = InMemoryWorkspaceSnapshotStore(_snapshot());
+      agent = KitAgent(capabilities: _withLoad, snapshots: store);
+
+      agent.workspace.startWithoutRestore();
+      agent.workspace.selectProject('/work');
+      // Агент отвечает на session/load, если запрос придёт, чтобы красный тест
+      // падал по ассерту, а не по таймауту.
+      unawaited(
+        agent
+            .next(sessionLoadMethod)
+            .then(
+              (request) => agent.respond(request, const <String, Object?>{}),
+            ),
+      );
+      await agent.start();
+
+      expect(sentMethods(), [initializeMethod]);
+      expect(agent.workspace.current.sessions, isEmpty);
+      expect(agent.workspace.current.activeSessionId, isNull);
+    });
+
+    test('снимок пишется по ходу работы: проект нового запуска, без сессий '
+        'прошлого снимка', () async {
+      store = InMemoryWorkspaceSnapshotStore(_snapshot());
+      agent = KitAgent(capabilities: _withLoad, snapshots: store);
+
+      agent.workspace.startWithoutRestore();
+      agent.workspace.selectProject('/work/other');
+      await agent.workspace.flushSnapshot();
+
+      expect(_savedWindow(store)['projectDirectory'], '/work/other');
+      expect(_savedWindow(store)['openSessions'], isEmpty);
+      expect(_savedWindow(store)['activeSessionId'], isNull);
+    });
+
+    test('тот же проект, что в снимке: сессии снимка не сохраняются как '
+        'ожидающие', () async {
+      store = InMemoryWorkspaceSnapshotStore(_snapshot());
+      agent = KitAgent(capabilities: _withLoad, snapshots: store);
+
+      agent.workspace.startWithoutRestore();
+      agent.workspace.selectProject('/work');
+      await agent.workspace.flushSnapshot();
+
+      expect(_savedWindow(store)['projectDirectory'], '/work');
+      expect(_savedWindow(store)['openSessions'], isEmpty);
+      expect(_savedWindow(store)['activeSessionId'], isNull);
+    });
+  });
+}
+
+Map<Object?, Object?> _savedWindow(InMemoryWorkspaceSnapshotStore store) {
+  final saved = jsonDecode(store.value!) as Map<String, Object?>;
+  return (saved['windows']! as Map)['main'] as Map;
 }

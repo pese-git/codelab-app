@@ -2063,3 +2063,11 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
 
   Future<void> close() => _views.close();
 }
+
+/// ЗАГЛУШКА красного теста (задача 3.1 change `add-app-general-page`, D9):
+/// сигнатура `startWithoutRestore()`, чтобы тесты падали по ассерту, а не по
+/// компиляции. Намеренно ведёт себя как обычное восстановление; задача 3.2
+/// заменяет её методом интерфейса `ClientWorkspace` и удаляет расширение.
+extension ClientWorkspaceStartWithoutRestoreStub on ClientWorkspace {
+  void startWithoutRestore() => unawaited(restoreProject());
+}
