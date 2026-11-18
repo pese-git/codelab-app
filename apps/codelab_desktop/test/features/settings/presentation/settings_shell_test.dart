@@ -6,6 +6,8 @@
 
 import 'package:codelab_desktop/app/default_settings_pages.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
+import 'package:codelab_desktop/l10n/app_localizations_ru.dart';
 import 'package:codelab_desktop/features/settings/application/settings_search_index.dart';
 import 'package:codelab_desktop/features/settings/presentation/settings_shell.dart';
 import 'package:codelab_ui/codelab_ui.dart';
@@ -13,9 +15,66 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/l10n_app.dart';
+import '../../../support/l10n_mix.dart';
+
 Finder _nav(SettingsPage page) => find.byKey(ValueKey(page.navKey));
 
 void main() {
+  // Задача 1.9 change `add-desktop-localization` (D5 п. 8, spec app-settings
+  // «Навигация настроек»): «General» входит в рабочую сборку, группу «App», а
+  // заголовки групп и страниц пересобираются при смене языка.
+  group('General и язык', () {
+    test('General — в defaultSettingsPages, группе App, с построителем', () {
+      expect(defaultSettingsPages.visible, contains(SettingsPage.general));
+      expect(SettingsPage.general.group, SettingsGroup.app);
+      expect(SettingsPage.general.navKey, 'settings-nav-general');
+      expect(settingsPageBuilders, contains(SettingsPage.general));
+    });
+
+    testWidgets('заголовки групп и страниц пересобираются при смене языка', (
+      tester,
+    ) async {
+      final en = AppLocalizationsEn();
+      final ru = AppLocalizationsRu();
+      Widget shell(Locale locale) => localizedFluentApp(
+        locale: locale,
+        SettingsShell(
+          pages: const SettingsPages(
+            available: {SettingsPage.connection, SettingsPage.general},
+          ),
+          selected: SettingsPage.general,
+          onSelected: (_) {},
+          onBack: () {},
+          builders: {
+            for (final page in SettingsPage.values)
+              page: (_) => Text('body of ${page.slug}'),
+          },
+        ),
+      );
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(shell(const Locale('en')));
+      await tester.pumpAndSettle();
+      expect(find.text('Agent'), findsOneWidget);
+      expect(find.text('App'), findsOneWidget);
+      expect(find.text('General'), findsOneWidget);
+
+      await tester.pumpWidget(shell(const Locale('ru')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Agent'), findsNothing);
+      expect(find.text('App'), findsNothing);
+      expect(find.text('General'), findsNothing);
+      expect(find.text('Connection'), findsNothing);
+      expect(find.text(ru.settingsPageGeneralTitle), findsOneWidget);
+      await expectNoStaleLanguage(tester, from: en, to: ru);
+    });
+  });
+
   /// Тела-заглушки для всех страниц: тест выбирает видимые через `available`.
   final bodies = <SettingsPage, WidgetBuilder>{
     for (final page in SettingsPage.values)

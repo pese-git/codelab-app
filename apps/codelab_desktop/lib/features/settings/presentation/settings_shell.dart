@@ -8,6 +8,7 @@ import 'agents_modes_page.dart';
 import 'connection_page.dart';
 import 'mcp_page.dart';
 import 'providers_page.dart';
+import 'general_page.dart';
 import 'skills_page.dart';
 
 /// Тела страниц настроек.
@@ -27,6 +28,7 @@ final Map<SettingsPage, WidgetBuilder> settingsPageBuilders =
       SettingsPage.mcpServers: buildMcpPage,
       SettingsPage.agentsAndModes: buildAgentsModesPage,
       SettingsPage.skillsAndExtensions: buildSkillsPage,
+      SettingsPage.general: buildGeneralPage,
     });
 
 /// Ширина окна, меньше которой навигация настроек уходит наверх.
