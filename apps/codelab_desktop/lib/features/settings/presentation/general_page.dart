@@ -6,7 +6,9 @@ import 'package:codelab_setup/codelab_setup.dart'
         MaskedSetting,
         SecretSetting,
         SettingEditRefusal,
-        SettingType;
+        SettingType,
+        TrustBoundarySetting,
+        UnknownSetting;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -92,8 +94,10 @@ class _GeneralPageHostState extends State<GeneralPageHost> {
 /// Для чего: выбор `System | English | Русский` применяется сразу, без
 /// перезапуска (spec app-settings «Язык интерфейса app»); сбой записи
 /// показывается предупреждением, язык при этом остаётся применённым. Порядок
-/// блоков: InfoBar и «Agent defaults», затем «Interface». Блоки «Startup and
-/// files» и «About» появятся вместе со своим поведением (SETUP-17).
+/// блоков: InfoBar и «Agent defaults», «Interface», «Startup and files»,
+/// «About» (раздел показывается, если передан [about]). Строка «Show ignored
+/// files» появится после итерации 3 `add-file-preview-and-tree` (D10): строка
+/// без поведения не показывается (SETUP-17).
 ///
 /// Как использовать: строится из `settingsPageBuilders` хозяином
 /// [GeneralPageHost]; `AppLanguageCubit` и `AgentDefaultsCubit` берутся из
@@ -230,10 +234,24 @@ class _AgentDefaultsBlock extends StatelessWidget {
             InfoBar(
               key: const ValueKey('settings-general-agent-unreadable'),
               title: Text(l10n.settingsGeneralUnreadable),
-              // Тексты проблем — от загрузчика ядра, как есть (английские).
               content: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [for (final p in state.problems) Text(p)],
+                children: switch (state.reason) {
+                  // Тексты проблем — от загрузчика ядра, как есть
+                  // (английские); остальные причины — из ARB (D7).
+                  AgentDefaultsUnreadableReason.loader => [
+                    for (final p in state.problems) Text(p),
+                  ],
+                  AgentDefaultsUnreadableReason.cannotRead => [
+                    Text(l10n.settingsGeneralUnreadableCannotRead),
+                  ],
+                  AgentDefaultsUnreadableReason.homeUnavailable => [
+                    Text(l10n.settingsGeneralUnreadableHome),
+                  ],
+                  AgentDefaultsUnreadableReason.userLayerUnreadable => [
+                    Text(l10n.settingsGeneralUnreadableUserLayer),
+                  ],
+                },
               ),
               severity: InfoBarSeverity.error,
             ),
@@ -535,7 +553,10 @@ class _AgentRow extends StatelessWidget {
     SecretSetting() => l10n.settingsGeneralRefusalSecret,
     MaskedSetting() => l10n.settingsGeneralRefusalMasked,
     ExternalSourceSetting() => l10n.settingsGeneralRefusalExternal(sourceName),
-    _ => l10n.settingsGeneralRefusalOther,
+    // Без `_ =>`: новая ветка `SettingEditRefusal` ломает сборку и требует
+    // решения о тексте (контракт моста, D6).
+    UnknownSetting() ||
+    TrustBoundarySetting() => l10n.settingsGeneralRefusalOther,
   };
 
   /// Подсказка формата по типу и границам дескриптора (D5); введённого
@@ -668,10 +689,10 @@ class _TextEditorState extends State<_TextEditor> {
 /// Блок «Startup and files»: строка «Reopen the last project and its tabs»
 /// (design.md change `add-app-general-page`, D9).
 ///
-/// Для чего: только отображение [StartupSettingsState]. Строки «Show ignored
-/// files» и «About» появятся вместе со своим поведением (SETUP-17). Значение
-/// применяется при следующем запуске, поэтому текущую работу переключение не
-/// трогает.
+/// Для чего: только отображение [StartupSettingsState]. Строка «Show ignored
+/// files» появится в этом блоке вместе со своим владельцем значения (D10,
+/// SETUP-17). Значение применяется при следующем запуске, поэтому текущую
+/// работу переключение не трогает.
 class _StartupSection extends StatelessWidget {
   const _StartupSection();
 

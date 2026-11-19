@@ -1,4 +1,4 @@
-// Красные тесты страницы «General» (задача 1.9 change
+// Тесты страницы «General» (задача 1.9 change
 // `add-desktop-localization`; spec app-settings «Язык интерфейса app»:
 // «Смена языка применяется сразу на странице настроек» — критерий D-19,
 // «Сбой записи», «Возврат к английскому»; design.md D2, D9).
@@ -16,7 +16,7 @@
 // `agent_defaults_cubit_test.dart`. Здесь — что страница показывает из
 // состояния и какой метод Cubit вызывает при выборе пользователя.
 //
-// Красные тесты: страница — прежняя, блоков нет, тело появится в задаче 2.6.
+// Реализация блоков — задачи 2.6, 3.6 и 5.10 change `add-app-general-page`.
 //
 // Контракт ключей (spec): `settings-general-shared-info`,
 // `settings-general-agent-defaults`, `settings-general-agent-row-<key>`,
@@ -39,6 +39,7 @@ import 'package:codelab_desktop/app/build_version.dart';
 import 'package:codelab_desktop/core/platform/external_link_opener.dart';
 import 'package:codelab_desktop/core/platform/local_folder_opener.dart';
 import 'package:codelab_desktop/features/settings/application/about_diagnostics.dart';
+import 'package:codelab_desktop/features/settings/application/about_ports.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_rows.dart';
 import 'package:codelab_desktop/features/settings/application/startup_settings_cubit.dart';
@@ -62,6 +63,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 import '../../../support/fake_external_link_opener.dart';
 import '../../../support/fake_local_folder_opener.dart';
 import '../../../support/l10n_app.dart';
+import '../../../support/recording_logger.dart';
 import '../../../support/l10n_mix.dart';
 import '../../../support/settings_search.dart';
 import '../../../support/test_app_scope.dart';
@@ -409,6 +411,7 @@ void main() {
       AgentDefaultsState state, {
       Locale locale = const Locale('en'),
       Size size = const Size(1200, 2600),
+      AboutPorts? about,
     }) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
@@ -441,8 +444,10 @@ void main() {
                 CodeLabLocalizations.delegate,
               ],
               supportedLocales: AppLocalizations.supportedLocales,
-              home: const ScaffoldPage(
-                content: SingleChildScrollView(child: GeneralPage()),
+              home: ScaffoldPage(
+                content: SingleChildScrollView(
+                  child: GeneralPage(about: about),
+                ),
               ),
             ),
           ),
@@ -1036,6 +1041,7 @@ void main() {
         await pumpPage(
           tester,
           const AgentDefaultsUnreadable(
+            reason: AgentDefaultsUnreadableReason.loader,
             problems: ['config.yaml:12:3: budget: Expected node content.'],
           ),
         );
@@ -1099,6 +1105,197 @@ void main() {
         expect(key('settings-general-agent-loading'), findsOneWidget);
         expect(row('budget.max_steps'), findsNothing);
         expect(key('settings-general-language'), findsOneWidget);
+      });
+    });
+
+    group('About: сбои без падения страницы', () {
+      const info = AboutInfo(
+        version: '0.1.0',
+        os: 'macOS',
+        arch: 'arm64',
+        embeddedAgentVersion: '0.1.0',
+        licenseName: 'MIT',
+        licenseCopyright: 'Copyright (c) 2026 x',
+        configHome: '~/.codelab',
+        logDirectory: '/tmp/logs-marker',
+        thirdPartyNotices: '',
+      );
+
+      AboutPorts ports(
+        RecordingLogger logger, {
+        Future<AboutInfo> Function()? loadInfo,
+        Future<AboutWindow> Function()? window,
+      }) => AboutPorts(
+        info: loadInfo ?? () async => info,
+        window:
+            window ??
+            () async => (
+              connection: DiagnosticsConnection.embedded,
+              state: DiagnosticsConnectionState.connected,
+              access: DiagnosticsAccess.editable,
+              customConfigHome: false,
+            ),
+        externalLinks: FakeExternalLinkOpener(),
+        folders: FakeLocalFolderOpener(),
+        logger: logger,
+      );
+
+      Iterable<Map<String, Object?>> events(RecordingLogger l, String name) =>
+          l.entries.where((e) => e['event'] == name);
+
+      testWidgets('сбой «Copy diagnostics» (снимок окна бросает): InfoBar '
+          'сбоя без текста исключения, событие failed', (tester) async {
+        final logger = RecordingLogger();
+        await pumpPage(
+          tester,
+          const AgentDefaultsUnreadable(
+            reason: AgentDefaultsUnreadableReason.cannotRead,
+          ),
+          about: ports(
+            logger,
+            window: () async => throw StateError('boom /secret/path'),
+          ),
+        );
+        await tester.tap(find.text('CodeLab 0.1.0'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(key('settings-general-about-copy-diagnostics'));
+        await tester.pumpAndSettle();
+
+        expect(key('settings-general-about-copy-failed'), findsOneWidget);
+        expect(find.text("Couldn't copy the diagnostics."), findsOneWidget);
+        expect(find.text('Diagnostics copied.'), findsNothing);
+        expect(find.textContaining('/secret/path'), findsNothing);
+        final event = events(logger, 'settings.about_action').single;
+        expect(event['action'], 'copy_diagnostics');
+        expect(event['outcome'], 'failed');
+        expect('${logger.entries}', isNot(contains('/secret/path')));
+      });
+
+      testWidgets('сбой буфера обмена: тот же InfoBar и событие failed', (
+        tester,
+      ) async {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async {
+            if (call.method == 'Clipboard.setData') {
+              throw PlatformException(code: 'clipboard-gone');
+            }
+            return null;
+          },
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            SystemChannels.platform,
+            null,
+          ),
+        );
+        final logger = RecordingLogger();
+        await pumpPage(
+          tester,
+          const AgentDefaultsUnreadable(
+            reason: AgentDefaultsUnreadableReason.cannotRead,
+          ),
+          about: ports(logger),
+        );
+        await tester.tap(find.text('CodeLab 0.1.0'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(key('settings-general-about-copy-diagnostics'));
+        await tester.pumpAndSettle();
+
+        expect(key('settings-general-about-copy-failed'), findsOneWidget);
+        expect(
+          events(logger, 'settings.about_action').single['outcome'],
+          'failed',
+        );
+      });
+
+      testWidgets('сбой чтения ресурсов: раздел не прячется молча — InfoBar и '
+          'событие с именем типа без пути', (tester) async {
+        final logger = RecordingLogger();
+        await pumpPage(
+          tester,
+          const AgentDefaultsUnreadable(
+            reason: AgentDefaultsUnreadableReason.cannotRead,
+          ),
+          about: ports(
+            logger,
+            loadInfo: () async => throw StateError('no asset /secret/assets'),
+          ),
+        );
+
+        expect(key('settings-general-about-load-failed'), findsOneWidget);
+        expect(find.text("Couldn't load the About section."), findsOneWidget);
+        expect(find.textContaining('/secret/assets'), findsNothing);
+        final failed = events(logger, 'settings.about_load_failed').single;
+        expect(failed['error_type'], 'StateError');
+        expect(failed['level'], 'warning');
+        expect('${logger.entries}', isNot(contains('/secret/assets')));
+      });
+    });
+
+    group('Причина Unreadable — из ARB (D7)', () {
+      const cases = {
+        AgentDefaultsUnreadableReason.cannotRead: (
+          'Cannot read the agent settings.',
+          'Не удаётся прочитать настройки агента.',
+        ),
+        AgentDefaultsUnreadableReason.homeUnavailable: (
+          'The CodeLab home folder is not available.',
+          'Папка CodeLab недоступна.',
+        ),
+        AgentDefaultsUnreadableReason.userLayerUnreadable: (
+          'The user config.yaml cannot be read.',
+          'Пользовательский config.yaml не читается.',
+        ),
+      };
+
+      cases.forEach((reason, texts) {
+        testWidgets('${reason.name}: текст на языке интерфейса, без '
+            'английского после смены языка', (tester) async {
+          await pumpPage(tester, AgentDefaultsUnreadable(reason: reason));
+          expect(
+            find.descendant(
+              of: key('settings-general-agent-unreadable'),
+              matching: find.text(texts.$1),
+            ),
+            findsOneWidget,
+          );
+
+          await choose(tester, 'settings-language-ru');
+
+          expect(
+            find.descendant(
+              of: key('settings-general-agent-unreadable'),
+              matching: find.text(texts.$2),
+            ),
+            findsOneWidget,
+          );
+          expect(find.text(texts.$1), findsNothing);
+          await expectNoStaleLanguage(tester, from: en, to: ru);
+        });
+      });
+
+      testWidgets('проблемы загрузчика показываются как есть и на русском', (
+        tester,
+      ) async {
+        await pumpPage(
+          tester,
+          const AgentDefaultsUnreadable(
+            reason: AgentDefaultsUnreadableReason.loader,
+            problems: ['config.yaml:12:3: budget: Expected node content.'],
+          ),
+          locale: const Locale('ru'),
+        );
+
+        expect(
+          find.descendant(
+            of: key('settings-general-agent-unreadable'),
+            matching: find.textContaining('Expected node content.'),
+          ),
+          findsOneWidget,
+        );
       });
     });
 
@@ -1248,6 +1445,7 @@ void main() {
         await pumpPage(
           tester,
           const AgentDefaultsUnreadable(
+            reason: AgentDefaultsUnreadableReason.loader,
             problems: ['config.yaml:1:1: broken'],
             banner: AgentDefaultsBanner(
               AgentDefaultsBannerKind.savedUnverified,
@@ -1304,7 +1502,7 @@ void main() {
           findsOneWidget,
         );
         // Подписи и описания ключей — из ARB (D2); ключ и источник как есть.
-        expect(inRow('budget.max_steps', 'Макс. шагов'), findsOneWidget);
+        expect(inRow('budget.max_steps', 'Лимит шагов'), findsOneWidget);
         expect(
           inRow('budget.max_steps', 'Запросов к модели за ход.'),
           findsOneWidget,
@@ -1969,23 +2167,10 @@ void main() {
         expect(lines[1], 'OS: macOS arm64');
         expect(lines[2], 'Embedded agent: 0.1.0');
         expect(lines[3], 'UI language: en (preference: system)');
-        expect(
-          lines[4],
-          matches(
-            RegExp(
-              r'^Connection: (embedded|stdio|websocket) · '
-              r'(connecting|connected|reconnecting|failed|disconnected)$',
-            ),
-          ),
-        );
-        expect(
-          lines[5],
-          matches(
-            RegExp(
-              r'^Agent settings: (editable|remote-read-only|not-managed)$',
-            ),
-          ),
-        );
+        // Окно ещё не подключено, профиль по умолчанию — свой stdio-агент.
+        expect(lines[4], 'Connection: stdio · disconnected');
+        expect(lines[5], 'Agent settings: editable');
+        // `CODELAB_HOME` зависит от машины, поэтому признак — по образцу.
         expect(lines[6], matches(RegExp(r'^Config folder: (default|custom)$')));
         expect(find.text('Diagnostics copied.'), findsOneWidget);
         final event = aboutEvents().single;

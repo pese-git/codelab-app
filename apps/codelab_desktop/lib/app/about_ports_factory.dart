@@ -1,26 +1,8 @@
 import 'package:codelab_client_acp/codelab_client_acp.dart' show Logger;
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show
-        ClientWorkspace,
-        Connected,
-        Connecting,
-        ConnectionFailed,
-        ConnectionLost,
-        ConnectionProfile,
-        Disconnected,
-        EmbeddedProfile,
-        Reconnecting,
-        StdioProfile,
-        WebSocketProfile;
+    show ClientWorkspace, ConnectionProfile;
 import 'package:codelab_embedded/codelab_embedded.dart'
     show embeddedAgentVersion;
-import 'package:codelab_setup/codelab_setup.dart'
-    show
-        AgentLaunchKind,
-        EditableSettings,
-        NotManaged,
-        RemoteReadOnly,
-        resolveSettingsAccess;
 import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 
 import '../core/platform/build_info.dart';
@@ -29,6 +11,7 @@ import '../core/platform/home_path_label.dart';
 import '../core/platform/local_folder_opener.dart';
 import '../features/settings/application/about_diagnostics.dart';
 import '../features/settings/application/about_ports.dart';
+import '../features/settings/application/about_window.dart';
 import '../features/settings/application/license_summary.dart';
 import 'connection_environment.dart';
 
@@ -107,43 +90,10 @@ Future<AboutWindow> _windowOf(
   ConnectionEnvironment environment,
 ) async {
   final current = workspace.current;
-  final profile = current.profile ?? await defaultProfile();
-  final home = environment.codelabHome ?? '';
-  final (kind, access) = switch (profile) {
-    EmbeddedProfile() => (
-      DiagnosticsConnection.embedded,
-      DiagnosticsAccess.editable,
-    ),
-    WebSocketProfile() => (
-      DiagnosticsConnection.websocket,
-      DiagnosticsAccess.remoteReadOnly,
-    ),
-    StdioProfile(:final command, :final args, :final env) => (
-      DiagnosticsConnection.stdio,
-      switch (resolveSettingsAccess(
-        kind: AgentLaunchKind.stdio,
-        command: command,
-        args: args,
-        env: env,
-        defaultCodelabHome: home,
-      )) {
-        EditableSettings() => DiagnosticsAccess.editable,
-        NotManaged() => DiagnosticsAccess.notManaged,
-        RemoteReadOnly() => DiagnosticsAccess.remoteReadOnly,
-      },
-    ),
-  };
-  return (
-    connection: kind,
-    state: switch (current.connection) {
-      Disconnected() => DiagnosticsConnectionState.disconnected,
-      Connecting() => DiagnosticsConnectionState.connecting,
-      Connected() => DiagnosticsConnectionState.connected,
-      Reconnecting() => DiagnosticsConnectionState.reconnecting,
-      ConnectionLost() => DiagnosticsConnectionState.disconnected,
-      ConnectionFailed() => DiagnosticsConnectionState.failed,
-    },
-    access: access,
-    customConfigHome: (environment.variables['CODELAB_HOME'] ?? '').isNotEmpty,
+  return aboutWindowOf(
+    profile: current.profile ?? await defaultProfile(),
+    connection: current.connection,
+    codelabHome: environment.codelabHome ?? '',
+    environment: environment.variables,
   );
 }

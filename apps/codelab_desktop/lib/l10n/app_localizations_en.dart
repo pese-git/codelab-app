@@ -363,4 +363,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsGeneralAboutClose => 'Close';
+
+  @override
+  String get settingsGeneralUnreadableCannotRead =>
+      'Cannot read the agent settings.';
+
+  @override
+  String get settingsGeneralUnreadableHome =>
+      'The CodeLab home folder is not available.';
+
+  @override
+  String get settingsGeneralUnreadableUserLayer =>
+      'The user config.yaml cannot be read.';
+
+  @override
+  String get settingsGeneralAboutCopyFailed =>
+      'Couldn\'t copy the diagnostics.';
+
+  @override
+  String get settingsGeneralAboutLoadFailed =>
+      'Couldn\'t load the About section.';
 }

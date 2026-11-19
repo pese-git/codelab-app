@@ -1,8 +1,8 @@
-// Красные тесты хранения настройки «Reopen the last project and its tabs»
+// Тесты хранения настройки «Reopen the last project and its tabs»
 // (задача 3.3 change `add-app-general-page`; design.md D9; spec app-settings
 // «Открытие последнего проекта при запуске»).
 //
-// Красные тесты: порт — заглушка итерации 3, реализация — задача 3.4.
+// Реализация — задачи 3.3 и 3.4 change `add-app-general-page`.
 //
 // Ключ `codelab.workspace.reopen_last_project` (`bool`): включённое значение
 // (по умолчанию) — ключа нет, выключенное — `false`. Нечитаемое значение

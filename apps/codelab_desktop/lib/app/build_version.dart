@@ -14,8 +14,8 @@ library;
 const codelabDesktopVersion = '0.1.0';
 
 /// Адрес `CHANGELOG.md` репозитория CodeLab на ветке `master`; `<repo>` — тот
-/// же адрес, что `repoUrl` в `site/src/site.config.ts` (тест сверяет). Константа
-/// app, а не ввод пользователя: страница новостей сайта не используется, пока
-/// не выбран хостинг (решение пользователя 2026-11-19).
+/// же адрес, что `repoUrl` в `site/src/site.config.ts` (тест сверяет).
+/// Константа app, а не ввод пользователя: страница новостей сайта не
+/// используется, пока не выбран хостинг (решение пользователя 2026-11-19).
 const kCodeLabReleaseNotesUrl =
     'https://github.com/pese-git/codelab-app/blob/master/CHANGELOG.md';

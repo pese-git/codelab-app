@@ -223,6 +223,44 @@ void main() {
     expect(sentMethods(), [initializeMethod]);
   });
 
+  // Чтение снимка ещё идёт, а пользователь уже выбрал папку и подключился:
+  // первое подключение прошло без восстановления, и снимок, дочитанный позже,
+  // не должен сработать при reconnect — иначе `session/load` уйдёт без
+  // действия пользователя (AGENTS.md §9, §10).
+  test('подключение до завершения readProject: после reconnect нет '
+      'session/load', () async {
+    final gate = Completer<void>();
+    final slow = _GatedStore(_snapshot(), gate.future);
+    agent = KitAgent(capabilities: _withLoad, snapshots: slow);
+
+    final reading = agent.workspace.restoreProject();
+    agent.workspace.selectProject('/work');
+    await agent.start();
+    gate.complete();
+    // Проект возвращается хосту, даже если читался позже подключения.
+    expect(await reading, '/work');
+
+    agent.restartAgent(capabilities: _withLoad);
+    await agent.workspace.connect(
+      const StdioProfile(id: 'agent', label: 'Agent', command: 'agent'),
+      projectDirectory: '/work',
+    );
+
+    await agent.workspace.flushSnapshot();
+
+    expect(sentMethods(), [initializeMethod]);
+    expect(agent.workspace.current.sessions, isEmpty);
+    // Сессии позднего снимка не попали и в запись: ни открытые, ни активная.
+    expect(slow.written, isNotNull);
+    final window = (jsonDecode(slow.written!)['windows'] as Map)['main'] as Map;
+    expect(window['projectDirectory'], '/work');
+    final ids = [
+      for (final s in window['openSessions'] as List) (s as Map)['id'],
+    ];
+    expect(ids, isNot(contains('s-42')));
+    expect(window['activeSessionId'], isNot('s-42'));
+  });
+
   // Пользователь открыл другую папку до первого подключения: снимок описывает
   // прошлый проект, и его сессии не должны ни появиться в новом проекте, ни
   // дать `session/new` в старой папке.
@@ -345,4 +383,27 @@ void main() {
 Map<Object?, Object?> _savedWindow(InMemoryWorkspaceSnapshotStore store) {
   final saved = jsonDecode(store.value!) as Map<String, Object?>;
   return (saved['windows']! as Map)['main'] as Map;
+}
+
+/// Хранилище, чьё чтение ждёт [gate]: моделирует долгое чтение снимка.
+final class _GatedStore implements WorkspaceSnapshotStore {
+  _GatedStore(this.value, this.gate);
+
+  final String? value;
+  final Future<void> gate;
+
+  @override
+  Future<String?> read() async {
+    await gate;
+    return value;
+  }
+
+  @override
+  Future<void> write(String snapshot) async => written = snapshot;
+
+  /// Последняя записанная строка снимка; `null` — записи не было.
+  String? written;
+
+  @override
+  Future<void> clear() async {}
 }

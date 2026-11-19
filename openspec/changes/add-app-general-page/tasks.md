@@ -114,7 +114,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 6. Документация и приёмка
 
-- [ ] 6.1 `[desktop]` `apps/codelab_desktop/AGENTS.md` — раздел «Страница «General»»:
+- [x] 6.1 `[desktop]` `apps/codelab_desktop/AGENTS.md` — раздел «Страница «General»»:
   - `AgentDefaultsCubit`, `StartupSettingsCubit`, классификация ключей и тест полноты (D2);
   - цель `user` (D4);
   - `StartupPreferences` и `startWithoutRestore` (D9);
@@ -123,5 +123,5 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - диагностика по белому списку (D12);
   - копии `assets/legal/` (D13);
   - события (D16).
-- [ ] 6.2 `[desktop]` `docs-writer`: `apps/codelab_desktop/doc/user-guide.md` (раздел о странице «General»: умолчания агента, запуск без прошлого проекта, «About», что копирует «Copy diagnostics») и `docs/user/configuration.md` (умолчания агента правятся и в app, запись в `$CODELAB_HOME/config.yaml`).
-- [ ] 6.3 `[desktop]` Сверка §12.4.9, A11 и D17 с кодом, `openspec validate add-app-general-page --strict`, проверки затронутого (§21) по итерациям.
+- [x] 6.2 `[desktop]` `docs-writer`: `apps/codelab_desktop/doc/user-guide.md` (раздел о странице «General»: умолчания агента, запуск без прошлого проекта, «About», что копирует «Copy diagnostics») и `docs/user/configuration.md` (умолчания агента правятся и в app, запись в `$CODELAB_HOME/config.yaml`).
+- [x] 6.3 `[desktop]` Сверка §12.4.9, A11 и D17 с кодом, `openspec validate add-app-general-page --strict`, проверки затронутого (§21) по итерациям.

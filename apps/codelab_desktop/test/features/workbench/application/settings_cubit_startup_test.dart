@@ -4,9 +4,7 @@
 // «Выключено — старт без проекта», «Выключено — снимок нового запуска
 // пишется»; design.md D9).
 //
-// Красные тесты: настройку читает только заглушка итерации 3 (всегда
-// «включено»), чтение до восстановления и `startWithoutRestore` появятся в
-// задаче 3.4.
+// Реализация — задача 3.4 change `add-app-general-page`.
 //
 // Тесты идут через граф app (`CodeLabTestBinding`) и проверяют наблюдаемое:
 // выбран ли проект, какие кадры ушли агенту, сколько раз открыт транспорт,
@@ -65,6 +63,15 @@ final class _FixedStartupPreferences implements StartupPreferences {
   @override
   Future<void> save(bool reopenLastProject) async =>
       saves.add(reopenLastProject);
+}
+
+/// Порт, чьё чтение бросает (контракт «не бросает» нарушен адаптером).
+final class _ThrowingStartupPreferences implements StartupPreferences {
+  @override
+  Future<StartupLoad> load() => Future.error(StateError('disk is gone: /x/y'));
+
+  @override
+  Future<void> save(bool reopenLastProject) async {}
 }
 
 void main() {
@@ -252,6 +259,23 @@ void main() {
       expect(unreadable, hasLength(1));
       expect(unreadable.single['level'], 'warning');
       expect(unreadable.single['error_class'], 'StateError');
+      expect(events(binding, 'app.reopen_last_project_skipped'), isEmpty);
+    });
+
+    test('порт бросает при чтении: восстановление не зависает, проект '
+        'открывается, событие unreadable с именем типа без текста', () async {
+      final binding = CodeLabTestBinding(
+        startupPreferences: _ThrowingStartupPreferences(),
+        preferences: {kWorkspaceSnapshotPrefsKey: _snapshot('/work/app')},
+      );
+      final cubit = binding.scope.resolve<CodeLabShellCubit>();
+      await restored(binding);
+
+      expect(cubit.state.selectedProjectPath, '/work/app');
+      final unreadable = events(binding, 'app.reopen_last_project_unreadable');
+      expect(unreadable, hasLength(1));
+      expect(unreadable.single['error_class'], 'StateError');
+      expect('${unreadable.single}', isNot(contains('/x/y')));
       expect(events(binding, 'app.reopen_last_project_skipped'), isEmpty);
     });
 

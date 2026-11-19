@@ -2,9 +2,7 @@
 // `add-app-general-page`; design.md D1, D11; spec app-settings «Раздел
 // «About» страницы «General»»: `macOS arm64`, `Linux x64`, `Windows x64`).
 //
-// Красные тесты: `BuildInfo` — заглушка итерации 5, реализация — задача 5.4.
-// Отображение — чистая функция от значений платформы, поэтому проверяется без
-// запуска на нужной ОС; `dart:ffi` в `lib/` разрешён только этому файлу (5.5).
+// Реализация — задача 5.4 change `add-app-general-page`.
 
 import 'dart:ffi' show Abi;
 
@@ -47,6 +45,12 @@ void main() {
 
       expect(info.label, 'Windows x64');
     });
+  });
+
+  test('архитектура вне перечня — имя Abi как есть, без разбора строки', () {
+    final info = BuildInfo.of(operatingSystem: 'linux', abi: Abi.linuxRiscv64);
+
+    expect(info.arch, Abi.linuxRiscv64.toString());
   });
 
   test('BuildInfo.current описывает процесс тестов', () {

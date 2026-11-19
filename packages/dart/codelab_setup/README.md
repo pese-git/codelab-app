@@ -36,6 +36,7 @@ flowchart LR
 | `resolveSettingsAccess`, `SettingsAccess` (`EditableSettings`, `RemoteReadOnly`, `NotManaged`) | чьи настройки читать и куда писать; цели записи — `user` и `projectLocal` |
 | `AgentConfigStore`, `AgentConfigSnapshot`, `ConfigSaveOutcome` | порт чтения и записи конфига агента; снимок слоёв и проблем загрузки; исходы записи |
 | `providerEntriesOf`, `mcpServerEntriesOf`, `settingFieldsOf`, `sessionDefaultsOf`, `agentDefinitionRowsOf` | модели представления для страниц настроек и `/settings`; значения секретов не раскрываются |
+| `SettingEditRefusal` (`UnknownSetting`, `TrustBoundarySetting`, `SecretSetting`, `ExternalSourceSetting`, `MaskedSetting`), `settingKeyEditRefusalOf`, `settingEditRefusalOf` | почему строку настроек нельзя править из клиента; `null` — править можно. Значений в причинах нет, тексты — дело клиента |
 | `ProviderCheck`, `HttpProviderCheck` | проверка адреса провайдера запросом `/models` на переданном `http.Client` |
 | `ProviderSetupFlow`, `ProviderPresets`, `ProviderSetupPlan`, `ProviderSetupCommitter`, `ProviderKeys` | мастер подключения провайдера: автомат, пресеты, запись «секрет, затем конфиг» с откатом |
 | `ProviderRemover` | удаление провайдера одной записью конфига; секрет удаляется только после успешной записи |

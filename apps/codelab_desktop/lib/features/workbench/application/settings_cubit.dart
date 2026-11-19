@@ -289,13 +289,23 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     if (port == null) {
       return true;
     }
-    final load = await port.load();
+    final StartupLoad load;
+    try {
+      load = await port.load();
+    } on Object catch (error) {
+      // Порт обязан не бросать, но адаптер может нарушить контракт: без
+      // защиты не вызвались бы ни `restoreProject`, ни `startWithoutRestore`,
+      // и снимок этого запуска не писался бы вовсе (приоритет 3: данные).
+      _appLogger?.warning(
+        'app.reopen_last_project_unreadable',
+        context: {'error_class': error.runtimeType.toString()},
+      );
+      return true;
+    }
     if (load.storedValueInvalid || load.readFailure != null) {
       _appLogger?.warning(
         'app.reopen_last_project_unreadable',
-        context: {
-          if (load.readFailure case final failure?) 'error_class': failure,
-        },
+        context: {'error_class': ?load.readFailure},
       );
     }
     return load.reopenLastProject;

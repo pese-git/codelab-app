@@ -4,7 +4,7 @@ import '../repl/picker_spec.dart';
 
 /// Строки `/settings`: ключи реестра со `scope: shared` (design.md change
 /// `add-provider-setup-ui`, D17, Q15). `trusted_projects` показывается, но не
-/// правится ([isTrustBoundary]).
+/// правится (`TrustBoundarySetting` моста, `settingKeyEditRefusalOf`).
 ///
 /// Почему отдельный файл без `dart_tui`: те же строки нужны REPL и экрану
 /// настроек TUI (4b), а выбор слоя записи и отказы — общие правила.
@@ -46,7 +46,8 @@ List<SettingFieldView> settingRowsOf(AgentConfigSnapshot snapshot) {
 
 /// Дескриптор ключа реестра со `scope: shared`; `null` — ключа нет в реестре
 /// или он не `shared` («Unknown setting»). `trusted_projects` дескриптор
-/// имеет, но команда его не правит ([isTrustBoundary]).
+/// имеет, но команда его не правит (`settingKeyEditRefusalOf` →
+/// `TrustBoundarySetting`).
 SettingDescriptor? editableDescriptorOf(String key) {
   final descriptor = SettingsRegistry.lookup(key);
   if (descriptor == null || descriptor.scope != SettingScope.shared) {
@@ -73,7 +74,7 @@ String? expectedFormatOf(SettingDescriptor descriptor) {
 /// `add-app-general-page`), здесь — только тексты CLI, неизменные побайтно.
 String? settingKeyRefusal(String key) {
   final refusal = settingKeyEditRefusalOf(key);
-  return refusal == null ? null : _refusalText(refusal, null);
+  return refusal == null ? null : _refusalText(refusal);
 }
 
 /// Отказ по строке [row] (до записи): ключ ([settingKeyRefusal]), источник
@@ -84,13 +85,19 @@ String? settingKeyRefusal(String key) {
 /// переписать, ни сбросить вслепую (D17, D20).
 String? settingRowRefusal(SettingFieldView row) {
   final refusal = settingEditRefusalOf(row);
-  return refusal == null ? null : _refusalText(refusal, row);
+  return refusal == null
+      ? null
+      : _refusalText(refusal, sourceName: row.sourceName);
 }
 
 /// Текст отказа CLI для ветки моста. `switch` без `default`: новая ветка
-/// `SettingEditRefusal` не пройдёт мимо CLI. Имя источника — из
-/// `row.sourceName` (в ветке моста его нет, только вид источника).
-String _refusalText(SettingEditRefusal refusal, SettingFieldView? row) =>
+/// `SettingEditRefusal` не пройдёт мимо CLI.
+///
+/// [sourceName] — колонка `source` строки (`config`/`env`, `row.sourceName`):
+/// `ConfigSourceView.label` в ветке моста — путь файла, а текст CLI называет
+/// источник по виду, поэтому `refusal.source` здесь не подходит. Для отказов по
+/// одному ключу источника нет и ветка `ExternalSourceSetting` недостижима.
+String _refusalText(SettingEditRefusal refusal, {String sourceName = ''}) =>
     switch (refusal) {
       UnknownSetting(:final key) =>
         'Unknown setting $key. Run /settings to list them.',
@@ -98,7 +105,7 @@ String _refusalText(SettingEditRefusal refusal, SettingFieldView? row) =>
         'trusted_projects is a trust boundary; it cannot be changed here.',
       SecretSetting() || MaskedSetting() => 'Use codelab secret set <name>',
       ExternalSourceSetting(:final key) =>
-        '$key is set by ${row!.sourceName}; it cannot be changed here.',
+        '$key is set by $sourceName; it cannot be changed here.',
     };
 
 /// Записывает или сбрасывает [key] в слое [layer] и возвращает строку исхода

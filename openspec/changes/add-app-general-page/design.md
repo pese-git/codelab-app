@@ -43,7 +43,7 @@
 | `codelab_embedded` (мост) | экспорт `embeddedAgentVersion` из основного бареля | `[agent]` |
 | `codelab_client_core` | `ClientWorkspace.startWithoutRestore()`, `WorkspaceRestorer.skip()` | `[client]` |
 | `apps/codelab_cli` | `settings_rows.dart` строит тексты по `SettingEditRefusal` | `[client]` |
-| `apps/codelab_desktop` | `features/settings/application/` (Cubit-ы, классификация, диагностика), `presentation/general_page.dart`, `core/platform/` (`startup_preferences.dart`, `build_info.dart`), `lib/app/` (сборка), `assets/legal/`, ARB | `[desktop]` |
+| `apps/codelab_desktop` | `features/settings/application/` (`agent_defaults_rows.dart`, `agent_defaults_state.dart`, `agent_defaults_cubit.dart`, `startup_settings_cubit.dart`, `about_ports.dart`, `about_diagnostics.dart`, `license_summary.dart`, `settings_search_index.dart`), `presentation/` (`general_page.dart`, `about_section.dart`, `agent_setting_labels.dart`), `core/platform/` (`startup_preferences.dart`, `build_info.dart`), `lib/app/` (`app_scope.dart`, `about_ports_factory.dart`, `build_version.dart`), `features/workbench/application/settings_cubit.dart`, `assets/legal/`, ARB | `[desktop]` |
 
 Направление зависимостей не меняется: `apps/codelab_desktop` → `codelab_setup`, `codelab_embedded`, `codelab_client_core`; `apps/codelab_cli` → `codelab_setup`. Новых пакетов и рёбер нет, граф в `README.md` не меняется. Allowlist ядра (PKG-2), `setupAllowlist`, `desktopAllowlist` не меняются.
 
@@ -72,6 +72,8 @@
 Тест классификации обходит `SettingsRegistry.all` и падает на ключе `shared` без строки в таблице. Новый ключ реестра поэтому не появится на «General» без решения.
 
 Группы — по `SettingDescriptor.section` в порядке Budget, Agent, Subagents, Logging. Внутри группы — порядок реестра, как у `/settings`.
+
+Уточнение реализации (сверка задачи 6.3). Группы есть в состоянии (`AgentDefaultsGroup.section`), но страница выводит строки одним списком в этом порядке, без подписей разделов, как на артборде. Ключи `subagents.*` перечислены в таблице поимённо (`_generalKeys`), а не шаблоном: новый ключ раздела `subagents` без строки в таблице роняет тест полноты, а не появляется на странице. `providers.*` относится к «Providers» по префиксу шаблона `providers.*.`. Подпись и описание берут `agentSettingLabelOf` и `agentSettingDescriptionOf` (`presentation/agent_setting_labels.dart`); ключ без сообщения ARB показывается своим именем.
 
 **Почему не все `scope: shared`, как буквально в §12.4.9:**
 - `permissions.mode` на «General» обошёл бы подтверждение `bypass` (D15 `add-settings-agents-modes`) — это нарушение приоритета 1 ради полноты списка;
@@ -112,6 +114,13 @@
 - Отказы — по ветке `SettingEditRefusal` (D6): секрет, маска, `config`/`env`. Среди ключей `general` секретных нет. Отказ всё равно обрабатывается, чтобы новый ключ классификации не стал редактируемым случайно.
 - `restartRequired` → пометка `(applies after restart)` у строки и хвост баннера `Applies after Restart agent.` по `ConfigSaved.restartRequiredKeys` (единственный источник — реестр, R0-1).
 
+Уточнения реализации (сверка задачи 6.3), тексты которых spec не задаёт:
+- у ключа `int` без `min` подсказка — `Enter a whole number.` (`settingsGeneralHintInt`). Среди ключей `general` такой подсказки нет, это защита от нового ключа;
+- отказы `UnknownSetting` и `TrustBoundarySetting` дают подпись `This setting cannot be changed here.` (`settingsGeneralRefusalOther`). Ключей `general` с такими отказами нет, ветка нужна, чтобы `switch` был полным;
+- `ConfigRejected` без проблем писателя и отсутствие слоя `user` в снимке дают баннер уровня `error` `The config was not saved.` (`settingsGeneralRejected`); с проблемами — их текст как есть;
+- баннеры `Saved.` и `Saved to <home>/config.yaml.` — уровня `success`, конфликт и перекрытие — `warning`;
+- у редактируемой строки значение показывает сам редактор: текст поля — `SettingFieldView.effectiveValue`, у пустого поля подсказка `Not set` (`settingsGeneralNotSet`). Строка с отказом показывает значение текстом (`Not set`, если значения и умолчания нет).
+
 ### D6. Правило «можно ли править» — в мосте
 
 **Решение.** В `codelab_setup/lib/src/views/setting_edit_rules.dart`:
@@ -136,7 +145,13 @@ SettingEditRefusal? settingEditRefusalOf(SettingFieldView row);
 ### D7. `AgentDefaultsCubit`: состояние, жизненный цикл, поздние результаты
 
 По образцу `AgentsModesCubit` (D11 `add-settings-agents-modes`):
-- закрытая иерархия `AgentDefaultsState`: `Loading | ReadOnly(access) | Unreadable(issues) | Ready(groups, banner, saving, fieldErrors)`;
+- закрытая иерархия `AgentDefaultsState` (`agent_defaults_state.dart`):
+  - `AgentDefaultsLoading` — страница показывает `ProgressRing` с ключом `settings-general-agent-loading`;
+  - `AgentDefaultsReadOnly(kind: remote | notManaged, subject)` — `subject` — `scheme://host:port` или имя агента;
+  - `AgentDefaultsUnreadable(reason, problems, banner?, configHome)` — заголовок InfoBar `The agent config cannot be read.` (`settingsGeneralUnreadable`). Под заголовком — текст по причине `AgentDefaultsUnreadableReason`: `loader` — проблемы загрузчика ядра как есть (`problems`, только у этой причины); `homeUnavailable` (папка `$CODELAB_HOME` неизвестна), `cannotRead` (сессия настроек или снимок не открылись, текст исключения не хранится), `userLayerUnreadable` (пользовательский `config.yaml` не читается, а загрузчик проблем не назвал) — сообщения ARB, которые строит страница. Так английский текст app в состоянии не хранится. `banner` — только `savedUnverified`: запись прошла, а перечитанный конфиг не разбирается;
+  - `AgentDefaultsReady(groups, banner?, saving, fieldErrors, configHome)`.
+
+  `configHome` — метка `$CODELAB_HOME` с `~` (`homePathLabel`) для текстов `<home>/config.yaml`; её считает Cubit, страница путей не вычисляет;
 - Cubit создаётся на каждое открытие страницы (`CodeLabDependencies.createAgentDefaultsCubit`), страница его закрывает. Единственная подписка на `ClientWorkspace.state` (профиль, фокус, папка) — у Cubit, `close()` её отменяет (AGENTS.md §9);
 - номер загрузки: снимок, пришедший после нового `reload`, смены доступа или папки либо `close()`, отбрасывается (`agent_defaults.load_discarded`). Пока идёт новая загрузка, правка не записывается (`save_failed` с `outcome: stale`);
 - одна запись за раз (`Ready.saving`), повторные правки игнорируются; `ConfigConflict` — баннер и перечитывание без автоповтора (SETUP-6);
@@ -172,6 +187,10 @@ SettingEditRefusal? settingEditRefusalOf(SettingFieldView row);
 
 **Сбой чтения** — как при включённой настройке (не меняет привычное поведение) и событие `app.reopen_last_project_unreadable`. **Сбой записи** — переключатель остаётся в выбранном положении, InfoBar с «Retry» (образец — `settings-language-save-failed`).
 
+Уточнение реализации (сверка задачи 6.3). `StartupPreferences.load()` возвращает `StartupLoad(reopenLastProject, storedValueInvalid, readFailure)`: небулево значение и сбой хранилища различаются, но оба дают «включено». Порт в `SettingsCubit` необязателен (`null` — «включено»); шов тестов — `createCodeLabRootScope(startupPreferences:)`. InfoBar сбоя записи — ключ `settings-general-reopen-last-project-save-failed` над строкой, кнопка `settings-general-reopen-last-project-retry` с тем же сообщением `Retry`, что у строки «Language» (`settingsLanguageSaveRetry`). Поздний итог записи после нового выбора состояние не меняет (номер выбора в `StartupSettingsCubit`).
+
+Уточнение реализации kit (исправления по ревью). `WorkspaceRestorer` запоминает первое подключение запуска (`_connectedOnce`). Если снимок дочитан уже после первого подключения, `restoreProject()` отдаёт его проект хосту, но сессии снимка не восстанавливаются: ни `session/load`, ни `session/new`, в том числе при последующих `reconnect()`. В список и в следующую запись снимка они тоже не попадают. Это следует из правила spec acp-client-kit «Восстановление после перезапуска» («при первом успешном подключении в запуске»): восстановление — один раз за запуск и только на первом подключении. Сценарий — в delta acp-client-kit «Снимок, дочитанный после первого подключения».
+
 **Владелец значения на странице** — `StartupSettingsCubit` (на открытие страницы: загрузка, запись, `saveFailed`). Значение читается только при старте, поэтому живой подписки workbench на него нет.
 
 Альтернатива — хранить настройку в `profiles.json` или `config.yaml`. Отклонена: это поведение окна app, CLI его не знает.
@@ -197,7 +216,15 @@ SettingEditRefusal? settingEditRefusalOf(SettingFieldView row);
 | Channel | **скрыт** | признака канала в сборке нет; каналы §12.7 — про обновление CLI (решение пользователя Q3) |
 | Signed by | **скрыт** | проверки подписи во время работы нет; на Linux её нет вовсе (решение пользователя Q4) |
 
-`AboutInfo` (неизменяемые данные) собирает composition root один раз. Страница получает его из `CodeLabDependencies`, своего Cubit у блока нет: состояние — только развёрнут ли `Expander` (эфемерный UI) и заметка об исходе действия.
+`AboutInfo` (неизменяемые данные) собирает composition root один раз. Своего Cubit у блока нет: состояние — только развёрнут ли `Expander` (эфемерный UI) и заметка об исходе действия.
+
+Уточнение реализации (сверка задачи 6.3). Страница получает не `AboutInfo`, а набор `AboutPorts` (`features/settings/application/about_ports.dart`) из `CodeLabDependencies.aboutPorts`:
+- `info` — `Future<AboutInfo>`: ресурсы `assets/legal/` читаются лениво при первом открытии страницы, результат кэшируется, повторные вызовы дают то же значение;
+- `window` — снимок окна для диагностики в момент нажатия «Copy diagnostics» (D12);
+- `externalLinks` и `folders` — порты `ExternalLinkOpener` и `LocalFolderOpener`;
+- `logger` — события `settings.about_action`.
+
+Собирает их `buildAboutPorts` (`lib/app/about_ports_factory.dart`); параметр `fixed` — шов тестов с готовым `AboutInfo` без чтения ресурсов. Строку «License» разбирает `licenseSummaryOf` (`application/license_summary.dart`): имя — первая строка без слова `License`, права — первая строка, начинающаяся с `Copyright`; разбор не бросает. Виджет — `AboutSection` (`presentation/about_section.dart`): блок с заголовком «About», внутри свёрнутый `Expander` с ключом `settings-general-about` на обёртке `KeyedSubtree`. `GeneralPage(about: null)` раздел не показывает — так тесты блоков «Agent defaults» обходятся без портов.
 
 ### D12. «Copy diagnostics»
 
@@ -207,10 +234,13 @@ SettingEditRefusal? settingEditRefusalOf(SettingFieldView row);
 
 Текст английский при любом языке интерфейса: это диагностика для отчёта, как содержимое «Debug log» (D7 `add-desktop-localization`).
 
+Уточнение реализации (сверка задачи 6.3). `DiagnosticsContext` собирается в момент нажатия: язык — из `AppLanguageCubit`, остальное — из `AboutPorts.window()`. Профиль — профиль текущего состояния окна, без него — профиль по умолчанию. Вид доступа: встроенный агент — `editable`, WebSocket — `remote-read-only`, stdio — по `resolveSettingsAccess`. Состояние `ConnectionLost` показывается как `disconnected`. «Config folder: custom» — переменная `CODELAB_HOME` непуста.
+
 ### D13. Лицензия и «Third-party notices»
 
 - `apps/codelab_desktop/assets/legal/LICENSE` и `assets/legal/THIRD_PARTY_NOTICES.md` — копии корневых файлов, объявленные в `pubspec.yaml` как ресурсы. Тест `test/app/legal_assets_test.dart` сверяет их побайтно с корнем. Образец сверки копии — `.fvm/fvm_config.json` и `.fvmrc`. Flutter не принимает ресурсы вне каталога пакета, поэтому ссылка `../../THIRD_PARTY_NOTICES.md` невозможна.
 - Диалог `settings-general-third-party-dialog`: текст `THIRD_PARTY_NOTICES.md` (markdown-виджет `codelab_ui`, уже есть в ленте), затем список лицензий пакетов из `LicenseRegistry.licenses` — свёрнутые `Expander` по имени пакета. `showLicensePage` (Material) не используется: app на Fluent, и страница Material требует своих локализаций и темы.
+- В диалоге под уведомлениями — заголовок `Package licenses` и кнопка `Close` (сообщения ARB). Сбой `LicenseRegistry` не мешает показать уведомления: остаётся то, что успело собраться.
 - Почему офлайн, а не ссылка на репозиторий: запись про шрифт OFL-1.1 в `THIRD_PARTY_NOTICES.md` относится к распространяемой сборке, и уведомление должно быть доступно в самой сборке. Ссылка на сайт без сети не работает.
 
 ### D14. «Release notes» и «Open log folder»
@@ -218,16 +248,35 @@ SettingEditRefusal? settingEditRefusalOf(SettingFieldView row);
 - «Release notes» — `ExternalLinkOpener.open(Uri)` с константой `kCodeLabReleaseNotesUrl` = `<repo>/blob/master/CHANGELOG.md`. `<repo>` — тот же адрес, что `repoUrl` в `site/src/site.config.ts`. Константа в app (`lib/app/build_version.dart`) сверяется тестом с `site.config.ts`. Страница новостей сайта не используется, пока не выбран хостинг (H1 [`add-astro-site`](../archive/2026-11-18-add-astro-site/design.md); решение пользователя Q5). Политика ссылок порта (`http`/`https`) уже есть.
 - «Open log folder» — `LocalFolderOpener.open(logDirectory, create: false)`. `logDirectory` — тот же путь, что получает `CodeLabLoggingModule`, его передаёт composition root. Ввода пути нет. Исходы `failed` и `missing` → InfoBar без пути.
 - Журналы встроенного агента и сессий лежат в `$CODELAB_HOME` и этой кнопкой не открываются. Подпись кнопки говорит «log folder» app — это журнал, о котором просит отчёт об ошибке.
+- Уточнение реализации (сверка задачи 6.3). Исходы `failed` и `rejectedScheme` у ссылки дают тот же InfoBar `settings-general-about-open-failed`. Подтверждение копирования — отдельный InfoBar уровня `success` `settings-general-about-copied` (`Diagnostics copied.`). Показана одна заметка — об исходе последнего действия.
+- Сбои раздела (исправления по ревью; spec app-settings «Раздел «About» страницы «General»»). Ни в одном InfoBar нет текста исключения и пути:
+  - сбой «Copy diagnostics» (данные окна, построение текста или `Clipboard.setData`) — InfoBar уровня `warning` `settings-general-about-copy-failed`: `Couldn't copy the diagnostics.` (`settingsGeneralAboutCopyFailed`); событие `settings.about_action` с `outcome: failed`; текст в буфер не кладётся;
+  - сбой `AboutPorts.info()` (ресурсы `assets/legal/`) — вместо `Expander` в блоке «About» InfoBar уровня `warning` `settings-general-about-load-failed`: `Couldn't load the About section.` (`settingsGeneralAboutLoadFailed`); событие `settings.about_load_failed`. Раздел не прячется молча: пустое место без объяснения скрыло бы сбой сборки.
 
 ### D15. Локализация
 
 - Все новые строки — ключи ARB `en` и `ru` с `@description`. Ключи конфигурации, значения, источники, команды (`codelab /settings`, `codelab config set`, `codelab secret set`), `CodeLab`, `MIT`, пути и версии — плейсхолдеры или неизменяемые части (глоссарий §2).
-- Новые термины глоссария (задача 0.2): «Agent defaults» — «Умолчания агента», «Shared» (тег) — «Общая», «Startup and files» — «Запуск и файлы», «Reopen the last project» — «Открывать последний проект», «Show ignored files» — «Показывать игнорируемые файлы», «About» — «О программе», «Copy diagnostics» — «Скопировать диагностику», «Third-party notices» — «Сторонние уведомления», «Release notes» — «Заметки о выпуске», «Open log folder» — «Открыть папку журналов». Подписи ключей реестра (D2) — по глоссарию: «ход», «шаг», «субагент».
+- Новые термины глоссария (задача 0.2): «Agent defaults» — «Умолчания агента», «Shared» (тег) — «Общая», «Startup and files» — «Запуск и файлы», «Reopen the last project» — «Открывать последний проект», «Show ignored files» — «Показывать игнорируемые файлы», «About» — «О программе», «Copy diagnostics» — «Копировать диагностику» (уточнено решением пользователя 2026-11-19, ниже), «Third-party notices» — «Сторонние уведомления», «Release notes» — «Заметки о выпуске», «Open log folder» — «Открыть папку журналов». Подписи ключей реестра (D2) — по глоссарию: «ход», «шаг», «субагент».
+- Поиск «Find a setting» (уточнение реализации, сверка задачи 6.3): `SettingsSearchIndex.search(visible, query, titlesOf:, localizedKeywordsOf:)`. `titlesOf` даёт заголовок страницы на текущем языке и английский, `localizedKeywordsOf` — переводы ключевых слов страницы из ARB. Для «General» это `settingsSearchKeywordsGeneral` — список через запятую, его делит `SettingsShell`. Английские ключевые слова `SettingsSearchIndex.keywords` от языка не зависят.
+- Сверка ARB с глоссарием (задача 6.3) добавила в подраздел «Страница «General»» термины, которые появились при реализации: `Not set`, `Saved`, `overrides`, `(applies after restart)`, `License`, `Config folder`, `Package licenses`, `Close` и подписи ключей реестра.
+- Решения пользователя 2026-11-19 по переводу (сверка задачи 6.3; глоссарий, подраздел «Страница «General»»):
+  - `Max …` подписей ключей реестра — «Лимит …»: «Лимит шагов», «Лимит токенов», «Лимит стоимости», «Лимит длительности», «Лимит глубины», «Лимит одновременных», «Лимит за ход». «Макс. …» нарушало правило глоссария о сокращениях с точкой;
+  - «Copy diagnostics» — «Копировать диагностику», несовершенный вид, как «Copy» и «Copy path» кита;
+  - «Config folder» — «Папка настроек» остаётся;
+  - все «Applies …» страницы — совершенным видом «Применится …», в том числе «Применится при следующем запуске» в подписи «Reopen the last project and its tabs».
 - Cubit-ы change текста в состоянии не держат (D7, D9), подписка на смену языка им не нужна. Тест смены языка (`expectNoStaleLanguage`) — на всю страницу «General» с открытым «About» и баннером записи.
 
 ### D16. Наблюдаемость
 
 Логгер `codelab_desktop.settings`, события — в spec app-settings «События журнала страницы «General»». Значения ключей конфигурации, пути, URL и тексты исключений в событиях не пишутся (CFG-10; AGENTS.md §16). Ключ конфигурации (`budget.max_steps`) — не секрет и пишется. Запись умолчаний дополнительно журналирует сам `ConfigWriter` агента, здесь это не дублируется.
+
+Уточнение реализации (сверка задачи 6.3) — имена полей, которые spec называет «имя типа исключения»:
+- `error_type` — у `agent_defaults.unreadable` (тип исключения открытия или чтения, `ConfigIssue` — проблемы загрузчика), `agent_defaults.save_failed` с `outcome: error` и `settings.reopen_last_project_save_failed`. Так называют поле остальные Cubit-ы страниц настроек;
+- `error_class` — у `app.reopen_last_project_unreadable` (логгер компонента `app`, как `app.language_preference_read_failed`). Поле есть только при сбое хранилища; при небулевом значении событие пишется без поля.
+
+`settings.about_load_failed` несёт `error_type` — имя типа исключения чтения данных «About», без пути и текста.
+
+`agent_defaults.loaded` у блока только для чтения несёт `access: remote | not_managed` без `rows`, у редактируемого — `access: editable` и `rows`. `settings.about_action` для `third_party` всегда даёт `outcome: opened`. Итог записи, пришедший после закрытия страницы, пишется в журнал (`agent_defaults.saved` с `overridden: false`): перечитывания уже нет, а запись не должна пропасть из журнала.
 
 ### D17. Отступления от артборда
 
@@ -237,6 +286,8 @@ SettingEditRefusal? settingEditRefusalOf(SettingFieldView row);
 - **InfoBar shared.** `Shared with codelab_cli … written to ~/.codelab/config.yaml — codelab_cli /settings shows the same rows (E-15)` → `Shared with the codelab CLI. … saved to <home>/config.yaml; codelab /settings shows them too.`. Бинарь CLI называется `codelab`, путь — действительный `$CODELAB_HOME`, а на «General» показано подмножество строк `/settings` (D2). Коды целей (`E-15`, `R-22`, `D-16`, `C-03`) в тексты интерфейса не выносятся.
 - **Подпись «Step limit per turn».** На странице — подпись реестра (`Max steps`, перевод по D2), чтобы CLI и app называли ключ одинаково.
 - **«About».** Без «Stable channel» и «Signed by» (D11). Обновления — InfoBar без кодов целей.
+- **Подписи разделов реестра** (Budget, Agent, Subagents, Logging) над строками «Agent defaults» не выводятся, как на артборде: порядок разделов сохраняется, строки идут одним списком (D2).
+- **«Show ignored files».** До итерации 3 `add-file-preview-and-tree` строки нет (D10, SETUP-17). Блок «Startup and files» при этом виден: в нём есть строка «Reopen the last project and its tabs».
 
 ### D18. Итерации
 

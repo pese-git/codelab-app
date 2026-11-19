@@ -1040,13 +1040,16 @@ sequenceDiagram
 не границу доверия: `budget.*`, `compaction.enabled`, `subagents.*` (все 12), `logging.level`
 (блок «Agent defaults»; таблица классификации ключей по страницам с тестом полноты — change
 [`add-app-general-page`](../../../../openspec/changes/add-app-general-page/design.md), D2).
+Строки идут одним списком в порядке разделов реестра Budget, Agent, Subagents, Logging, без
+подписей разделов, как на артборде (D17).
 Режим, effort, модель, провайдеры, MCP, `permissions.deny`, `permissions.tools` и
 `trusted_projects` правятся только на своих страницах (или нигде), чтобы строчный редактор не
 обходил подтверждения и мастера. Запись блока — только в слой `user`; перекрытие проектным слоем
 показывает баннер по действующему значению (D4; решение пользователя Q2, 2026-11-19). Страница
 «General» в app дополнительно показывает клиентские настройки `codelab.file_browser.show_ignored`
 (`shared_preferences`, §12.6.8) и `codelab.workspace.reopen_last_project` (D9); `SettingsRegistry`
-их не содержит.
+их не содержит. Строка `show_ignored` появится вместе с фильтром `.gitignore` панели Files
+(итерация 3 change `add-file-preview-and-tree`), до этого она скрыта (D10, SETUP-17).
 
 Решения change `add-provider-setup-ui` (D17; решения пользователя Q6, Q8):
 * **в построчном REPL** `/settings` — `PickerSpec` со строками `key value source`; `/settings <key>` —
@@ -1073,7 +1076,7 @@ sequenceDiagram
 | Agent | Redaction (23) | D-24, P-10, P-14, P-18, P-19 | ниже | `ConfigWriter` |
 | Agent | Skills & extensions (24) | E-01, E-06, E-07 | §12.4.6а (change [`add-app-skills-page`](../../../../openspec/changes/add-app-skills-page/proposal.md)): цепочка `AGENTS.md` и шаблоны — только чтение; навыки с выключателями (`skills.disabled`) и согласием на каталоги другого агента (`skills.extra_roots`); «Open» открывает каталог. Будущие: E-08, E-09, E-10, E-17…E-19 — строки появятся с их changes | `ConfigWriter` |
 | Agent | Code & web (25) | T-13, T-14, T-15, T-17, T-31, E-12 | языковые серверы, память, web-инструменты | `ConfigWriter` |
-| App | General (26) | E-15, D-18, D-19 | порядок блоков — по артборду (change [`add-app-general-page`](../../../../openspec/changes/add-app-general-page/design.md), D17): InfoBar `Shared with the codelab CLI` и «Agent defaults» — подмножество `SettingsRegistry` `scope: shared` по таблице классификации (D2: `budget.*`, `compaction.enabled`, `subagents.*`, `logging.level`; запись только в `user`, D4); «Interface» со строкой «Language» (`System`, `English`, `Русский`; `codelab.app.language`, применяется сразу; change `add-desktop-localization`, D2; D-19); «Startup and files» — «Reopen the last project and its tabs» (`codelab.workspace.reopen_last_project`, D9) и `codelab.file_browser.show_ignored` (D10); «About» — версия app и встроенного агента, ОС, лицензия, сторонние уведомления, «Release notes» (`CHANGELOG.md` на `master`), «Open log folder», «Copy diagnostics» (§12.7.7; D11–D14). Канал сборки и «Signed by» скрыты до change релизного конвейера, политика конфиденциальности — до появления `PRIVACY.md` (D11, D17). Строка `codelab.input.enter_while_running` (§12.3, A11) появится с change steering (C-03); до него Enter во время хода только ставит сообщение в очередь (D8). App не обновляет себя сам: строка «Updates come from the installer or your package manager» | `ConfigWriter` (shared), `shared_preferences` |
+| App | General (26) | E-15, D-18, D-19 | порядок блоков — по артборду (change [`add-app-general-page`](../../../../openspec/changes/add-app-general-page/design.md), D17): InfoBar `Shared with the codelab CLI` и «Agent defaults» — подмножество `SettingsRegistry` `scope: shared` по таблице классификации (D2: `budget.*`, `compaction.enabled`, `subagents.*`, `logging.level`; запись только в `user`, D4); «Interface» со строкой «Language» (`System`, `English`, `Русский`; `codelab.app.language`, применяется сразу; change `add-desktop-localization`, D2; D-19); «Startup and files» — «Reopen the last project and its tabs» (`codelab.workspace.reopen_last_project`, D9) и `codelab.file_browser.show_ignored` (D10; строка скрыта до фильтра `.gitignore` панели Files, итерация 3 `add-file-preview-and-tree`); «About» — свёрнутый `Expander`: версия app и встроенного агента, ОС, лицензия, сторонние уведомления, «Release notes» (`CHANGELOG.md` на `master`), «Open log folder», «Copy diagnostics» (§12.7.7; D11–D14). Канал сборки и «Signed by» скрыты до change релизного конвейера, политика конфиденциальности — до появления `PRIVACY.md` (D11, D17). Строка `codelab.input.enter_while_running` (§12.3, A11) появится с change steering (C-03); до него Enter во время хода только ставит сообщение в очередь (D8). App не обновляет себя сам: строка «Updates come from the installer or your package manager» | `ConfigWriter` (shared), `shared_preferences` |
 | App | Appearance (10) | D-20 | §12.6.3 | `shared_preferences`, файлы тем |
 | App | Keyboard (27) | — | сочетания app по группам, только для чтения, с поиском; переназначение в app не вводится | — |
 

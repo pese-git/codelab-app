@@ -103,16 +103,39 @@ final class AgentDefaultsBanner {
   final List<String> problems;
 }
 
+/// Почему блок не может показать настройки (D7: текст в состоянии не хранится,
+/// сообщение строит страница из ARB).
+enum AgentDefaultsUnreadableReason {
+  /// Загрузчик ядра назвал проблемы: [AgentDefaultsUnreadable.problems]
+  /// показываются как есть (`ConfigIssue`, английский текст ядра).
+  loader,
+
+  /// Папка `$CODELAB_HOME` неизвестна.
+  homeUnavailable,
+
+  /// Сессия настроек или снимок не открылись (исключение; текст не хранится).
+  cannotRead,
+
+  /// Пользовательский `config.yaml` не читается, а проблем загрузчик не назвал.
+  userLayerUnreadable,
+}
+
 /// `config.yaml` не разбирается или нарушает схему: записи нет
 /// (`settings-general-agent-unreadable`).
 final class AgentDefaultsUnreadable extends AgentDefaultsState {
   const AgentDefaultsUnreadable({
-    required this.problems,
+    required this.reason,
+    this.problems = const [],
     this.banner,
     this.configHome = _defaultConfigHome,
   });
 
-  /// Проблемы загрузчика с путём ключа, по строке на проблему.
+  /// Причина; для не-[AgentDefaultsUnreadableReason.loader] сообщение строит
+  /// страница из ARB.
+  final AgentDefaultsUnreadableReason reason;
+
+  /// Проблемы загрузчика с путём ключа, по строке на проблему (только для
+  /// [AgentDefaultsUnreadableReason.loader]).
   final List<String> problems;
 
   /// Баннер записи, после которой перечитать не удалось; `null` — записи не

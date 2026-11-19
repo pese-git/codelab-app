@@ -175,10 +175,45 @@
 | Reopen the last project | Открывать последний проект | начало подписи строки `codelab.workspace.reopen_last_project` |
 | Show ignored files | Показывать игнорируемые файлы | подпись строки `codelab.file_browser.show_ignored` (D10) |
 | About | О программе | раздел страницы |
-| Copy diagnostics | Скопировать диагностику | сам текст диагностики не переводится (§2) |
+| Copy diagnostics | Копировать диагностику | несовершенный вид, как «Copy» и «Copy path» (§5); сам текст диагностики не переводится (§2); решение пользователя 2026-11-19 |
 | Third-party notices | Сторонние уведомления | |
 | Release notes | Заметки о выпуске | |
 | Open log folder | Открыть папку журналов | |
+| Not set | Не задано | значение ключа, которого нет ни в одном слое и у которого нет умолчания; подсказка пустого поля |
+| Saved | Сохранено | баннер записи: «Saved.» → «Сохранено.», «Saved to all projects» → «Сохранено для всех проектов», «Saved to {home}/config.yaml.» → «Сохранено в {home}/config.yaml.» |
+| overrides (слой перекрывает значение) | переопределяет значение | «This project overrides it ({source}).» → «Этот проект переопределяет значение ({source}).»; источник — плейсхолдер (§2) |
+| (applies after restart) | (применится после перезапуска) | пометка ключа с `restartRequired`; хвост баннера «Applies after Restart agent.» → «Применится после «Перезапустить агента».» |
+| Applies when the agent starts | Применится при запуске агента | хвост баннера, если агент не подключён |
+| Applies at the next start | Применится при следующем запуске | хвост подписи «Reopen the last project and its tabs». Все «Applies …» страницы — совершенным видом «Применится …» (решение пользователя 2026-11-19) |
+| Changes are saved for all projects | Изменения сохраняются для всех проектов | подпись блока «Agent defaults» |
+| Reopen the last project and its tabs | Открывать последний проект и его вкладки | полная подпись строки; «tabs» — открытые сессии снимка рабочего пространства |
+| embedded agent {version} | встроенный агент {version} | подзаголовок «About»; термин — §3 |
+| License | Лицензия | строка «About»; `MIT` не переводится (§2) |
+| Config folder | Папка настроек | строка «About» со значением `$CODELAB_HOME`: в ней не только конфигурация, поэтому не «папка конфигурации» (решение пользователя 2026-11-19) |
+| Package licenses | Лицензии пакетов | заголовок списка в диалоге «Third-party notices» |
+| Close | Закрыть | кнопка диалога |
+| Diagnostics copied | Диагностика скопирована | подтверждение «Copy diagnostics» |
+
+Подписи ключей реестра в блоке «Agent defaults» (английский текст — `label` и `description` реестра, D2):
+
+| en | ru | Примечание |
+|---|---|---|
+| Subagents | Субагенты | `subagents.enabled` |
+| Automatic compaction | Автоматическое сжатие | `compaction.enabled`; «сжатие контекста» — §3 |
+| Log level | Уровень журнала | `logging.level`; значения уровня не переводятся (§2) |
+| Report size | Размер отчёта | `subagents.report_max_bytes` |
+| Progress interval | Интервал прогресса | `subagents.progress_interval` |
+| Heartbeat interval | Интервал сигнала | `subagents.heartbeat_interval` |
+| Cancel grace | Время на отмену | `subagents.cancel_grace` |
+| Max steps | Лимит шагов | `budget.max_steps`, `subagents.max_steps` |
+| Max tokens | Лимит токенов | `budget.max_tokens`, `subagents.max_tokens` |
+| Max cost | Лимит стоимости | `budget.max_cost`, `subagents.max_cost` |
+| Max duration | Лимит длительности | `budget.max_duration`, `subagents.max_duration` |
+| Max depth | Лимит глубины | `subagents.max_depth` |
+| Max concurrent | Лимит одновременных | `subagents.max_concurrent` |
+| Max per turn | Лимит за ход | `subagents.max_per_turn` |
+
+`Max …` переводится как «Лимит …», а не «Макс. …»: сокращения с точкой запрещены (§1 п. 9; решение пользователя 2026-11-19).
 
 ---
 

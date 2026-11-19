@@ -33,6 +33,7 @@ flowchart LR
 | `createEmbeddedAgent` | собирает агента из `EmbeddedAgentConfig` и `EmbeddedHostServices`; принимает профили `embedded-app-desktop` и `embedded-cli` |
 | `EmbeddedHostServices` | порты хоста: окружение исполнения, сессии, секреты, `http.Client`, часы, `Random`, MCP и другие |
 | `EmbeddedAgentConfigException` | невалидная конфигурация; текст указывает на `config.yaml` и `codelab config check` |
+| `embeddedAgentVersion` | версия встроенного агента (`agentInfo` в ответе `initialize`); app показывает её в «About» и в «Copy diagnostics» |
 | `localEmbeddedAgentOpener` | настольный открыватель (`io.dart`): конфигурация, секреты, журнал сессий, MCP |
 | `scriptedEmbeddedAgentOpener` | открыватель для тестов (`testing.dart`): модель заменена сценарием |
 

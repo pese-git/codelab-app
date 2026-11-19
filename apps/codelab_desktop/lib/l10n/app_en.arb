@@ -462,5 +462,25 @@
   "settingsGeneralAboutClose": "Close",
   "@settingsGeneralAboutClose": {
     "description": "Кнопка закрытия диалога сторонних уведомлений."
+  },
+  "settingsGeneralUnreadableCannotRead": "Cannot read the agent settings.",
+  "@settingsGeneralUnreadableCannotRead": {
+    "description": "Причина в InfoBar блока Agent defaults: сессия настроек или снимок конфигурации агента не открылись."
+  },
+  "settingsGeneralUnreadableHome": "The CodeLab home folder is not available.",
+  "@settingsGeneralUnreadableHome": {
+    "description": "Причина в InfoBar блока Agent defaults: не удалось определить папку CODELAB_HOME. CodeLab — название продукта, не переводить."
+  },
+  "settingsGeneralUnreadableUserLayer": "The user config.yaml cannot be read.",
+  "@settingsGeneralUnreadableUserLayer": {
+    "description": "Причина в InfoBar блока Agent defaults: пользовательский файл конфигурации не читается. config.yaml — имя файла, не переводить."
+  },
+  "settingsGeneralAboutCopyFailed": "Couldn't copy the diagnostics.",
+  "@settingsGeneralAboutCopyFailed": {
+    "description": "Предупреждение раздела About, когда диагностику не удалось скопировать в буфер обмена."
+  },
+  "settingsGeneralAboutLoadFailed": "Couldn't load the About section.",
+  "@settingsGeneralAboutLoadFailed": {
+    "description": "Предупреждение вместо раздела About, когда его данные (ресурсы лицензий) не прочитались."
   }
 }

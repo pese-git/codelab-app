@@ -703,6 +703,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Close'**
   String get settingsGeneralAboutClose;
+
+  /// Причина в InfoBar блока Agent defaults: сессия настроек или снимок конфигурации агента не открылись.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot read the agent settings.'**
+  String get settingsGeneralUnreadableCannotRead;
+
+  /// Причина в InfoBar блока Agent defaults: не удалось определить папку CODELAB_HOME. CodeLab — название продукта, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'The CodeLab home folder is not available.'**
+  String get settingsGeneralUnreadableHome;
+
+  /// Причина в InfoBar блока Agent defaults: пользовательский файл конфигурации не читается. config.yaml — имя файла, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'The user config.yaml cannot be read.'**
+  String get settingsGeneralUnreadableUserLayer;
+
+  /// Предупреждение раздела About, когда диагностику не удалось скопировать в буфер обмена.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t copy the diagnostics.'**
+  String get settingsGeneralAboutCopyFailed;
+
+  /// Предупреждение вместо раздела About, когда его данные (ресурсы лицензий) не прочитались.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the About section.'**
+  String get settingsGeneralAboutLoadFailed;
 }
 
 class _AppLocalizationsDelegate

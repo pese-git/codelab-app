@@ -43,13 +43,11 @@ final class BuildInfo {
     final other => other,
   };
 
-  static String _archName(Abi abi) {
-    final name = abi.toString();
-    if (name.endsWith('_arm64')) return 'arm64';
-    if (name.endsWith('_x64')) return 'x64';
-    if (name.endsWith('_arm')) return 'arm';
-    if (name.endsWith('_ia32')) return 'ia32';
-    if (name.endsWith('_riscv64')) return 'riscv64';
-    return name;
-  }
+  /// Архитектура по константам `Abi`, а не по разбору `abi.toString()`:
+  /// формат строки не контракт SDK (D1). Вне перечня — имя `Abi` как есть.
+  static String _archName(Abi abi) => switch (abi) {
+    Abi.macosArm64 || Abi.linuxArm64 || Abi.windowsArm64 => 'arm64',
+    Abi.macosX64 || Abi.linuxX64 || Abi.windowsX64 => 'x64',
+    _ => abi.toString(),
+  };
 }

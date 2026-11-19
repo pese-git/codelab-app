@@ -3,7 +3,7 @@
 // «…запись», «События журнала страницы «General»»; design.md D2, D4, D5, D7,
 // D16).
 //
-// Красные тесты: Cubit — заглушка итерации 2, логика появится в задаче 2.4.
+// Реализация — задача 2.4 change `add-app-general-page`.
 //
 // Конфиг читает и пишет НАСТОЯЩЕЕ хранилище во временной папке
 // (`ModesFixture`, образец — `agents_modes_cubit_test.dart`): итог значения,
@@ -20,6 +20,7 @@ import 'dart:io';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
+import 'package:codelab_desktop/features/settings/application/provider_settings_session.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -42,8 +43,7 @@ const _foreign = ConnectionProfile.stdio(
 
 const _connected = ConnectionView.connected();
 
-/// Ограничение ожидания: красный тест на заглушке падает быстро, а не по
-/// таймауту теста.
+/// Ограничение ожидания: сбой теста быстрее общего таймаута, а не зависание.
 const _wait = Duration(seconds: 2);
 
 void main() {
@@ -838,6 +838,92 @@ void main() {
       expect(text, isNot(contains(fx.rootPath)));
       expect(text, isNot(contains(ok.rootPath)));
       expect(text, isNot(contains('config.yaml')));
+    });
+  });
+
+  // Причина нечитаемости — тип, а не английская строка app (D7; spec
+  // app-settings «Все тексты страницы SHALL браться из каталогов ARB»):
+  // `problems` остаются только у проблем загрузчика ядра.
+  group('Причина Unreadable без текста app (D7)', () {
+    AgentDefaultsCubit custom(
+      ModesFixture fx, {
+      String? home,
+      Future<ProviderSettingsSession> Function()? open,
+    }) {
+      final cubit = AgentDefaultsCubit(
+        workspace: workspace,
+        defaultProfile: () async => embeddedConnectionProfile,
+        open: (access, env) => open != null
+            ? open()
+            : Future.value(ModesSession(fx.store) as ProviderSettingsSession),
+        environment: {'HOME': fx.home},
+        codelabHome: home ?? fx.home,
+        projectDirectory: () => fx.project,
+        logger: logger,
+      );
+      cubits.add(cubit);
+      return cubit;
+    }
+
+    AgentDefaultsUnreadable unreadable(AgentDefaultsCubit cubit) {
+      expect(cubit.state, isA<AgentDefaultsUnreadable>());
+      return cubit.state as AgentDefaultsUnreadable;
+    }
+
+    test(
+      'проблемы загрузчика ядра остаются как есть, причина loader',
+      () async {
+        final fx = await fixture(userYaml: 'budget: [unclosed\n');
+        final cubit = custom(fx);
+
+        await cubit.reload();
+
+        final state = unreadable(cubit);
+        expect(state.reason, AgentDefaultsUnreadableReason.loader);
+        expect(state.problems, isNotEmpty);
+      },
+    );
+
+    test('сессия или снимок не открылись: причина cannotRead, строк app в '
+        'problems нет', () async {
+      final fx = await fixture();
+      final cubit = custom(fx, open: () async => throw StateError('boom'));
+
+      await cubit.reload();
+
+      final state = unreadable(cubit);
+      expect(state.reason, AgentDefaultsUnreadableReason.cannotRead);
+      expect(state.problems, isEmpty);
+    });
+
+    test('папка CODELAB_HOME неизвестна: причина homeUnavailable', () async {
+      final fx = await fixture();
+      final cubit = custom(fx, home: '');
+
+      await cubit.reload();
+
+      final state = unreadable(cubit);
+      expect(state.reason, AgentDefaultsUnreadableReason.homeUnavailable);
+      expect(state.problems, isEmpty);
+    });
+
+    test('пользовательский слой не читается без проблем загрузчика: причина '
+        'userLayerUnreadable', () async {
+      final fx = await fixture();
+      fx.store.transform = (s) => AgentConfigSnapshot(
+        cwd: s.cwd,
+        layers: {...s.layers}..remove(ConfigLayer.user),
+        loaded: s.loaded,
+        origins: s.origins,
+        secrets: s.secrets,
+      );
+      final cubit = custom(fx);
+
+      await cubit.reload();
+
+      final state = unreadable(cubit);
+      expect(state.reason, AgentDefaultsUnreadableReason.userLayerUnreadable);
+      expect(state.problems, isEmpty);
     });
   });
 }

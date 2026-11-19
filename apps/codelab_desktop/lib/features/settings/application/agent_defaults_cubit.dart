@@ -106,8 +106,9 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
   /// слой).
   _SavedNote? _saved;
 
-  /// Номер загрузки последней записи, о которой уже есть `agent_defaults.saved`:
-  /// запись не должна пропасть из журнала, если перечитывание обогнали.
+  /// Номер загрузки последней записи, о которой уже есть
+  /// `agent_defaults.saved`: запись не должна пропасть из журнала, если
+  /// перечитывание обогнали.
   var _savedLoggedFor = -1;
 
   /// Читает доступ и снимок конфига; вызывается при открытии страницы и после
@@ -207,7 +208,7 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
 
   Future<void> _loadEditable(int attempt, EditableSettings access) async {
     if (access.paths.codelabHome.isEmpty) {
-      _setUnreadable(const ['The CodeLab home folder is not available.']);
+      _setUnreadable(AgentDefaultsUnreadableReason.homeUnavailable);
       return;
     }
     final profile = _accessProfile;
@@ -230,17 +231,20 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
         'agent_defaults.unreadable',
         context: {'error_type': error.runtimeType.toString()},
       );
-      _setUnreadable(const ['Cannot read the agent settings.'], log: false);
+      _setUnreadable(AgentDefaultsUnreadableReason.cannotRead, log: false);
       return;
     }
     if (_stale(attempt)) {
       return;
     }
     if (snapshot.issues.isNotEmpty || !snapshot.isReadable(ConfigLayer.user)) {
-      _setUnreadable([
-        for (final issue in snapshot.issues) issue.toString(),
-        if (snapshot.issues.isEmpty) 'The user config.yaml cannot be read.',
-      ]);
+      // Проблемы загрузчика ядра — как есть; своих строк у app нет (D7).
+      _setUnreadable(
+        snapshot.issues.isEmpty
+            ? AgentDefaultsUnreadableReason.userLayerUnreadable
+            : AgentDefaultsUnreadableReason.loader,
+        problems: [for (final issue in snapshot.issues) issue.toString()],
+      );
       return;
     }
     _session = session;
@@ -273,7 +277,13 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
     _emit(_buildReady());
   }
 
-  void _setUnreadable(List<String> problems, {bool log = true}) {
+  /// Переводит блок в `Unreadable`: [reason] — тип причины, текст строит
+  /// страница из ARB; [problems] — только проблемы загрузчика ядра.
+  void _setUnreadable(
+    AgentDefaultsUnreadableReason reason, {
+    List<String> problems = const [],
+    bool log = true,
+  }) {
     _forgetSession();
     if (log) {
       _logger?.warning(
@@ -281,7 +291,13 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
         context: {'error_type': 'ConfigIssue'},
       );
     }
-    _emit(AgentDefaultsUnreadable(problems: problems, configHome: _homeLabel));
+    _emit(
+      AgentDefaultsUnreadable(
+        reason: reason,
+        problems: problems,
+        configHome: _homeLabel,
+      ),
+    );
   }
 
   /// Метка `$CODELAB_HOME` для текстов страницы: `~` вместо домашнего
@@ -480,6 +496,7 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
         !isClosed) {
       _emit(
         AgentDefaultsUnreadable(
+          reason: after.reason,
           problems: after.problems,
           banner: AgentDefaultsBanner(
             AgentDefaultsBannerKind.savedUnverified,

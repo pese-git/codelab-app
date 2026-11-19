@@ -3,7 +3,7 @@
 // «General»: доступ и строки», сценарий «Новый ключ реестра без решения»;
 // design.md D2, D5).
 //
-// Красные тесты: функции — заглушки итерации 2, реализация — задача 2.2.
+// Реализация — задача 2.2 change `add-app-general-page`.
 //
 // Почему тест обходит реестр, а не список ключей: ключ `scope: shared`,
 // которого нет в таблице, должен ронять тест и называть себя, а не появляться
@@ -63,6 +63,15 @@ const _editorTypes = {
   SettingType.float,
   SettingType.duration,
 };
+
+/// Идентификаторы сообщений ARB для подписи и описания ключа реестра (D2):
+/// нужны только тесту сверки каталогов, коду страницы хватает таблицы
+/// `agentSettingLabelOf`.
+String agentSettingLabelId(String descriptorKey) =>
+    'agentSettingLabel_${descriptorKey.replaceAll('.', '_')}';
+
+String agentSettingDescriptionId(String descriptorKey) =>
+    'agentSettingDescription_${descriptorKey.replaceAll('.', '_')}';
 
 List<SettingDescriptor> _shared() => [
   for (final d in SettingsRegistry.all)

@@ -149,15 +149,3 @@ List<AgentDefaultsGroup> agentDefaultsGroupsOf(
       AgentDefaultsGroup(section: section, rows: bySection[section]!),
   ];
 }
-
-String _idSuffix(String descriptorKey) => descriptorKey.replaceAll('.', '_');
-
-/// Идентификатор сообщения ARB с подписью ключа реестра: приложение
-/// переводит подпись по ключу (`SettingDescriptor.label` это допускает, D2).
-String agentSettingLabelId(String descriptorKey) =>
-    'agentSettingLabel_${_idSuffix(descriptorKey)}';
-
-/// Идентификатор сообщения ARB с описанием ключа реестра (вторая строка
-/// строки страницы, D2).
-String agentSettingDescriptionId(String descriptorKey) =>
-    'agentSettingDescription_${_idSuffix(descriptorKey)}';

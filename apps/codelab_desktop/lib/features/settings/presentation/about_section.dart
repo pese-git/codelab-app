@@ -42,10 +42,25 @@ class AboutSection extends StatefulWidget {
 }
 
 /// Заметка об исходе последнего действия раздела.
-enum _Note { copied, releaseNotesFailed, logsFailed }
+enum _Note { copied, copyFailed, releaseNotesFailed, logsFailed }
 
 class _AboutSectionState extends State<AboutSection> {
-  late final Future<AboutInfo> _info = widget.ports.info();
+  late final Future<AboutInfo?> _info = _loadInfo();
+
+  /// Данные раздела; сбой чтения ресурсов не прячет раздел молча: пишется
+  /// имя типа ошибки (без пути и текста), вместо раздела — InfoBar.
+  Future<AboutInfo?> _loadInfo() async {
+    try {
+      return await widget.ports.info();
+    } on Object catch (error) {
+      widget.ports.logger?.warning(
+        'settings.about_load_failed',
+        context: {'error_type': error.runtimeType.toString()},
+      );
+      return null;
+    }
+  }
+
   _Note? _note;
 
   void _log(String action, String outcome) => widget.ports.logger?.info(
@@ -55,19 +70,28 @@ class _AboutSectionState extends State<AboutSection> {
 
   Future<void> _copyDiagnostics(AboutInfo about) async {
     final language = context.read<AppLanguageCubit>().state;
-    final window = await widget.ports.window();
-    final report = diagnosticsReportOf(
-      about,
-      DiagnosticsContext(
-        connection: window.connection,
-        connectionState: window.state,
-        access: window.access,
-        locale: language.locale.languageCode,
-        languagePreference: language.preference,
-        customConfigHome: window.customConfigHome,
-      ),
-    );
-    await Clipboard.setData(ClipboardData(text: report));
+    try {
+      final window = await widget.ports.window();
+      final report = diagnosticsReportOf(
+        about,
+        DiagnosticsContext(
+          connection: window.connection,
+          connectionState: window.state,
+          access: window.access,
+          locale: language.locale.languageCode,
+          languagePreference: language.preference,
+          customConfigHome: window.customConfigHome,
+        ),
+      );
+      await Clipboard.setData(ClipboardData(text: report));
+    } on Object {
+      // Текст исключения в журнал и InfoBar не идёт: в нём бывают пути.
+      _log('copy_diagnostics', 'failed');
+      if (mounted) {
+        setState(() => _note = _Note.copyFailed);
+      }
+      return;
+    }
     _log('copy_diagnostics', 'copied');
     if (mounted) {
       setState(() => _note = _Note.copied);
@@ -124,12 +148,24 @@ class _AboutSectionState extends State<AboutSection> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return FutureBuilder<AboutInfo>(
+    return FutureBuilder<AboutInfo?>(
       future: _info,
       builder: (context, snapshot) {
         final about = snapshot.data;
         if (about == null) {
-          return const SizedBox.shrink();
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const SizedBox.shrink();
+          }
+          return CodeLabSettingsSection(
+            title: l10n.settingsGeneralSectionAbout,
+            children: [
+              InfoBar(
+                key: const ValueKey('settings-general-about-load-failed'),
+                title: Text(l10n.settingsGeneralAboutLoadFailed),
+                severity: InfoBarSeverity.warning,
+              ),
+            ],
+          );
         }
         final secondary = FluentTheme.of(
           context,
@@ -206,15 +242,24 @@ class _AboutSectionState extends State<AboutSection> {
                     if (_note case final note?) ...[
                       const SizedBox(height: 8),
                       InfoBar(
-                        key: note == _Note.copied
-                            ? const ValueKey('settings-general-about-copied')
-                            : const ValueKey(
-                                'settings-general-about-open-failed',
-                              ),
+                        key: switch (note) {
+                          _Note.copied => const ValueKey(
+                            'settings-general-about-copied',
+                          ),
+                          _Note.copyFailed => const ValueKey(
+                            'settings-general-about-copy-failed',
+                          ),
+                          _Note.releaseNotesFailed ||
+                          _Note.logsFailed => const ValueKey(
+                            'settings-general-about-open-failed',
+                          ),
+                        },
                         // Только типизированный исход: текста исключения и
                         // пути в InfoBar нет (D14).
                         title: Text(switch (note) {
                           _Note.copied => l10n.settingsGeneralAboutCopied,
+                          _Note.copyFailed =>
+                            l10n.settingsGeneralAboutCopyFailed,
                           _Note.releaseNotesFailed =>
                             l10n.settingsGeneralAboutReleaseNotesFailed,
                           _Note.logsFailed =>

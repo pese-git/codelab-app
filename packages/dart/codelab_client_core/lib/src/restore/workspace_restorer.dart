@@ -75,6 +75,11 @@ final class WorkspaceRestorer {
   /// восстанавливается.
   var _skipped = false;
 
+  /// Первое подключение запуска уже прошло: снимок, дочитанный после него,
+  /// не восстанавливается (иначе reconnect отправил бы `session/load` без
+  /// действия пользователя).
+  var _connectedOnce = false;
+
   /// Результат первого [readProject]; задан — значит, читать повторно нельзя.
   Future<String?>? _projectRead;
   WorkspaceSnapshot? _written;
@@ -110,8 +115,12 @@ final class WorkspaceRestorer {
   ///
   /// Повторный и одновременный вызовы возвращают результат первого без
   /// повторного чтения (spec acp-client-kit «Старт без восстановления
-  /// рабочего пространства»: повторный вызов — пустая операция); единственный
-  /// вызывающий — `SettingsCubit` desktop — зовёт его один раз.
+  /// рабочего пространства»: повторный вызов — пустая операция).
+  ///
+  /// Если первое подключение запуска прошло, пока снимок читался, сессии
+  /// снимка не восстанавливаются ни сейчас, ни при reconnect: проект
+  /// возвращается (хост получает его, как требует spec «Восстановление после
+  /// перезапуска»), а `session/load` без действия пользователя не уходит.
   Future<String?> readProject() {
     if (_skipped) {
       return Future<String?>.value();
@@ -141,6 +150,9 @@ final class WorkspaceRestorer {
       return null;
     }
     _written = snapshot;
+    if (_connectedOnce) {
+      return snapshot.projectDirectory;
+    }
     _restoring = snapshot;
     _snapshotProject = snapshot.projectDirectory;
     for (final session in snapshot.openSessions) {
@@ -164,6 +176,7 @@ final class WorkspaceRestorer {
   /// подтверждением D24). Правило не зависит от `loadSession` агента: без
   /// него новая сессия тоже не создаётся.
   Future<void> restoreAfterConnect() async {
+    _connectedOnce = true;
     final snapshot = _restoring;
     _restoring = null;
     if (snapshot == null) {

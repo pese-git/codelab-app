@@ -167,6 +167,12 @@
 
 Сбой открытия ссылки или каталога SHALL показывать InfoBar `settings-general-about-open-failed`: `Couldn't open the release notes.` или `Couldn't open the log folder.`. Текст исключения и путь в InfoBar НЕ SHALL попадать.
 
+Сбой «Copy diagnostics» (сбор данных окна, построение текста или запись в буфер обмена) SHALL показывать InfoBar уровня `warning` `settings-general-about-copy-failed`: `Couldn't copy the diagnostics.`. Подтверждение `Diagnostics copied.` при этом НЕ SHALL показываться, а текст диагностики НЕ SHALL класться в буфер обмена.
+
+Если данные раздела не читаются (ресурсы `assets/legal/` сборки), вместо развёрнутого раздела под заголовком «About» SHALL показываться InfoBar уровня `warning` `settings-general-about-load-failed`: `Couldn't load the About section.`. Остальные блоки страницы при этом SHALL работать.
+
+Текст исключения и путь НЕ SHALL попадать ни в один InfoBar раздела.
+
 #### Scenario: Версии в заголовке
 - **WHEN** app версии `0.1.0` запущен на macOS arm64, и пользователь открывает «General»
 - **THEN** заголовок «About» содержит `CodeLab 0.1.0` и `macOS arm64 · embedded agent 0.1.0`, строк «Channel» и «Signed by» нет
@@ -182,6 +188,14 @@
 #### Scenario: Каталог журналов не открылся
 - **WHEN** `LocalFolderOpener` возвращает `failed` для каталога журналов
 - **THEN** показан InfoBar `settings-general-about-open-failed` с `Couldn't open the log folder.` без пути
+
+#### Scenario: Диагностика не скопировалась
+- **WHEN** запись в буфер обмена при «Copy diagnostics» завершается ошибкой
+- **THEN** показан InfoBar `settings-general-about-copy-failed` с `Couldn't copy the diagnostics.` без текста исключения, `Diagnostics copied.` не показан, журнал содержит `settings.about_action` с `action: copy_diagnostics` и `outcome: failed`
+
+#### Scenario: Данные раздела не прочитались
+- **WHEN** ресурс `assets/legal/LICENSE` не читается, и пользователь открывает «General»
+- **THEN** под заголовком «About» показан InfoBar `settings-general-about-load-failed` с `Couldn't load the About section.` без пути и текста исключения, кнопок раздела нет, блоки «Agent defaults», «Interface» и «Startup and files» работают; журнал содержит `settings.about_load_failed` с именем типа исключения
 
 ### Requirement: Диагностика для отчёта без секретов и путей
 «Copy diagnostics» SHALL класть в буфер обмена текст на английском из фиксированных строк, независимо от языка интерфейса (spec app-settings «Локализация интерфейса app»: диагностика не переводится):
@@ -209,6 +223,7 @@
 - `agent_defaults.saved` (`key`, `restart_required`, `overridden`) и `agent_defaults.save_failed` (`key`, `outcome: conflict | rejected | inline_secret | stale | error`, при `error` — имя типа исключения);
 - `settings.reopen_last_project_changed` (`enabled`) и `settings.reopen_last_project_save_failed` (имя типа исключения);
 - `settings.about_action` (`action: copy_diagnostics | third_party | release_notes | open_logs`, `outcome: opened | copied | failed | rejected_scheme | missing`).
+- `settings.about_load_failed` (`error_type` — имя типа исключения) — данные раздела «About» не прочитались.
 
 Старт app с выключенной настройкой SHALL писать `app.reopen_last_project_skipped`. Сбой чтения настройки SHALL писать `app.reopen_last_project_unreadable` с именем типа исключения.
 

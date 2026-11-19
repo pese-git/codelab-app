@@ -70,28 +70,28 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsLanguageSaveRetry => 'Повторить';
 
   @override
-  String get agentSettingLabel_budget_max_steps => 'Макс. шагов';
+  String get agentSettingLabel_budget_max_steps => 'Лимит шагов';
 
   @override
   String get agentSettingDescription_budget_max_steps =>
       'Запросов к модели за ход.';
 
   @override
-  String get agentSettingLabel_budget_max_tokens => 'Макс. токенов';
+  String get agentSettingLabel_budget_max_tokens => 'Лимит токенов';
 
   @override
   String get agentSettingDescription_budget_max_tokens =>
       'Сумма входных и выходных токенов за ход.';
 
   @override
-  String get agentSettingLabel_budget_max_cost => 'Макс. стоимость';
+  String get agentSettingLabel_budget_max_cost => 'Лимит стоимости';
 
   @override
   String get agentSettingDescription_budget_max_cost =>
       'USD за ход; работает только при известных ценах.';
 
   @override
-  String get agentSettingLabel_budget_max_duration => 'Макс. длительность';
+  String get agentSettingLabel_budget_max_duration => 'Лимит длительности';
 
   @override
   String get agentSettingDescription_budget_max_duration =>
@@ -105,49 +105,50 @@ class AppLocalizationsRu extends AppLocalizations {
       'Разрешить агенту запускать субагентов (только новые сессии).';
 
   @override
-  String get agentSettingLabel_subagents_max_depth => 'Макс. глубина';
+  String get agentSettingLabel_subagents_max_depth => 'Лимит глубины';
 
   @override
   String get agentSettingDescription_subagents_max_depth =>
       'Насколько глубоко могут вкладываться субагенты (только новые сессии).';
 
   @override
-  String get agentSettingLabel_subagents_max_concurrent => 'Макс. одновременно';
+  String get agentSettingLabel_subagents_max_concurrent =>
+      'Лимит одновременных';
 
   @override
   String get agentSettingDescription_subagents_max_concurrent =>
       'Субагентов, работающих одновременно в одном дереве сессии.';
 
   @override
-  String get agentSettingLabel_subagents_max_per_turn => 'Макс. за ход';
+  String get agentSettingLabel_subagents_max_per_turn => 'Лимит за ход';
 
   @override
   String get agentSettingDescription_subagents_max_per_turn =>
       'Субагентов, запущенных за ход сессии.';
 
   @override
-  String get agentSettingLabel_subagents_max_steps => 'Макс. шагов';
+  String get agentSettingLabel_subagents_max_steps => 'Лимит шагов';
 
   @override
   String get agentSettingDescription_subagents_max_steps =>
       'Запросов к модели одного субагента.';
 
   @override
-  String get agentSettingLabel_subagents_max_tokens => 'Макс. токенов';
+  String get agentSettingLabel_subagents_max_tokens => 'Лимит токенов';
 
   @override
   String get agentSettingDescription_subagents_max_tokens =>
       'Входных и выходных токенов одного субагента.';
 
   @override
-  String get agentSettingLabel_subagents_max_cost => 'Макс. стоимость';
+  String get agentSettingLabel_subagents_max_cost => 'Лимит стоимости';
 
   @override
   String get agentSettingDescription_subagents_max_cost =>
       'USD одного субагента; работает только при известных ценах.';
 
   @override
-  String get agentSettingLabel_subagents_max_duration => 'Макс. длительность';
+  String get agentSettingLabel_subagents_max_duration => 'Лимит длительности';
 
   @override
   String get agentSettingDescription_subagents_max_duration =>
@@ -315,11 +316,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsGeneralReopenDescription =>
-      'Включено: открывать последний проект и его открытые сессии. Выключено: начинать с недавних проектов в боковой панели. Применяется при следующем запуске.';
+      'Включено: открывать последний проект и его открытые сессии. Выключено: начинать с недавних проектов в боковой панели. Применится при следующем запуске.';
 
   @override
   String get settingsGeneralStartupSaveFailed =>
-      'Не удалось сохранить настройку. При следующем запуске действует прежнее значение.';
+      'Не удалось сохранить настройку. При следующем запуске применится прежнее значение.';
 
   @override
   String get settingsGeneralSectionAbout => 'О программе';
@@ -336,7 +337,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsGeneralAboutConfigFolder => 'Папка настроек';
 
   @override
-  String get settingsGeneralAboutCopyDiagnostics => 'Скопировать диагностику';
+  String get settingsGeneralAboutCopyDiagnostics => 'Копировать диагностику';
 
   @override
   String get settingsGeneralAboutThirdParty => 'Сторонние уведомления';
@@ -367,4 +368,23 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsGeneralAboutClose => 'Закрыть';
+
+  @override
+  String get settingsGeneralUnreadableCannotRead =>
+      'Не удаётся прочитать настройки агента.';
+
+  @override
+  String get settingsGeneralUnreadableHome => 'Папка CodeLab недоступна.';
+
+  @override
+  String get settingsGeneralUnreadableUserLayer =>
+      'Пользовательский config.yaml не читается.';
+
+  @override
+  String get settingsGeneralAboutCopyFailed =>
+      'Не удалось скопировать диагностику.';
+
+  @override
+  String get settingsGeneralAboutLoadFailed =>
+      'Не удалось загрузить раздел «О программе».';
 }
