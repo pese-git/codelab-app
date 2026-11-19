@@ -16,6 +16,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/approval_focus.dart';
+
 /// Нажатие комбинации; [useMeta] выбирает ⌘ вместо Ctrl для основного
 /// модификатора, [key] подменяет клавишу (numpad Enter из `alsoKeys`).
 typedef _Press =
@@ -504,6 +506,12 @@ Future<void> _approval(
     ),
   );
   await tester.pump();
+  // Виджеты одобрения не берут фокус сами (`fix-approval-focus`, D1):
+  // как и пользователь, доводим его до первой кнопки клавишей Tab.
+  await tabTo(
+    tester,
+    find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.allowOnce)),
+  );
   await press(combo);
   expect(fromGroup, [expectedId], reason: 'CodeLabApprovalOptionGroup');
 
@@ -522,6 +530,7 @@ Future<void> _approval(
     ),
   );
   await tester.pump();
+  await tabTo(tester, find.byKey(CodeLabApprovalPrompt.allowKey));
   await press(combo);
   expect(fromPrompt, [expectedId], reason: 'CodeLabApprovalPrompt');
 }

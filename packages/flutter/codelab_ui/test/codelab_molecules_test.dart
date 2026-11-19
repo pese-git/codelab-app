@@ -3,6 +3,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/approval_focus.dart';
+
 void main() {
   test('exports molecules through the public package API', () {
     expect(CodeLabApprovalOption, isA<Type>());
@@ -748,6 +750,13 @@ void main() {
       ),
     );
 
+    // Группа не берёт фокус сама (change `fix-approval-focus`, D1):
+    // пользователь доводит его до первой кнопки клавишей Tab.
+    await tabTo(
+      tester,
+      find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.allowOnce)),
+    );
+
     Future<void> pressWithModifiers(
       LogicalKeyboardKey trigger, {
       bool alt = false,
@@ -852,6 +861,11 @@ void main() {
       ),
     );
 
+    // Явный шаг фокуса: группа не берёт его сама (`fix-approval-focus`, D1).
+    await tabTo(
+      tester,
+      find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.allowOnce)),
+    );
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);

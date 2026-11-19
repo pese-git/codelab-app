@@ -39,6 +39,7 @@ import 'package:codelab_setup/codelab_setup.dart' show ConfigLayer;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -177,24 +178,24 @@ void main() {
         )
         .last;
 
-    /// Переводит фокус клавиатуры внутрь ожидающего одобрения: сочетания
-    /// вариантов действуют, когда фокус внутри полосы решения (spec
-    /// agent-workbench-ui).
+    /// Переводит фокус клавиатуры внутрь ожидающего одобрения клавишей Tab:
+    /// сочетания вариантов действуют, когда фокус внутри полосы решения
+    /// (spec agent-workbench-ui).
     ///
-    /// Почему явно: `Focus(autofocus: true)` полосы
-    /// (`codelab_approval_prompt.dart`) срабатывает, только если в области
-    /// фокуса ещё нет сфокусированного узла, а у рабочего места он есть
-    /// (`CodeLabWorkbenchShortcuts` тоже `autofocus`). Пользователь попадает
-    /// в полосу Tab-ом или щелчком по кнопке.
-    void focusApproval(WidgetTester tester) {
-      final node = FocusManager.instance.rootScope.descendants.firstWhere(
-        (node) =>
-            node.canRequestFocus &&
-            node.context
-                    ?.findAncestorWidgetOfExactType<CodeLabApprovalPrompt>() !=
-                null,
-      );
-      node.requestFocus();
+    /// Почему явно: полоса не берёт фокус сама (change `fix-approval-focus`,
+    /// D1), пользователь попадает в неё Tab-ом, щелчком по кнопке или
+    /// сочетанием перехода. Tab нажимается с верхней границей, пока фокус не
+    /// окажется внутри полосы.
+    Future<void> focusApproval(WidgetTester tester) async {
+      bool inApproval() =>
+          FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<CodeLabApprovalPrompt>() !=
+          null;
+      for (var i = 0; i < 60 && !inApproval(); i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
+      expect(inApproval(), isTrue, reason: 'Tab не довёл фокус до одобрения');
     }
 
     /// Ответы клиента на `session/request_permission` (id — запроса агента).
@@ -256,8 +257,7 @@ void main() {
         await shortFrames(tester);
         expect(find.byType(CodeLabApprovalPrompt), findsOneWidget);
         expect(cubit.state.queuedPrompts, isEmpty);
-        focusApproval(tester);
-        await tester.pump();
+        await focusApproval(tester);
 
         await pressShortcut(
           tester,

@@ -3,6 +3,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/approval_focus.dart';
+
 void main() {
   test('exports organisms through the public package API', () {
     expect(CodeLabActivityBar, isA<Type>());
@@ -349,6 +351,8 @@ void main() {
     ) async {
       final selected = <String>[];
       await tester.pumpWidget(prompt(onSelected: selected.add));
+      // Полоса не берёт фокус сама (`fix-approval-focus`, D1): Tab до «Allow».
+      await tabTo(tester, find.byKey(CodeLabApprovalPrompt.allowKey));
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
@@ -372,6 +376,8 @@ void main() {
       expect(find.text('Ctrl+Alt+⏎'), findsOneWidget);
       expect(find.text('Alt+Ctrl+⏎'), findsNothing);
 
+      // Полоса не берёт фокус сама (`fix-approval-focus`, D1): Tab до «Allow».
+      await tabTo(tester, find.byKey(CodeLabApprovalPrompt.allowKey));
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
