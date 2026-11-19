@@ -50,7 +50,7 @@ abstract interface class RestoreHost {
 /// снимка — [observe] на каждое изменение `WorkspaceState`.
 ///
 /// Как использовать: создаёт и вызывает `DefaultClientWorkspace`, если хост
-/// передал `WorkspaceSnapshotStore`. Пока [readProject] не вызван, снимок не
+/// передал `WorkspaceSnapshotStore`. Пока [readProject] не завершён, снимок не
 /// пишется: иначе пустое рабочее пространство стёрло бы снимок прошлого
 /// запуска до восстановления.
 final class WorkspaceRestorer {
@@ -87,8 +87,15 @@ final class WorkspaceRestorer {
   /// действия пользователя).
   var _connectedOnce = false;
 
-  /// Результат первого [readProject]; задан — значит, читать повторно нельзя.
-  Future<String?>? _projectRead;
+  /// [observe] пришёл, пока снимок читался: после чтения состояние нужно
+  /// сверить со снимком. Без изменений сверки нет — иначе неудачное чтение
+  /// или первый запуск сразу записали бы пустой снимок.
+  var _changedWhileReading = false;
+
+  /// Чтение снимка — идущее или завершённое; задано — значит, читать повторно
+  /// нельзя. [flush] ждёт его, чтобы закрытие рабочего пространства не
+  /// пропустило запись, начатую сразу после чтения.
+  Future<String?>? _reading;
   WorkspaceSnapshot? _written;
   WorkspaceSnapshot? _wanted;
   Future<void>? _writing;
@@ -128,16 +135,39 @@ final class WorkspaceRestorer {
   /// снимка не восстанавливаются ни сейчас, ни при reconnect: проект
   /// возвращается (хост получает его, как требует spec «Восстановление после
   /// перезапуска»), а `session/load` без действия пользователя не уходит.
+  ///
+  /// Запись снимка разрешается только после чтения (spec acp-client-kit
+  /// «Восстановление после перезапуска»: до чтения снимка kit не пишет
+  /// снимок). Почему не раньше: изменение состояния во время чтения
+  /// (`selectProject`, смена соединения) затёрло бы снимок прошлого запуска,
+  /// а дочитанный снимок откатил бы учёт записанного — и запись того же
+  /// состояния после восстановления пропускалась бы дедупликацией, оставляя
+  /// на диске снимок без сессий. Изменения, пришедшие во время чтения, не
+  /// теряются: если они были, после чтения текущее состояние сверяется со
+  /// снимком, и другой проект отменяет восстановление, как при выборе до
+  /// подключения.
   Future<String?> readProject() {
     if (_skipped) {
       return Future<String?>.value();
     }
-    return _projectRead ??= _readProject();
+    return _reading ??= _readThenStart();
+  }
+
+  Future<String?> _readThenStart() async {
+    try {
+      return await _readProject();
+    } finally {
+      _started = true;
+      if (_changedWhileReading) {
+        _changedWhileReading = false;
+        _observeCurrent();
+      }
+    }
   }
 
   Future<String?> _readProject() async {
+    // [skip] во время чтения — пустая операция: способ старта уже выбран.
     _startChosen = true;
-    _started = true;
     final String? json;
     try {
       json = await _store.read();
@@ -247,6 +277,11 @@ final class WorkspaceRestorer {
   /// неоткрытые сессии снимка из следующей записи.
   void observe(WorkspaceState state) {
     if (!_started) {
+      // Пока снимок читается, изменение только отмечается: запись — после
+      // чтения ([readProject]).
+      if (_reading != null) {
+        _changedWhileReading = true;
+      }
       return;
     }
     // Пользователь перешёл в другой проект: сессии снимка принадлежат
@@ -283,8 +318,26 @@ final class WorkspaceRestorer {
     _writing ??= _drain();
   }
 
-  /// Дожидается записи снимка, начатой или запрошенной до вызова.
-  Future<void> flush() => _writing ?? Future<void>.value();
+  /// Сколько [flush] ждёт идущее чтение снимка. Почему есть предел:
+  /// хранилище может зависнуть (заблокированный файл, сетевой диск), и
+  /// закрытие рабочего пространства не должно зависать вместе с ним (AGENTS.md
+  /// §12); значение совпадает с ожиданием проекта в desktop
+  /// (`SettingsCubit.projectRestoreTimeout`). Запись изменений, пришедших во
+  /// время такого чтения, теряется — закрытие важнее.
+  static const readWaitLimit = Duration(seconds: 2);
+
+  /// Дожидается записи снимка, начатой или запрошенной до вызова, а если
+  /// снимок ещё читается — и записи, которую начнёт конец чтения (не дольше
+  /// [readWaitLimit] на чтение).
+  Future<void> flush() async {
+    try {
+      await _reading?.timeout(readWaitLimit);
+    } on Object {
+      // Сбой чтения уже обработан в [readProject], а таймаут означает
+      // зависшее хранилище: здесь важна только запись.
+    }
+    await _writing;
+  }
 
   void _observeCurrent() => observe(_host.current);
 
