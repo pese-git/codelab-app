@@ -23,7 +23,9 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 
+import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import '../../../core/platform/usage_csv_saver.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../usage/application/ledger_refresh.dart';
 import '../../usage/application/usage_csv.dart';
 import '../../usage/application/usage_pane_data.dart';
@@ -191,20 +193,31 @@ final class ActiveSessionState {
 /// Как использовать: какую сессию показывать, решает `SessionsCubit` — он
 /// вызывает [show], [showCreated] или [showMissing] в одном пакете со своим
 /// изменением. Диагностику исходов хода, отмены и ответов пишет kit.
+///
+/// Язык (`add-desktop-localization`, D5): текст ленты (заметки, метки вызовов)
+/// и строки статуса — функция `(снимок сессии, SessionView, язык)`. Язык
+/// читается из [AppStrings] только внутри проекции; по `AppStrings.changes`
+/// лента и строка статуса пересобираются из последних входов, а данные панели
+/// Usage остаются языконезависимыми (их текст собирает presentation, D5 п. 4).
+/// Подписка одна: создаётся в конструкторе, отменяется в `close()` и не
+/// зависит от смены сессии.
 final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   ActiveSessionCubit({
     required super.changes,
     required ClientWorkspace workspace,
     required ShellDiagnostics diagnostics,
     required UsageCsvSaver usageCsvSaver,
+    required AppStrings strings,
     Logger? usageLogger,
     DateTime Function()? clock,
   }) : _workspace = workspace,
        _diagnostics = diagnostics,
        _usageCsvSaver = usageCsvSaver,
+       _strings = strings,
        _usageLogger = usageLogger,
        _clock = clock ?? DateTime.now,
        super(const ActiveSessionState()) {
+    _languageSubscription = strings.changes.listen(_handleLanguage);
     // Исход хода любой сессии — отправленного отсюда и ушедшего из очереди
     // kit: очередь могла сдвинуться.
     _outcomeSubscription = _workspace.promptOutcomes.listen(
@@ -214,6 +227,10 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
 
   final ClientWorkspace _workspace;
   final ShellDiagnostics _diagnostics;
+  final AppStrings _strings;
+  late final StreamSubscription<AppLocalizations> _languageSubscription;
+
+  AppLocalizations get _l10n => _strings.current;
 
   /// Порт сохранения CSV панели Usage (D5); `app_scope` привязывает его
   /// всегда, тесты передают двойник.
@@ -240,23 +257,10 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     final id = session.id.value;
     final view = _handle(id)?.current;
     _shown = session;
-    // Соединение kit в `canRetry` не учитывает — его проверяет хост
-    // (design D4 change `add-connection-and-error-states`).
-    final canRetry =
-        view != null &&
-        view.canRetry &&
-        _workspace.current.connection is Connected;
     emit(
       state._copyWith(
         sessionId: id,
-        transcriptRows: transcriptRowsOf(
-          view?.transcript ?? const [],
-          cwd: session.cwd,
-          isRunning: view?.status == SessionStatusView.running,
-          approvalsEnabled: !state.isRespondingToApproval,
-          onApprovalSelected: _onApprovalSelected,
-          onRetry: canRetry ? () => unawaited(retryTurn()) : null,
-        ),
+        transcriptRows: _rowsOf(session, view),
         inspectorEntries: const InspectorProjection().project(session),
         agentCommands: agentCommandsOf(view?.agentCommands ?? const []),
         agentCommandViews: view?.agentCommands ?? const [],
@@ -268,7 +272,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         isPromptSubmitting: _isBusy(view?.status),
         canCancel: view?.status == SessionStatusView.running,
         turnState: turnStateOf(view),
-        statusBar: view == null ? null : sessionStatusDataOf(view),
+        statusBar: view == null ? null : sessionStatusDataOf(view, l10n: _l10n),
         usage: _usageOf(id, view, session.cwd),
       ),
     );
@@ -298,7 +302,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         isPromptSubmitting: false,
         canCancel: false,
         turnState: null,
-        statusBar: view == null ? null : sessionStatusDataOf(view),
+        statusBar: view == null ? null : sessionStatusDataOf(view, l10n: _l10n),
         usage: _usageOf(id, view, session.cwd),
       ),
     );
@@ -306,6 +310,51 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     if (view != null) {
       _refreshLedgerIfNeeded(id, view, reason: 'seq');
     }
+  }
+
+  /// Строки ленты [session] по её `SessionView`.
+  ///
+  /// Единственное место сборки ленты: [show] и смена языка ([_handleLanguage])
+  /// строят её одинаково, поэтому после смены языка лента равна ленте, которую
+  /// построил бы новый `session/update` (D5 п. 1).
+  List<CodeLabTranscriptRow> _rowsOf(AcpSession session, SessionView? view) {
+    // Соединение kit в `canRetry` не учитывает — его проверяет хост
+    // (design D4 change `add-connection-and-error-states`).
+    final canRetry =
+        view != null &&
+        view.canRetry &&
+        _workspace.current.connection is Connected;
+    return transcriptRowsOf(
+      view?.transcript ?? const [],
+      cwd: session.cwd,
+      isRunning: view?.status == SessionStatusView.running,
+      approvalsEnabled: !state.isRespondingToApproval,
+      onApprovalSelected: _onApprovalSelected,
+      onRetry: canRetry ? () => unawaited(retryTurn()) : null,
+      l10n: _l10n,
+    );
+  }
+
+  /// Смена языка: лента и строка статуса пересобираются из последнего
+  /// снимка и `SessionView` показываемой сессии; остальное состояние (ввод,
+  /// очередь, одобрения в полёте) не трогается. После `close` событие
+  /// игнорируется (D5 п. 3).
+  void _handleLanguage(AppLocalizations l10n) {
+    if (isClosed) return;
+    final id = state.sessionId;
+    if (id == null) return;
+    final view = _handle(id)?.current;
+    final shown = _shown;
+    emit(
+      state._copyWith(
+        transcriptRows: shown != null && shown.id.value == id
+            ? _rowsOf(shown, view)
+            : null,
+        statusBar: view == null
+            ? state.statusBar
+            : sessionStatusDataOf(view, l10n: l10n),
+      ),
+    );
   }
 
   /// Выбрана сессия, которой нет в ядре клиента: показывать нечего, кроме
@@ -835,7 +884,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     if (isClosed || state.sessionId != sessionId) {
       return;
     }
-    final data = sessionStatusDataOf(view);
+    final data = sessionStatusDataOf(view, l10n: _l10n);
     final usage = _usageOf(sessionId, view, _shown?.cwd ?? '');
     if (data != state.statusBar || !identical(usage, state.usage)) {
       emit(state._copyWith(statusBar: data, usage: usage));
@@ -845,6 +894,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
 
   @override
   Future<void> close() async {
+    await _languageSubscription.cancel();
     await _viewSubscription?.cancel();
     await _outcomeSubscription.cancel();
     return super.close();

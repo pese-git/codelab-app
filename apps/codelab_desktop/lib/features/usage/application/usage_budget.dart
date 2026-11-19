@@ -28,27 +28,33 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 /// `used ≥ limit` (в целых, D9). Решает application, не виджет.
 enum UsageBudgetTone { neutral, warning, danger }
 
-/// Пояснение под блоком (`usage-budget-note`).
-const usageBudgetFootnote =
-    'When a limit is hit, the turn stops at the next step boundary.';
+/// Заголовок блока: идущий ход или последний завершённый. Решение «какой»
+/// принимает application (Q11 (а)), а текст («This turn» / «Last turn»)
+/// собирает presentation по каталогу (`add-desktop-localization`, D5 п. 4).
+enum UsageBudgetTitle { thisTurn, lastTurn }
+
+/// Вид строки бюджета: подпись и подсказка выбираются по нему
+/// исчерпывающим `switch` в presentation (`add-desktop-localization`, D5 п. 4).
+enum UsageBudgetRowKind { steps, tokens, cost, time }
 
 /// Строка блока: Steps, Tokens, Cost или Time (`usage-budget-<id>`).
+///
+/// Подпись, подсказка строки Tokens и пометка Cost без цены — тексты app; они
+/// определяются по [id] и [priceUnknown] и собираются presentation по
+/// каталогу (`add-desktop-localization`, D5 п. 4).
 final class UsageBudgetRow {
   const UsageBudgetRow({
-    required this.id,
-    required this.label,
+    required this.kind,
     required this.value,
     required this.fill,
     this.tone = UsageBudgetTone.neutral,
-    this.hint,
-    this.note,
+    this.priceUnknown = false,
   });
 
-  /// `steps`, `tokens`, `cost` или `time` — суффикс ключа.
-  final String id;
+  final UsageBudgetRowKind kind;
 
-  /// `Steps`, `Tokens`, `Cost` или `Time`.
-  final String label;
+  /// `steps`, `tokens`, `cost` или `time` — суффикс ключа строки.
+  String get id => kind.name;
 
   /// Готовая подпись `<израсходовано> / <лимит>`: `3 / 50`, `92.0k / 200.0k`.
   final String value;
@@ -58,11 +64,8 @@ final class UsageBudgetRow {
   final double fill;
   final UsageBudgetTone tone;
 
-  /// Подсказка строки (Tokens: `input + output, including subagents`, R2).
-  final String? hint;
-
-  /// Строка под подписью (Cost без цены: `not checked: price unknown`, R8).
-  final String? note;
+  /// Cost без цены модели: лимит не проверяется (R8), под подписью пометка.
+  final bool priceUnknown;
 }
 
 /// Исходные числа Time для пересчёта на момент `now` (D9 change
@@ -104,8 +107,8 @@ final class UsageBudgetData {
     this.time,
   });
 
-  /// `This turn` или `Last turn` (Q11 (а)).
-  final String title;
+  /// Идущий или последний завершённый ход (Q11 (а)).
+  final UsageBudgetTitle title;
 
   /// Строки Steps, Tokens, Cost — только присутствующие, в этом порядке.
   final List<UsageBudgetRow> rows;
@@ -155,19 +158,15 @@ double _fillOf(int used, int limit) {
 }
 
 UsageBudgetRow _rowOf({
-  required String id,
-  required String label,
+  required UsageBudgetRowKind kind,
   required String value,
   required int used,
   required int limit,
-  String? hint,
 }) => UsageBudgetRow(
-  id: id,
-  label: label,
+  kind: kind,
   value: value,
   fill: _fillOf(used, limit),
   tone: _toneOf(used, limit),
-  hint: hint,
 );
 
 UsageBudgetRow _costRowOf(BudgetCost cost) {
@@ -176,16 +175,14 @@ UsageBudgetRow _costRowOf(BudgetCost cost) {
   if (used == null) {
     // Цена модели неизвестна: лимит не проверяется (R8) — не `$0.00`, а `—`.
     return UsageBudgetRow(
-      id: 'cost',
-      label: 'Cost',
+      kind: UsageBudgetRowKind.cost,
       value: '— / $limitText',
       fill: 0,
-      note: 'not checked: price unknown',
+      priceUnknown: true,
     );
   }
   return _rowOf(
-    id: 'cost',
-    label: 'Cost',
+    kind: UsageBudgetRowKind.cost,
     value: '${formatUsageMoney(used)} / $limitText',
     used: used.micros,
     limit: cost.limit.micros,
@@ -211,26 +208,23 @@ UsageBudgetData? usageBudgetDataOf(SessionView view) {
   final cost = budget.cost;
   final duration = budget.duration;
   return UsageBudgetData(
-    title: live ? 'This turn' : 'Last turn',
+    title: live ? UsageBudgetTitle.thisTurn : UsageBudgetTitle.lastTurn,
     rows: [
       if (steps != null)
         _rowOf(
-          id: 'steps',
-          label: 'Steps',
+          kind: UsageBudgetRowKind.steps,
           value: '${steps.used} / ${steps.limit}',
           used: steps.used,
           limit: steps.limit,
         ),
       if (tokens != null)
         _rowOf(
-          id: 'tokens',
-          label: 'Tokens',
+          kind: UsageBudgetRowKind.tokens,
           value:
               '${formatUsageTokens(tokens.used)} / '
               '${formatUsageTokens(tokens.limit)}',
           used: tokens.used,
           limit: tokens.limit,
-          hint: 'input + output, including subagents',
         ),
       if (cost != null) _costRowOf(cost),
     ],
@@ -311,8 +305,7 @@ List<UsageBudgetRow> usageBudgetRowsAt(
   return [
     ...budget.rows,
     _rowOf(
-      id: 'time',
-      label: 'Time',
+      kind: UsageBudgetRowKind.time,
       value:
           '${formatUsageDuration(used)} / '
           '${formatUsageDuration(time.limitMs)}',

@@ -590,12 +590,6 @@ abstract class AppLocalizations {
   /// **'The agent config cannot be read.'**
   String get settingsGeneralUnreadable;
 
-  /// Ключевые слова поиска по настройкам для страницы General, через запятую; на русском — переводы английских слов.
-  ///
-  /// In en, this message translates to:
-  /// **'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics'**
-  String get settingsSearchKeywordsGeneral;
-
   /// Заголовок секции страницы General со строками запуска и файлов.
   ///
   /// In en, this message translates to:
@@ -733,6 +727,1092 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t load the About section.'**
   String get settingsGeneralAboutLoadFailed;
+
+  /// Кнопка отмены в диалогах рабочего места.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get commonCancel;
+
+  /// Кнопка закрытия диалога.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get commonClose;
+
+  /// Кнопка подтверждения «открыть» в диалогах.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get commonOpen;
+
+  /// Кнопка повтора действия: экран подключения, баннер соединения, заметка о сбое хода, заметка панели Usage.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get commonRetry;
+
+  /// Кнопка и пункт «перезапустить агента».
+  ///
+  /// In en, this message translates to:
+  /// **'Restart agent'**
+  String get commonRestartAgent;
+
+  /// Название сессии без заголовка и промпта, кнопка стартового экрана, подпись пункта палитры /new.
+  ///
+  /// In en, this message translates to:
+  /// **'New session'**
+  String get commonNewSession;
+
+  /// Подпись строки сайдбара для открытой в этом запуске сессии.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get workbenchSessionActive;
+
+  /// Название сессии агента без заголовка. Плейсхолдер id — идентификатор сессии, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Session {id}'**
+  String workbenchSessionTitleWithId(String id);
+
+  /// Подпись строки сайдбара для сессии из списка агента. Плейсхолдер time — дата и время в формате yyyy-MM-dd HH:mm, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated {time}'**
+  String workbenchSessionUpdated(String time);
+
+  /// Название группы сайдбара, когда проект не выбран.
+  ///
+  /// In en, this message translates to:
+  /// **'No project'**
+  String get workbenchNoProject;
+
+  /// Название текущей сессии в шапке, когда сессии нет.
+  ///
+  /// In en, this message translates to:
+  /// **'No active session'**
+  String get workbenchNoActiveSession;
+
+  /// Подсказка под названием текущей сессии и текст стартового экрана без проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'Open a project to start a session.'**
+  String get workbenchOpenProjectHint;
+
+  /// Кнопка стартового экрана без проекта; то же название кнопки сайдбара.
+  ///
+  /// In en, this message translates to:
+  /// **'Open folder…'**
+  String get workbenchOpenFolder;
+
+  /// Текст стартового экрана с проектом. Плейсхолдер project — имя папки проекта, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a new session in {project}.'**
+  String workbenchStartNewSessionIn(String project);
+
+  /// Индикатор стартового экрана, пока агент запускается. Плейсхолдер profile — название профиля подключения, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting {profile}…'**
+  String workbenchStarting(String profile);
+
+  /// Подсказка пустой ленты, когда сессии нет.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a new session to talk to the agent.'**
+  String get workbenchTranscriptEmptyNoSession;
+
+  /// Подсказка пустой ленты открытой сессии.
+  ///
+  /// In en, this message translates to:
+  /// **'Send a message to start.'**
+  String get workbenchTranscriptEmptySession;
+
+  /// Тип подключения «встроенный агент» в подсказке бейджа соединения и на экране подключения.
+  ///
+  /// In en, this message translates to:
+  /// **'Embedded agent'**
+  String get workbenchTransportEmbedded;
+
+  /// Причина на экране сбоя старта, когда ядро клиента её не назвало.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start the agent.'**
+  String get workbenchConnectionStartFailed;
+
+  /// Причина сбоя старта с числом повторов подряд. Плейсхолдеры: reason — причина, repeat — число повторов; не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{reason} Failed again ({repeat})'**
+  String workbenchConnectionFailedAgain(String reason, int repeat);
+
+  /// Текст баннера, когда встроенному агенту не настроен провайдер модели.
+  ///
+  /// In en, this message translates to:
+  /// **'No model provider is configured for the embedded agent.'**
+  String get workbenchNoProviderConfigured;
+
+  /// Кнопка баннера соединения: открыть мастер провайдера.
+  ///
+  /// In en, this message translates to:
+  /// **'Add provider'**
+  String get workbenchAddProvider;
+
+  /// Причина отказа подключения и загрузки сессии, когда папки нет на диске. Плейсхолдер path — путь папки, не переводить; «Open folder…» — название кнопки сайдбара.
+  ///
+  /// In en, this message translates to:
+  /// **'Project folder not found: {path}. Choose an existing folder with Open folder….'**
+  String workbenchProjectFolderMissing(String path);
+
+  /// Заметка над лентой, когда платформа отказала открыть ссылку из ответа агента.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open the link.'**
+  String get workbenchLinkOpenFailed;
+
+  /// Заголовок заметки: сессию не удалось привязать к новому соединению.
+  ///
+  /// In en, this message translates to:
+  /// **'Session detached'**
+  String get workbenchNoticeSessionDetached;
+
+  /// Тело заметки detached: агент не умеет восстанавливать сессии.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent cannot restore sessions after reconnecting.'**
+  String get workbenchNoticeDetachedCannotRestore;
+
+  /// Тело заметки detached: восстановление сессии не удалось. Плейсхолдер id — идентификатор сессии, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Session {id} could not be restored after reconnecting.'**
+  String workbenchNoticeDetachedRestoreFailed(String id);
+
+  /// Заметка после переподключения: агент не умеет восстанавливать сессии.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent cannot restore sessions; a new session was started.'**
+  String get workbenchNoticeReconnectedCannotRestore;
+
+  /// Заметка после переподключения: восстановление не удалось. Плейсхолдер id — идентификатор сессии, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Session {id} could not be restored; a new session was started.'**
+  String workbenchNoticeReconnectedRestoreFailed(String id);
+
+  /// Заметка исхода хода: stopReason max_tokens.
+  ///
+  /// In en, this message translates to:
+  /// **'The model reached its token limit, so the turn ended.'**
+  String get workbenchNoticeMaxTokens;
+
+  /// Заметка исхода хода: stopReason max_turn_requests без названного лимита.
+  ///
+  /// In en, this message translates to:
+  /// **'The turn reached the limit of model requests.'**
+  String get workbenchNoticeMaxTurnRequests;
+
+  /// Заметка исхода хода: превышен бюджет хода. Плейсхолдер limit — имя лимита с провода (steps, tokens, cost, duration, deadline), не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'The turn stopped: budget exceeded: {limit}.'**
+  String workbenchNoticeBudgetExceeded(String limit);
+
+  /// Заметка исхода хода: stopReason refusal.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent refused to continue.'**
+  String get workbenchNoticeRefusal;
+
+  /// Заметка завершённого хода без вывода агента. Плейсхолдер stopReason — значение причины остановки, не переводить; stopReason — имя поля протокола.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed with stopReason {stopReason}.'**
+  String workbenchNoticeCompletedWithStopReason(String stopReason);
+
+  /// Заметка завершённого хода, у которого причина остановки неизвестна. stopReason — имя поля протокола.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed with stopReason unknown.'**
+  String get workbenchNoticeCompletedStopReasonUnknown;
+
+  /// Заголовок заметки о сбое хода: ошибка входа у провайдера.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent could not sign in to the model provider'**
+  String get workbenchFailureAuth;
+
+  /// Заголовок заметки о сбое хода: сеть, таймаут или сервер провайдера.
+  ///
+  /// In en, this message translates to:
+  /// **'The model provider is unavailable'**
+  String get workbenchFailureProviderUnavailable;
+
+  /// Заголовок заметки о сбое хода: лимит запросов провайдера.
+  ///
+  /// In en, this message translates to:
+  /// **'The model provider\'s rate limit was reached'**
+  String get workbenchFailureRateLimited;
+
+  /// Заголовок заметки о сбое хода: переполнение контекста модели.
+  ///
+  /// In en, this message translates to:
+  /// **'The conversation is too long for the model'**
+  String get workbenchFailureOverflow;
+
+  /// Заголовок заметки о сбое хода: связь с агентом потеряна.
+  ///
+  /// In en, this message translates to:
+  /// **'The connection to the agent was lost'**
+  String get workbenchFailureConnectionLost;
+
+  /// Общий заголовок заметки о сбое хода.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent could not complete the turn'**
+  String get workbenchFailureGeneric;
+
+  /// Тело заметки о потере связи с агентом.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry to continue working with the agent.'**
+  String get workbenchFailureConnectionLostBody;
+
+  /// Метка вызова инструмента вида read.
+  ///
+  /// In en, this message translates to:
+  /// **'Read'**
+  String get workbenchToolKindRead;
+
+  /// Метка вызова инструмента вида edit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get workbenchToolKindEdit;
+
+  /// Метка вызова инструмента вида delete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get workbenchToolKindDelete;
+
+  /// Метка вызова инструмента вида move.
+  ///
+  /// In en, this message translates to:
+  /// **'Move'**
+  String get workbenchToolKindMove;
+
+  /// Метка вызова инструмента вида search.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get workbenchToolKindSearch;
+
+  /// Метка вызова инструмента вида execute.
+  ///
+  /// In en, this message translates to:
+  /// **'Run'**
+  String get workbenchToolKindExecute;
+
+  /// Метка вызова инструмента вида fetch.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch'**
+  String get workbenchToolKindFetch;
+
+  /// Метка решённого одобрения, отменённого без выбора варианта агента (ход отменён, пока запрос ждал решения).
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get workbenchApprovalCancelled;
+
+  /// Метка решённого одобрения, когда вариант агента не выбран и запрос не отменён; обычно название варианта приходит от агента и не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolved'**
+  String get workbenchApprovalResolved;
+
+  /// Метка вызова инструмента вида think.
+  ///
+  /// In en, this message translates to:
+  /// **'Think'**
+  String get workbenchToolKindThink;
+
+  /// Метка вызова инструмента вида switch_mode (смена режима сессии).
+  ///
+  /// In en, this message translates to:
+  /// **'Mode'**
+  String get workbenchToolKindSwitchMode;
+
+  /// Строка блока одобрения вызова субагента. Плейсхолдер path — путь субагента в дереве, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{path} wants to run'**
+  String workbenchRequesterWantsToRun(String path);
+
+  /// Подпись токенов строки субагента. Плейсхолдер tokens — число в формате ядра клиента, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{tokens} tokens'**
+  String workbenchAgentRowTokens(String tokens);
+
+  /// Число вызовов инструментов в строке субагента.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} tool call} other{{count} tool calls}}'**
+  String workbenchAgentRowToolCalls(int count);
+
+  /// Подпись сегмента строки статуса, когда агент не сообщает расход.
+  ///
+  /// In en, this message translates to:
+  /// **'usage: —'**
+  String get workbenchStatusUsageUnknown;
+
+  /// Подсказка сегмента строки статуса, когда агент не сообщает расход.
+  ///
+  /// In en, this message translates to:
+  /// **'agent does not report usage'**
+  String get workbenchStatusUsageUnknownTooltip;
+
+  /// Строка подсказки токенов хода: входные токены. Плейсхолдер count — число.
+  ///
+  /// In en, this message translates to:
+  /// **'input {count}'**
+  String workbenchStatusTokenInput(int count);
+
+  /// Строка подсказки токенов хода: выходные токены. Плейсхолдер count — число.
+  ///
+  /// In en, this message translates to:
+  /// **'output {count}'**
+  String workbenchStatusTokenOutput(int count);
+
+  /// Строка подсказки токенов хода: чтение из кэша. Плейсхолдер count — число.
+  ///
+  /// In en, this message translates to:
+  /// **'cache read {count}'**
+  String workbenchStatusTokenCacheRead(int count);
+
+  /// Строка подсказки токенов хода: запись в кэш. Плейсхолдер count — число.
+  ///
+  /// In en, this message translates to:
+  /// **'cache write {count}'**
+  String workbenchStatusTokenCacheWrite(int count);
+
+  /// Строка подсказки токенов хода: токены рассуждения. Плейсхолдер count — число.
+  ///
+  /// In en, this message translates to:
+  /// **'reasoning {count}'**
+  String workbenchStatusTokenReasoning(int count);
+
+  /// Строка подсказки токенов хода: перечень причин неполноты. Плейсхолдер reasons — причины через запятую.
+  ///
+  /// In en, this message translates to:
+  /// **'approximate: {reasons}'**
+  String workbenchStatusApproximate(String reasons);
+
+  /// Причина неполной суммы расхода: агент не прислал usage.
+  ///
+  /// In en, this message translates to:
+  /// **'agent sent no usage for some steps'**
+  String get usagePartialNoUsage;
+
+  /// Причина неполной суммы расхода: неизвестна цена.
+  ///
+  /// In en, this message translates to:
+  /// **'price unknown for some steps'**
+  String get usagePartialNoPrice;
+
+  /// Причина неполной суммы расхода: часть расхода была до загрузки сессии.
+  ///
+  /// In en, this message translates to:
+  /// **'before the session was loaded'**
+  String get usagePartialBeforeLoad;
+
+  /// Подсказка сегмента стоимости строки статуса, когда цена неизвестна.
+  ///
+  /// In en, this message translates to:
+  /// **'price unknown'**
+  String get workbenchStatusPriceUnknown;
+
+  /// Сегмент стоимости строки статуса: стоимость хода и сессии. Плейсхолдеры — суммы в формате ядра клиента, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{turn} · session {session}'**
+  String workbenchStatusCostWithSession(String turn, String session);
+
+  /// Сегмент заполнения контекста. Плейсхолдер fill — процент в формате ядра, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{fill} context'**
+  String workbenchStatusContext(String fill);
+
+  /// Сегмент заполнения контекста с предупреждением о скором сжатии. Плейсхолдер fill — процент.
+  ///
+  /// In en, this message translates to:
+  /// **'{fill} context · compaction soon'**
+  String workbenchStatusContextCompactionSoon(String fill);
+
+  /// Заголовок подтверждения: сессия работает в корне диска. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Open session in the disk root?'**
+  String get workbenchRootSessionTitle;
+
+  /// Текст подтверждения открытия сессии в корне диска. Плейсхолдер cwd — путь корня, не переводить. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'This session runs in the disk root ({cwd}). The agent gets access to the whole disk. Open anyway?'**
+  String workbenchRootSessionBody(String cwd);
+
+  /// Заголовок подтверждения перезапуска агента при идущих сессиях.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart agent?'**
+  String get workbenchRestartTitle;
+
+  /// Текст подтверждения перезапуска агента. Плейсхолдеры: title — название профиля, count — число идущих сессий, sessions — названия сессий через запятую; не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart {title}? This interrupts {count, plural, one{{count} running session} other{{count} running sessions}}: {sessions}. Queued prompts stay.'**
+  String workbenchRestartMessage(String title, int count, String sessions);
+
+  /// Заголовок панели инспектора в панели Protocol. Содержимое инспектора не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Inspector'**
+  String get workbenchInspectorTitle;
+
+  /// Тег записи инспектора: одобрение.
+  ///
+  /// In en, this message translates to:
+  /// **'Approval'**
+  String get workbenchInspectorCategoryApproval;
+
+  /// Тег записи инспектора: вызов инструмента.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool'**
+  String get workbenchInspectorCategoryTool;
+
+  /// Тег записи инспектора: протокол.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol'**
+  String get workbenchInspectorCategoryProtocol;
+
+  /// Тег записи инспектора: диагностика.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostic'**
+  String get workbenchInspectorCategoryDiagnostic;
+
+  /// Бейдж риска записи инспектора. Плейсхолдер risk — значение риска из ядра клиента, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Risk {risk}'**
+  String workbenchInspectorRisk(String risk);
+
+  /// Подпись блока исходных параметров записи инспектора.
+  ///
+  /// In en, this message translates to:
+  /// **'Raw input'**
+  String get workbenchInspectorRawInput;
+
+  /// Подпись блока исходного вывода записи инспектора.
+  ///
+  /// In en, this message translates to:
+  /// **'Raw output'**
+  String get workbenchInspectorRawOutput;
+
+  /// Заголовок панели журнала отладки. Содержимое журнала не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug log'**
+  String get workbenchDebugLogTitle;
+
+  /// Подсказка кнопки, которая открывает журнал отладки на весь экран.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand'**
+  String get workbenchDebugLogExpand;
+
+  /// Подпись команды палитры /new.
+  ///
+  /// In en, this message translates to:
+  /// **'New session'**
+  String get paletteNewLabel;
+
+  /// Описание команды палитры /new.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a fresh ACP session.'**
+  String get paletteNewDescription;
+
+  /// Подпись команды палитры /plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Plan mode'**
+  String get palettePlanLabel;
+
+  /// Описание команды палитры /plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch the prompt turn into planning.'**
+  String get palettePlanDescription;
+
+  /// Подпись команды палитры /permissions.
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions'**
+  String get palettePermissionsLabel;
+
+  /// Описание команды палитры /permissions.
+  ///
+  /// In en, this message translates to:
+  /// **'Open permission mode controls.'**
+  String get palettePermissionsDescription;
+
+  /// Подпись команды палитры /logs.
+  ///
+  /// In en, this message translates to:
+  /// **'Logs'**
+  String get paletteLogsLabel;
+
+  /// Описание команды палитры /logs.
+  ///
+  /// In en, this message translates to:
+  /// **'Open protocol and diagnostic logs.'**
+  String get paletteLogsDescription;
+
+  /// Подпись команды палитры /compact.
+  ///
+  /// In en, this message translates to:
+  /// **'Compact transcript'**
+  String get paletteCompactLabel;
+
+  /// Описание команды палитры /compact.
+  ///
+  /// In en, this message translates to:
+  /// **'Prepare the transcript for compaction.'**
+  String get paletteCompactDescription;
+
+  /// Подпись команды палитры /reconnect для удалённого агента.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect'**
+  String get paletteReconnectLabel;
+
+  /// Описание команды палитры /reconnect для удалённого агента.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry the current agent connection.'**
+  String get paletteReconnectDescription;
+
+  /// Описание команды палитры /reconnect для локального агента (подпись — «Restart agent»).
+  ///
+  /// In en, this message translates to:
+  /// **'Restart the agent with the selected profile and reload open sessions.'**
+  String get paletteRestartDescription;
+
+  /// Подпись команды палитры /files.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get paletteFilesLabel;
+
+  /// Описание команды палитры /files.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to the project files panel.'**
+  String get paletteFilesDescription;
+
+  /// Подпись команды палитры /agents.
+  ///
+  /// In en, this message translates to:
+  /// **'Agents'**
+  String get paletteAgentsLabel;
+
+  /// Описание команды палитры /agents.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to the subagents panel.'**
+  String get paletteAgentsDescription;
+
+  /// Подпись команды палитры /usage-pane.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage'**
+  String get paletteUsageLabel;
+
+  /// Описание команды палитры /usage-pane.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to the usage panel.'**
+  String get paletteUsageDescription;
+
+  /// Предупреждение над лентой: секреты лежат в файле конфигурации встроенного агента. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Secrets are stored in the agent config file.'**
+  String get secretMigrationWarning;
+
+  /// Кнопка предупреждения и заголовок диалога переноса секретов.
+  ///
+  /// In en, this message translates to:
+  /// **'Migrate secrets'**
+  String get secretMigrationMigrateSecrets;
+
+  /// Ход построения плана переноса секретов.
+  ///
+  /// In en, this message translates to:
+  /// **'Building the migration plan…'**
+  String get secretMigrationPlanning;
+
+  /// Ход записи при переносе секретов.
+  ///
+  /// In en, this message translates to:
+  /// **'Moving secrets…'**
+  String get secretMigrationApplying;
+
+  /// Пояснение диалога, когда в плане нет пунктов.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to migrate.'**
+  String get secretMigrationNothing;
+
+  /// Итог переноса секретов.
+  ///
+  /// In en, this message translates to:
+  /// **'Secrets moved. Restart the embedded agent to use them.'**
+  String get secretMigrationMoved;
+
+  /// Подсказка кнопки перезапуска, когда агент сменился или закрыт.
+  ///
+  /// In en, this message translates to:
+  /// **'The embedded agent is no longer connected.'**
+  String get secretMigrationAgentGone;
+
+  /// Подсказка кнопки перезапуска, пока идёт ход.
+  ///
+  /// In en, this message translates to:
+  /// **'Wait for the current turn to finish.'**
+  String get secretMigrationWaitForTurn;
+
+  /// Сбой построения плана переноса. Плейсхолдер errorClass — имя типа ошибки, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Planning failed: {errorClass}.'**
+  String secretMigrationPlanFailed(String errorClass);
+
+  /// Сбой переноса секретов. Плейсхолдер errorClass — имя типа ошибки, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Migration failed: {errorClass}.'**
+  String secretMigrationApplyFailed(String errorClass);
+
+  /// Кнопка выполнения переноса секретов в диалоге.
+  ///
+  /// In en, this message translates to:
+  /// **'Migrate'**
+  String get secretMigrationMigrate;
+
+  /// Заголовок панели Usage.
+  ///
+  /// In en, this message translates to:
+  /// **'This session'**
+  String get usageTitle;
+
+  /// Заголовок карточки входных токенов панели Usage.
+  ///
+  /// In en, this message translates to:
+  /// **'Input'**
+  String get usageCardInput;
+
+  /// Заголовок карточки выходных токенов панели Usage.
+  ///
+  /// In en, this message translates to:
+  /// **'Output'**
+  String get usageCardOutput;
+
+  /// Заголовок карточки стоимости панели Usage и строки бюджета хода.
+  ///
+  /// In en, this message translates to:
+  /// **'Cost'**
+  String get usageCardCost;
+
+  /// Заголовок карточки числа ходов и шагов панели Usage.
+  ///
+  /// In en, this message translates to:
+  /// **'Turns · steps'**
+  String get usageCardTurns;
+
+  /// Строка под карточкой входных токенов. Плейсхолдеры — числа в формате ядра клиента, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'cache read {read} · write {write}'**
+  String usageDetailCache(String read, String write);
+
+  /// Строка под карточкой выходных токенов: токены рассуждения. Плейсхолдер count — число.
+  ///
+  /// In en, this message translates to:
+  /// **'reasoning {count}'**
+  String usageDetailReasoning(String count);
+
+  /// Строка под карточкой стоимости пустой сессии.
+  ///
+  /// In en, this message translates to:
+  /// **'no usage yet'**
+  String get usageDetailNoUsageYet;
+
+  /// Строка под карточкой стоимости, когда цена неизвестна.
+  ///
+  /// In en, this message translates to:
+  /// **'price unknown'**
+  String get usageDetailPriceUnknown;
+
+  /// Строка под карточкой ходов. Плейсхолдер average — десятичное число, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'avg {average} steps per turn'**
+  String usageDetailAverageSteps(String average);
+
+  /// Подпись шага в раскрытом ходе. Плейсхолдеры: number — номер шага, title — название шага; не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'step {number} · {title}'**
+  String usageStepLabel(int number, String title);
+
+  /// Название шага журнала без вызовов инструментов.
+  ///
+  /// In en, this message translates to:
+  /// **'reply'**
+  String get usageStepReply;
+
+  /// Название шага журнала, когда вызовы не найдены в ленте.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} tool call} other{{count} tool calls}}'**
+  String usageStepToolCalls(int count);
+
+  /// Подпись хода в списке «По ходам»: номер хода и заголовок его промпта в кавычках языка. Плейсхолдеры: index — номер хода, title — текст промпта пользователя; не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{index} · “{title}”'**
+  String usageTurnLabel(int index, String title);
+
+  /// Подпись хода: сколько запусков субагентов было в ходе.
+  ///
+  /// In en, this message translates to:
+  /// **'subagents · {count, plural, one{{count} run} other{{count} runs}}'**
+  String usageTurnSubagents(int count);
+
+  /// Название строки таблицы «Per model» с расходом субагентов.
+  ///
+  /// In en, this message translates to:
+  /// **'Subagents'**
+  String get usageModelSubagents;
+
+  /// Название строки таблицы «Per model» с расходом сводок контекста.
+  ///
+  /// In en, this message translates to:
+  /// **'Summaries'**
+  String get usageModelSummaries;
+
+  /// Число запусков в строке «Subagents» таблицы «Per model».
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} run} other{{count} runs}}'**
+  String usageModelRuns(int count);
+
+  /// Состояние журнала расхода: актуален.
+  ///
+  /// In en, this message translates to:
+  /// **'Ledger: up to date'**
+  String get usageLedgerUpToDate;
+
+  /// Состояние журнала расхода: пересобран из журнала сессии.
+  ///
+  /// In en, this message translates to:
+  /// **'rebuilt from journal'**
+  String get usageLedgerRebuilt;
+
+  /// Состояние журнала расхода: только в памяти.
+  ///
+  /// In en, this message translates to:
+  /// **'in memory'**
+  String get usageLedgerInMemory;
+
+  /// Состояние журнала расхода: не сохранён.
+  ///
+  /// In en, this message translates to:
+  /// **'not saved'**
+  String get usageLedgerNotSaved;
+
+  /// Число записей журнала расхода в строке состояния.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} record} other{{count} records}}'**
+  String usageLedgerRecords(int count);
+
+  /// Причина пересборки журнала в скобках. Плейсхолдер reason — значение с провода, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'({reason})'**
+  String usageLedgerReason(String reason);
+
+  /// Подсказка строки состояния: штатное обновление кэша журнала. Плейсхолдер reason — значение с провода, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'refreshed from the session journal ({reason})'**
+  String usageLedgerRefreshedHint(String reason);
+
+  /// Заметка панели Usage: журнал расхода не загрузился.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load usage history.'**
+  String get usageNoteLedgerFailed;
+
+  /// Заметка панели Usage: агент не объявил журнал расхода.
+  ///
+  /// In en, this message translates to:
+  /// **'This agent does not provide usage history.'**
+  String get usageNoteNoLedger;
+
+  /// Заметка панели Usage: файл CSV не записан.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the file.'**
+  String get usageNoteSaveFailed;
+
+  /// Заголовок блока бюджета идущего хода.
+  ///
+  /// In en, this message translates to:
+  /// **'This turn'**
+  String get usageBudgetThisTurn;
+
+  /// Заголовок блока бюджета завершённого хода.
+  ///
+  /// In en, this message translates to:
+  /// **'Last turn'**
+  String get usageBudgetLastTurn;
+
+  /// Строка бюджета хода: шаги.
+  ///
+  /// In en, this message translates to:
+  /// **'Steps'**
+  String get usageBudgetSteps;
+
+  /// Строка бюджета хода: токены.
+  ///
+  /// In en, this message translates to:
+  /// **'Tokens'**
+  String get usageBudgetTokens;
+
+  /// Строка бюджета хода: время.
+  ///
+  /// In en, this message translates to:
+  /// **'Time'**
+  String get usageBudgetTime;
+
+  /// Подсказка строки токенов бюджета хода.
+  ///
+  /// In en, this message translates to:
+  /// **'input + output, including subagents'**
+  String get usageBudgetTokensHint;
+
+  /// Пометка строки стоимости бюджета, когда цена модели неизвестна.
+  ///
+  /// In en, this message translates to:
+  /// **'not checked: price unknown'**
+  String get usageBudgetCostNote;
+
+  /// Пояснение под блоком бюджета хода.
+  ///
+  /// In en, this message translates to:
+  /// **'When a limit is hit, the turn stops at the next step boundary.'**
+  String get usageBudgetFootnote;
+
+  /// Заголовок вкладки терминала. Плейсхолдер number — порядковый номер.
+  ///
+  /// In en, this message translates to:
+  /// **'Terminal {number}'**
+  String terminalTabTitle(int number);
+
+  /// Тег вкладки терминала: процесс запускается.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting'**
+  String get terminalStatusStarting;
+
+  /// Тег вкладки терминала: процесс работает.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get terminalStatusRunning;
+
+  /// Тег вкладки терминала: процесс вышел, код неизвестен.
+  ///
+  /// In en, this message translates to:
+  /// **'Exited'**
+  String get terminalStatusExited;
+
+  /// Тег вкладки терминала: процесс вышел с кодом. Плейсхолдер code — код выхода.
+  ///
+  /// In en, this message translates to:
+  /// **'Exited {code}'**
+  String terminalStatusExitedWithCode(int code);
+
+  /// Тег вкладки терминала: исполняемого файла оболочки нет.
+  ///
+  /// In en, this message translates to:
+  /// **'Shell not found'**
+  String get terminalFailureShellNotFound;
+
+  /// Тег вкладки терминала: рабочей папки нет.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder not found'**
+  String get terminalFailureFolderNotFound;
+
+  /// Тег вкладки терминала: псевдотерминал не создан.
+  ///
+  /// In en, this message translates to:
+  /// **'Terminal is unavailable'**
+  String get terminalFailureUnavailable;
+
+  /// Предупреждение панели терминала: команды идут вне одобрений агента, вывод не очищается от секретов. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Commands here run as you, outside the agent\'s approval flow. Output is shown as is and is not redacted for secrets.'**
+  String get terminalDisclosure;
+
+  /// Заголовок подтверждения открытия ссылки из вывода терминала. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Open link?'**
+  String get terminalLinkTitle;
+
+  /// Отказ для ссылки терминала с другой схемой. http и https — схемы адреса, не переводить. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Only http and https links can be opened.'**
+  String get terminalLinkRefusal;
+
+  /// Сообщение панели Files без папки проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a project or start a session to browse its files.'**
+  String get projectFilesNoFolder;
+
+  /// Сообщение панели Files: папки проекта нет.
+  ///
+  /// In en, this message translates to:
+  /// **'The project folder does not exist.'**
+  String get projectFilesFolderMissing;
+
+  /// Сообщение панели Files: папку проекта не прочитать.
+  ///
+  /// In en, this message translates to:
+  /// **'The project folder cannot be read.'**
+  String get projectFilesFolderUnreadable;
+
+  /// Предупреждение панели Files: корень объявил агент, он вне папки проекта. Плейсхолдер root — путь, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{root} — outside the project folder'**
+  String projectFilesRootOutside(String root);
+
+  /// Подпись над деревом панели Files. .git — имя папки, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'.git is never shown'**
+  String get projectFilesGitHidden;
+
+  /// Кнопка панели Files: перечитать дерево.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get projectFilesRefresh;
+
+  /// Пустой предпросмотр панели Files.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a file to preview it.'**
+  String get projectFilesSelectFile;
+
+  /// Строка дерева Files под папкой, содержимое которой не прочиталось.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot read this folder.'**
+  String get projectFilesFolderReadFailed;
+
+  /// Строка дерева Files: сколько записей не показано. Плейсхолдер count — число.
+  ///
+  /// In en, this message translates to:
+  /// **'… {count} more'**
+  String projectFilesMore(int count);
+
+  /// Причина отказа предпросмотра: файл вне папки проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is outside the project folder.'**
+  String get projectFilesFailureOutsideRoot;
+
+  /// Причина отказа предпросмотра: файла нет.
+  ///
+  /// In en, this message translates to:
+  /// **'The file was not found.'**
+  String get projectFilesFailureNotFound;
+
+  /// Причина отказа предпросмотра: файл не прочитать.
+  ///
+  /// In en, this message translates to:
+  /// **'The file cannot be read.'**
+  String get projectFilesFailureUnreadable;
+
+  /// Причина отказа предпросмотра: путь недопустим.
+  ///
+  /// In en, this message translates to:
+  /// **'The file path is not valid.'**
+  String get projectFilesFailureInvalidPath;
+
+  /// Размер файла в килобайтах в предпросмотре. Плейсхолдер count — число.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} KB'**
+  String projectFilesSizeKilobytes(int count);
+
+  /// Размер файла в мегабайтах в предпросмотре. Плейсхолдер count — число.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} MB'**
+  String projectFilesSizeMegabytes(int count);
+
+  /// InfoBar оболочки настроек: у агента есть запрос одобрения.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent is waiting for your approval'**
+  String get settingsShellPendingApproval;
+
+  /// Кнопка InfoBar оболочки настроек: вернуться к сессии с запросом.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to session'**
+  String get settingsShellBackToSession;
+
+  /// Причина отказа подключения: сервер отверг отправленный токен. Плейсхолдер status — HTTP-статус (401 или 403), не переводить. Значения токена в тексте нет. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent rejected the token (HTTP {status}).'**
+  String workbenchTokenRejected(int status);
+
+  /// Причина отказа подключения: сервер требует токен, а он не был отправлен. Плейсхолдер status — HTTP-статус (401 или 403), не переводить. Значения токена в тексте нет. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent requires a token (HTTP {status}).'**
+  String workbenchTokenRequired(int status);
 }
 
 class _AppLocalizationsDelegate

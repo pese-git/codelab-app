@@ -96,12 +96,15 @@ sealed class TranscriptItem with _$TranscriptItem {
   ///
   /// [failure] заполнен только у [NoticeKind.error]: по нему хост строит
   /// заголовок заметки, а [text] остаётся нейтральной строкой для CLI
-  /// (design D3 change `add-connection-and-error-states`).
+  /// (design D3 change `add-connection-and-error-states`). [reason] — причина
+  /// заметок `emptyTurn`, `turnStopped`, `detached`, `reconnected` (D6 change
+  /// `add-desktop-localization`); у остальных `null`.
   const factory TranscriptItem.notice({
     required String id,
     required NoticeKind kind,
     required String text,
     PromptFailure? failure,
+    NoticeReason? reason,
   }) = NoticeItem;
 }
 
@@ -282,6 +285,19 @@ sealed class ApprovalStateView with _$ApprovalStateView {
     required String label,
     required ApprovalOutcomeView outcome,
 
+    /// Подпись от агента: название выбранного варианта или id варианта, если
+    /// его нет среди options; `null` — [label] запасная подпись ядра
+    /// (`Cancelled` при отмене, `Resolved`, когда вариант не выбран).
+    ///
+    /// Почему: хост не отличал английские запасные строки ядра от названия
+    /// варианта агента и не мог перевести первые (D6 change
+    /// `add-desktop-localization`: ядро даёт тип, текст строит хост).
+    ///
+    /// Как использовать: хост показывает значение как есть, а при `null`
+    /// строит подпись на языке интерфейса по [outcome]; [label] остаётся для
+    /// CLI.
+    String? agentLabel,
+
     /// Спрашивавший потомок: по нему хост подписывает строку исхода под
     /// строкой корня (`review: Allow`, D43 п. 2); `null` — запрос корня.
     SubagentRequester? subagent,
@@ -325,4 +341,75 @@ enum NoticeKind {
   /// Сессию не удалось восстановить после перезапуска хоста, и вместо неё
   /// создана новая (design D6).
   reconnected,
+}
+
+/// Типизированная причина заметки (D6 change `add-desktop-localization`).
+///
+/// Почему: `NoticeItem.text` английский, а хост с другим языком не должен
+/// разбирать строку ядра. Ядро остаётся без локали и `intl`.
+///
+/// Для чего: поле `NoticeItem.reason` у видов `emptyTurn`, `turnStopped`,
+/// `detached`, `reconnected` (у `error` — `failure`, у остальных `null`).
+/// Проекция с нуля и инкрементальная дают равные причины.
+///
+/// Как использовать: хост разбирает `switch` по наследникам и строит текст
+/// сам; `text` остаётся для CLI и не меняется (spec acp-client-kit
+/// «Типизированная причина заметки транскрипта»).
+sealed class NoticeReason {
+  const NoticeReason();
+}
+
+/// Причина `emptyTurn`: `stopReason` хода, `null` — исход неизвестен
+/// (например, реплей `session/load`).
+final class EmptyTurnReason extends NoticeReason {
+  const EmptyTurnReason(this.stopReason);
+
+  final StopReason? stopReason;
+
+  @override
+  bool operator ==(Object other) =>
+      other is EmptyTurnReason && other.stopReason == stopReason;
+
+  @override
+  int get hashCode => Object.hash(EmptyTurnReason, stopReason);
+}
+
+/// Причина `turnStopped`: `stopReason` и [budgetLimit] — имя лимита из
+/// известного набора (`steps`, `tokens`, `cost`, `duration`, `deadline`);
+/// `null` для незнакомого или отсутствующего, как и в тексте.
+final class TurnStoppedReason extends NoticeReason {
+  const TurnStoppedReason(this.stopReason, {this.budgetLimit});
+
+  final StopReason stopReason;
+  final String? budgetLimit;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TurnStoppedReason &&
+      other.stopReason == stopReason &&
+      other.budgetLimit == budgetLimit;
+
+  @override
+  int get hashCode => Object.hash(TurnStoppedReason, stopReason, budgetLimit);
+}
+
+/// Почему сессию не удалось привязать к новому соединению.
+enum SessionRestoreCause { agentCannotRestore, restoreFailed }
+
+/// Причина `detached` и `reconnected`; [sessionId] — у `restoreFailed`:
+/// сессия, которую не удалось восстановить.
+final class SessionRestoreReason extends NoticeReason {
+  const SessionRestoreReason(this.cause, {this.sessionId});
+
+  final SessionRestoreCause cause;
+  final SessionId? sessionId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionRestoreReason &&
+      other.cause == cause &&
+      other.sessionId == sessionId;
+
+  @override
+  int get hashCode => Object.hash(SessionRestoreReason, cause, sessionId);
 }

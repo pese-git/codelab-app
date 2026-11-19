@@ -9,6 +9,7 @@ import 'package:codelab_desktop/features/workbench/application/agents_pane_data.
 import 'package:codelab_desktop/features/workbench/application/shell_part.dart';
 import 'package:codelab_desktop/features/workbench/application/transcript_view_cubit.dart';
 import 'package:codelab_desktop/features/workbench/application/ui_mappers.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -193,10 +194,12 @@ void main() {
       final busy = agentRowsOf(
         AgentsPaneData(rows: rows, busy: true),
         now: started.add(const Duration(seconds: 125)),
+        l10n: AppLocalizationsEn(),
       );
       final idle = agentRowsOf(
         AgentsPaneData(rows: rows),
         now: started.add(const Duration(seconds: 125)),
+        l10n: AppLocalizationsEn(),
       );
 
       expect(busy.single.time, '2m 05s');
@@ -209,6 +212,7 @@ void main() {
       final rows = agentRowsOf(
         AgentsPaneData(rows: [_row('call_1', startedAt: started)], busy: true),
         now: started.subtract(const Duration(seconds: 5)),
+        l10n: AppLocalizationsEn(),
       );
 
       expect(rows.single.time, '0s');
@@ -233,6 +237,7 @@ void main() {
           planTitles: const {'2': 'Check callers'},
         ),
         now: started,
+        l10n: AppLocalizationsEn(),
       );
 
       final row = rows.single;

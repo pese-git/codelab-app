@@ -815,6 +815,9 @@ final class CodeLabPresentationModule extends Module {
             usageLogger: _usageLogger(),
             startupPreferences: currentScope.resolve<StartupPreferences>(),
             appLogger: codeLabAppLogger(),
+            // Язык интерфейса: Cubit-ы рабочего места с текстом подписаны на
+            // порт в конструкторе (`add-desktop-localization`, D5).
+            strings: currentScope.resolve<AppStrings>(),
           ),
         )
         .singleton();

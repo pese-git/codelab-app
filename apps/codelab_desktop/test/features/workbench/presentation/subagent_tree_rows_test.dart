@@ -28,6 +28,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/workbench/application/ui_mappers.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -106,6 +107,7 @@ List<CodeLabTranscriptRow> _rows(
   cwd: '/work',
   approvalsEnabled: true,
   onApprovalSelected: onSelected ?? (_, _) {},
+  l10n: AppLocalizationsEn(),
 );
 
 Future<void> _pump(
@@ -443,6 +445,7 @@ void main() {
     const resolved = ApprovalStateView.resolved(
       label: 'Allow',
       outcome: ApprovalOutcomeView.allowed,
+      agentLabel: 'Allow',
       subagent: grandchild,
     );
 

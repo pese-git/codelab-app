@@ -1,16 +1,17 @@
 import 'dart:async';
 
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show ProjectFilesFailureKind;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import 'package:codelab_client_core/codelab_client_core.dart'
-    show ProjectFilesFailureKind;
-
 import '../../../app/app_scope.dart';
+import '../../../l10n/l10n.dart';
 import '../application/preview_view.dart';
 import '../application/project_files_cubit.dart';
+import '../application/project_tree_rows.dart' show localizedProjectTreeRows;
 import '../application/project_tree_state.dart';
 
 /// Панель Files дока: дерево сверху, просмотр снизу (артборд `Files`;
@@ -47,15 +48,14 @@ class ProjectFilesView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return BlocBuilder<ProjectFilesCubit, ProjectTreeState>(
       builder: (context, state) => switch (state.status) {
-        ProjectTreeStatus.noFolder => const _Message(
-          'Select a project or start a session to browse its files.',
-        ),
+        ProjectTreeStatus.noFolder => _Message(l10n.projectFilesNoFolder),
         ProjectTreeStatus.unavailable => _Message(
           state.failure == ProjectFilesFailureKind.notFound
-              ? 'The project folder does not exist.'
-              : 'The project folder cannot be read.',
+              ? l10n.projectFilesFolderMissing
+              : l10n.projectFilesFolderUnreadable,
         ),
         ProjectTreeStatus.loading => const Center(
           child: CodeLabProgressIndicator(),
@@ -95,7 +95,8 @@ class _ReadyView extends StatelessWidget {
     final cubit = context.read<ProjectFilesCubit>();
     final theme = FluentTheme.of(context);
     final selected = state.selected;
-    final content = previewContentOf(state.preview);
+    final l10n = context.l10n;
+    final content = previewContentOf(state.preview, l10n);
     final shown = state.preview;
 
     return Column(
@@ -109,7 +110,7 @@ class _ReadyView extends StatelessWidget {
               // Корень объявил агент, он вне папки проекта: путь виден
               // только здесь, в логи выше debug он не попадает (Q18, D5).
               child: CodeLabText(
-                '${state.root} — outside the project folder',
+                l10n.projectFilesRootOutside('${state.root}'),
                 role: CodeLabTextRole.caption,
                 color: Colors.warningPrimaryColor,
               ),
@@ -121,14 +122,14 @@ class _ReadyView extends StatelessWidget {
             children: [
               Expanded(
                 child: CodeLabText(
-                  '.git is never shown',
+                  l10n.projectFilesGitHidden,
                   role: CodeLabTextRole.caption,
                   color: theme.resources.textFillColorSecondary,
                 ),
               ),
               CodeLabButton(
                 key: const ValueKey('project-files-refresh'),
-                label: 'Refresh',
+                label: l10n.projectFilesRefresh,
                 icon: FluentIcons.refresh,
                 emphasis: CodeLabButtonEmphasis.subtle,
                 onPressed: () => unawaited(cubit.refresh()),
@@ -139,7 +140,7 @@ class _ReadyView extends StatelessWidget {
         Expanded(
           flex: 3,
           child: CodeLabFileTree(
-            rows: state.rows,
+            rows: localizedProjectTreeRows(state.rows, l10n),
             selectedPath: selected,
             onToggleDirectory: (row) =>
                 unawaited(cubit.toggleDirectory(row.relativePath)),
@@ -150,7 +151,7 @@ class _ReadyView extends StatelessWidget {
         Expanded(
           flex: 2,
           child: selected == null || content == null
-              ? const _Message('Select a file to preview it.')
+              ? _Message(l10n.projectFilesSelectFile)
               : CodeLabFilePreview(
                   relativePath: selected,
                   content: content,

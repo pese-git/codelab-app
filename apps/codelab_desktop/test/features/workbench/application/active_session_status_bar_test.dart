@@ -13,8 +13,10 @@ import 'package:codelab_client_acp/codelab_client_acp.dart' show AcpSession;
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/workbench/application/active_session_cubit.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_part.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/app_strings.dart';
 import '../../../support/fake_usage_csv_saver.dart';
 
 /// Сессия с управляемым потоком `view`; `emit` публикует новую ревизию.
@@ -84,6 +86,7 @@ void main() {
       workspace: workspace,
       diagnostics: ShellDiagnostics(),
       usageCsvSaver: FakeUsageCsvSaver(),
+      strings: FixedAppStrings(AppLocalizationsEn()),
     );
   });
 

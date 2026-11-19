@@ -1,5 +1,11 @@
 import 'dart:async';
 
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
+import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_acp_transports/codelab_acp_transports.dart';
+import 'package:codelab_client_acp/codelab_client_acp.dart';
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show ConnectionProfile, ProfileSecretSource;
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
@@ -10,27 +16,25 @@ import 'package:codelab_desktop/features/workbench/presentation/widgets/debug_lo
 import 'package:codelab_desktop/features/workbench/presentation/widgets/main_pane.dart';
 import 'package:codelab_desktop/features/workbench/presentation/workbench_shell.dart'
     show selectPaletteCommand;
-import 'package:codelab_client_acp/codelab_client_acp.dart';
-import 'package:codelab_client_core/codelab_client_core.dart'
-    show ConnectionProfile, ProfileSecretSource;
-import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
-import 'package:codelab_acp_testing/codelab_acp_testing.dart';
-import 'package:codelab_acp_transports/codelab_acp_transports.dart';
+import 'package:codelab_desktop/l10n/app_localizations.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' show ComboBox, FluentApp, FluentIcons;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:structured_log_flutter/structured_log_flutter.dart'
-    show LogBuffer;
 import 'package:structured_log_fluent/structured_log_fluent.dart'
     show FluentLogViewerPage;
+import 'package:structured_log_flutter/structured_log_flutter.dart'
+    show LogBuffer;
 
-import 'support/test_app_scope.dart';
-import 'support/transcript_rows.dart';
 import 'features/workbench/application/shell_cubit_characterization/harness.dart'
     show ThrowingStartTransport;
+import 'support/app_strings.dart';
+import 'support/l10n_app.dart';
 import 'support/start_agent.dart';
+import 'support/test_app_scope.dart';
+import 'support/transcript_rows.dart';
 
 /// stdio-профиль окна вместо прежней формы подключения (задача 2.4 change
 /// `add-app-settings-shell`, D6). Метка и команда — произвольные литералы теста
@@ -313,6 +317,7 @@ void main() {
     final application = AcpClientApplication(transport: initialTransport);
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -368,6 +373,7 @@ void main() {
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -417,6 +423,7 @@ void main() {
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -465,6 +472,7 @@ void main() {
     final configs = <StdioAcpTransportConfig>[];
     final application = AcpClientApplication(transport: FakeAcpTransport());
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -506,6 +514,7 @@ void main() {
     final application = AcpClientApplication(transport: initialTransport);
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -591,6 +600,7 @@ void main() {
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -702,6 +712,7 @@ void main() {
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -799,6 +810,7 @@ void main() {
       final agentTransport = FakeAcpTransport();
       final application = AcpClientApplication(transport: initialTransport);
       final shellCubit = CodeLabShellCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         profile: codelabAgentStdioProfile,
         application: application,
         createSessionUseCase: CreateSession(application),
@@ -922,6 +934,7 @@ void main() {
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -1005,6 +1018,7 @@ void main() {
     final application = AcpClientApplication(transport: initialTransport);
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -1082,6 +1096,7 @@ void main() {
     final application = AcpClientApplication(transport: FakeAcpTransport());
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -1128,6 +1143,7 @@ void main() {
     var reconnectAttempts = 0;
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -1577,6 +1593,7 @@ void main() {
     final application = AcpClientApplication(transport: initialTransport);
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -1697,6 +1714,7 @@ void main() {
     final application = AcpClientApplication(transport: initialTransport);
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -1751,6 +1769,7 @@ void main() {
     final application = AcpClientApplication(transport: initialTransport);
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -1815,6 +1834,7 @@ void main() {
       final application = AcpClientApplication(transport: initialTransport);
       final logger = _RecordingLogger();
       final shellCubit = CodeLabShellCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         profile: codelabAgentStdioProfile,
         application: application,
         createSessionUseCase: CreateSession(application),
@@ -1887,6 +1907,7 @@ void main() {
     final application = AcpClientApplication(transport: FakeAcpTransport());
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -1926,6 +1947,7 @@ void main() {
     final application = AcpClientApplication(transport: FakeAcpTransport());
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -1968,6 +1990,7 @@ void main() {
     final application = AcpClientApplication(transport: initialTransport);
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -2031,6 +2054,7 @@ void main() {
     // окружения в момент открытия транспорта, а не хранится (D13, D15).
     final environment = {'AGENT_TOKEN': 'initial-token'};
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -2098,6 +2122,7 @@ void main() {
     var attempts = 0;
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -2146,6 +2171,7 @@ void main() {
     final agentTransport = FakeAcpTransport();
     final application = AcpClientApplication(transport: initialTransport);
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -2226,6 +2252,7 @@ void main() {
       final application = AcpClientApplication(transport: FakeAcpTransport());
       final logger = _RecordingLogger();
       final shellCubit = CodeLabShellCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         profile: codelabAgentStdioProfile,
         application: application,
         createSessionUseCase: CreateSession(application),
@@ -2265,6 +2292,7 @@ void main() {
     final application = AcpClientApplication(transport: initialTransport);
     final logger = _RecordingLogger();
     final shellCubit = CodeLabShellCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       profile: codelabAgentStdioProfile,
       application: application,
       createSessionUseCase: CreateSession(application),
@@ -3535,6 +3563,7 @@ void main() {
       final agentTransport = FakeAcpTransport();
       final application = AcpClientApplication(transport: initialTransport);
       final shellCubit = CodeLabShellCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         profile: codelabAgentStdioProfile,
         application: application,
         createSessionUseCase: CreateSession(application),
@@ -3740,6 +3769,8 @@ void main() {
 
         Future<void> pumpMainPane(CodeLabShellState state) => tester.pumpWidget(
           FluentApp(
+            localizationsDelegates: l10nTestDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: WorkbenchMainPane(state: state, cubit: harness.shellCubit),
           ),
         );
@@ -3821,6 +3852,8 @@ void main() {
       );
       Future<void> pumpMainPane() => tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: WorkbenchMainPane(
             state: stateWith(),
             cubit: harness.shellCubit,
@@ -3880,6 +3913,8 @@ void main() {
       );
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: WorkbenchMainPane(
             state: stateWithTranscript,
             cubit: harness.shellCubit,
@@ -3917,6 +3952,8 @@ void main() {
       );
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: WorkbenchMainPane(state: state, cubit: harness.shellCubit),
         ),
       );
@@ -3932,6 +3969,8 @@ void main() {
 
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: WorkbenchMainPane(
             state: state.copyWith(
               connectionStatus: CodeLabConnectionStatus.reconnecting,
@@ -3945,6 +3984,8 @@ void main() {
 
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: WorkbenchMainPane(
             state: state.copyWith(
               connectionStatus: CodeLabConnectionStatus.failed,
@@ -3960,6 +4001,8 @@ void main() {
 
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: WorkbenchMainPane(
             state: state.copyWith(
               connectionStatus: CodeLabConnectionStatus.connected,
@@ -3990,6 +4033,8 @@ void main() {
       );
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: WorkbenchMainPane(
             state: failed.copyWith(
               transcriptRows: const [CodeLabUserRow(id: 'u', text: 'hi')],
@@ -4003,6 +4048,8 @@ void main() {
 
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: WorkbenchMainPane(state: failed, cubit: harness.shellCubit),
         ),
       );
@@ -4020,6 +4067,8 @@ void main() {
 
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: WorkbenchMainPane(
             state: harness.shellCubit.state.copyWith(
               connectionStatus: CodeLabConnectionStatus.lost,
@@ -4088,6 +4137,8 @@ void main() {
       );
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Center(
             child: SizedBox(
               width: 580,
@@ -4145,6 +4196,7 @@ void main() {
       final application = AcpClientApplication(transport: initialTransport);
       final logger = _RecordingLogger();
       final shellCubit = CodeLabShellCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         profile: codelabAgentStdioProfile,
         application: application,
         createSessionUseCase: CreateSession(application),
@@ -4664,6 +4716,8 @@ void main() {
 
         await tester.pumpWidget(
           FluentApp(
+            localizationsDelegates: l10nTestDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
             home: WorkbenchMainPane(state: state, cubit: harness.shellCubit),
           ),
         );
@@ -4697,6 +4751,7 @@ void main() {
       final agentTransport = FakeAcpTransport();
       final application = AcpClientApplication(transport: initialTransport);
       final shellCubit = CodeLabShellCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         profile: codelabAgentStdioProfile,
         application: application,
         createSessionUseCase: CreateSession(application),

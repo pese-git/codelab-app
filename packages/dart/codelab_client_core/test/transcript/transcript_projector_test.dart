@@ -176,6 +176,7 @@ void main() {
         const ApprovalStateView.resolved(
           label: 'Allow once',
           outcome: ApprovalOutcomeView.allowed,
+          agentLabel: 'Allow once',
         ),
       );
 

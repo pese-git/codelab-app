@@ -27,21 +27,41 @@ final class FixedAppStrings implements AppStrings {
 ///
 /// Как использовать: `final strings = TestAppStrings(AppLocalizationsEn());`
 /// передать Cubit-у; `strings.emit(AppLocalizationsRu())` меняет [current] и
-/// шлёт событие; после `cubit.close()` `strings.hasListener` — `false`.
+/// шлёт событие; после `cubit.close()` `strings.hasListener` — `false`, а
+/// [subscriberCount] показывает, не выросло ли число подписок после
+/// переподключения и смены сессии (R3).
 final class TestAppStrings implements AppStrings {
   TestAppStrings(this._current);
 
   AppLocalizations _current;
   final _controller = StreamController<AppLocalizations>.broadcast();
+  var _subscribers = 0;
 
   @override
   AppLocalizations get current => _current;
 
+  // Свой счётчик, а не `_controller.hasListener`: широковещательный
+  // контроллер знает только «есть ли хоть один», а утечку второй подписки
+  // можно увидеть лишь по числу.
   @override
-  Stream<AppLocalizations> get changes => _controller.stream;
+  Stream<AppLocalizations> get changes =>
+      Stream<AppLocalizations>.multi((subscriber) {
+        _subscribers++;
+        final inner = _controller.stream.listen(
+          subscriber.add,
+          onDone: subscriber.close,
+        );
+        subscriber.onCancel = () {
+          _subscribers--;
+          return inner.cancel();
+        };
+      }, isBroadcast: true);
 
   /// Есть ли подписчик на [changes] (утёкшая подписка видна здесь).
-  bool get hasListener => _controller.hasListener;
+  bool get hasListener => _subscribers > 0;
+
+  /// Сколько подписок на [changes] живо сейчас.
+  int get subscriberCount => _subscribers;
 
   /// Меняет язык и сообщает подписчикам.
   void emit(AppLocalizations strings) {

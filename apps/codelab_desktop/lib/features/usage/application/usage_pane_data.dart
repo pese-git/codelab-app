@@ -41,29 +41,135 @@ enum UsagePaneNotice {
   noLedger,
 }
 
+/// Вторая строка карточки в виде значения: текст собирает presentation по
+/// каталогу (`add-desktop-localization`, D5 п. 4: `application` без языка).
+///
+/// Почему закрытая иерархия: у строки пять видов с разными аргументами;
+/// числа в аргументах — уже отформатированный текст kit (D8), его presentation
+/// подставляет как есть.
+sealed class UsageCardDetail {
+  const UsageCardDetail();
+}
+
+/// `cache read <read> · write <write>` под карточкой `input`.
+final class UsageCardCache extends UsageCardDetail {
+  const UsageCardCache({required this.read, required this.write});
+
+  final String read;
+  final String write;
+
+  @override
+  bool operator ==(Object other) =>
+      other is UsageCardCache && other.read == read && other.write == write;
+
+  @override
+  int get hashCode => Object.hash(UsageCardCache, read, write);
+}
+
+/// `reasoning <count>` под карточкой `output`.
+final class UsageCardReasoning extends UsageCardDetail {
+  const UsageCardReasoning(this.count);
+
+  final String count;
+
+  @override
+  bool operator ==(Object other) =>
+      other is UsageCardReasoning && other.count == count;
+
+  @override
+  int get hashCode => Object.hash(UsageCardReasoning, count);
+}
+
+/// Причины неполноты суммы стоимости (`partial`) в порядке `UsagePartial`.
+final class UsageCardPartialReasons extends UsageCardDetail {
+  const UsageCardPartialReasons(this.reasons);
+
+  final List<UsagePartial> reasons;
+
+  @override
+  bool operator ==(Object other) =>
+      other is UsageCardPartialReasons && _sameReasons(other.reasons, reasons);
+
+  /// Поэлементное сравнение: `application` остаётся без Flutter (сторож), а
+  /// `listEquals` живёт в `package:flutter/foundation.dart`.
+  static bool _sameReasons(List<UsagePartial> a, List<UsagePartial> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(UsageCardPartialReasons, Object.hashAll(reasons));
+}
+
+/// Расхода ещё нет: сессия без ходов (D8 change `fix-usage-pane-live-cards`).
+final class UsageCardNoUsageYet extends UsageCardDetail {
+  const UsageCardNoUsageYet();
+
+  @override
+  bool operator ==(Object other) => other is UsageCardNoUsageYet;
+
+  @override
+  int get hashCode => (UsageCardNoUsageYet).hashCode;
+}
+
+/// Цена модели неизвестна: стоимость не посчитана.
+final class UsageCardPriceUnknown extends UsageCardDetail {
+  const UsageCardPriceUnknown();
+
+  @override
+  bool operator ==(Object other) => other is UsageCardPriceUnknown;
+
+  @override
+  int get hashCode => (UsageCardPriceUnknown).hashCode;
+}
+
+/// `avg <average> steps per turn` под карточкой `turns`; [average] —
+/// десятичное число (`1.5`).
+final class UsageCardAverageSteps extends UsageCardDetail {
+  const UsageCardAverageSteps(this.average);
+
+  final String average;
+
+  @override
+  bool operator ==(Object other) =>
+      other is UsageCardAverageSteps && other.average == average;
+
+  @override
+  int get hashCode => Object.hash(UsageCardAverageSteps, average);
+}
+
+/// Вид карточки сводки: заголовок выбирается по нему исчерпывающим `switch`
+/// в presentation.
+enum UsageCardKind { input, output, cost, turns }
+
 /// Карточка сводки панели (`usage-card-<id>`; D2 п. 2).
 ///
 /// Поля заданы тестами `usage_pane_data_test.dart`; [approximate] — тон
 /// предупреждения: решение «неполная сумма» принимает application, а не
-/// виджет (`codelab_ui/AGENTS.md` §2).
+/// виджет (`codelab_ui/AGENTS.md` §2). Заголовок карточки — текст app по [id],
+/// его собирает presentation по каталогу.
 final class UsagePaneCard {
   const UsagePaneCard({
-    required this.id,
-    required this.title,
+    required this.kind,
     required this.value,
     this.detail,
     this.approximate = false,
   });
 
+  final UsageCardKind kind;
+
   /// `input`, `output`, `cost` или `turns` — суффикс ключа карточки.
-  final String id;
-  final String title;
+  String get id => kind.name;
 
   /// Готовое значение (формат kit): `950`, `~$2.26`, `—`.
   final String value;
 
   /// Вторая строка карточки; `null` — её нет.
-  final String? detail;
+  final UsageCardDetail? detail;
 
   /// Сумма неполна (есть причины `partial`): карточка в тоне `warning`.
   final bool approximate;
@@ -75,7 +181,6 @@ final class UsagePaneStep {
     required this.turn,
     required this.index,
     required this.title,
-    required this.label,
     required this.input,
     required this.output,
     required this.cost,
@@ -88,11 +193,10 @@ final class UsagePaneStep {
   /// Индекс шага журнала (с 0).
   final int index;
 
-  /// Подпись шага без префикса (`Read lib/a.dart`, `reply`) — её берёт CSV.
-  final String title;
-
-  /// `step <index + 1> · <title>`.
-  final String label;
+  /// Название шага: вызов, `reply` или число вызовов. Текст для экрана
+  /// собирает presentation (`step <index + 1> · <title>`), английский текст
+  /// для CSV — [UsageStepTitle.englishText].
+  final UsageStepTitle title;
   final String input;
   final String output;
   final String cost;
@@ -105,29 +209,35 @@ final class UsagePaneStep {
 final class UsagePaneTurn {
   const UsagePaneTurn({
     required this.index,
-    required this.label,
+    required this.title,
     required this.running,
     required this.input,
     required this.output,
     required this.cost,
     this.steps = const [],
-    this.subagents,
+    this.subagentRuns,
   });
 
   /// Номер хода журнала (с 1).
   final int index;
 
-  /// `N · “<title>”` или `N`.
-  final String label;
+  /// Заголовок хода — текст промпта; `null` — у хода его нет. Подпись
+  /// `N · “title”` собирает presentation по каталогу (D5 п. 2/4): кавычки
+  /// зависят от языка, а CSV берёт заголовок из журнала.
+  final String? title;
   final bool running;
   final String input;
   final String output;
   final String cost;
   final List<UsagePaneStep> steps;
 
-  /// `subagents · N runs`; `null` — субагентов у хода нет.
-  final String? subagents;
+  /// Число запусков субагентов хода (`subagents · N runs` на экране);
+  /// `null` — субагентов у хода нет.
+  final int? subagentRuns;
 }
+
+/// Вид строки таблицы `Per model`: модель, группа `Subagents` или `Summaries`.
+enum UsageModelKind { model, subagents, summaries }
 
 /// Строка таблицы `Per model` (`usage-model-<n>`; D2 п. 5), включая строки
 /// `Subagents` и `Summaries`.
@@ -137,17 +247,59 @@ final class UsagePaneModel {
     required this.input,
     required this.output,
     required this.cost,
-    this.detail,
+    this.kind = UsageModelKind.model,
+    this.count,
   });
 
-  /// `<provider> / <id>`, `Subagents` или `Summaries`.
+  /// `<provider> / <id>` у модели; у групп — пусто: их название собирает
+  /// presentation по [kind] (`add-desktop-localization`, D5 п. 4).
   final String label;
   final String input;
   final String output;
   final String cost;
+  final UsageModelKind kind;
 
-  /// `N runs` у `Subagents`, `N` у `Summaries`; у модели — `null`.
-  final String? detail;
+  /// Число запусков у `Subagents`, число сводок у `Summaries`; у модели —
+  /// `null`.
+  final int? count;
+}
+
+/// Состояние журнала для строки `usage-ledger-status`: значение, из которого
+/// presentation собирает строку и подсказку (D7 change
+/// `fix-usage-pane-live-cards`; `add-desktop-localization`, D5 п. 4).
+enum UsageLedgerLineKind { upToDate, rebuilt, inMemory, notSaved }
+
+/// Строка состояния журнала в виде значения.
+final class UsageLedgerLine {
+  const UsageLedgerLine(
+    this.kind, {
+    this.records,
+    this.reason,
+    this.refreshReason,
+  });
+
+  final UsageLedgerLineKind kind;
+
+  /// Число записей журнала; `null` — не сообщено.
+  final int? records;
+
+  /// Причина пересборки (`rebuilt`) — значение провода, не переводится.
+  final String? reason;
+
+  /// Причина штатной пересборки кэша (`stale`, `missing`) для подсказки
+  /// строки: журнал показан как `upToDate`, причина — только в подсказке.
+  final String? refreshReason;
+
+  @override
+  bool operator ==(Object other) =>
+      other is UsageLedgerLine &&
+      other.kind == kind &&
+      other.records == records &&
+      other.reason == reason &&
+      other.refreshReason == refreshReason;
+
+  @override
+  int get hashCode => Object.hash(kind, records, reason, refreshReason);
 }
 
 /// Неизменяемый снимок панели Usage для сессии в фокусе (D1, D2, D10).
@@ -164,8 +316,7 @@ final class UsagePaneData {
     this.ledger,
     this.notice = UsagePaneNotice.none,
     this.failureHint,
-    this.statusLine,
-    this.statusHint,
+    this.ledgerLine,
     this.cards = const [],
     this.turns = const [],
     this.models = const [],
@@ -194,14 +345,10 @@ final class UsagePaneData {
   /// Код ошибки журнала для подсказки заметки (`-32603`); `null` — не сбой.
   final String? failureHint;
 
-  /// Строка состояния журнала (`usage-ledger-status`); `null` — нечего
-  /// показывать.
-  final String? statusLine;
-
-  /// Подсказка строки состояния: причина штатной пересборки кэша журнала
-  /// (`stale`, `missing`), показанной как `up to date` (D7 change
-  /// `fix-usage-pane-live-cards`); `null` — подсказки нет.
-  final String? statusHint;
+  /// Состояние журнала для строки `usage-ledger-status`; `null` — нечего
+  /// показывать. Строку и подсказку (причина штатной пересборки кэша, D7
+  /// change `fix-usage-pane-live-cards`) собирает presentation.
+  final UsageLedgerLine? ledgerLine;
 
   /// Карточки сводки: все четыре из одного агрегата — свежего из журнала и
   /// живых снимков (D1 того же change).
@@ -226,13 +373,6 @@ bool usageAvailableOf(SessionView? view) =>
     view != null &&
     (view.usageLedger is! UsageLedgerUnavailable ||
         view.usage.support != UsageSupport.unknown);
-
-/// Тексты причин неполноты — те же, что в подсказке строки статуса (A7).
-const _partialTexts = {
-  UsagePartial.noUsage: 'agent sent no usage for some steps',
-  UsagePartial.noPrice: 'price unknown for some steps',
-  UsagePartial.beforeLoad: 'before the session was loaded',
-};
 
 /// Строка агрегата без usage: счётчики нулевые и агент не прислал usage.
 ///
@@ -302,50 +442,49 @@ List<UsagePaneCard> _cardsOf(UsageTotals total, {required int? turnCount}) {
   final reasoning = tokens.reasoning;
   final reasons = [
     for (final reason in UsagePartial.values)
-      if (partial.contains(reason)) _partialTexts[reason]!,
+      if (partial.contains(reason)) reason,
   ];
   return [
     UsagePaneCard(
-      id: 'input',
-      title: 'Input',
+      kind: UsageCardKind.input,
       value: inputValue,
-      detail:
-          'cache read ${formatUsageTokens(tokens.cacheRead)} · '
-          'write ${formatUsageTokens(tokens.cacheWrite)}',
+      detail: UsageCardCache(
+        read: formatUsageTokens(tokens.cacheRead),
+        write: formatUsageTokens(tokens.cacheWrite),
+      ),
       approximate: inputApprox,
     ),
     UsagePaneCard(
-      id: 'output',
-      title: 'Output',
+      kind: UsageCardKind.output,
       value: outputValue,
       detail: reasoning == null
           ? null
-          : 'reasoning ${formatUsageTokens(reasoning)}',
+          : UsageCardReasoning(formatUsageTokens(reasoning)),
       approximate: outputApprox,
     ),
     UsagePaneCard(
-      id: 'cost',
-      title: 'Cost',
+      kind: UsageCardKind.cost,
       value: total.cost == null
           ? _unknown
           : '${usageCostPartial(partial) ? '~' : ''}'
                 '${formatUsageMoney(total.cost!)}',
       detail: reasons.isNotEmpty
-          ? reasons.join(', ')
+          ? UsageCardPartialReasons(reasons)
           : (total.cost == null
-                ? (_noUsageYet(total) ? 'no usage yet' : 'price unknown')
+                ? (_noUsageYet(total)
+                      ? const UsageCardNoUsageYet()
+                      : const UsageCardPriceUnknown())
                 : null),
       approximate: total.cost != null && usageCostPartial(partial),
     ),
     UsagePaneCard(
-      id: 'turns',
-      title: 'Turns · steps',
+      kind: UsageCardKind.turns,
       value: turnCount == null
           ? '${total.steps}'
           : '$turnCount · ${total.steps}',
       detail: turnCount == null || turnCount <= 0
           ? null
-          : 'avg ${_averageOf(total.steps, turnCount)} steps per turn',
+          : UsageCardAverageSteps(_averageOf(total.steps, turnCount)),
     ),
   ];
 }
@@ -363,12 +502,10 @@ UsagePaneTurn _turnOf(UsageLedgerTurn turn, UsageStepLabeler labeler) {
   final steps = [
     for (final step in turn.steps)
       () {
-        final text = labeler.labelOf(step);
         return UsagePaneStep(
           turn: turn.index,
           index: step.index,
-          title: text,
-          label: 'step ${step.index + 1} · $text',
+          title: labeler.labelOf(step),
           input: _inputOf(step.tokens, step.partial),
           output: _outputOf(step.tokens, step.partial),
           cost: _costOf(step.tokens, step.cost, step.partial),
@@ -378,60 +515,63 @@ UsagePaneTurn _turnOf(UsageLedgerTurn turn, UsageStepLabeler labeler) {
   ];
   return UsagePaneTurn(
     index: turn.index,
-    label: title == null || title.isEmpty
-        ? '${turn.index}'
-        : '${turn.index} · “$title”',
+    title: title == null || title.isEmpty ? null : title,
     running: turn.running,
     input: _inputOf(total.tokens, total.partial),
     output: _outputOf(total.tokens, total.partial),
     cost: _costOf(total.tokens, total.cost, total.partial),
     steps: steps,
-    subagents: turn.subagents == null
-        ? null
-        : 'subagents · ${turn.subagents!.count} runs',
+    subagentRuns: turn.subagents?.count,
   );
 }
 
-UsagePaneModel _groupOf(String label, UsageLedgerGroup group, String detail) =>
+UsagePaneModel _groupOf(UsageModelKind kind, UsageLedgerGroup group) =>
     UsagePaneModel(
-      label: label,
+      label: '',
+      kind: kind,
       input: _inputOf(group.tokens, group.partial),
       output: _outputOf(group.tokens, group.partial),
       cost: _costOf(group.tokens, group.cost, group.partial),
-      detail: detail,
+      count: group.count,
     );
 
 /// Причины пересборки, которые при `rebuilt` считаются штатным обновлением
 /// ленивого кэша `usage.json` (D3 change `add-usage-ledger`), а не сбоем.
 const _routineRebuildReasons = {'stale', 'missing'};
 
-/// Строка состояния журнала и подсказка к ней (D7, Q5 (а)).
+/// Состояние журнала для строки состояния и подсказки (D7, Q5 (а)).
 ///
 /// `stale` и `missing` — путь ленивого кэша: после пересборки файл свеж, и
-/// пользователь видит то же, что при `upToDate`; причина уходит в подсказку.
-/// `invalid`, `explicit` и незнакомая причина видны в строке: это битый файл
-/// или действие пользователя («Rebuild from log»).
-({String? line, String? hint}) _statusOf(UsageLedgerView ledger) {
+/// пользователь видит то же, что при `upToDate`; причина уходит в
+/// [UsageLedgerLine.refreshReason] (подсказка). `invalid`, `explicit` и
+/// незнакомая причина видны в строке: это битый файл или действие
+/// пользователя («Rebuild from log»).
+UsageLedgerLine? _statusOf(UsageLedgerView ledger) {
   final records = ledger.records;
-  final tail = records == null
-      ? ''
-      : ' · $records ${records == 1 ? 'record' : 'records'}';
   final reason = ledger.reason;
   return switch (ledger.status) {
-    UsageLedgerStatus.upToDate => (line: 'Ledger: up to date$tail', hint: null),
-    UsageLedgerStatus.rebuilt when _routineRebuildReasons.contains(reason) => (
-      line: 'Ledger: up to date$tail',
-      hint: 'refreshed from the session journal ($reason)',
+    UsageLedgerStatus.upToDate => UsageLedgerLine(
+      UsageLedgerLineKind.upToDate,
+      records: records,
     ),
-    UsageLedgerStatus.rebuilt => (
-      line:
-          'rebuilt from journal'
-          '${reason == null ? '' : ' ($reason)'}$tail',
-      hint: null,
+    UsageLedgerStatus.rebuilt when _routineRebuildReasons.contains(reason) =>
+      UsageLedgerLine(
+        UsageLedgerLineKind.upToDate,
+        records: records,
+        refreshReason: reason,
+      ),
+    UsageLedgerStatus.rebuilt => UsageLedgerLine(
+      UsageLedgerLineKind.rebuilt,
+      records: records,
+      reason: reason,
     ),
-    UsageLedgerStatus.inMemory => (line: 'in memory', hint: null),
-    UsageLedgerStatus.notSaved => (line: 'not saved', hint: null),
-    null => (line: null, hint: null),
+    UsageLedgerStatus.inMemory => const UsageLedgerLine(
+      UsageLedgerLineKind.inMemory,
+    ),
+    UsageLedgerStatus.notSaved => const UsageLedgerLine(
+      UsageLedgerLineKind.notSaved,
+    ),
+    null => null,
   };
 }
 
@@ -484,9 +624,9 @@ UsagePaneData usagePaneDataOf(SessionView? view, {required String cwd}) {
           cost: _costOf(model.tokens, model.cost, model.partial),
         ),
       if (ledger.subagents case final group?)
-        _groupOf('Subagents', group, '${group.count} runs'),
+        _groupOf(UsageModelKind.subagents, group),
       if (ledger.summaries case final group?)
-        _groupOf('Summaries', group, '${group.count}'),
+        _groupOf(UsageModelKind.summaries, group),
     ];
   }
   final status = ledger == null ? null : _statusOf(ledger);
@@ -501,8 +641,7 @@ UsagePaneData usagePaneDataOf(SessionView? view, {required String cwd}) {
     failureHint: failed == null
         ? null
         : (failed.code?.toString() ?? failed.kind.name),
-    statusLine: status?.line,
-    statusHint: status?.hint,
+    ledgerLine: status,
     cards: cards,
     turns: turns,
     models: models,

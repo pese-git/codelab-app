@@ -11,12 +11,11 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_client_core/codelab_client_core.dart'
     show ClientWorkspace, ConnectionProfile;
+import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
-
-import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 
 import '../../../support/fake_project_files.dart';
 import '../../../support/test_app_scope.dart';
@@ -94,9 +93,10 @@ void main() {
     await h.cubit.restartAgent();
     final pending = h.cubit.state.pendingRestart!;
     expect(pending.sessions, hasLength(1));
-    expect(pending.message, startsWith('Restart '));
-    expect(pending.message, contains('This interrupts 1 running session'));
-    expect(pending.message, endsWith('Queued prompts stay.'));
+    // Текст диалога собирает presentation по каталогу
+    // (`restart_confirmation_l10n_test.dart`); состояние хранит данные.
+    expect(pending.title, isNotEmpty);
+    expect(pending.sessions, hasLength(1));
 
     // Повторный перезапуск при открытом диалоге игнорируется.
     await h.cubit.restartAgent();

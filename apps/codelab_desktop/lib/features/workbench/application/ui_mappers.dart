@@ -13,12 +13,14 @@
 /// вызывают их при каждом изменении своей части состояния.
 library;
 
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
-import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart' show FluentIcons, VoidCallback;
 
+import '../../../l10n/app_localizations.dart';
+import '../../../l10n/app_localizations_en.dart';
 import 'agents_pane_data.dart';
 
 /// Модели инспектора — модели kit (`InspectorProjection`, design D9);
@@ -45,9 +47,6 @@ CodeLabConnectionStatus connectionStatusOf(ConnectionView connection) =>
       ConnectionFailed() => CodeLabConnectionStatus.failed,
     };
 
-/// Название сессии, у которой ещё нет ни заголовка, ни промпта.
-const untitledSessionTitle = 'New session';
-
 /// Предел длины названия из первого промпта: строка сайдбара однострочная.
 const _promptTitleMaxLength = 60;
 
@@ -55,19 +54,24 @@ const _promptTitleMaxLength = 60;
 ///
 /// Заголовок агент присылает в `session_info_update` только после первого
 /// хода, а некоторые агенты не присылают его вовсе. До этого название —
-/// начало первого промпта, а у сессии без промптов — [untitledSessionTitle];
-/// id сессии (ULID) пользователю ничего не говорит и в названии не
-/// показывается.
-CodeLabSessionListItem sessionListItemOf(AcpSession session) {
+/// начало первого промпта, а у сессии без промптов — `commonNewSession`
+/// каталога [l10n]; id сессии (ULID) пользователю ничего не говорит и в
+/// названии не показывается. Заголовок агента и промпт пользователя не
+/// переводятся (D7). Язык — явный вход (`add-desktop-localization`, D5):
+/// Cubit-ы пересобирают строки по событию `AppStrings.changes`.
+CodeLabSessionListItem sessionListItemOf(
+  AcpSession session, {
+  required AppLocalizations l10n,
+}) {
   final title = session.title?.trim().isNotEmpty == true
       ? session.title!.trim()
-      : _firstPromptTitle(session) ?? untitledSessionTitle;
+      : _firstPromptTitle(session) ?? l10n.commonNewSession;
   return CodeLabSessionListItem(
     id: session.id.value,
     title: title,
     status: _sessionStatusOf(session.status),
     subtitle: session.cwd,
-    updatedLabel: 'Active',
+    updatedLabel: l10n.workbenchSessionActive,
   );
 }
 
@@ -90,17 +94,22 @@ String? _firstPromptTitle(AcpSession session) {
 /// (`session/list` или снимок прошлого запуска; design D7 change
 /// `add-session-list-and-reload`): заголовок агента или `Session <id>`,
 /// подзаголовок — `cwd`, подпись — время последнего изменения.
-CodeLabSessionListItem sessionListItemOfSummary(SessionSummaryView summary) {
+CodeLabSessionListItem sessionListItemOfSummary(
+  SessionSummaryView summary, {
+  required AppLocalizations l10n,
+}) {
   final title = summary.title?.trim();
   final updated = summary.updatedAt?.toLocal();
   return CodeLabSessionListItem(
     id: summary.id.value,
     title: title == null || title.isEmpty
-        ? 'Session ${summary.id.value}'
+        ? l10n.workbenchSessionTitleWithId(summary.id.value)
         : title,
     status: CodeLabSessionStatus.notLoaded,
     subtitle: summary.cwd,
-    updatedLabel: updated == null ? null : 'Updated ${_minuteOf(updated)}',
+    updatedLabel: updated == null
+        ? null
+        : l10n.workbenchSessionUpdated(_minuteOf(updated)),
   );
 }
 
@@ -141,11 +150,17 @@ CodeLabSessionStatus _sessionStatusOf(SessionLifecycleStatus status) =>
 /// его, только когда повтор возможен (`SessionView.canRetry` и соединение
 /// установлено, design D4 change `add-connection-and-error-states`), и кнопка
 /// Retry появляется у последней заметки о сбое.
+///
+/// Заметки строятся по типизированной причине `NoticeItem.reason`, а не по
+/// английскому `NoticeItem.text` ядра (D6): `text` остаётся запасным
+/// значением для заметки без причины. Ответ агента, запрос пользователя,
+/// мысли и заголовки вызовов от агента не переводятся (D7).
 List<CodeLabTranscriptRow> transcriptRowsOf(
   List<TranscriptItem> transcript, {
   required String cwd,
   required bool approvalsEnabled,
   required ApprovalOptionChosen onApprovalSelected,
+  required AppLocalizations l10n,
   bool isRunning = false,
   VoidCallback? onRetry,
 }) {
@@ -177,12 +192,12 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
           CodeLabNoticeRow(
             id: 'prompt-error-${index + 1}',
             severity: CodeLabNoticeSeverity.error,
-            title: failureTitleOf(failure),
-            body: _failureBodyOf(failure) ?? text,
+            title: failureTitleOf(failure, l10n: l10n),
+            body: _failureBodyOf(failure, l10n) ?? text,
             details: failure == null ? null : text,
             action: index == lastErrorIndex && onRetry != null
                 ? CodeLabTranscriptAction(
-                    label: 'Retry',
+                    label: l10n.commonRetry,
                     icon: FluentIcons.refresh,
                     onPressed: onRetry,
                   )
@@ -192,31 +207,33 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
         // `add-session-list-and-reload`): потеря — предупреждение, новая или
         // переподключённая сессия и пустой ход — нейтральная строка
         // (design D6 change `redesign-transcript-rows`).
-        NoticeItem(kind: NoticeKind.detached, :final text) => CodeLabNoticeRow(
-          id: 'session-notice-${index + 1}',
-          severity: CodeLabNoticeSeverity.warning,
-          title: 'Session detached',
-          body: text,
-        ),
-        NoticeItem(kind: NoticeKind.reconnected, :final text) =>
+        NoticeItem(kind: NoticeKind.detached, :final text, :final reason) =>
+          CodeLabNoticeRow(
+            id: 'session-notice-${index + 1}',
+            severity: CodeLabNoticeSeverity.warning,
+            title: l10n.workbenchNoticeSessionDetached,
+            body: _noticeBodyOf(NoticeKind.detached, reason, text, l10n),
+          ),
+        NoticeItem(kind: NoticeKind.reconnected, :final text, :final reason) =>
           CodeLabNoticeRow(
             id: 'session-notice-${index + 1}',
             severity: CodeLabNoticeSeverity.info,
-            body: text,
+            body: _noticeBodyOf(NoticeKind.reconnected, reason, text, l10n),
           ),
         // Заметка исхода хода (Q33, D27): лимит токенов, лимит запросов,
         // отказ агента — информационная строка, как `emptyTurn`.
-        NoticeItem(kind: NoticeKind.turnStopped, :final text) =>
+        NoticeItem(kind: NoticeKind.turnStopped, :final text, :final reason) =>
           CodeLabNoticeRow(
             id: 'notice-${index + 1}',
             severity: CodeLabNoticeSeverity.info,
-            body: text,
+            body: _noticeBodyOf(NoticeKind.turnStopped, reason, text, l10n),
           ),
-        NoticeItem(kind: NoticeKind.emptyTurn, :final text) => CodeLabNoticeRow(
-          id: 'notice-${index + 1}',
-          severity: CodeLabNoticeSeverity.info,
-          body: text,
-        ),
+        NoticeItem(kind: NoticeKind.emptyTurn, :final text, :final reason) =>
+          CodeLabNoticeRow(
+            id: 'notice-${index + 1}',
+            severity: CodeLabNoticeSeverity.info,
+            body: _noticeBodyOf(NoticeKind.emptyTurn, reason, text, l10n),
+          ),
         // Тихая строка операций со списком задач (D27): текст даёт kit.
         final TaskOpsItem ops => CodeLabTaskOpsRow(
           id: 'task-ops-${index + 1}',
@@ -228,10 +245,57 @@ List<CodeLabTranscriptRow> transcriptRowsOf(
           cwd: cwd,
           approvalsEnabled: approvalsEnabled,
           onApprovalSelected: onApprovalSelected,
+          l10n: l10n,
         ),
       },
   ];
 }
+
+/// Тело заметки хода или связи сессии по типизированной причине [reason].
+///
+/// Почему не `text` ядра: он английский и общий с CLI, а desktop строит
+/// текст сам (D6). Причина другого вида или `null` — запасной [text] ядра:
+/// заметка не теряется, если ядро добавит новую причину.
+String _noticeBodyOf(
+  NoticeKind kind,
+  NoticeReason? reason,
+  String text,
+  AppLocalizations l10n,
+) => switch (reason) {
+  TurnStoppedReason(:final stopReason, :final budgetLimit) =>
+    switch (stopReason) {
+      StopReason.maxTokens => l10n.workbenchNoticeMaxTokens,
+      StopReason.refusal => l10n.workbenchNoticeRefusal,
+      StopReason.maxTurnRequests =>
+        budgetLimit == null
+            ? l10n.workbenchNoticeMaxTurnRequests
+            : l10n.workbenchNoticeBudgetExceeded(budgetLimit),
+      StopReason.endTurn || StopReason.cancelled => text,
+    },
+  // `stopReason` — значение провода: подставляется как `name`, как в тексте
+  // ядра (решение оркестратора 2026-11-18), и не переводится (D7).
+  EmptyTurnReason(:final stopReason) =>
+    stopReason == null
+        ? l10n.workbenchNoticeCompletedStopReasonUnknown
+        : l10n.workbenchNoticeCompletedWithStopReason(stopReason.name),
+  SessionRestoreReason(:final cause, :final sessionId) => switch ((
+    kind,
+    cause,
+  )) {
+    (NoticeKind.detached, SessionRestoreCause.agentCannotRestore) =>
+      l10n.workbenchNoticeDetachedCannotRestore,
+    // Без id сессии сообщение с плейсхолдером теряет смысл («сессию  не
+    // удалось…»): остаётся текст ядра.
+    (_, SessionRestoreCause.restoreFailed) when sessionId == null => text,
+    (NoticeKind.detached, SessionRestoreCause.restoreFailed) =>
+      l10n.workbenchNoticeDetachedRestoreFailed(sessionId!.value),
+    (_, SessionRestoreCause.agentCannotRestore) =>
+      l10n.workbenchNoticeReconnectedCannotRestore,
+    (_, SessionRestoreCause.restoreFailed) =>
+      l10n.workbenchNoticeReconnectedRestoreFailed(sessionId!.value),
+  },
+  null => text,
+};
 
 /// Id строки ленты верхнего уровня для вызова [call] на позиции [index].
 ///
@@ -255,6 +319,7 @@ CodeLabToolCallRow _toolCallRowOf(
   required String cwd,
   required bool approvalsEnabled,
   required ApprovalOptionChosen onApprovalSelected,
+  required AppLocalizations l10n,
   bool nested = false,
 }) {
   final view = ToolRowFormatter.format(call, cwd: cwd);
@@ -271,12 +336,17 @@ CodeLabToolCallRow _toolCallRowOf(
     cwd: cwd,
     approvalsEnabled: approvalsEnabled,
     onApprovalSelected: onApprovalSelected,
+    l10n: l10n,
     nested: true,
   );
   return CodeLabToolCallRow(
     id: id,
     status: _toolCallStatusOf(details?.status ?? ToolCallStatusView.queued),
-    label: isSubagent ? '${view.label} ${view.detail}'.trim() : view.label,
+    // Метка вида вызова — текст app; заголовок вида `other` и строка
+    // субагента приходят от агента и ядра и не переводятся (D6, D7).
+    label: isSubagent
+        ? '${view.label} ${view.detail}'.trim()
+        : toolKindLabelOf(details?.kind, view.label, l10n),
     detail: isSubagent ? '' : view.detail,
     secondary: view.secondary,
     output: isSubagent
@@ -310,6 +380,7 @@ CodeLabToolCallRow _toolCallRowOf(
             callStatus: details?.status,
             enabled: approvalsEnabled,
             onSelected: onApprovalSelected,
+            l10n: l10n,
           ),
     awaitsRootDecision: waitsRootDecision,
     // Одобрения потомков — блоки под строкой корня (D27 п. 4, D43 п. 2).
@@ -320,6 +391,7 @@ CodeLabToolCallRow _toolCallRowOf(
           callStatus: null,
           enabled: approvalsEnabled,
           onSelected: onApprovalSelected,
+          l10n: l10n,
         ),
     ],
     // Дерево вызовов потомков (D24, D47 Т11): id вложенных строк — id
@@ -364,30 +436,52 @@ CodeLabTurnState? turnStateOf(SessionView? view) => switch (view?.status) {
 /// сбоя от агента (`data.codelab.errorClass`) — говорит. Незнакомый класс и
 /// сбой без класса получают общий заголовок: словарь классов растёт на
 /// стороне агента.
-String failureTitleOf(PromptFailure? failure) => switch (failure) {
-  AgentPromptFailure(errorClass: 'auth') =>
-    'The agent could not sign in to the model provider',
+String failureTitleOf(
+  PromptFailure? failure, {
+  required AppLocalizations l10n,
+}) => switch (failure) {
+  AgentPromptFailure(errorClass: 'auth') => l10n.workbenchFailureAuth,
   AgentPromptFailure(errorClass: 'network' || 'timeout' || 'server') =>
-    'The model provider is unavailable',
+    l10n.workbenchFailureProviderUnavailable,
   AgentPromptFailure(errorClass: 'rateLimited') =>
-    "The model provider's rate limit was reached",
-  AgentPromptFailure(errorClass: 'overflow') =>
-    'The conversation is too long for the model',
-  ConnectionLostPromptFailure() => 'The connection to the agent was lost',
+    l10n.workbenchFailureRateLimited,
+  AgentPromptFailure(errorClass: 'overflow') => l10n.workbenchFailureOverflow,
+  ConnectionLostPromptFailure() => l10n.workbenchFailureConnectionLost,
   AgentPromptFailure() ||
   RequestPromptFailure() ||
   UnknownPromptFailure() ||
-  null => 'The agent could not complete the turn',
+  null => l10n.workbenchFailureGeneric,
 };
 
 /// Тело заметки: сообщение агента или JSON-RPC; сырой текст ошибки уходит в
 /// Details. Без типизированного сбоя тело — сам текст заметки.
-String? _failureBodyOf(PromptFailure? failure) => switch (failure) {
-  AgentPromptFailure(:final message) ||
-  RequestPromptFailure(:final message) ||
-  UnknownPromptFailure(:final message) => message,
-  ConnectionLostPromptFailure() => 'Retry to continue working with the agent.',
-  null => null,
+String? _failureBodyOf(PromptFailure? failure, AppLocalizations l10n) =>
+    switch (failure) {
+      AgentPromptFailure(:final message) ||
+      RequestPromptFailure(:final message) ||
+      UnknownPromptFailure(:final message) => message,
+      ConnectionLostPromptFailure() => l10n.workbenchFailureConnectionLostBody,
+      null => null,
+    };
+
+/// Метка вызова по виду [kind]: перевод app для известных видов; для `other`
+/// (и вида, которого ядро не назвало) — [coreLabel], то есть заголовок вызова
+/// от агента, который не переводится (D6, D7).
+String toolKindLabelOf(
+  ToolKind? kind,
+  String coreLabel,
+  AppLocalizations l10n,
+) => switch (kind) {
+  ToolKind.read => l10n.workbenchToolKindRead,
+  ToolKind.edit => l10n.workbenchToolKindEdit,
+  ToolKind.delete => l10n.workbenchToolKindDelete,
+  ToolKind.move => l10n.workbenchToolKindMove,
+  ToolKind.search => l10n.workbenchToolKindSearch,
+  ToolKind.execute => l10n.workbenchToolKindExecute,
+  ToolKind.fetch => l10n.workbenchToolKindFetch,
+  ToolKind.think => l10n.workbenchToolKindThink,
+  ToolKind.switchMode => l10n.workbenchToolKindSwitchMode,
+  ToolKind.other || null => coreLabel,
 };
 
 /// Одобрение встроено в строку вызова: ожидающее — интерактивная карточка,
@@ -401,6 +495,7 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
   required ToolCallStatusView? callStatus,
   required bool enabled,
   required ApprovalOptionChosen onSelected,
+  required AppLocalizations l10n,
 }) => switch (approval) {
   null => null,
   // Ход отменён, пока вызов ждал решения: тег статуса уже читается
@@ -408,16 +503,22 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
   ResolvedApprovalView(outcome: ApprovalOutcomeView.cancelled)
       when callStatus == ToolCallStatusView.cancelled =>
     null,
-  ResolvedApprovalView(:final label, :final outcome) =>
+  // Название варианта пришло от агента — не переводится (D4); без него ядро
+  // отдаёт лишь запасной английский `label`, а текст берём из каталога.
+  ResolvedApprovalView(:final agentLabel, :final outcome) =>
     CodeLabTranscriptApproval.resolved(
-      label: label,
+      label:
+          agentLabel ??
+          (outcome == ApprovalOutcomeView.cancelled
+              ? l10n.workbenchApprovalCancelled
+              : l10n.workbenchApprovalResolved),
       outcome: switch (outcome) {
         ApprovalOutcomeView.allowed => CodeLabApprovalOutcome.allowed,
         ApprovalOutcomeView.rejected => CodeLabApprovalOutcome.rejected,
         ApprovalOutcomeView.cancelled => CodeLabApprovalOutcome.cancelled,
         ApprovalOutcomeView.unknown => CodeLabApprovalOutcome.unknown,
       },
-      requesterLine: _requesterLineOf(approval.subagent),
+      requesterLine: _requesterLineOf(approval.subagent, l10n),
     ),
   PendingApprovalView() => CodeLabTranscriptApproval.pending(
     risk: _approvalRiskOf(approval.risk),
@@ -427,7 +528,7 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
     enabled: enabled,
     shortcutsEnabled: approval.focused,
     onOptionSelected: (optionId) => onSelected(approval, optionId),
-    requesterLine: _requesterLineOf(approval.subagent),
+    requesterLine: _requesterLineOf(approval.subagent, l10n),
     requesterHint: approval.subagent?.description,
     callTitle: approval.subagent == null ? null : _callTitleOf(approval),
     // Цель «Go to approval» панели Agents: лента прокручивается к блоку по
@@ -474,8 +575,10 @@ String? _titleWithoutRequesterPrefix(
 
 /// Строка «review › explore wants to run»: путь готовит kit (`pathText`,
 /// D43 п. 4), маппер только добавляет действие.
-String? _requesterLineOf(SubagentRequester? requester) =>
-    requester == null ? null : '${requester.pathText} wants to run';
+String? _requesterLineOf(SubagentRequester? requester, AppLocalizations l10n) =>
+    requester == null
+    ? null
+    : l10n.workbenchRequesterWantsToRun(requester.pathText);
 
 CodeLabApprovalRisk _approvalRiskOf(ApprovalRiskLevel risk) => switch (risk) {
   ApprovalRiskLevel.readOnly => CodeLabApprovalRisk.readOnly,
@@ -550,6 +653,63 @@ CodeLabCommandAction _agentCommandAction(AgentCommandView command) =>
       hint: command.hint,
     );
 
+/// Подпись и описание команды хоста [id] на языке [l10n].
+///
+/// Почему по `id`, а не из `CodeLabCommandAction.defaults`: `defaults` — набор
+/// кита с английскими литералами для превью и тестов кита и в итерации 3 не
+/// меняется; переводит подписи app по `id` (`add-desktop-localization`, D4).
+/// [localRestart] — пункт `reconnect` для локального агента называется
+/// «Restart agent» (Q24, D22), для удалённого — «Reconnect».
+///
+/// `switch` по `id` закрытого набора: `null` — `id` не команда хоста.
+({String label, String description})? _hostTextOf(
+  String id,
+  AppLocalizations l10n, {
+  required bool localRestart,
+}) => switch (id) {
+  'new' => (
+    label: l10n.paletteNewLabel,
+    description: l10n.paletteNewDescription,
+  ),
+  'plan' => (
+    label: l10n.palettePlanLabel,
+    description: l10n.palettePlanDescription,
+  ),
+  'permissions' => (
+    label: l10n.palettePermissionsLabel,
+    description: l10n.palettePermissionsDescription,
+  ),
+  'logs' => (
+    label: l10n.paletteLogsLabel,
+    description: l10n.paletteLogsDescription,
+  ),
+  'compact' => (
+    label: l10n.paletteCompactLabel,
+    description: l10n.paletteCompactDescription,
+  ),
+  'reconnect' when localRestart => (
+    label: l10n.commonRestartAgent,
+    description: l10n.paletteRestartDescription,
+  ),
+  'reconnect' => (
+    label: l10n.paletteReconnectLabel,
+    description: l10n.paletteReconnectDescription,
+  ),
+  'files' => (
+    label: l10n.paletteFilesLabel,
+    description: l10n.paletteFilesDescription,
+  ),
+  'agents' => (
+    label: l10n.paletteAgentsLabel,
+    description: l10n.paletteAgentsDescription,
+  ),
+  'usage-pane' => (
+    label: l10n.paletteUsageLabel,
+    description: l10n.paletteUsageDescription,
+  ),
+  _ => null,
+};
+
 /// Действие палитры «Files»: открывает или закрывает панель Files дока.
 ///
 /// Почему отдельно от `CodeLabCommandAction.defaults`: пункт есть только когда
@@ -557,7 +717,9 @@ CodeLabCommandAction _agentCommandAction(AgentCommandView command) =>
 /// `defaults` — фиксированный набор `codelab_ui` (spec workspace-file-browser
 /// «Панель Files в доке инструментов»; design.md change
 /// `add-file-preview-and-tree`, D7). Отдельной «группы Go to» у палитры нет:
-/// пункт стоит в общем списке после команд app.
+/// пункт стоит в общем списке после команд app. Подпись и описание здесь —
+/// английские эталоны для значка и команды; на экране их заменяет
+/// [_paletteActionOf] по каталогу языка.
 const _filesAction = CodeLabCommandAction(
   id: 'files',
   label: 'Files',
@@ -582,20 +744,6 @@ const _agentsAction = CodeLabCommandAction(
   icon: FluentIcons.robot,
 );
 
-HostCommand _hostCommandOf(CodeLabCommandAction action) => HostCommand(
-  id: action.id,
-  name: action.slashCommand.substring(1),
-  label: action.label,
-  description: action.description,
-  isAvailable: action.isAvailable,
-);
-
-/// Шесть команд app как команды хоста каталога: имя — `slashCommand` без
-/// `/`, связь с иконкой — `id` (D2 change `add-command-palette-agent-commands`).
-final List<HostCommand> _paletteHostCommands = List.unmodifiable([
-  for (final action in CodeLabCommandAction.defaults) _hostCommandOf(action),
-]);
-
 /// Действие палитры «Usage»: открывает панель Usage дока.
 ///
 /// Почему отдельно от `CodeLabCommandAction.defaults`: пункт есть только когда
@@ -612,22 +760,69 @@ const _usageAction = CodeLabCommandAction(
   icon: FluentIcons.chart,
 );
 
-/// Команды хоста для сочетания необязательных пунктов (D11): один построитель
-/// вместо перебора сочетаний. Результат кэшируется по сочетанию, чтобы каталог
-/// не получал новый список на каждое состояние рабочего места.
-final Map<int, List<HostCommand>> _hostCommandsCache = {};
+/// Команда хоста для [action]: подпись и описание — на языке [l10n], а
+/// `searchAliases` — английские подпись и описание из `AppLocalizationsEn()`.
+///
+/// Почему английские строки в `searchAliases`: команды хоста ищутся и по
+/// тому, что видит пользователь, и по английскому названию из документации
+/// (решение пользователя 2026-11-18, D4). Прямой `AppLocalizationsEn()` равен
+/// `lookupAppLocalizations(const Locale('en'))`, как у `titlesOf` в
+/// `settings_shell.dart`. Совпадающие с `label`/`description` строки не
+/// добавляются, а на `en` поле пусто: поиск там прежний. Ядро не знает, что
+/// это английский текст (spec workspace-architecture).
+HostCommand _hostCommandOf(
+  CodeLabCommandAction action,
+  AppLocalizations l10n, {
+  required bool localRestart,
+}) {
+  final text =
+      _hostTextOf(action.id, l10n, localRestart: localRestart) ??
+      (label: action.label, description: action.description);
+  final english =
+      _hostTextOf(
+        action.id,
+        AppLocalizationsEn(),
+        localRestart: localRestart,
+      ) ??
+      (label: action.label, description: action.description);
+  return HostCommand(
+    id: action.id,
+    name: action.slashCommand.substring(1),
+    label: text.label,
+    description: text.description,
+    isAvailable: action.isAvailable,
+    searchAliases: [
+      if (english.label != text.label) english.label,
+      if (english.description != text.description) english.description,
+    ],
+  );
+}
 
-List<HostCommand> _paletteHostCommandsOf({
+/// Команды хоста для сочетания необязательных пунктов (D11) и языка: один
+/// построитель вместо перебора сочетаний. Результат кэшируется, чтобы каталог
+/// не получал новый список на каждое состояние рабочего места; язык входит в
+/// ключ, иначе после смены языка вернулся бы старый (R1, D4).
+///
+/// Инвариант ключа: каталоги различаются по `localeName` (`en`, `ru`). Если
+/// появятся региональные варианты (`ru_BY`), `localeName` перестанет быть
+/// достаточным различителем — ключевать нужно по полному `Locale`.
+final Map<String, List<HostCommand>> _hostCommandsCache = {};
+
+List<HostCommand> _paletteHostCommandsOf(
+  AppLocalizations l10n, {
   required bool files,
   required bool agents,
   required bool usage,
+  required bool localRestart,
 }) => _hostCommandsCache.putIfAbsent(
-  (files ? 1 : 0) | (agents ? 2 : 0) | (usage ? 4 : 0),
+  '${l10n.localeName}|${files ? 1 : 0}${agents ? 1 : 0}${usage ? 1 : 0}'
+  '|${localRestart ? 1 : 0}',
   () => List.unmodifiable([
-    ..._paletteHostCommands,
-    if (files) _hostCommandOf(_filesAction),
-    if (agents) _hostCommandOf(_agentsAction),
-    if (usage) _hostCommandOf(_usageAction),
+    for (final action in CodeLabCommandAction.defaults)
+      _hostCommandOf(action, l10n, localRestart: localRestart),
+    if (files) _hostCommandOf(_filesAction, l10n, localRestart: localRestart),
+    if (agents) _hostCommandOf(_agentsAction, l10n, localRestart: localRestart),
+    if (usage) _hostCommandOf(_usageAction, l10n, localRestart: localRestart),
   ]),
 );
 
@@ -636,16 +831,22 @@ List<HostCommand> _paletteHostCommandsOf({
 /// [filesAvailable] добавляет пункт «Files» (панель доступна, D7),
 /// [agentsAvailable] — пункт «Agents» (у сессии есть субагенты, D49 Т11),
 /// [usageAvailable] — пункт «Usage» (панель Usage доступна, D10, D11).
+/// [localRestart] — агент локальный: пункт `reconnect` называется
+/// «Restart agent». Команды агента не переводятся (D7).
 CommandCatalog paletteCatalogOf(
   List<AgentCommandView> agentCommands, {
+  required AppLocalizations l10n,
   bool filesAvailable = false,
   bool agentsAvailable = false,
   bool usageAvailable = false,
+  bool localRestart = false,
 }) => CommandCatalog(
   host: _paletteHostCommandsOf(
+    l10n,
     files: filesAvailable,
     agents: agentsAvailable,
     usage: usageAvailable,
+    localRestart: localRestart,
   ),
   agent: agentCommands,
 );
@@ -661,18 +862,22 @@ List<CodeLabCommandAction> searchPaletteActions(
   String query,
 ) => [for (final command in catalog.search(query)) _paletteActionOf(command)];
 
+/// Строка палитры: значок, `/команда` и доступность — из действия по `id`,
+/// подпись и описание — из команды хоста каталога (они уже на языке каталога).
+/// `searchAliases` на экран не попадает.
 CodeLabCommandAction _paletteActionOf(CatalogCommand command) =>
     switch (command) {
       HostCatalogCommand(:final command) =>
-        command.id == _filesAction.id
-            ? _filesAction
-            : command.id == _agentsAction.id
-            ? _agentsAction
-            : command.id == _usageAction.id
-            ? _usageAction
-            : CodeLabCommandAction.defaults.firstWhere(
-                (action) => action.id == command.id,
-              ),
+        (command.id == _filesAction.id
+                ? _filesAction
+                : command.id == _agentsAction.id
+                ? _agentsAction
+                : command.id == _usageAction.id
+                ? _usageAction
+                : CodeLabCommandAction.defaults.firstWhere(
+                    (action) => action.id == command.id,
+                  ))
+            .copyWith(label: command.label, description: command.description),
       AgentCatalogCommand(:final command) => _agentCommandAction(command),
     };
 
@@ -737,6 +942,7 @@ AgentsPaneData agentsPaneDataOf(SessionView? view) {
 List<CodeLabAgentRow> agentRowsOf(
   AgentsPaneData data, {
   required DateTime now,
+  required AppLocalizations l10n,
 }) => [
   for (final row in data.rows)
     CodeLabAgentRow(
@@ -746,8 +952,12 @@ List<CodeLabAgentRow> agentRowsOf(
       title: row.title,
       state: _agentRowStateOf(row.state),
       time: _agentTimeOf(row, busy: data.busy, now: now),
-      calls: row.toolCalls == null ? null : subagentCallsText(row.toolCalls!),
-      tokens: row.summary == null ? null : '${row.summary!.tokensText} tokens',
+      calls: row.toolCalls == null
+          ? null
+          : l10n.workbenchAgentRowToolCalls(row.toolCalls!),
+      tokens: row.summary == null
+          ? null
+          : l10n.workbenchAgentRowTokens(row.summary!.tokensText),
       lastAction: row.lastAction,
       items: [
         for (final id in row.taskIds)
@@ -867,6 +1077,7 @@ List<CodeLabSidebarProject> sidebarProjectsOf({
   required List<CodeLabSessionListItem> sessions,
   required List<CodeLabRecentProject> recentProjects,
   Map<String, String> sessionFolders = const {},
+  required AppLocalizations l10n,
 }) {
   final selected = selectedProjectPath;
   final otherPaths = {
@@ -892,7 +1103,9 @@ List<CodeLabSidebarProject> sidebarProjectsOf({
   return [
     CodeLabSidebarProject(
       path: selected ?? '',
-      name: selected == null ? 'No project' : projectNameOf(selected),
+      name: selected == null
+          ? l10n.workbenchNoProject
+          : projectNameOf(selected),
       current: true,
       sessions: underSelected,
     ),
@@ -948,7 +1161,10 @@ String? _selectedLabelOf(List<ConfigOptionView> options, String category) {
 /// `busy` задан только для `awaiting` и пока ход идёт или отменяется
 /// (`running`/`cancelling`, D23 Т9 п. 2): у `reported` числа
 /// остаются на месте между шагами хода.
-CodeLabSessionStatusData sessionStatusDataOf(SessionView view) {
+CodeLabSessionStatusData sessionStatusDataOf(
+  SessionView view, {
+  required AppLocalizations l10n,
+}) {
   final usage = view.usage;
   final modelLabel = modelLabelOf(view.configOptions);
   final modeLabel = modeLabelOf(view.configOptions);
@@ -957,9 +1173,9 @@ CodeLabSessionStatusData sessionStatusDataOf(SessionView view) {
       return CodeLabSessionStatusData(
         modelLabel: modelLabel,
         modeLabel: modeLabel,
-        usage: const CodeLabStatusSegment(
-          label: 'usage: —',
-          tooltip: 'agent does not report usage',
+        usage: CodeLabStatusSegment(
+          label: l10n.workbenchStatusUsageUnknown,
+          tooltip: l10n.workbenchStatusUsageUnknownTooltip,
         ),
       );
     case UsageSupport.awaiting:
@@ -974,9 +1190,9 @@ CodeLabSessionStatusData sessionStatusDataOf(SessionView view) {
       return CodeLabSessionStatusData(
         modelLabel: modelLabel,
         modeLabel: modeLabel,
-        usage: _usageSegmentOf(usage.lastTurn),
-        cost: _costSegmentOf(usage.lastTurn, usage.session),
-        context: _contextSegmentOf(usage.context),
+        usage: _usageSegmentOf(usage.lastTurn, l10n),
+        cost: _costSegmentOf(usage.lastTurn, usage.session, l10n),
+        context: _contextSegmentOf(usage.context, l10n),
       );
   }
 }
@@ -985,7 +1201,10 @@ CodeLabSessionStatusData sessionStatusDataOf(SessionView view) {
 /// (D11). Подсказка — пять счётчиков точными числами и причины неполноты.
 /// Нулевые токены хода (`0 → 0`) сегмент не рисуют (D23 Т9 п. 4):
 /// ноль вместо «ничего не пришло» вводил бы в заблуждение.
-CodeLabStatusSegment? _usageSegmentOf(UsageTotals? turn) {
+CodeLabStatusSegment? _usageSegmentOf(
+  UsageTotals? turn,
+  AppLocalizations l10n,
+) {
   if (turn == null) {
     return null;
   }
@@ -996,15 +1215,16 @@ CodeLabStatusSegment? _usageSegmentOf(UsageTotals? turn) {
   }
   final mark = usageTokensPartial(turn.partial) ? '~' : '';
   final lines = [
-    'input ${tokens.input}',
-    'output ${tokens.output}',
-    'cache read ${tokens.cacheRead}',
-    'cache write ${tokens.cacheWrite}',
-    if (tokens.reasoning != null) 'reasoning ${tokens.reasoning}',
+    l10n.workbenchStatusTokenInput(tokens.input),
+    l10n.workbenchStatusTokenOutput(tokens.output),
+    l10n.workbenchStatusTokenCacheRead(tokens.cacheRead),
+    l10n.workbenchStatusTokenCacheWrite(tokens.cacheWrite),
+    if (tokens.reasoning case final reasoning?)
+      l10n.workbenchStatusTokenReasoning(reasoning),
   ];
   final reasons = [
     for (final reason in UsagePartial.values)
-      if (turn.partial.contains(reason)) _partialReasonOf(reason),
+      if (turn.partial.contains(reason)) partialReasonTextOf(reason, l10n),
   ];
   return CodeLabStatusSegment(
     label:
@@ -1012,26 +1232,37 @@ CodeLabStatusSegment? _usageSegmentOf(UsageTotals? turn) {
         '${formatUsageTokens(tokens.output)}',
     tooltip: [
       lines.join(' · '),
-      if (reasons.isNotEmpty) 'approximate: ${reasons.join(', ')}',
+      if (reasons.isNotEmpty)
+        l10n.workbenchStatusApproximate(reasons.join(', ')),
     ].join('\n'),
   );
 }
 
-String _partialReasonOf(UsagePartial reason) => switch (reason) {
-  UsagePartial.noUsage => 'agent sent no usage for some steps',
-  UsagePartial.noPrice => 'price unknown for some steps',
-  UsagePartial.beforeLoad => 'before the session was loaded',
-};
+/// Причина неполной суммы расхода на языке [l10n]: общая для строки статуса и
+/// карточки стоимости панели Usage.
+String partialReasonTextOf(UsagePartial reason, AppLocalizations l10n) =>
+    switch (reason) {
+      UsagePartial.noUsage => l10n.usagePartialNoUsage,
+      UsagePartial.noPrice => l10n.usagePartialNoPrice,
+      UsagePartial.beforeLoad => l10n.usagePartialBeforeLoad,
+    };
 
 /// `<стоимость хода> · session <стоимость сессии>` (D11, Q19 (а)); «~» — по
 /// правилу kit перед суммой, чья полнота под вопросом (D6).
-CodeLabStatusSegment? _costSegmentOf(UsageTotals? turn, UsageTotals? session) {
+CodeLabStatusSegment? _costSegmentOf(
+  UsageTotals? turn,
+  UsageTotals? session,
+  AppLocalizations l10n,
+) {
   final turnCost = turn?.cost;
   final sessionCost = session?.cost;
   if (turnCost == null && sessionCost == null) {
     return turn == null
         ? null
-        : const CodeLabStatusSegment(label: '—', tooltip: 'price unknown');
+        : CodeLabStatusSegment(
+            label: '—',
+            tooltip: l10n.workbenchStatusPriceUnknown,
+          );
   }
   final turnText = turnCost == null
       ? '—'
@@ -1042,12 +1273,18 @@ CodeLabStatusSegment? _costSegmentOf(UsageTotals? turn, UsageTotals? session) {
   }
   final mark = usageCostPartial(session!.partial) ? '~' : '';
   return CodeLabStatusSegment(
-    label: '$turnText · session $mark${formatUsageMoney(sessionCost)}',
+    label: l10n.workbenchStatusCostWithSession(
+      turnText,
+      '$mark${formatUsageMoney(sessionCost)}',
+    ),
   );
 }
 
 /// `<N>% context[ · compaction soon]`; тон — по уровню kit (D24, Q17 (а)).
-CodeLabStatusSegment? _contextSegmentOf(ContextFillView? context) {
+CodeLabStatusSegment? _contextSegmentOf(
+  ContextFillView? context,
+  AppLocalizations l10n,
+) {
   if (context == null) {
     return null;
   }
@@ -1056,9 +1293,9 @@ CodeLabStatusSegment? _contextSegmentOf(ContextFillView? context) {
     return null;
   }
   return CodeLabStatusSegment(
-    label:
-        '${fill.label} context'
-        '${context.compactionSoon ? ' · compaction soon' : ''}',
+    label: context.compactionSoon
+        ? l10n.workbenchStatusContextCompactionSoon(fill.label)
+        : l10n.workbenchStatusContext(fill.label),
     tone: switch (fill.level) {
       UsageLevel.normal => CodeLabTone.neutral,
       UsageLevel.warning => CodeLabTone.warning,

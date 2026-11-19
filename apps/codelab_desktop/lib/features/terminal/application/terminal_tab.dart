@@ -59,31 +59,37 @@ final class TerminalTabFailed extends TerminalTabStatus {
   int get hashCode => Object.hash(TerminalTabFailed, reason);
 }
 
-/// Вкладка в состоянии: идентификатор, заголовок и статус.
+/// Вкладка в состоянии: идентификатор, порядковый номер и статус.
 ///
 /// Процесс и модель эмулятора здесь не лежат — они в реестре Cubit (D3);
 /// модель для виджета отдаёт `TerminalTabsCubit.terminalOf(id)`.
+///
+/// Заголовок вкладки в состоянии не хранится: это текст app («Terminal 1» /
+/// «Терминал 1»), его собирает presentation по [number] и каталогу
+/// (`add-desktop-localization`, D5 п. 4: `application` остаётся без текста).
 final class TerminalTab {
   const TerminalTab({
     required this.id,
-    required this.title,
+    required this.number,
     required this.status,
   });
 
   final String id;
-  final String title;
+
+  /// Порядковый номер вкладки (с 1): часть заголовка «Terminal N».
+  final int number;
   final TerminalTabStatus status;
 
   TerminalTab withStatus(TerminalTabStatus status) =>
-      TerminalTab(id: id, title: title, status: status);
+      TerminalTab(id: id, number: number, status: status);
 
   @override
   bool operator ==(Object other) =>
       other is TerminalTab &&
       other.id == id &&
-      other.title == title &&
+      other.number == number &&
       other.status == status;
 
   @override
-  int get hashCode => Object.hash(id, title, status);
+  int get hashCode => Object.hash(id, number, status);
 }

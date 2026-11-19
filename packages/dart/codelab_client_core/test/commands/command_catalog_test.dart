@@ -158,4 +158,67 @@ void main() {
       expect(catalog.search('zzz'), isEmpty);
     });
   });
+  // Дополнительные строки поиска команд хоста (задача 3.1 change
+  // `add-desktop-localization`; D4; spec acp-client-kit «Каталог команд
+  // палитры», MODIFIED). Красные тесты: поле `searchAliases` пока заглушка,
+  // `search` его не учитывает.
+  group('search by host searchAliases', () {
+    const newSession = HostCommand(
+      id: 'new',
+      name: 'new',
+      label: 'Новая сессия',
+      description: 'Начать новую сессию.',
+      searchAliases: ['New session', 'Start a new session.'],
+    );
+
+    test('an alias finds the host command; the name, label and description '
+        'stay as given', () {
+      final catalog = CommandCatalog(
+        host: const [newSession],
+        agent: [_agent('review', description: 'Review the plan')],
+      );
+
+      expect(_names(catalog.search('session')), ['host:new']);
+      expect(_names(catalog.search('новая')), ['host:new']);
+      expect(_names(catalog.search('plan')), ['agent:review']);
+      final host = catalog.commands.first as HostCatalogCommand;
+      expect(host.command.name, 'new');
+      expect(host.command.label, 'Новая сессия');
+      expect(host.command.description, 'Начать новую сессию.');
+    });
+
+    test('an alias match goes after the name prefix match', () {
+      final catalog = CommandCatalog(
+        host: [
+          const HostCommand(
+            id: 'new',
+            name: 'new',
+            label: 'Новая',
+            description: 'Описание.',
+            searchAliases: ['New session'],
+          ),
+          const HostCommand(
+            id: 'sessions',
+            name: 'sessions',
+            label: 'Сессии',
+            description: 'Описание.',
+          ),
+        ],
+        agent: const [],
+      );
+
+      expect(_names(catalog.search('sess')), ['host:sessions', 'host:new']);
+    });
+
+    test('without aliases the results are the same as before', () {
+      final catalog = CommandCatalog(
+        host: [_host('new'), _host('logs')],
+        agent: [_agent('review', description: 'Review the plan')],
+      );
+
+      expect(_names(catalog.search('host lo')), ['host:logs']);
+      expect(_names(catalog.search('plan')), ['agent:review']);
+      expect(catalog.search('session'), isEmpty);
+    });
+  });
 }

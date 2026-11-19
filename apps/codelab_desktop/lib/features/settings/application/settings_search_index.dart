@@ -12,11 +12,20 @@ import '../../../app/navigation/settings_page.dart';
 /// titlesOf: …)`;
 /// совпадение — по подстроке без учёта регистра с заголовком страницы или её
 /// ключевыми словами. Пустой запрос возвращает все страницы. Ключевые слова
-/// новой страницы добавляются в [keywords] вместе со страницей.
+/// новой страницы добавляются в [keywords] вместе со страницей — на английском
+/// и на русском (решение пользователя 2026-11-18, `add-desktop-localization`,
+/// D5 п. 8).
 final class SettingsSearchIndex {
   const SettingsSearchIndex._();
 
-  /// Статические ключевые слова строк страницы.
+  /// Статические ключевые слова строк страницы: английские и русские сразу.
+  ///
+  /// Почему оба языка в одном списке: страница находится по слову на любом из
+  /// двух языков, независимо от языка интерфейса, — как по заголовку (D5
+  /// п. 8). Английские слова — термины из документации и `codelab config`,
+  /// русские — по глоссарию `docs/architecture/l10n-glossary.md`
+  /// («токен», «ключ API», «навык», «субагент»). Поиск идёт по подстроке без
+  /// учёта регистра.
   static const keywords = <SettingsPage, List<String>>{
     SettingsPage.connection: [
       'profile',
@@ -24,6 +33,9 @@ final class SettingsSearchIndex {
       'websocket',
       'token',
       'restart',
+      'профиль',
+      'токен',
+      'перезапуск',
     ],
     SettingsPage.providers: [
       'provider',
@@ -31,8 +43,21 @@ final class SettingsSearchIndex {
       'api key',
       'key storage',
       'base url',
+      'провайдер',
+      'модель',
+      'ключ api',
+      'хранилище ключей',
+      'базовый url',
     ],
-    SettingsPage.mcpServers: ['mcp', 'server', 'tools', 'headers'],
+    SettingsPage.mcpServers: [
+      'mcp',
+      'server',
+      'tools',
+      'headers',
+      'сервер',
+      'инструменты',
+      'заголовки',
+    ],
     SettingsPage.agentsAndModes: [
       'mode',
       'permission',
@@ -43,10 +68,16 @@ final class SettingsSearchIndex {
       'agent',
       'definition',
       'subagent',
+      'режим',
+      'разрешение',
+      'план',
+      'рассуждение',
+      'определение',
+      'субагент',
     ],
     // Блоки страницы «General» (change `add-app-general-page`, spec
     // app-settings «Страница «General»: состав и порядок»). Слова не должны
-    // содержать слов других страниц (`restart`, `token`, `profile`): их
+    // содержать слов других страниц (`restart`, `token`, `профиль`): их
     // охраняют тесты поиска.
     SettingsPage.general: [
       'language',
@@ -62,6 +93,19 @@ final class SettingsSearchIndex {
       'version',
       'license',
       'diagnostics',
+      'язык',
+      'бюджет',
+      'шаги',
+      'сжатие',
+      'субагент',
+      'уровень журнала',
+      'запуск',
+      'открывать',
+      'игнорируемые',
+      'о программе',
+      'версия',
+      'лицензия',
+      'диагностика',
     ],
     SettingsPage.skillsAndExtensions: [
       'skill',
@@ -70,21 +114,22 @@ final class SettingsSearchIndex {
       'template',
       'prompt',
       'extension',
+      'навык',
+      'контекст',
+      'шаблон',
+      'промпт',
+      'расширение',
     ],
   };
 
   /// [titlesOf] даёт заголовки страницы, по которым ищем: на текущем языке
   /// (то, что видит пользователь) и английский (его знают из документации и
   /// `codelab config`) — `add-desktop-localization`, D5, п. 8. Ключевые слова
-  /// английские и от языка не зависят. [localizedKeywordsOf] добавляет
-  /// переводы ключевых слов на язык интерфейса (сейчас — «General», из ARB
-  /// `settingsSearchKeywordsGeneral`): по-русски ищут по русским словам, а
-  /// английские остаются доступными.
+  /// ([keywords]) на двух языках и от языка интерфейса не зависят.
   static List<SettingsPage> search(
     Iterable<SettingsPage> visible,
     String query, {
     required Iterable<String> Function(SettingsPage page) titlesOf,
-    Iterable<String> Function(SettingsPage page)? localizedKeywordsOf,
   }) {
     final needle = query.trim().toLowerCase();
     if (needle.isEmpty) {
@@ -95,10 +140,9 @@ final class SettingsSearchIndex {
         if (titlesOf(
               page,
             ).any((title) => title.toLowerCase().contains(needle)) ||
-            [
-              ...?keywords[page],
-              ...?localizedKeywordsOf?.call(page),
-            ].any((word) => word.toLowerCase().contains(needle)))
+            (keywords[page] ?? const []).any(
+              (word) => word.toLowerCase().contains(needle),
+            ))
           page,
     ];
   }

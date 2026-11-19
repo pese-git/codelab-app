@@ -35,8 +35,10 @@ import 'package:codelab_desktop/features/usage/application/usage_budget.dart';
 import 'package:codelab_desktop/features/usage/application/usage_pane_data.dart';
 import 'package:codelab_desktop/features/workbench/application/active_session_cubit.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_part.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/app_strings.dart';
 import '../../../support/fake_usage_csv_saver.dart';
 
 final _t0 = DateTime.utc(2026, 11, 18, 12);
@@ -234,13 +236,6 @@ void main() {
       expect(data.time?.limitMs, 600000);
       expect(data.time?.receivedAt, _t0);
     });
-
-    test('пояснение под блоком — константа из application', () {
-      expect(
-        usageBudgetFootnote,
-        'When a limit is hit, the turn stops at the next step boundary.',
-      );
-    });
   });
 
   group('подписи строк (D9, «Прогресс во время хода»)', () {
@@ -253,11 +248,12 @@ void main() {
       expect(_row(data, 'time').value, '3:00 / 10:00');
     });
 
-    test('подписи строк: Steps, Tokens, Cost, Time', () {
+    test('строки по порядку: Steps, Tokens, Cost, Time (подписи — по id в '
+        'presentation, `usage_pane_l10n_test.dart`)', () {
       final data = _data(_budget());
       expect(
-        [for (final r in usageBudgetRowsAt(data, now: _t0)) r.label],
-        ['Steps', 'Tokens', 'Cost', 'Time'],
+        [for (final r in usageBudgetRowsAt(data, now: _t0)) r.id],
+        ['steps', 'tokens', 'cost', 'time'],
       );
     });
 
@@ -273,13 +269,11 @@ void main() {
       expect(_row(data, 'cost').value, '0.41 EUR / 0.50 EUR');
     });
 
-    test('подсказка Tokens называет правило `input + output, including '
-        'subagents` (R2); у остальных строк подсказки нет', () {
+    test('цена известна: пометки «цена неизвестна» ни у одной строки нет', () {
       final data = _data(_budget());
-      expect(_row(data, 'tokens').hint, 'input + output, including subagents');
-      expect(_row(data, 'steps').hint, isNull);
-      expect(_row(data, 'cost').hint, isNull);
-      expect(_row(data, 'time').hint, isNull);
+      for (final row in usageBudgetRowsAt(data, now: _t0)) {
+        expect(row.priceUnknown, isFalse, reason: row.id);
+      }
     });
   });
 
@@ -294,8 +288,8 @@ void main() {
       expect(_row(data, 'cost').value, r'— / $0.50');
     });
 
-    test('пояснение `not checked: price unknown`', () {
-      expect(_row(data, 'cost').note, 'not checked: price unknown');
+    test('пометка «цена неизвестна» (R8)', () {
+      expect(_row(data, 'cost').priceUnknown, isTrue);
     });
 
     test('без тона и с пустой полосой', () {
@@ -305,7 +299,7 @@ void main() {
     });
 
     test('известная цена пояснения не имеет', () {
-      expect(_row(_data(_budget()), 'cost').note, isNull);
+      expect(_row(_data(_budget()), 'cost').priceUnknown, isFalse);
     });
   });
 
@@ -470,17 +464,17 @@ void main() {
   group('заголовок `This turn` / `Last turn` (Q11 (а))', () {
     test('running и неитоговый бюджет — `This turn`', () {
       final data = _data(_budget(), status: SessionStatusView.running);
-      expect(data.title, 'This turn');
+      expect(data.title, UsageBudgetTitle.thisTurn);
     });
 
     test('cancelling и неитоговый бюджет — `This turn`', () {
       final data = _data(_budget(), status: SessionStatusView.cancelling);
-      expect(data.title, 'This turn');
+      expect(data.title, UsageBudgetTitle.thisTurn);
     });
 
     test('сессия свободна — `Last turn`, даже если бюджет неитоговый', () {
-      expect(_data(_budget()).title, 'Last turn');
-      expect(_data(_budget(ended: true)).title, 'Last turn');
+      expect(_data(_budget()).title, UsageBudgetTitle.lastTurn);
+      expect(_data(_budget(ended: true)).title, UsageBudgetTitle.lastTurn);
     });
 
     test('running с итоговым бюджетом прошлого хода — `Last turn` с его '
@@ -492,7 +486,7 @@ void main() {
         ),
         status: SessionStatusView.running,
       );
-      expect(data.title, 'Last turn');
+      expect(data.title, UsageBudgetTitle.lastTurn);
       expect(data.ticking, isFalse);
       // Часы далеко впереди: итог прошлого хода не дорастает.
       final later = _t0.add(const Duration(minutes: 30));
@@ -506,7 +500,7 @@ void main() {
         _budget(turnId: 'turn-2', steps: const BudgetCount(used: 1, limit: 50)),
         status: SessionStatusView.running,
       );
-      expect(data.title, 'This turn');
+      expect(data.title, UsageBudgetTitle.thisTurn);
       expect(data.ticking, isTrue);
       expect(_row(data, 'steps').value, '1 / 50');
     });
@@ -525,7 +519,7 @@ void main() {
         approval: true,
       );
       expect(data.ticking, isFalse);
-      expect(data.title, 'This turn');
+      expect(data.title, UsageBudgetTitle.thisTurn);
     });
 
     test('cancelling без ожиданий — тик есть: цикл считает время до '
@@ -533,7 +527,7 @@ void main() {
       final data = _data(_budget(), status: SessionStatusView.cancelling);
 
       expect(data.ticking, isTrue);
-      expect(data.title, 'This turn');
+      expect(data.title, UsageBudgetTitle.thisTurn);
     });
 
     test('cancelling с ожидающим одобрением корня — без тика', () {
@@ -665,7 +659,7 @@ void main() {
           duration: const BudgetDuration(usedMs: 187000, limitMs: 600000),
         ),
       );
-      expect(data.title, 'Last turn');
+      expect(data.title, UsageBudgetTitle.lastTurn);
       expect(time(data, const Duration(seconds: 30)), '3:07 / 10:00');
     });
 
@@ -1040,7 +1034,7 @@ void main() {
       expect(data.ledgerAvailable, isFalse);
       expect(data.notice, UsagePaneNotice.noLedger);
       expect(data.budget, isNotNull);
-      expect(data.budget!.title, 'Last turn');
+      expect(data.budget!.title, UsageBudgetTitle.lastTurn);
     });
 
     test('с журналом блок строится из usage, а не из журнала', () {
@@ -1110,6 +1104,7 @@ void main() {
         workspace: workspace,
         diagnostics: ShellDiagnostics(),
         usageCsvSaver: FakeUsageCsvSaver(),
+        strings: FixedAppStrings(AppLocalizationsEn()),
       );
       cubit.show(AcpSession(id: const SessionId('a'), cwd: '/work'));
     });
@@ -1118,7 +1113,7 @@ void main() {
 
     test('сессия свободна: `Last turn`, тика нет', () async {
       await pumpEventQueue();
-      expect(cubit.state.usage.budget?.title, 'Last turn');
+      expect(cubit.state.usage.budget?.title, UsageBudgetTitle.lastTurn);
       expect(cubit.state.usage.budget?.ticking, isFalse);
     });
 
@@ -1127,17 +1122,17 @@ void main() {
       () async {
         handle.emit(revision(2, status: SessionStatusView.running));
         await pumpEventQueue();
-        expect(cubit.state.usage.budget?.title, 'This turn');
+        expect(cubit.state.usage.budget?.title, UsageBudgetTitle.thisTurn);
         expect(cubit.state.usage.budget?.ticking, isTrue);
 
         handle.emit(revision(3, status: SessionStatusView.cancelling));
         await pumpEventQueue();
-        expect(cubit.state.usage.budget?.title, 'This turn');
+        expect(cubit.state.usage.budget?.title, UsageBudgetTitle.thisTurn);
         expect(cubit.state.usage.budget?.ticking, isTrue);
 
         handle.emit(revision(4));
         await pumpEventQueue();
-        expect(cubit.state.usage.budget?.title, 'Last turn');
+        expect(cubit.state.usage.budget?.title, UsageBudgetTitle.lastTurn);
         expect(cubit.state.usage.budget?.ticking, isFalse);
       },
     );
@@ -1318,7 +1313,7 @@ void main() {
         );
         await pumpEventQueue();
         expect(cubit.state.usage.budget?.ticking, isFalse);
-        expect(cubit.state.usage.budget?.title, 'This turn');
+        expect(cubit.state.usage.budget?.title, UsageBudgetTitle.thisTurn);
 
         handle.emit(revision(4, status: SessionStatusView.running));
         await pumpEventQueue();

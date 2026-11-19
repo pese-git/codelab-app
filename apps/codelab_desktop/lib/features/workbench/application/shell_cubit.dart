@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
+
 import 'package:codelab_client_core/codelab_client_core.dart'
     show
         AcpClientBackend,
@@ -21,6 +22,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter/painting.dart' show ImageProvider;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import '../../../app/provider_setup_offer.dart';
 import '../../../core/platform/dock_layout_store.dart';
 import '../../../core/platform/external_link_opener.dart';
@@ -79,6 +81,7 @@ export 'ui_mappers.dart'
 /// `SettingsCubit.onProjectSelected` с `ConnectionCubit.startAgent` (D13).
 final class CodeLabShellParts {
   CodeLabShellParts._({
+    required this.strings,
     required this.changes,
     required this.diagnostics,
     required this.connection,
@@ -103,6 +106,7 @@ final class CodeLabShellParts {
     ProfileSecretSource? tokenSecrets,
     ProviderSetupOffer? providerSetupOffer,
     required UsageCsvSaver usageCsvSaver,
+    required AppStrings strings,
     Logger? usageLogger,
     StartupPreferences? startupPreferences,
     Logger? appLogger,
@@ -124,6 +128,7 @@ final class CodeLabShellParts {
       workspace: workspace,
       diagnostics: diagnostics,
       usageCsvSaver: usageCsvSaver,
+      strings: strings,
       usageLogger: usageLogger,
     );
     final connection = ConnectionCubit(
@@ -137,9 +142,11 @@ final class CodeLabShellParts {
       eventLogger: eventLogger,
       tokenSecrets: tokenSecrets,
       providerSetupOffer: providerSetupOffer,
+      strings: strings,
     );
     settings.bindProjectStart(connection.startAgent);
     return CodeLabShellParts._(
+      strings: strings,
       changes: changes,
       diagnostics: diagnostics,
       connection: connection,
@@ -151,6 +158,7 @@ final class CodeLabShellParts {
         connection: connection,
         settings: settings,
         activeSession: activeSession,
+        strings: strings,
         eventLogger: eventLogger,
       ),
       activeSession: activeSession,
@@ -164,6 +172,9 @@ final class CodeLabShellParts {
     );
   }
 
+  /// Порт языка: фасад читает из него каталог для палитры, а Cubit-ы с
+  /// текстом подписаны на него сами (`add-desktop-localization`, D5).
+  final AppStrings strings;
   final ShellChanges changes;
   final ShellDiagnostics diagnostics;
   final ConnectionCubit connection;
@@ -228,6 +239,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     Logger? eventLogger,
     bool projectFilesBound = false,
     UsageCsvSaver? usageCsvSaver,
+    AppStrings? strings,
   }) {
     // Без графа токена из окружения нет: ссылки `env:` дают подключение без
     // токена (тесты передают свой источник).
@@ -272,6 +284,11 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
             // диалог только по `Export CSV`, а в обычной сборке порт
             // приходит из `app_scope` через [parts].
             usageCsvSaver: usageCsvSaver ?? const FileSelectorUsageCsvSaver(),
+            strings:
+                strings ??
+                (throw ArgumentError.notNull(
+                  'strings (required without parts)',
+                )),
           ),
     );
   }
@@ -333,8 +350,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   String? _focusedSessionId;
 
   /// Заметка о неудачном открытии ссылки; живёт в фасаде, а не в частях, потому
-  /// что принадлежит только ему.
-  String? _linkNote;
+  /// что принадлежит только ему. Типизирована: текст собирает presentation по
+  /// каталогу (D5, разовое сообщение).
+  ShellLinkNote? _linkNote;
 
   /// Хост привязал порт `ProjectFiles`: без него панель Files не предлагается
   /// ни при каком профиле (design.md change `add-file-preview-and-tree`, D7).
@@ -435,7 +453,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       },
     );
     if (outcome == ExternalLinkOutcome.failed) {
-      _setLinkNote("Couldn't open the link.");
+      _setLinkNote(ShellLinkNote.openFailed);
     } else if (outcome == ExternalLinkOutcome.opened) {
       _setLinkNote(null);
     }
@@ -480,7 +498,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// Закрывает заметку об открытии ссылки.
   void dismissLinkNote() => _setLinkNote(null);
 
-  void _setLinkNote(String? note) {
+  void _setLinkNote(ShellLinkNote? note) {
     if (_linkNote == note) {
       return;
     }
@@ -774,7 +792,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     CodeLabShellParts parts,
     bool projectFilesBound, {
     required ClientWorkspace workspace,
-    String? linkNote,
+    ShellLinkNote? linkNote,
   }) {
     final connection = parts.connection.state;
     final sessions = parts.sessions.state;
@@ -836,11 +854,16 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       statusBar: active.statusBar,
       usage: active.usage,
       agentCommands: active.agentCommands,
+      // Каталог на языке порта: язык меняет состояние Cubit-ов с текстом, и
+      // этот пересчёт идёт следом за ними (D4, R1). Для локального агента
+      // пункт `reconnect` называется «Restart agent» (Q24).
       commandCatalog: paletteCatalogOf(
         active.agentCommandViews,
+        l10n: parts.strings.current,
         filesAvailable: projectFilesAvailable,
         agentsAvailable: !active.agents.isEmpty,
         usageAvailable: active.usage.available,
+        localRestart: connection.profile is! WebSocketProfile,
       ),
       composerDraft: active.composerDraft,
       composerDraftRevision: active.composerDraftRevision,
@@ -852,7 +875,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       recentProjects: settings.recentProjects,
       hasMoreSessions: sessions.hasMoreSessions,
       pendingRootSession: sessions.pendingRootSession,
-      restartsRemote: connection.profile is WebSocketProfile,
       sessionFolders: {
         for (final summary in workspace.current.sessions)
           summary.id.value: summary.cwd,

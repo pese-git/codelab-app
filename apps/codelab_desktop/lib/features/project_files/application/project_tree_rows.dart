@@ -3,6 +3,8 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_ui/codelab_ui.dart'
     show CodeLabFileTreeRowData, CodeLabFileTreeRowKind;
 
+import '../../../l10n/app_localizations.dart';
+
 /// Сегменты синтетических строк: `NUL` не бывает в имени POSIX-файла, поэтому
 /// ключ строки не совпадёт с настоящей записью `#more` или `#error`.
 const _moreSegment = '\u0000more';
@@ -59,7 +61,9 @@ List<CodeLabFileTreeRowData> buildProjectTreeRows({
         rows.add(
           CodeLabFileTreeRowData(
             relativePath: '${entry.relativePath}/$_errorSegment',
-            name: 'Cannot read this folder.',
+            // Текст строки собирает presentation по каталогу (D5 п. 4); имя
+            // синтетической строки данных не несёт.
+            name: '',
             kind: CodeLabFileTreeRowKind.error,
             depth: depth + 1,
           ),
@@ -76,7 +80,8 @@ List<CodeLabFileTreeRowData> buildProjectTreeRows({
       rows.add(
         CodeLabFileTreeRowData(
           relativePath: dir.isEmpty ? _moreSegment : '$dir/$_moreSegment',
-          name: '… ${listing.omitted} more',
+          // Число скрытых записей; подпись «… N more» собирает presentation.
+          name: '${listing.omitted}',
           kind: CodeLabFileTreeRowKind.more,
           depth: depth,
         ),
@@ -94,3 +99,32 @@ CodeLabFileTreeRowKind _kindOf(ProjectEntry entry) => switch (entry.kind) {
   ProjectEntryKind.symlinkOutside => CodeLabFileTreeRowKind.outsideLink,
   ProjectEntryKind.other => CodeLabFileTreeRowKind.other,
 };
+
+/// Строки дерева с подписями синтетических строк на языке [l10n].
+///
+/// Почему отдельно от [buildProjectTreeRows]: состояние панели хранит строки
+/// без текста app (у `error` имя пусто, у `more` — число), и текст нельзя
+/// «застрять» на старом языке: его собирает presentation на каждый `build`
+/// (`add-desktop-localization`, D5 п. 4). Остальные строки (файлы и папки) —
+/// данные проекта и не меняются (D7).
+List<CodeLabFileTreeRowData> localizedProjectTreeRows(
+  List<CodeLabFileTreeRowData> rows,
+  AppLocalizations l10n,
+) => [
+  for (final row in rows)
+    switch (row.kind) {
+      CodeLabFileTreeRowKind.error => CodeLabFileTreeRowData(
+        relativePath: row.relativePath,
+        name: l10n.projectFilesFolderReadFailed,
+        kind: row.kind,
+        depth: row.depth,
+      ),
+      CodeLabFileTreeRowKind.more => CodeLabFileTreeRowData(
+        relativePath: row.relativePath,
+        name: l10n.projectFilesMore(int.tryParse(row.name) ?? 0),
+        kind: row.kind,
+        depth: row.depth,
+      ),
+      _ => row,
+    },
+];

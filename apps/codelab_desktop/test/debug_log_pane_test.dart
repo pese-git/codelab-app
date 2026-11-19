@@ -1,8 +1,11 @@
 import 'package:codelab_desktop/features/workbench/presentation/widgets/debug_log_pane.dart';
+import 'package:codelab_desktop/l10n/app_localizations.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:structured_log/structured_log.dart' show LogLevel;
 import 'package:structured_log_flutter/structured_log_flutter.dart';
+
+import 'support/l10n_app.dart';
 
 LogBuffer _buffer({int entries = 0}) {
   final buffer = LogBuffer();
@@ -18,6 +21,8 @@ LogBuffer _buffer({int entries = 0}) {
 }
 
 Widget _host(double width, double height, LogBuffer buffer) => FluentApp(
+  localizationsDelegates: l10nTestDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
   key: UniqueKey(),
   home: Align(
     alignment: Alignment.topLeft,
@@ -122,6 +127,8 @@ void main() {
     final buffer = _buffer(entries: 2);
     final key = GlobalKey();
     Widget host(double height) => FluentApp(
+      localizationsDelegates: l10nTestDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Align(
         alignment: Alignment.topLeft,
         child: SizedBox(

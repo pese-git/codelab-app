@@ -640,6 +640,7 @@ List<TranscriptItem> _notices(
       id: '${turn.id.value}/completed',
       kind: NoticeKind.emptyTurn,
       text: 'Completed with stopReason ${turn.stopReason?.name ?? 'unknown'}.',
+      reason: EmptyTurnReason(turn.stopReason),
     ),
   if (turn.status != PromptTurnStatus.failed &&
       _stoppedNoticeText(turn) != null)
@@ -647,6 +648,7 @@ List<TranscriptItem> _notices(
       id: '${turn.id.value}/stopped',
       kind: NoticeKind.turnStopped,
       text: _stoppedNoticeText(turn)!,
+      reason: _stoppedReason(turn),
     ),
   if (turn.status == PromptTurnStatus.failed && turn.failureMessage != null)
     TranscriptItem.notice(
@@ -664,6 +666,28 @@ List<TranscriptItem> _notices(
 /// в заметку произвольную строку от агента нельзя.
 const _knownBudgetLimits = {'steps', 'tokens', 'cost', 'duration', 'deadline'};
 
+/// Известный лимит бюджета хода или `null` (D4/D6): общий критерий текста и
+/// причины заметки, чтобы они не расходились.
+String? _knownBudgetLimit(PromptTurn turn) => switch (turn.budgetExceeded) {
+  final limit? when _knownBudgetLimits.contains(limit) => limit,
+  _ => null,
+};
+
+/// Типизированная причина заметки `turnStopped` (D6 change
+/// `add-desktop-localization`); `null` — заметка не нужна. Общая для
+/// инкрементальной проекции и эталона `projectTranscript`: причины равны
+/// (spec acp-client-kit «Типизированная причина заметки транскрипта»).
+/// Имя лимита только у `max_turn_requests` и только из известного набора.
+NoticeReason? _stoppedReason(PromptTurn turn) => switch (turn.stopReason) {
+  final stop? when _stoppedNoticeText(turn) != null => TurnStoppedReason(
+    stop,
+    budgetLimit: stop == StopReason.maxTurnRequests
+        ? _knownBudgetLimit(turn)
+        : null,
+  ),
+  _ => null,
+};
+
 /// Текст заметки исхода хода (D27, Q33); `null` — заметка не нужна.
 /// Смысл причин — `docs/protocols/acp/protocol/05-Prompt Turn.md`.
 ///
@@ -674,9 +698,8 @@ const _knownBudgetLimits = {'steps', 'tokens', 'cost', 'duration', 'deadline'};
 String? _stoppedNoticeText(PromptTurn turn) => switch (turn.stopReason) {
   StopReason.maxTokens =>
     'The model reached its token limit, so the turn ended.',
-  StopReason.maxTurnRequests => switch (turn.budgetExceeded) {
-    final limit? when _knownBudgetLimits.contains(limit) =>
-      'The turn stopped: budget exceeded: $limit.',
+  StopReason.maxTurnRequests => switch (_knownBudgetLimit(turn)) {
+    final limit? => 'The turn stopped: budget exceeded: $limit.',
     _ => 'The turn reached the limit of model requests.',
   },
   StopReason.refusal => 'The agent refused to continue.',
@@ -756,6 +779,7 @@ ApprovalStateView? _approvalView(
   if (approval.status != ApprovalStatus.pending) {
     return ApprovalStateView.resolved(
       label: _resolvedLabel(approval),
+      agentLabel: _agentLabel(approval),
       outcome: _resolvedOutcome(approval),
       subagent: _requesterOf(turn, approval),
     );
@@ -774,13 +798,19 @@ ApprovalStateView? _approvalView(
   );
 }
 
-String _resolvedLabel(ApprovalRequest approval) {
+String _resolvedLabel(ApprovalRequest approval) =>
+    _agentLabel(approval) ??
+    (approval.status == ApprovalStatus.cancelled ? 'Cancelled' : 'Resolved');
+
+/// Подпись от агента для [ApprovalStateView.resolved] (`agentLabel`, D6):
+/// `null` при отмене и когда вариант не выбран — тогда подпись запасная.
+String? _agentLabel(ApprovalRequest approval) {
   if (approval.status == ApprovalStatus.cancelled) {
-    return 'Cancelled';
+    return null;
   }
   final selectedId = approval.selectedOptionId;
   if (selectedId == null) {
-    return 'Resolved';
+    return null;
   }
   for (final option in approval.options) {
     if (option.optionId == selectedId) {

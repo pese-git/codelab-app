@@ -194,7 +194,7 @@ class TerminalTabsCubit extends Cubit<TerminalTabsState> {
                 for (final e in _entries[owner] ?? const <_Entry>[])
                   TerminalTab(
                     id: e.id,
-                    title: 'Terminal ${e.id.substring(1)}',
+                    number: int.parse(e.id.substring(1)),
                     status: e.status,
                   ),
               ],

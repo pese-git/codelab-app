@@ -13,6 +13,12 @@ part 'command_catalog.freezed.dart';
 /// Для чего: вход [CommandCatalog]. [name] — без `/`; [isAvailable] `false` —
 /// заглушка «coming soon», которую вытесняет одноимённая команда агента
 /// (D3). Иконки — забота хоста: он сопоставляет команду по [id].
+///
+/// [searchAliases] — дополнительные строки поиска (change
+/// `add-desktop-localization`, D4): хост, показывающий [label] и
+/// [description] на своём языке, кладёт сюда те же тексты на другом (app —
+/// английские), чтобы команда находилась по обоим. Ядро язык не знает и
+/// строки не показывает; по умолчанию их нет (CLI поле не заполняет).
 @freezed
 abstract class HostCommand with _$HostCommand {
   const factory HostCommand({
@@ -21,6 +27,7 @@ abstract class HostCommand with _$HostCommand {
     required String label,
     required String description,
     @Default(true) bool isAvailable,
+    @Default(<String>[]) List<String> searchAliases,
   }) = _HostCommand;
 }
 
@@ -53,6 +60,12 @@ sealed class CatalogCommand with _$CatalogCommand {
   String get _description => switch (this) {
     HostCatalogCommand(:final command) => command.description,
     AgentCatalogCommand(:final command) => command.description,
+  };
+
+  /// Дополнительные строки поиска; у команд агента их нет (D4).
+  List<String> get _aliases => switch (this) {
+    HostCatalogCommand(:final command) => command.searchAliases,
+    AgentCatalogCommand() => const [],
   };
 }
 
@@ -101,8 +114,11 @@ final class CommandCatalog {
   ///
   /// Пробелы по краям и ведущий `/` снимаются, регистр не учитывается;
   /// пустой запрос — все [commands]. Правила по убыванию: префикс имени,
-  /// подстрока имени, подпоследовательность имени, подстрока названия или
-  /// описания; внутри правила — порядок [commands]. Подпоследовательность
+  /// подстрока имени, подпоследовательность имени, подстрока названия,
+  /// описания или дополнительной строки поиска команды хоста
+  /// (`HostCommand.searchAliases`, D4 change `add-desktop-localization`:
+  /// совпадение по ним — последнее правило, после совпадений по имени);
+  /// внутри правила — порядок [commands]. Подпоследовательность
   /// только по имени: по описанию она находила бы почти всё.
   List<CatalogCommand> search(String query) {
     var normalized = query.trim().toLowerCase();
@@ -136,7 +152,8 @@ final class CommandCatalog {
       return 2;
     }
     if (command._label.toLowerCase().contains(query) ||
-        command._description.toLowerCase().contains(query)) {
+        command._description.toLowerCase().contains(query) ||
+        command._aliases.any((alias) => alias.toLowerCase().contains(query))) {
       return 3;
     }
     return null;

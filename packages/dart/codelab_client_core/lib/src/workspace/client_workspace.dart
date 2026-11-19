@@ -686,7 +686,10 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       }
       final handle = _handles[id]!;
       if (!_capabilities.loadSession) {
-        handle.detach('The agent cannot restore sessions after reconnecting.');
+        handle.detach(
+          'The agent cannot restore sessions after reconnecting.',
+          const SessionRestoreReason(SessionRestoreCause.agentCannotRestore),
+        );
         continue;
       }
       try {
@@ -700,6 +703,10 @@ final class DefaultClientWorkspace implements ClientWorkspace {
         }
         handle.detach(
           'Session ${id.value} could not be restored after reconnecting.',
+          SessionRestoreReason(
+            SessionRestoreCause.restoreFailed,
+            sessionId: id,
+          ),
         );
       }
     }
@@ -1119,13 +1126,18 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     _publish(_current.copyWith(sessions: _summaries()));
   }
 
-  Future<SessionHandle> _newSessionWithNotice(String cwd, String text) async {
+  Future<SessionHandle> _newSessionWithNotice(
+    String cwd,
+    String text, {
+    required SessionRestoreReason reason,
+  }) async {
     final handle = await newSession(cwd: cwd);
     _handles[handle.id]!.notify(
       NoticeItem(
         id: '${handle.id.value}/reconnected',
         kind: NoticeKind.reconnected,
         text: text,
+        reason: reason,
       ),
     );
     return handle;
@@ -1486,8 +1498,11 @@ final class _RestoreHostAdapter implements RestoreHost {
   void activate(SessionId id) => _workspace.activate(id);
 
   @override
-  Future<SessionHandle> newSessionWithNotice(String cwd, String notice) =>
-      _workspace._newSessionWithNotice(cwd, notice);
+  Future<SessionHandle> newSessionWithNotice(
+    String cwd,
+    String notice, {
+    required SessionRestoreReason reason,
+  }) => _workspace._newSessionWithNotice(cwd, notice, reason: reason);
 
   @override
   void report(WorkspaceDiagnostic diagnostic) => _workspace._report(diagnostic);
@@ -1671,14 +1686,18 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   }
 
   /// Новое соединение не знает сессию: статус `detached` и уведомление
-  /// [text] в конце транскрипта.
-  void detach(String text) {
+  /// [text] в конце транскрипта; [reason] — типизированная причина, по
+  /// которой хост строит текст на своём языке (D6 change
+  /// `add-desktop-localization`, сценарий «Сессия не восстановлена после
+  /// переподключения»).
+  void detach(String text, SessionRestoreReason reason) {
     _link = _Link.detached;
     notify(
       NoticeItem(
         id: '${id.value}/detached',
         kind: NoticeKind.detached,
         text: text,
+        reason: reason,
       ),
     );
   }

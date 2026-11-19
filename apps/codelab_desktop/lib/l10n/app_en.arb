@@ -379,10 +379,6 @@
   "@settingsGeneralUnreadable": {
     "description": "Заголовок InfoBar блока Agent defaults, когда config.yaml не разбирается; ниже проблемы загрузчика."
   },
-  "settingsSearchKeywordsGeneral": "language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics",
-  "@settingsSearchKeywordsGeneral": {
-    "description": "Ключевые слова поиска по настройкам для страницы General, через запятую; на русском — переводы английских слов."
-  },
   "settingsGeneralSectionStartup": "Startup and files",
   "@settingsGeneralSectionStartup": {
     "description": "Заголовок секции страницы General со строками запуска и файлов."
@@ -482,5 +478,980 @@
   "settingsGeneralAboutLoadFailed": "Couldn't load the About section.",
   "@settingsGeneralAboutLoadFailed": {
     "description": "Предупреждение вместо раздела About, когда его данные (ресурсы лицензий) не прочитались."
+  },
+  "commonCancel": "Cancel",
+  "@commonCancel": {
+    "description": "Кнопка отмены в диалогах рабочего места."
+  },
+  "commonClose": "Close",
+  "@commonClose": {
+    "description": "Кнопка закрытия диалога."
+  },
+  "commonOpen": "Open",
+  "@commonOpen": {
+    "description": "Кнопка подтверждения «открыть» в диалогах."
+  },
+  "commonRetry": "Retry",
+  "@commonRetry": {
+    "description": "Кнопка повтора действия: экран подключения, баннер соединения, заметка о сбое хода, заметка панели Usage."
+  },
+  "commonRestartAgent": "Restart agent",
+  "@commonRestartAgent": {
+    "description": "Кнопка и пункт «перезапустить агента»."
+  },
+  "commonNewSession": "New session",
+  "@commonNewSession": {
+    "description": "Название сессии без заголовка и промпта, кнопка стартового экрана, подпись пункта палитры /new."
+  },
+  "workbenchSessionActive": "Active",
+  "@workbenchSessionActive": {
+    "description": "Подпись строки сайдбара для открытой в этом запуске сессии."
+  },
+  "workbenchSessionTitleWithId": "Session {id}",
+  "@workbenchSessionTitleWithId": {
+    "description": "Название сессии агента без заголовка. Плейсхолдер id — идентификатор сессии, не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchSessionUpdated": "Updated {time}",
+  "@workbenchSessionUpdated": {
+    "description": "Подпись строки сайдбара для сессии из списка агента. Плейсхолдер time — дата и время в формате yyyy-MM-dd HH:mm, не переводить.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchNoProject": "No project",
+  "@workbenchNoProject": {
+    "description": "Название группы сайдбара, когда проект не выбран."
+  },
+  "workbenchNoActiveSession": "No active session",
+  "@workbenchNoActiveSession": {
+    "description": "Название текущей сессии в шапке, когда сессии нет."
+  },
+  "workbenchOpenProjectHint": "Open a project to start a session.",
+  "@workbenchOpenProjectHint": {
+    "description": "Подсказка под названием текущей сессии и текст стартового экрана без проекта."
+  },
+  "workbenchOpenFolder": "Open folder…",
+  "@workbenchOpenFolder": {
+    "description": "Кнопка стартового экрана без проекта; то же название кнопки сайдбара."
+  },
+  "workbenchStartNewSessionIn": "Start a new session in {project}.",
+  "@workbenchStartNewSessionIn": {
+    "description": "Текст стартового экрана с проектом. Плейсхолдер project — имя папки проекта, не переводить.",
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchStarting": "Starting {profile}…",
+  "@workbenchStarting": {
+    "description": "Индикатор стартового экрана, пока агент запускается. Плейсхолдер profile — название профиля подключения, не переводить.",
+    "placeholders": {
+      "profile": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchTranscriptEmptyNoSession": "Start a new session to talk to the agent.",
+  "@workbenchTranscriptEmptyNoSession": {
+    "description": "Подсказка пустой ленты, когда сессии нет."
+  },
+  "workbenchTranscriptEmptySession": "Send a message to start.",
+  "@workbenchTranscriptEmptySession": {
+    "description": "Подсказка пустой ленты открытой сессии."
+  },
+  "workbenchTransportEmbedded": "Embedded agent",
+  "@workbenchTransportEmbedded": {
+    "description": "Тип подключения «встроенный агент» в подсказке бейджа соединения и на экране подключения."
+  },
+  "workbenchConnectionStartFailed": "Could not start the agent.",
+  "@workbenchConnectionStartFailed": {
+    "description": "Причина на экране сбоя старта, когда ядро клиента её не назвало."
+  },
+  "workbenchConnectionFailedAgain": "{reason} Failed again ({repeat})",
+  "@workbenchConnectionFailedAgain": {
+    "description": "Причина сбоя старта с числом повторов подряд. Плейсхолдеры: reason — причина, repeat — число повторов; не переводить.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      },
+      "repeat": {
+        "type": "int"
+      }
+    }
+  },
+  "workbenchNoProviderConfigured": "No model provider is configured for the embedded agent.",
+  "@workbenchNoProviderConfigured": {
+    "description": "Текст баннера, когда встроенному агенту не настроен провайдер модели."
+  },
+  "workbenchAddProvider": "Add provider",
+  "@workbenchAddProvider": {
+    "description": "Кнопка баннера соединения: открыть мастер провайдера."
+  },
+  "workbenchProjectFolderMissing": "Project folder not found: {path}. Choose an existing folder with Open folder….",
+  "@workbenchProjectFolderMissing": {
+    "description": "Причина отказа подключения и загрузки сессии, когда папки нет на диске. Плейсхолдер path — путь папки, не переводить; «Open folder…» — название кнопки сайдбара.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchLinkOpenFailed": "Couldn't open the link.",
+  "@workbenchLinkOpenFailed": {
+    "description": "Заметка над лентой, когда платформа отказала открыть ссылку из ответа агента."
+  },
+  "workbenchNoticeSessionDetached": "Session detached",
+  "@workbenchNoticeSessionDetached": {
+    "description": "Заголовок заметки: сессию не удалось привязать к новому соединению."
+  },
+  "workbenchNoticeDetachedCannotRestore": "The agent cannot restore sessions after reconnecting.",
+  "@workbenchNoticeDetachedCannotRestore": {
+    "description": "Тело заметки detached: агент не умеет восстанавливать сессии."
+  },
+  "workbenchNoticeDetachedRestoreFailed": "Session {id} could not be restored after reconnecting.",
+  "@workbenchNoticeDetachedRestoreFailed": {
+    "description": "Тело заметки detached: восстановление сессии не удалось. Плейсхолдер id — идентификатор сессии, не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchNoticeReconnectedCannotRestore": "The agent cannot restore sessions; a new session was started.",
+  "@workbenchNoticeReconnectedCannotRestore": {
+    "description": "Заметка после переподключения: агент не умеет восстанавливать сессии."
+  },
+  "workbenchNoticeReconnectedRestoreFailed": "Session {id} could not be restored; a new session was started.",
+  "@workbenchNoticeReconnectedRestoreFailed": {
+    "description": "Заметка после переподключения: восстановление не удалось. Плейсхолдер id — идентификатор сессии, не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchNoticeMaxTokens": "The model reached its token limit, so the turn ended.",
+  "@workbenchNoticeMaxTokens": {
+    "description": "Заметка исхода хода: stopReason max_tokens."
+  },
+  "workbenchNoticeMaxTurnRequests": "The turn reached the limit of model requests.",
+  "@workbenchNoticeMaxTurnRequests": {
+    "description": "Заметка исхода хода: stopReason max_turn_requests без названного лимита."
+  },
+  "workbenchNoticeBudgetExceeded": "The turn stopped: budget exceeded: {limit}.",
+  "@workbenchNoticeBudgetExceeded": {
+    "description": "Заметка исхода хода: превышен бюджет хода. Плейсхолдер limit — имя лимита с провода (steps, tokens, cost, duration, deadline), не переводить.",
+    "placeholders": {
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchNoticeRefusal": "The agent refused to continue.",
+  "@workbenchNoticeRefusal": {
+    "description": "Заметка исхода хода: stopReason refusal."
+  },
+  "workbenchNoticeCompletedWithStopReason": "Completed with stopReason {stopReason}.",
+  "@workbenchNoticeCompletedWithStopReason": {
+    "description": "Заметка завершённого хода без вывода агента. Плейсхолдер stopReason — значение причины остановки, не переводить; stopReason — имя поля протокола.",
+    "placeholders": {
+      "stopReason": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchNoticeCompletedStopReasonUnknown": "Completed with stopReason unknown.",
+  "@workbenchNoticeCompletedStopReasonUnknown": {
+    "description": "Заметка завершённого хода, у которого причина остановки неизвестна. stopReason — имя поля протокола."
+  },
+  "workbenchFailureAuth": "The agent could not sign in to the model provider",
+  "@workbenchFailureAuth": {
+    "description": "Заголовок заметки о сбое хода: ошибка входа у провайдера."
+  },
+  "workbenchFailureProviderUnavailable": "The model provider is unavailable",
+  "@workbenchFailureProviderUnavailable": {
+    "description": "Заголовок заметки о сбое хода: сеть, таймаут или сервер провайдера."
+  },
+  "workbenchFailureRateLimited": "The model provider's rate limit was reached",
+  "@workbenchFailureRateLimited": {
+    "description": "Заголовок заметки о сбое хода: лимит запросов провайдера."
+  },
+  "workbenchFailureOverflow": "The conversation is too long for the model",
+  "@workbenchFailureOverflow": {
+    "description": "Заголовок заметки о сбое хода: переполнение контекста модели."
+  },
+  "workbenchFailureConnectionLost": "The connection to the agent was lost",
+  "@workbenchFailureConnectionLost": {
+    "description": "Заголовок заметки о сбое хода: связь с агентом потеряна."
+  },
+  "workbenchFailureGeneric": "The agent could not complete the turn",
+  "@workbenchFailureGeneric": {
+    "description": "Общий заголовок заметки о сбое хода."
+  },
+  "workbenchFailureConnectionLostBody": "Retry to continue working with the agent.",
+  "@workbenchFailureConnectionLostBody": {
+    "description": "Тело заметки о потере связи с агентом."
+  },
+  "workbenchToolKindRead": "Read",
+  "@workbenchToolKindRead": {
+    "description": "Метка вызова инструмента вида read."
+  },
+  "workbenchToolKindEdit": "Edit",
+  "@workbenchToolKindEdit": {
+    "description": "Метка вызова инструмента вида edit."
+  },
+  "workbenchToolKindDelete": "Delete",
+  "@workbenchToolKindDelete": {
+    "description": "Метка вызова инструмента вида delete."
+  },
+  "workbenchToolKindMove": "Move",
+  "@workbenchToolKindMove": {
+    "description": "Метка вызова инструмента вида move."
+  },
+  "workbenchToolKindSearch": "Search",
+  "@workbenchToolKindSearch": {
+    "description": "Метка вызова инструмента вида search."
+  },
+  "workbenchToolKindExecute": "Run",
+  "@workbenchToolKindExecute": {
+    "description": "Метка вызова инструмента вида execute."
+  },
+  "workbenchToolKindFetch": "Fetch",
+  "@workbenchToolKindFetch": {
+    "description": "Метка вызова инструмента вида fetch."
+  },
+  "workbenchApprovalCancelled": "Cancelled",
+  "@workbenchApprovalCancelled": {
+    "description": "Метка решённого одобрения, отменённого без выбора варианта агента (ход отменён, пока запрос ждал решения)."
+  },
+  "workbenchApprovalResolved": "Resolved",
+  "@workbenchApprovalResolved": {
+    "description": "Метка решённого одобрения, когда вариант агента не выбран и запрос не отменён; обычно название варианта приходит от агента и не переводится."
+  },
+  "workbenchToolKindThink": "Think",
+  "@workbenchToolKindThink": {
+    "description": "Метка вызова инструмента вида think."
+  },
+  "workbenchToolKindSwitchMode": "Mode",
+  "@workbenchToolKindSwitchMode": {
+    "description": "Метка вызова инструмента вида switch_mode (смена режима сессии)."
+  },
+  "workbenchRequesterWantsToRun": "{path} wants to run",
+  "@workbenchRequesterWantsToRun": {
+    "description": "Строка блока одобрения вызова субагента. Плейсхолдер path — путь субагента в дереве, не переводить.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchAgentRowTokens": "{tokens} tokens",
+  "@workbenchAgentRowTokens": {
+    "description": "Подпись токенов строки субагента. Плейсхолдер tokens — число в формате ядра клиента, не переводить.",
+    "placeholders": {
+      "tokens": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchAgentRowToolCalls": "{count, plural, one{{count} tool call} other{{count} tool calls}}",
+  "@workbenchAgentRowToolCalls": {
+    "description": "Число вызовов инструментов в строке субагента.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workbenchStatusUsageUnknown": "usage: —",
+  "@workbenchStatusUsageUnknown": {
+    "description": "Подпись сегмента строки статуса, когда агент не сообщает расход."
+  },
+  "workbenchStatusUsageUnknownTooltip": "agent does not report usage",
+  "@workbenchStatusUsageUnknownTooltip": {
+    "description": "Подсказка сегмента строки статуса, когда агент не сообщает расход."
+  },
+  "workbenchStatusTokenInput": "input {count}",
+  "@workbenchStatusTokenInput": {
+    "description": "Строка подсказки токенов хода: входные токены. Плейсхолдер count — число.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workbenchStatusTokenOutput": "output {count}",
+  "@workbenchStatusTokenOutput": {
+    "description": "Строка подсказки токенов хода: выходные токены. Плейсхолдер count — число.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workbenchStatusTokenCacheRead": "cache read {count}",
+  "@workbenchStatusTokenCacheRead": {
+    "description": "Строка подсказки токенов хода: чтение из кэша. Плейсхолдер count — число.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workbenchStatusTokenCacheWrite": "cache write {count}",
+  "@workbenchStatusTokenCacheWrite": {
+    "description": "Строка подсказки токенов хода: запись в кэш. Плейсхолдер count — число.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workbenchStatusTokenReasoning": "reasoning {count}",
+  "@workbenchStatusTokenReasoning": {
+    "description": "Строка подсказки токенов хода: токены рассуждения. Плейсхолдер count — число.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workbenchStatusApproximate": "approximate: {reasons}",
+  "@workbenchStatusApproximate": {
+    "description": "Строка подсказки токенов хода: перечень причин неполноты. Плейсхолдер reasons — причины через запятую.",
+    "placeholders": {
+      "reasons": {
+        "type": "String"
+      }
+    }
+  },
+  "usagePartialNoUsage": "agent sent no usage for some steps",
+  "@usagePartialNoUsage": {
+    "description": "Причина неполной суммы расхода: агент не прислал usage."
+  },
+  "usagePartialNoPrice": "price unknown for some steps",
+  "@usagePartialNoPrice": {
+    "description": "Причина неполной суммы расхода: неизвестна цена."
+  },
+  "usagePartialBeforeLoad": "before the session was loaded",
+  "@usagePartialBeforeLoad": {
+    "description": "Причина неполной суммы расхода: часть расхода была до загрузки сессии."
+  },
+  "workbenchStatusPriceUnknown": "price unknown",
+  "@workbenchStatusPriceUnknown": {
+    "description": "Подсказка сегмента стоимости строки статуса, когда цена неизвестна."
+  },
+  "workbenchStatusCostWithSession": "{turn} · session {session}",
+  "@workbenchStatusCostWithSession": {
+    "description": "Сегмент стоимости строки статуса: стоимость хода и сессии. Плейсхолдеры — суммы в формате ядра клиента, не переводить.",
+    "placeholders": {
+      "turn": {
+        "type": "String"
+      },
+      "session": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchStatusContext": "{fill} context",
+  "@workbenchStatusContext": {
+    "description": "Сегмент заполнения контекста. Плейсхолдер fill — процент в формате ядра, не переводить.",
+    "placeholders": {
+      "fill": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchStatusContextCompactionSoon": "{fill} context · compaction soon",
+  "@workbenchStatusContextCompactionSoon": {
+    "description": "Сегмент заполнения контекста с предупреждением о скором сжатии. Плейсхолдер fill — процент.",
+    "placeholders": {
+      "fill": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchRootSessionTitle": "Open session in the disk root?",
+  "@workbenchRootSessionTitle": {
+    "description": "Заголовок подтверждения: сессия работает в корне диска. Метка security (D14): перевод не смягчает смысл."
+  },
+  "workbenchRootSessionBody": "This session runs in the disk root ({cwd}). The agent gets access to the whole disk. Open anyway?",
+  "@workbenchRootSessionBody": {
+    "description": "Текст подтверждения открытия сессии в корне диска. Плейсхолдер cwd — путь корня, не переводить. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "cwd": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchRestartTitle": "Restart agent?",
+  "@workbenchRestartTitle": {
+    "description": "Заголовок подтверждения перезапуска агента при идущих сессиях."
+  },
+  "workbenchRestartMessage": "Restart {title}? This interrupts {count, plural, one{{count} running session} other{{count} running sessions}}: {sessions}. Queued prompts stay.",
+  "@workbenchRestartMessage": {
+    "description": "Текст подтверждения перезапуска агента. Плейсхолдеры: title — название профиля, count — число идущих сессий, sessions — названия сессий через запятую; не переводить.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      },
+      "sessions": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchInspectorTitle": "Inspector",
+  "@workbenchInspectorTitle": {
+    "description": "Заголовок панели инспектора в панели Protocol. Содержимое инспектора не переводится."
+  },
+  "workbenchInspectorCategoryApproval": "Approval",
+  "@workbenchInspectorCategoryApproval": {
+    "description": "Тег записи инспектора: одобрение."
+  },
+  "workbenchInspectorCategoryTool": "Tool",
+  "@workbenchInspectorCategoryTool": {
+    "description": "Тег записи инспектора: вызов инструмента."
+  },
+  "workbenchInspectorCategoryProtocol": "Protocol",
+  "@workbenchInspectorCategoryProtocol": {
+    "description": "Тег записи инспектора: протокол."
+  },
+  "workbenchInspectorCategoryDiagnostic": "Diagnostic",
+  "@workbenchInspectorCategoryDiagnostic": {
+    "description": "Тег записи инспектора: диагностика."
+  },
+  "workbenchInspectorRisk": "Risk {risk}",
+  "@workbenchInspectorRisk": {
+    "description": "Бейдж риска записи инспектора. Плейсхолдер risk — значение риска из ядра клиента, не переводить.",
+    "placeholders": {
+      "risk": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchInspectorRawInput": "Raw input",
+  "@workbenchInspectorRawInput": {
+    "description": "Подпись блока исходных параметров записи инспектора."
+  },
+  "workbenchInspectorRawOutput": "Raw output",
+  "@workbenchInspectorRawOutput": {
+    "description": "Подпись блока исходного вывода записи инспектора."
+  },
+  "workbenchDebugLogTitle": "Debug log",
+  "@workbenchDebugLogTitle": {
+    "description": "Заголовок панели журнала отладки. Содержимое журнала не переводится."
+  },
+  "workbenchDebugLogExpand": "Expand",
+  "@workbenchDebugLogExpand": {
+    "description": "Подсказка кнопки, которая открывает журнал отладки на весь экран."
+  },
+  "paletteNewLabel": "New session",
+  "@paletteNewLabel": {
+    "description": "Подпись команды палитры /new."
+  },
+  "paletteNewDescription": "Start a fresh ACP session.",
+  "@paletteNewDescription": {
+    "description": "Описание команды палитры /new."
+  },
+  "palettePlanLabel": "Plan mode",
+  "@palettePlanLabel": {
+    "description": "Подпись команды палитры /plan."
+  },
+  "palettePlanDescription": "Switch the prompt turn into planning.",
+  "@palettePlanDescription": {
+    "description": "Описание команды палитры /plan."
+  },
+  "palettePermissionsLabel": "Permissions",
+  "@palettePermissionsLabel": {
+    "description": "Подпись команды палитры /permissions."
+  },
+  "palettePermissionsDescription": "Open permission mode controls.",
+  "@palettePermissionsDescription": {
+    "description": "Описание команды палитры /permissions."
+  },
+  "paletteLogsLabel": "Logs",
+  "@paletteLogsLabel": {
+    "description": "Подпись команды палитры /logs."
+  },
+  "paletteLogsDescription": "Open protocol and diagnostic logs.",
+  "@paletteLogsDescription": {
+    "description": "Описание команды палитры /logs."
+  },
+  "paletteCompactLabel": "Compact transcript",
+  "@paletteCompactLabel": {
+    "description": "Подпись команды палитры /compact."
+  },
+  "paletteCompactDescription": "Prepare the transcript for compaction.",
+  "@paletteCompactDescription": {
+    "description": "Описание команды палитры /compact."
+  },
+  "paletteReconnectLabel": "Reconnect",
+  "@paletteReconnectLabel": {
+    "description": "Подпись команды палитры /reconnect для удалённого агента."
+  },
+  "paletteReconnectDescription": "Retry the current agent connection.",
+  "@paletteReconnectDescription": {
+    "description": "Описание команды палитры /reconnect для удалённого агента."
+  },
+  "paletteRestartDescription": "Restart the agent with the selected profile and reload open sessions.",
+  "@paletteRestartDescription": {
+    "description": "Описание команды палитры /reconnect для локального агента (подпись — «Restart agent»)."
+  },
+  "paletteFilesLabel": "Files",
+  "@paletteFilesLabel": {
+    "description": "Подпись команды палитры /files."
+  },
+  "paletteFilesDescription": "Go to the project files panel.",
+  "@paletteFilesDescription": {
+    "description": "Описание команды палитры /files."
+  },
+  "paletteAgentsLabel": "Agents",
+  "@paletteAgentsLabel": {
+    "description": "Подпись команды палитры /agents."
+  },
+  "paletteAgentsDescription": "Go to the subagents panel.",
+  "@paletteAgentsDescription": {
+    "description": "Описание команды палитры /agents."
+  },
+  "paletteUsageLabel": "Usage",
+  "@paletteUsageLabel": {
+    "description": "Подпись команды палитры /usage-pane."
+  },
+  "paletteUsageDescription": "Go to the usage panel.",
+  "@paletteUsageDescription": {
+    "description": "Описание команды палитры /usage-pane."
+  },
+  "secretMigrationWarning": "Secrets are stored in the agent config file.",
+  "@secretMigrationWarning": {
+    "description": "Предупреждение над лентой: секреты лежат в файле конфигурации встроенного агента. Метка security (D14): перевод не смягчает смысл."
+  },
+  "secretMigrationMigrateSecrets": "Migrate secrets",
+  "@secretMigrationMigrateSecrets": {
+    "description": "Кнопка предупреждения и заголовок диалога переноса секретов."
+  },
+  "secretMigrationPlanning": "Building the migration plan…",
+  "@secretMigrationPlanning": {
+    "description": "Ход построения плана переноса секретов."
+  },
+  "secretMigrationApplying": "Moving secrets…",
+  "@secretMigrationApplying": {
+    "description": "Ход записи при переносе секретов."
+  },
+  "secretMigrationNothing": "Nothing to migrate.",
+  "@secretMigrationNothing": {
+    "description": "Пояснение диалога, когда в плане нет пунктов."
+  },
+  "secretMigrationMoved": "Secrets moved. Restart the embedded agent to use them.",
+  "@secretMigrationMoved": {
+    "description": "Итог переноса секретов."
+  },
+  "secretMigrationAgentGone": "The embedded agent is no longer connected.",
+  "@secretMigrationAgentGone": {
+    "description": "Подсказка кнопки перезапуска, когда агент сменился или закрыт."
+  },
+  "secretMigrationWaitForTurn": "Wait for the current turn to finish.",
+  "@secretMigrationWaitForTurn": {
+    "description": "Подсказка кнопки перезапуска, пока идёт ход."
+  },
+  "secretMigrationPlanFailed": "Planning failed: {errorClass}.",
+  "@secretMigrationPlanFailed": {
+    "description": "Сбой построения плана переноса. Плейсхолдер errorClass — имя типа ошибки, не переводить.",
+    "placeholders": {
+      "errorClass": {
+        "type": "String"
+      }
+    }
+  },
+  "secretMigrationApplyFailed": "Migration failed: {errorClass}.",
+  "@secretMigrationApplyFailed": {
+    "description": "Сбой переноса секретов. Плейсхолдер errorClass — имя типа ошибки, не переводить.",
+    "placeholders": {
+      "errorClass": {
+        "type": "String"
+      }
+    }
+  },
+  "secretMigrationMigrate": "Migrate",
+  "@secretMigrationMigrate": {
+    "description": "Кнопка выполнения переноса секретов в диалоге."
+  },
+  "usageTitle": "This session",
+  "@usageTitle": {
+    "description": "Заголовок панели Usage."
+  },
+  "usageCardInput": "Input",
+  "@usageCardInput": {
+    "description": "Заголовок карточки входных токенов панели Usage."
+  },
+  "usageCardOutput": "Output",
+  "@usageCardOutput": {
+    "description": "Заголовок карточки выходных токенов панели Usage."
+  },
+  "usageCardCost": "Cost",
+  "@usageCardCost": {
+    "description": "Заголовок карточки стоимости панели Usage и строки бюджета хода."
+  },
+  "usageCardTurns": "Turns · steps",
+  "@usageCardTurns": {
+    "description": "Заголовок карточки числа ходов и шагов панели Usage."
+  },
+  "usageDetailCache": "cache read {read} · write {write}",
+  "@usageDetailCache": {
+    "description": "Строка под карточкой входных токенов. Плейсхолдеры — числа в формате ядра клиента, не переводить.",
+    "placeholders": {
+      "read": {
+        "type": "String"
+      },
+      "write": {
+        "type": "String"
+      }
+    }
+  },
+  "usageDetailReasoning": "reasoning {count}",
+  "@usageDetailReasoning": {
+    "description": "Строка под карточкой выходных токенов: токены рассуждения. Плейсхолдер count — число.",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "usageDetailNoUsageYet": "no usage yet",
+  "@usageDetailNoUsageYet": {
+    "description": "Строка под карточкой стоимости пустой сессии."
+  },
+  "usageDetailPriceUnknown": "price unknown",
+  "@usageDetailPriceUnknown": {
+    "description": "Строка под карточкой стоимости, когда цена неизвестна."
+  },
+  "usageDetailAverageSteps": "avg {average} steps per turn",
+  "@usageDetailAverageSteps": {
+    "description": "Строка под карточкой ходов. Плейсхолдер average — десятичное число, не переводить.",
+    "placeholders": {
+      "average": {
+        "type": "String"
+      }
+    }
+  },
+  "usageStepLabel": "step {number} · {title}",
+  "@usageStepLabel": {
+    "description": "Подпись шага в раскрытом ходе. Плейсхолдеры: number — номер шага, title — название шага; не переводить.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      },
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "usageStepReply": "reply",
+  "@usageStepReply": {
+    "description": "Название шага журнала без вызовов инструментов."
+  },
+  "usageStepToolCalls": "{count, plural, one{{count} tool call} other{{count} tool calls}}",
+  "@usageStepToolCalls": {
+    "description": "Название шага журнала, когда вызовы не найдены в ленте.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "usageTurnLabel": "{index} · “{title}”",
+  "@usageTurnLabel": {
+    "description": "Подпись хода в списке «По ходам»: номер хода и заголовок его промпта в кавычках языка. Плейсхолдеры: index — номер хода, title — текст промпта пользователя; не переводить.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "usageTurnSubagents": "subagents · {count, plural, one{{count} run} other{{count} runs}}",
+  "@usageTurnSubagents": {
+    "description": "Подпись хода: сколько запусков субагентов было в ходе.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "usageModelSubagents": "Subagents",
+  "@usageModelSubagents": {
+    "description": "Название строки таблицы «Per model» с расходом субагентов."
+  },
+  "usageModelSummaries": "Summaries",
+  "@usageModelSummaries": {
+    "description": "Название строки таблицы «Per model» с расходом сводок контекста."
+  },
+  "usageModelRuns": "{count, plural, one{{count} run} other{{count} runs}}",
+  "@usageModelRuns": {
+    "description": "Число запусков в строке «Subagents» таблицы «Per model».",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "usageLedgerUpToDate": "Ledger: up to date",
+  "@usageLedgerUpToDate": {
+    "description": "Состояние журнала расхода: актуален."
+  },
+  "usageLedgerRebuilt": "rebuilt from journal",
+  "@usageLedgerRebuilt": {
+    "description": "Состояние журнала расхода: пересобран из журнала сессии."
+  },
+  "usageLedgerInMemory": "in memory",
+  "@usageLedgerInMemory": {
+    "description": "Состояние журнала расхода: только в памяти."
+  },
+  "usageLedgerNotSaved": "not saved",
+  "@usageLedgerNotSaved": {
+    "description": "Состояние журнала расхода: не сохранён."
+  },
+  "usageLedgerRecords": "{count, plural, one{{count} record} other{{count} records}}",
+  "@usageLedgerRecords": {
+    "description": "Число записей журнала расхода в строке состояния.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "usageLedgerReason": "({reason})",
+  "@usageLedgerReason": {
+    "description": "Причина пересборки журнала в скобках. Плейсхолдер reason — значение с провода, не переводить.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "usageLedgerRefreshedHint": "refreshed from the session journal ({reason})",
+  "@usageLedgerRefreshedHint": {
+    "description": "Подсказка строки состояния: штатное обновление кэша журнала. Плейсхолдер reason — значение с провода, не переводить.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "usageNoteLedgerFailed": "Couldn't load usage history.",
+  "@usageNoteLedgerFailed": {
+    "description": "Заметка панели Usage: журнал расхода не загрузился."
+  },
+  "usageNoteNoLedger": "This agent does not provide usage history.",
+  "@usageNoteNoLedger": {
+    "description": "Заметка панели Usage: агент не объявил журнал расхода."
+  },
+  "usageNoteSaveFailed": "Couldn't save the file.",
+  "@usageNoteSaveFailed": {
+    "description": "Заметка панели Usage: файл CSV не записан."
+  },
+  "usageBudgetThisTurn": "This turn",
+  "@usageBudgetThisTurn": {
+    "description": "Заголовок блока бюджета идущего хода."
+  },
+  "usageBudgetLastTurn": "Last turn",
+  "@usageBudgetLastTurn": {
+    "description": "Заголовок блока бюджета завершённого хода."
+  },
+  "usageBudgetSteps": "Steps",
+  "@usageBudgetSteps": {
+    "description": "Строка бюджета хода: шаги."
+  },
+  "usageBudgetTokens": "Tokens",
+  "@usageBudgetTokens": {
+    "description": "Строка бюджета хода: токены."
+  },
+  "usageBudgetTime": "Time",
+  "@usageBudgetTime": {
+    "description": "Строка бюджета хода: время."
+  },
+  "usageBudgetTokensHint": "input + output, including subagents",
+  "@usageBudgetTokensHint": {
+    "description": "Подсказка строки токенов бюджета хода."
+  },
+  "usageBudgetCostNote": "not checked: price unknown",
+  "@usageBudgetCostNote": {
+    "description": "Пометка строки стоимости бюджета, когда цена модели неизвестна."
+  },
+  "usageBudgetFootnote": "When a limit is hit, the turn stops at the next step boundary.",
+  "@usageBudgetFootnote": {
+    "description": "Пояснение под блоком бюджета хода."
+  },
+  "terminalTabTitle": "Terminal {number}",
+  "@terminalTabTitle": {
+    "description": "Заголовок вкладки терминала. Плейсхолдер number — порядковый номер.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "terminalStatusStarting": "Starting",
+  "@terminalStatusStarting": {
+    "description": "Тег вкладки терминала: процесс запускается."
+  },
+  "terminalStatusRunning": "Running",
+  "@terminalStatusRunning": {
+    "description": "Тег вкладки терминала: процесс работает."
+  },
+  "terminalStatusExited": "Exited",
+  "@terminalStatusExited": {
+    "description": "Тег вкладки терминала: процесс вышел, код неизвестен."
+  },
+  "terminalStatusExitedWithCode": "Exited {code}",
+  "@terminalStatusExitedWithCode": {
+    "description": "Тег вкладки терминала: процесс вышел с кодом. Плейсхолдер code — код выхода.",
+    "placeholders": {
+      "code": {
+        "type": "int"
+      }
+    }
+  },
+  "terminalFailureShellNotFound": "Shell not found",
+  "@terminalFailureShellNotFound": {
+    "description": "Тег вкладки терминала: исполняемого файла оболочки нет."
+  },
+  "terminalFailureFolderNotFound": "Folder not found",
+  "@terminalFailureFolderNotFound": {
+    "description": "Тег вкладки терминала: рабочей папки нет."
+  },
+  "terminalFailureUnavailable": "Terminal is unavailable",
+  "@terminalFailureUnavailable": {
+    "description": "Тег вкладки терминала: псевдотерминал не создан."
+  },
+  "terminalDisclosure": "Commands here run as you, outside the agent's approval flow. Output is shown as is and is not redacted for secrets.",
+  "@terminalDisclosure": {
+    "description": "Предупреждение панели терминала: команды идут вне одобрений агента, вывод не очищается от секретов. Метка security (D14): перевод не смягчает смысл."
+  },
+  "terminalLinkTitle": "Open link?",
+  "@terminalLinkTitle": {
+    "description": "Заголовок подтверждения открытия ссылки из вывода терминала. Метка security (D14): перевод не смягчает смысл."
+  },
+  "terminalLinkRefusal": "Only http and https links can be opened.",
+  "@terminalLinkRefusal": {
+    "description": "Отказ для ссылки терминала с другой схемой. http и https — схемы адреса, не переводить. Метка security (D14): перевод не смягчает смысл."
+  },
+  "projectFilesNoFolder": "Select a project or start a session to browse its files.",
+  "@projectFilesNoFolder": {
+    "description": "Сообщение панели Files без папки проекта."
+  },
+  "projectFilesFolderMissing": "The project folder does not exist.",
+  "@projectFilesFolderMissing": {
+    "description": "Сообщение панели Files: папки проекта нет."
+  },
+  "projectFilesFolderUnreadable": "The project folder cannot be read.",
+  "@projectFilesFolderUnreadable": {
+    "description": "Сообщение панели Files: папку проекта не прочитать."
+  },
+  "projectFilesRootOutside": "{root} — outside the project folder",
+  "@projectFilesRootOutside": {
+    "description": "Предупреждение панели Files: корень объявил агент, он вне папки проекта. Плейсхолдер root — путь, не переводить.",
+    "placeholders": {
+      "root": {
+        "type": "String"
+      }
+    }
+  },
+  "projectFilesGitHidden": ".git is never shown",
+  "@projectFilesGitHidden": {
+    "description": "Подпись над деревом панели Files. .git — имя папки, не переводить."
+  },
+  "projectFilesRefresh": "Refresh",
+  "@projectFilesRefresh": {
+    "description": "Кнопка панели Files: перечитать дерево."
+  },
+  "projectFilesSelectFile": "Select a file to preview it.",
+  "@projectFilesSelectFile": {
+    "description": "Пустой предпросмотр панели Files."
+  },
+  "projectFilesFolderReadFailed": "Cannot read this folder.",
+  "@projectFilesFolderReadFailed": {
+    "description": "Строка дерева Files под папкой, содержимое которой не прочиталось."
+  },
+  "projectFilesMore": "… {count} more",
+  "@projectFilesMore": {
+    "description": "Строка дерева Files: сколько записей не показано. Плейсхолдер count — число.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "projectFilesFailureOutsideRoot": "This file is outside the project folder.",
+  "@projectFilesFailureOutsideRoot": {
+    "description": "Причина отказа предпросмотра: файл вне папки проекта."
+  },
+  "projectFilesFailureNotFound": "The file was not found.",
+  "@projectFilesFailureNotFound": {
+    "description": "Причина отказа предпросмотра: файла нет."
+  },
+  "projectFilesFailureUnreadable": "The file cannot be read.",
+  "@projectFilesFailureUnreadable": {
+    "description": "Причина отказа предпросмотра: файл не прочитать."
+  },
+  "projectFilesFailureInvalidPath": "The file path is not valid.",
+  "@projectFilesFailureInvalidPath": {
+    "description": "Причина отказа предпросмотра: путь недопустим."
+  },
+  "projectFilesSizeKilobytes": "{count} KB",
+  "@projectFilesSizeKilobytes": {
+    "description": "Размер файла в килобайтах в предпросмотре. Плейсхолдер count — число.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "projectFilesSizeMegabytes": "{count} MB",
+  "@projectFilesSizeMegabytes": {
+    "description": "Размер файла в мегабайтах в предпросмотре. Плейсхолдер count — число.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsShellPendingApproval": "Agent is waiting for your approval",
+  "@settingsShellPendingApproval": {
+    "description": "InfoBar оболочки настроек: у агента есть запрос одобрения."
+  },
+  "settingsShellBackToSession": "Back to session",
+  "@settingsShellBackToSession": {
+    "description": "Кнопка InfoBar оболочки настроек: вернуться к сессии с запросом."
+  },
+  "workbenchTokenRejected": "The agent rejected the token (HTTP {status}).",
+  "@workbenchTokenRejected": {
+    "description": "Причина отказа подключения: сервер отверг отправленный токен. Плейсхолдер status — HTTP-статус (401 или 403), не переводить. Значения токена в тексте нет. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
+  },
+  "workbenchTokenRequired": "The agent requires a token (HTTP {status}).",
+  "@workbenchTokenRequired": {
+    "description": "Причина отказа подключения: сервер требует токен, а он не был отправлен. Плейсхолдер status — HTTP-статус (401 или 403), не переводить. Значения токена в тексте нет. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
   }
 }

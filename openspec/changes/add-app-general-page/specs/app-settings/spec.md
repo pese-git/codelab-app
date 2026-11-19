@@ -9,7 +9,7 @@
 
 Строка без поведения в текущей сборке НЕ SHALL показываться (SETUP-17). Строки «When I press Enter during a turn», «Sidebar opens on», «Send crash reports» и ссылка «Privacy policy» НЕ SHALL показываться (design.md, D8, D17). Блок, в котором не осталось видимых строк, SHALL быть скрыт вместе с заголовком.
 
-Поиск «Find a setting» SHALL находить «General» по ключевым словам `language`, `budget`, `steps`, `compaction`, `subagent`, `log level`, `startup`, `reopen`, `ignored`, `about`, `version`, `license`, `diagnostics`, а также по их переводам из `app_ru.arb` (spec app-settings «Навигация настроек»).
+Поиск «Find a setting» SHALL находить «General» по ключевым словам `language`, `budget`, `steps`, `compaction`, `subagent`, `log level`, `startup`, `reopen`, `ignored`, `about`, `version`, `license`, `diagnostics` и по русским словам `язык`, `бюджет`, `шаги`, `сжатие`, `субагент`, `уровень журнала`, `запуск`, `открывать`, `игнорируемые`, `о программе`, `версия`, `лицензия`, `диагностика` при любом языке интерфейса. Слова обоих языков хранятся в одном статическом списке ключевых слов страницы, а не в каталогах ARB (spec app-settings «Навигация настроек»; design.md change `add-desktop-localization`, D5 п. 8).
 
 Все тексты страницы SHALL браться из каталогов ARB `en` и `ru` (spec app-settings «Локализация интерфейса app»). Ключи конфигурации, значения, источники `default`, `user`, `project`, `local`, `config`, `env`, пути и версии SHALL показываться как есть.
 
