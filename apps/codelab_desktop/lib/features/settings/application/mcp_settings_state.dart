@@ -42,86 +42,56 @@ sealed class McpSettingsLoaded extends McpSettingsState {
 
 /// Агент не наш или удалённый: настройки не читаются и не пишутся (SETUP-2).
 final class McpSettingsReadOnly extends McpSettingsLoaded {
-  const McpSettingsReadOnly({
-    this.reason,
-    this.notice = '',
-    this.hint,
-    required super.agentStatus,
-  });
+  const McpSettingsReadOnly({required this.reason, required super.agentStatus});
 
   /// Причина «только чтение»: чей агент (D5, «Уточнение итерации 5»). Текст
-  /// InfoBar строит presentation. Заглушка задачи 5.1c: Cubit пока оставляет
-  /// `null`, [notice] и [hint] остаются до задачи 5.2.
-  final ReadOnlyReason? reason;
-
-  /// Прежний готовый текст InfoBar `mcp-read-only`; удаляется в задаче 5.2.
-  final String notice;
-
-  /// Команды для хоста агента; у стороннего агента `null`.
-  final String? hint;
+  /// InfoBar `mcp-read-only` и команды для хоста строит presentation.
+  final ReadOnlyReason reason;
 
   @override
   McpSettingsReadOnly withAgentStatus(McpAgentStatus status) =>
-      McpSettingsReadOnly(
-        reason: reason,
-        notice: notice,
-        hint: hint,
-        agentStatus: status,
-      );
+      McpSettingsReadOnly(reason: reason, agentStatus: status);
 
   @override
-  String toString() => 'McpSettingsReadOnly($notice)';
+  String toString() => 'McpSettingsReadOnly($reason)';
 }
 
 /// Файл не разбирается или нарушает схему: запись недоступна, файл не
 /// перезаписывается (целостность данных, AGENTS.md §2; решение Q26).
 final class McpSettingsUnreadable extends McpSettingsLoaded {
   const McpSettingsUnreadable({
-    required this.problems,
-    this.issues = const [],
+    required this.issues,
     required super.agentStatus,
   });
 
-  /// Прежние проблемы строками (фразы app смешаны с текстами загрузчика);
-  /// удаляется в задаче 5.2.
-  final List<String> problems;
-
-  /// Проблемы закрытого типа: фраза app (переводится) или текст загрузчика как
-  /// есть (D5, «Уточнение итерации 5»). Заглушка задачи 5.1c: пусто.
+  /// Проблемы закрытого типа: фраза app (переводится) или текст загрузчика с
+  /// путём ключа как есть (D5, D6).
   final List<SettingsProblem> issues;
 
   @override
   McpSettingsUnreadable withAgentStatus(McpAgentStatus status) =>
-      McpSettingsUnreadable(
-        problems: problems,
-        issues: issues,
-        agentStatus: status,
-      );
+      McpSettingsUnreadable(issues: issues, agentStatus: status);
 
   @override
-  String toString() => 'McpSettingsUnreadable(${problems.length})';
+  String toString() => 'McpSettingsUnreadable(${issues.length})';
 }
 
 /// Вид баннера итога записи и удаления (`mcp-banner`).
 enum McpBannerKind { saved, conflict, error }
 
-/// Баннер итога: первая строка — итог, остальные — подробности (оставшиеся
-/// секреты, предупреждения записи).
+/// Баннер итога записи и удаления.
+///
+/// Хранит типизированное [message] (имя сервера, секреты с исходом
+/// `SecretCleanup`, отказ моста), а текст строит presentation
+/// (`mcpMessageLines`) на текущем языке (D5, «Уточнение итерации 5»).
 final class McpBanner {
-  const McpBanner(this.kind, this.lines, {this.message});
+  const McpBanner(this.kind, {required this.message});
 
   final McpBannerKind kind;
-
-  /// Прежние готовые строки; удаляются в задаче 5.2.
-  final List<String> lines;
-
-  /// Типизированное сообщение, по которому presentation строит текст (D5,
-  /// «Уточнение итерации 5»). Заглушка задачи 5.1c: Cubit пока оставляет
-  /// `null`.
-  final McpMessage? message;
+  final McpMessage message;
 
   @override
-  String toString() => 'McpBanner(${kind.name}, ${lines.length} lines)';
+  String toString() => 'McpBanner(${kind.name})';
 }
 
 /// Когда агент отклонил конфиг: от этого зависит заголовок InfoBar.
@@ -136,20 +106,16 @@ enum McpRejectedKind {
 /// Содержимое InfoBar `mcp-rejected`: агент отклоняет конфиг (решение Q26).
 final class McpRejectedConfig {
   const McpRejectedConfig({
-    this.kind,
-    this.title = '',
+    required this.kind,
     required this.problems,
     this.editServer,
   });
 
-  /// Вид заголовка (D5, «Уточнение итерации 5»). Заглушка задачи 5.1c: Cubit
-  /// пока оставляет `null`.
-  final McpRejectedKind? kind;
+  /// Вид заголовка: после своей записи или при открытии страницы.
+  final McpRejectedKind kind;
 
-  /// Прежний готовый заголовок; удаляется в задаче 5.2.
-  final String title;
-
-  /// Строки `<путь ключа>: <проблема>`; значений в них нет.
+  /// Строки `<путь ключа>: <проблема>` от ядра агента как есть; значений в них
+  /// нет.
   final List<String> problems;
 
   /// Сервер, на которого указывает путь проблемы (`Edit <server>`).
@@ -210,10 +176,8 @@ final class McpServerRow {
   const McpServerRow({
     required this.name,
     required this.entry,
-    this.sourceLabel = '',
-    this.source,
+    required this.source,
     this.sourceFile,
-    this.noteKind,
     required this.layer,
     required this.enabled,
     required this.canToggle,
@@ -221,7 +185,7 @@ final class McpServerRow {
     required this.canRemove,
     required this.canDisableHere,
     required this.canEnableHere,
-    this.note,
+    this.noteKind,
     this.draft,
   });
 
@@ -230,19 +194,12 @@ final class McpServerRow {
   /// Вид из моста: тип, цель, значения `args`/`env`/`headers` уже очищены.
   final McpServerEntryView entry;
 
-  /// Прежняя готовая подпись источника; удаляется в задаче 5.2.
-  final String sourceLabel;
-
   /// Вид источника: подпись `user`, `this project` или `defined in <file>`
-  /// строит presentation (D7). Заглушка задачи 5.1c: Cubit пока оставляет
-  /// `null`.
-  final ConfigSourceKind? source;
+  /// строит presentation (D7).
+  final ConfigSourceKind source;
 
   /// Путь файла с `~` вместо домашнего каталога для `defined in <file>`.
   final String? sourceFile;
-
-  /// Вид пояснения вместо готового [note]; `null` — пояснения нет.
-  final McpRowNoteKind? noteKind;
 
   /// Слой сервера: показывает неизменяемая цель «Save to» (Q27).
   final ConfigLayer layer;
@@ -262,8 +219,9 @@ final class McpServerRow {
   /// `build()` (AGENTS.md §15).
   final McpServerDraft? draft;
 
-  /// Пояснение строки слоя 3 и `disabled here` вместо редактора (Q25 (5)).
-  final String? note;
+  /// Вид пояснения строки слоя 3 и `disabled here` вместо редактора (Q25 (5));
+  /// текст строит presentation.
+  final McpRowNoteKind? noteKind;
 
   @override
   String toString() => 'McpServerRow($name)';
@@ -339,42 +297,31 @@ final class McpAgentStatusUnavailable extends McpAgentStatus {
   String toString() => 'McpAgentStatusUnavailable';
 }
 
-/// Строка таблицы встроенного агента.
+/// Строка таблицы встроенного агента: данные, а не готовые ячейки.
+///
+/// Почему: подпись состояния (`failed · retry in 24 s`) зависит от языка, а
+/// прочерк при `null` рисует presentation (D5, D8).
 final class McpStatusRow {
   const McpStatusRow({
     required this.name,
     required this.state,
-    this.stateLabel = '',
     this.retryIn,
-    this.tools = '',
     this.toolCount,
-    this.lastError = '',
     this.errorText,
     required this.canReconnect,
   });
 
-  /// Через сколько агент повторит подключение (`failed`); `null` — не ждёт.
-  /// Подпись `failed · retry in 24 s` строит presentation (D5, D8).
-  final Duration? retryIn;
-
-  /// Число инструментов; `null` — не определено (у `disabled`), прочерк рисует
-  /// presentation. Заглушка задачи 5.1c: Cubit пока оставляет `null`.
-  final int? toolCount;
-
-  /// Текст последней ошибки сервера как есть; `null` — ошибки нет.
-  final String? errorText;
-
   final String name;
   final McpServerState state;
 
-  /// Прежняя готовая подпись состояния; удаляется в задаче 5.2.
-  final String stateLabel;
+  /// Через сколько агент повторит подключение (`failed`); `null` — не ждёт.
+  final Duration? retryIn;
 
-  /// Прежнее число строкой или `—`; удаляется в задаче 5.2 вместе с [toolCount].
-  final String tools;
+  /// Число инструментов; `null` — не определено (у `disabled`).
+  final int? toolCount;
 
-  /// Прежняя ошибка или `—`; удаляется в задаче 5.2 вместе с [errorText].
-  final String lastError;
+  /// Причина последней ошибки сервера как есть; `null` — ошибки нет.
+  final String? errorText;
 
   /// У выключенного сервера «Reconnect» нет.
   final bool canReconnect;
@@ -399,14 +346,8 @@ final class McpAgentStatusText extends McpAgentStatus {
     this.text,
     this.sending = false,
     required this.canSend,
-    this.notice,
     this.listFailed = false,
   });
-
-  /// Последний `/mcp list` не завершился: presentation показывает переведённое
-  /// `/mcp list did not complete. Try Refresh again.` над прежним текстом.
-  /// Заглушка задачи 5.1c: Cubit пока оставляет `false`.
-  final bool listFailed;
 
   /// Текст последнего ответа; `null` — ещё не запрашивали.
   final String? text;
@@ -417,8 +358,9 @@ final class McpAgentStatusText extends McpAgentStatus {
   /// Кнопки активны: `Connected`, свободная сессия, пустая очередь.
   final bool canSend;
 
-  /// Прежний готовый текст; удаляется в задаче 5.2.
-  final String? notice;
+  /// Последний `/mcp list` не завершился: presentation показывает переведённое
+  /// `/mcp list did not complete. Try Refresh again.` над прежним текстом.
+  final bool listFailed;
 
   // Текст ответа может быть любым: в строку состояния он не попадает.
   @override

@@ -1976,7 +1976,9 @@ void main() {
           findsOneWidget,
         );
         expect(keyLabel('budget.max_steps'), findsOneWidget);
-        expect(inRow('budget.max_steps', 'user'), findsOneWidget);
+        // Подпись источника — на русском, одной функцией по ConfigSourceKind
+        // (итерация 5, В1); ключ реестра — как есть.
+        expect(inRow('budget.max_steps', 'пользователь'), findsOneWidget);
         expect(inRow('budget.max_steps', 'Общая'), findsOneWidget);
         expect(inRow('budget.max_steps', 'Max steps'), findsNothing);
         expect(inRow('budget.max_tokens', 'Не задано'), findsOneWidget);

@@ -27,7 +27,6 @@ final class AgentDefaultsRow {
   const AgentDefaultsRow({
     required this.field,
     this.refusal,
-    this.overriddenBy,
     this.overriddenByKind,
   });
 
@@ -37,13 +36,10 @@ final class AgentDefaultsRow {
   /// Причина, по которой редактора нет; `null` — строка редактируется.
   final SettingEditRefusal? refusal;
 
-  /// Прежняя готовая подпись (`project` или `local`); удаляется в задаче 5.2.
-  final String? overriddenBy;
-
   /// Вид проектного слоя (`project` или `projectLocal`), из которого пришло
   /// значение; иначе `null`. Подпись `This project overrides it ({source})`
   /// строит страница одной функцией по `ConfigSourceKind` (D7, решение
-  /// пользователя 2026-11-19 В1). Заглушка задачи 5.1c: пока `null`.
+  /// пользователя 2026-11-19 В1).
   final ConfigSourceKind? overriddenByKind;
 }
 
@@ -138,9 +134,10 @@ List<AgentDefaultsGroup> agentDefaultsGroupsOf(
           AgentDefaultsRow(
             field: field,
             refusal: settingEditRefusalOf(field),
-            overriddenBy: switch (field.source?.kind) {
-              ConfigSourceKind.project => 'project',
-              ConfigSourceKind.projectLocal => 'local',
+            overriddenByKind: switch (field.source?.kind) {
+              final kind &&
+                  (ConfigSourceKind.project || ConfigSourceKind.projectLocal) =>
+                kind,
               _ => null,
             },
           ),

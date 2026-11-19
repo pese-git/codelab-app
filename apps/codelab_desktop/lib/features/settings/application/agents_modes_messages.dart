@@ -26,7 +26,6 @@ enum AgentsModesSetting { mode, effort }
 /// предложение. Подпись режима (`ask (edits and commands blocked by plan)`)
 /// строит presentation по [blocksWriteAndExec].
 ///
-/// Заглушка задачи 5.1c: типы нужны тестам; Cubit их пока не создаёт.
 sealed class AgentsModesMessage {
   const AgentsModesMessage();
 }
@@ -113,6 +112,12 @@ final class AgentsBypassStaleMessage extends AgentsModesMessage {
 /// `The config changed on disk, so nothing was saved. …`
 final class AgentsConflictMessage extends AgentsModesMessage {
   const AgentsConflictMessage();
+}
+
+/// `Cannot save: the target config file is not available.` — слой цели не
+/// прочитан, запись не начиналась.
+final class AgentsTargetUnavailableMessage extends AgentsModesMessage {
+  const AgentsTargetUnavailableMessage();
 }
 
 /// `The config was not saved.`

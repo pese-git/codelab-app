@@ -2050,7 +2050,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String settingsGeneralRefusalExternal(String source) {
-    return 'Задано источником $source; изменить здесь нельзя.';
+    return 'Источник значения: $source; изменить здесь нельзя.';
   }
 
   @override
@@ -2089,7 +2089,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String settingsGeneralSavedOverridden(String source, String effective) {
-    return 'Сохранено для всех проектов; $source переопределяет значение: агент использует $effective.';
+    return 'Сохранено для всех проектов; значение переопределено (источник: $source), агент использует $effective.';
   }
 
   @override
@@ -2237,4 +2237,973 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsGeneralAboutThirdPartyCaption =>
       'Записи реестра сторонних уведомлений CodeLab в том виде, в каком они хранятся в репозитории.';
+
+  @override
+  String get mcpAddServer => 'Добавить сервер';
+
+  @override
+  String mcpServerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count сервера',
+      many: '$count серверов',
+      few: '$count сервера',
+      one: '$count сервер',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get mcpCompositionCaption =>
+      'Состав из конфигурации · состояние агента ниже';
+
+  @override
+  String get mcpEmpty => 'MCP-серверов пока нет.';
+
+  @override
+  String get mcpNewServer => 'Новый сервер';
+
+  @override
+  String mcpRemoveTitle(String name) {
+    return 'Удалить «$name»?';
+  }
+
+  @override
+  String get mcpRemoveBody => 'Сервер удаляется из файла конфигурации.';
+
+  @override
+  String get mcpRemoveSecretsIntro =>
+      'Эти секреты из хранилища будут удалены, если ими больше никто не пользуется:';
+
+  @override
+  String get mcpReconnect => 'Переподключить';
+
+  @override
+  String get mcpReloadAll => 'Переподключить все';
+
+  @override
+  String get mcpRefresh => 'Обновить';
+
+  @override
+  String get mcpDisableHere => 'Отключить здесь';
+
+  @override
+  String get mcpEnableHere => 'Включить здесь';
+
+  @override
+  String get mcpOn => 'Вкл';
+
+  @override
+  String get mcpOff => 'Выкл';
+
+  @override
+  String mcpNoteProjectFile(String name) {
+    return 'Сервер «$name» задан в файле проекта: здесь его нельзя изменить или удалить; «Отключить здесь» записывает enabled: false в .codelab/config.local.yaml.';
+  }
+
+  @override
+  String mcpNoteDisabledHere(String name) {
+    return 'Сервер «$name» отключён в .codelab/config.local.yaml. «Включить здесь» снимает это переопределение.';
+  }
+
+  @override
+  String get mcpFieldName => 'Имя';
+
+  @override
+  String get mcpFieldType => 'Тип';
+
+  @override
+  String get mcpFieldCommand => 'Команда';
+
+  @override
+  String get mcpFieldArguments => 'Аргументы';
+
+  @override
+  String get mcpFieldUrl => 'URL';
+
+  @override
+  String get mcpFieldHeaders => 'Заголовки';
+
+  @override
+  String get mcpFieldEnvironment => 'Окружение';
+
+  @override
+  String get mcpFieldSaveTo => 'Куда сохранить';
+
+  @override
+  String get mcpArgumentsNote => 'Один аргумент на строку.';
+
+  @override
+  String get mcpAddHeader => '+ Добавить заголовок';
+
+  @override
+  String get mcpAddVariable => '+ Добавить переменную';
+
+  @override
+  String get mcpMoveNote =>
+      'Чтобы перенести сервер в другой файл, удалите его и добавьте снова.';
+
+  @override
+  String get mcpTargetUser => 'Пользовательская конфигурация';
+
+  @override
+  String get mcpTargetProject => 'Только этот проект';
+
+  @override
+  String get mcpValueSecretPlaceholder => 'Значение секрета';
+
+  @override
+  String get mcpValueStored => 'сохранён';
+
+  @override
+  String get mcpValuePlaceholder => 'Значение';
+
+  @override
+  String get mcpHiddenHint => 'Скрыто — оставьте пустым, чтобы не менять';
+
+  @override
+  String mcpSecretStoredIn(String backend) {
+    return 'Секрет — хранится в $backend';
+  }
+
+  @override
+  String mcpSecretStoredInAs(String backend, String name) {
+    return 'Секрет — хранится в $backend как «$name»';
+  }
+
+  @override
+  String get mcpStoreReadOnly => 'Хранилище секретов только для чтения.';
+
+  @override
+  String get mcpReplaceTitle => 'Секрет с таким именем уже есть в хранилище';
+
+  @override
+  String get mcpReplaceNewValue =>
+      'Новое значение заменит секрет у каждого сервера, который на него ссылается.';
+
+  @override
+  String get mcpReplaceRunning =>
+      'Работающий агент сохраняет прежнее значение, пока сервер не переподключится.';
+
+  @override
+  String get mcpReplaceConfirm => 'Заменить';
+
+  @override
+  String get mcpReplaceKeep => 'Оставить';
+
+  @override
+  String get mcpProblemNameInvalid =>
+      'Используйте имя без пробелов и символов «[», «]», «\"».';
+
+  @override
+  String get mcpProblemRenameNotAllowed =>
+      'Чтобы переименовать сервер, удалите его и добавьте снова.';
+
+  @override
+  String get mcpProblemNameTaken => 'Сервер с таким именем уже есть.';
+
+  @override
+  String get mcpProblemCommandEmpty => 'Введите команду.';
+
+  @override
+  String get mcpProblemUrlInvalid => 'Введите URL http или https.';
+
+  @override
+  String get mcpProblemUrlHasUserinfo =>
+      'Уберите имя пользователя и пароль из URL.';
+
+  @override
+  String mcpProblemKeyHasSpaces(String key) {
+    return 'Уберите пробелы вокруг имени $key.';
+  }
+
+  @override
+  String mcpProblemKeyDuplicate(String key) {
+    return 'Два значения названы $key.';
+  }
+
+  @override
+  String get mcpProblemKeyEmpty => 'Введите имя для каждого значения.';
+
+  @override
+  String mcpProblemSecretValueEmpty(String key) {
+    return 'Введите значение секрета для $key.';
+  }
+
+  @override
+  String mcpProblemSecretNameCollision(String key) {
+    return 'Два значения секрета получают одно имя в хранилище; переименуйте $key.';
+  }
+
+  @override
+  String mcpBannerSaved(String server) {
+    return 'Сервер «$server» сохранён.';
+  }
+
+  @override
+  String mcpBannerSavedRestart(String server) {
+    return 'Сервер «$server» сохранён. Он запустится после «Перезапустить агента» (Настройки › Подключение).';
+  }
+
+  @override
+  String mcpBannerEnabledRestart(String server) {
+    return 'Сервер «$server» включён. Он запустится после «Перезапустить агента» (Настройки › Подключение).';
+  }
+
+  @override
+  String mcpBannerRemoved(String server) {
+    return 'Сервер «$server» удалён.';
+  }
+
+  @override
+  String mcpSecretKept(String name) {
+    return 'Секрет «$name» оставлен: он создан не этой страницей.';
+  }
+
+  @override
+  String mcpSecretStillUsed(String name) {
+    return 'Секрет «$name» оставлен: его ещё используют другие настройки.';
+  }
+
+  @override
+  String mcpSecretDeleteFailed(String name) {
+    return 'Не удалось удалить секрет «$name». Удалите его командой: codelab secret delete $name';
+  }
+
+  @override
+  String mcpSecretNotStored(String reason) {
+    return 'Секрет не сохранён, поэтому ничего не записано: $reason';
+  }
+
+  @override
+  String mcpSecretNotRestored(String name) {
+    return 'Сохранённое значение секрета «$name» уже заменено и не может быть восстановлено.';
+  }
+
+  @override
+  String get mcpRefusalChanged =>
+      'Настройки MCP изменились. Проверьте страницу и повторите.';
+
+  @override
+  String get mcpRefusalNotEditable =>
+      'Этот сервер задан в файле только для чтения. Измените его там.';
+
+  @override
+  String get mcpRefusalNotProject =>
+      'Здесь можно отключить только сервер из файла проекта.';
+
+  @override
+  String get mcpRefusalNoProjectTarget =>
+      'Папка проекта неизвестна, поэтому в .codelab/config.local.yaml ничего записать нельзя.';
+
+  @override
+  String get mcpFailSettingsChanged =>
+      'Настройки MCP-серверов изменились. Проверьте страницу и повторите.';
+
+  @override
+  String get mcpFailSecretStore =>
+      'Хранилище секретов не удалось прочитать, поэтому ничего не записано.';
+
+  @override
+  String get mcpFailChange => 'Изменение не сохранено из-за ошибки.';
+
+  @override
+  String get mcpFailConflict =>
+      'Файл конфигурации изменился на диске, поэтому ничего не записано. Страница перечитана; проверьте её и повторите.';
+
+  @override
+  String mcpFailRejected(String issues) {
+    return 'Конфигурация не сохранена: $issues';
+  }
+
+  @override
+  String get mcpFailConfig => 'Конфигурация не сохранена из-за ошибки.';
+
+  @override
+  String get mcpRejectedAfterSave =>
+      'Сохранено, но агент отклонил новую конфигурацию';
+
+  @override
+  String get mcpRejectedOnOpen => 'Агент отклоняет текущую конфигурацию';
+
+  @override
+  String get mcpConfigInvalid => 'Конфигурация: недействительна';
+
+  @override
+  String get mcpKeepsRunning =>
+      'Пока это не исправлено, агент продолжает работать на прежней конфигурации.';
+
+  @override
+  String mcpEditServer(String server) {
+    return 'Изменить «$server»';
+  }
+
+  @override
+  String get mcpStatusTitle => 'Состояние агента';
+
+  @override
+  String get mcpColServer => 'Сервер';
+
+  @override
+  String get mcpColState => 'Состояние';
+
+  @override
+  String get mcpColTools => 'Инструменты';
+
+  @override
+  String get mcpColLastError => 'Последняя ошибка';
+
+  @override
+  String get mcpStateConnecting => 'подключается';
+
+  @override
+  String get mcpStateConnected => 'подключён';
+
+  @override
+  String get mcpStateDisabled => 'отключён';
+
+  @override
+  String get mcpStateFailed => 'сбой';
+
+  @override
+  String mcpStateFailedRetry(String seconds) {
+    return 'сбой · повтор через $seconds с';
+  }
+
+  @override
+  String get mcpStatusUnavailable => 'Откройте сессию, чтобы увидеть состояние';
+
+  @override
+  String mcpStatusLive(String time) {
+    return 'Текущие данные встроенного агента · $time';
+  }
+
+  @override
+  String get mcpStatusFooter =>
+      'От встроенного агента. Для stdio- и удалённого агента панель показывает ответ /mcp list текстом.';
+
+  @override
+  String get mcpListFailed =>
+      'Команда /mcp list не завершилась. Нажмите «Обновить» ещё раз.';
+
+  @override
+  String get configSourceDefault => 'по умолчанию';
+
+  @override
+  String get configSourceUser => 'пользователь';
+
+  @override
+  String get configSourceProject => 'проект';
+
+  @override
+  String get configSourceLocal => 'локально';
+
+  @override
+  String get configSourceFile => 'файл';
+
+  @override
+  String get configSourceConfig => 'файл';
+
+  @override
+  String get configSourceEnv => 'окружение';
+
+  @override
+  String get mcpSourceThisProject => 'этот проект';
+
+  @override
+  String mcpSourceDefinedIn(String file) {
+    return 'определён в $file';
+  }
+
+  @override
+  String get agentsSaveToTitle => 'Куда сохранить';
+
+  @override
+  String get agentsSaveToDescription =>
+      'Одна цель для режима и уровня рассуждения.';
+
+  @override
+  String get agentsTargetAll => 'Все проекты';
+
+  @override
+  String get agentsTargetProject => 'Только этот проект';
+
+  @override
+  String get agentsModeSection => 'Режим разрешений по умолчанию';
+
+  @override
+  String get agentsModeCaption =>
+      'Новые сессии запускаются в нём после «Перезапустить агента»; для одной сессии измените его в поле ввода.';
+
+  @override
+  String agentsModeEffective(String mode) {
+    return 'Действует: $mode';
+  }
+
+  @override
+  String agentsModeSource(String source) {
+    return 'Источник: $source';
+  }
+
+  @override
+  String agentsModeBlocked(String mode) {
+    return '$mode (правки и команды запрещены режимом plan)';
+  }
+
+  @override
+  String get agentsAutopilotHint =>
+      'Только как флаг запуска агента (codelab-agent serve --permission-mode autopilot); в конфиге не сохраняется никогда.';
+
+  @override
+  String agentsModeNarrowed(String mode) {
+    return 'Этот проект недоверенный, поэтому его конфигурация может только ужесточить режим. Новые сессии здесь используют $mode.';
+  }
+
+  @override
+  String agentsEffortTitle(String source) {
+    return 'Уровень рассуждения · $source';
+  }
+
+  @override
+  String get agentsEffortSection => 'Уровень рассуждения по умолчанию';
+
+  @override
+  String get agentsEffortDescription =>
+      'Передаётся как опция сессии, только если модель поддерживает рассуждение; для одной сессии измените его в поле ввода.';
+
+  @override
+  String get agentsBypassTitle => 'Использовать bypass для новых сессий?';
+
+  @override
+  String get agentsBypassBody =>
+      'Запрос подтверждения остаётся только для критичных команд, изменений конфигурации агента и сетевых инструментов. Остальные команды выполняются без запроса и тоже могут выходить в сеть. Используйте bypass только в одноразовой копии проекта.';
+
+  @override
+  String get agentsBypassConfirm => 'Использовать bypass';
+
+  @override
+  String agentsBannerSaved(String value, String when) {
+    String _temp0 = intl.Intl.selectLogic(when, {
+      'now': 'Сохранено. Новые сессии используют $value.',
+      'afterRestart':
+          'Сохранено. Новые сессии будут использовать $value после «Перезапустить агента».',
+      'whenAgentStarts':
+          'Сохранено. Новые сессии будут использовать $value при запуске агента.',
+      'other': 'Сохранено. Новые сессии используют $value.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String agentsBannerOverridden(
+    String target,
+    String source,
+    String value,
+    String when,
+  ) {
+    String _temp0 = intl.Intl.selectLogic(when, {
+      'now':
+          'Сохранено: $target; значение переопределено (источник: $source), новые сессии используют $value.',
+      'afterRestart':
+          'Сохранено: $target; значение переопределено (источник: $source), новые сессии будут использовать $value после «Перезапустить агента».',
+      'whenAgentStarts':
+          'Сохранено: $target; значение переопределено (источник: $source), новые сессии будут использовать $value при запуске агента.',
+      'other':
+          'Сохранено: $target; значение переопределено (источник: $source), новые сессии используют $value.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String agentsBannerNarrowed(String target, String value, String when) {
+    String _temp0 = intl.Intl.selectLogic(when, {
+      'now':
+          'Сохранено: $target; режим сужен недоверенным проектом, новые сессии используют $value.',
+      'afterRestart':
+          'Сохранено: $target; режим сужен недоверенным проектом, новые сессии будут использовать $value после «Перезапустить агента».',
+      'whenAgentStarts':
+          'Сохранено: $target; режим сужен недоверенным проектом, новые сессии будут использовать $value при запуске агента.',
+      'other':
+          'Сохранено: $target; режим сужен недоверенным проектом, новые сессии используют $value.',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String agentsBannerSavedOnly(String target) {
+    return 'Сохранено: $target.';
+  }
+
+  @override
+  String get agentsBannerBypassStale =>
+      'Настройки изменились, пока диалог был открыт; bypass не сохранён.';
+
+  @override
+  String get agentsBannerConflict =>
+      'Файл конфигурации изменился на диске, поэтому ничего не записано. Страница перечитана; проверьте её и повторите.';
+
+  @override
+  String get agentsBannerNotSaved => 'Конфигурация не сохранена.';
+
+  @override
+  String get agentsBannerTargetUnavailable =>
+      'Не удалось сохранить: целевой файл конфигурации недоступен.';
+
+  @override
+  String get agentsReadOnlyHint =>
+      'Измените режимы и агентов на том хосте: codelab config set, .codelab/agents.';
+
+  @override
+  String agentsReadOnlyManaged(String agent) {
+    return 'Настройками агента управляет $agent.';
+  }
+
+  @override
+  String get agentsDefinitionsSection => 'Определения агентов';
+
+  @override
+  String get agentsDefinitionsCaption =>
+      'Определения читаются при создании сессии; для одной сессии выберите определение в меню агента в поле ввода.';
+
+  @override
+  String get agentsOpenFolder => 'Открыть папку';
+
+  @override
+  String agentsOpenUserFolder(String folder) {
+    return 'Определения пользователя ($folder)';
+  }
+
+  @override
+  String get agentsOpenProjectFolder => 'Этот проект (.codelab/agents)';
+
+  @override
+  String get agentsOpenProjectMissing =>
+      'Создайте .codelab/agents в проекте, чтобы добавить определения.';
+
+  @override
+  String get agentsReload => 'Перечитать';
+
+  @override
+  String get agentsColName => 'Имя';
+
+  @override
+  String get agentsColDescription => 'Описание';
+
+  @override
+  String get agentsColSource => 'Источник';
+
+  @override
+  String get agentsColAvailableIn => 'Доступен в';
+
+  @override
+  String get agentsColTools => 'Инструменты';
+
+  @override
+  String get agentsColModel => 'Модель';
+
+  @override
+  String get agentsColStatus => 'Статус';
+
+  @override
+  String get agentsColPath => 'Путь';
+
+  @override
+  String get agentsColMessage => 'Сообщение';
+
+  @override
+  String get agentsBuiltIn => 'встроенный';
+
+  @override
+  String get agentsAllTools => 'все';
+
+  @override
+  String get agentsSessionModel => 'модель сессии';
+
+  @override
+  String get agentsStatusAvailable => 'Доступно';
+
+  @override
+  String get agentsStatusOverridden => 'Переопределено';
+
+  @override
+  String agentsStatusOverriddenBy(String path) {
+    return 'Переопределено: $path';
+  }
+
+  @override
+  String get agentsStatusModelNotConfigured => 'Модель не настроена';
+
+  @override
+  String get agentsStatusError => 'Ошибка';
+
+  @override
+  String agentsStatusErrorLine(int line) {
+    return 'Ошибка · строка $line';
+  }
+
+  @override
+  String get agentsStatusDuplicate => 'Не загружено: повторяющееся имя';
+
+  @override
+  String get agentsStatusShadowed => 'Перекрыто проектом';
+
+  @override
+  String get agentsStatusSubagentsOff => 'Субагенты отключены';
+
+  @override
+  String get agentsScopeSession => 'сессия';
+
+  @override
+  String get agentsScopeSubagent => 'субагент';
+
+  @override
+  String get agentsScopeBoth => 'сессия и субагент';
+
+  @override
+  String get agentsErrorTitle => 'Не удалось загрузить определение';
+
+  @override
+  String agentsErrorTitleLine(int line) {
+    return 'Не удалось загрузить определение · строка $line';
+  }
+
+  @override
+  String get agentsUntrustedTitle => 'Определения проекта не читаются';
+
+  @override
+  String agentsUntrustedBody(String project) {
+    return 'Определения в $project/.codelab/agents не читаются: проект недоверенный.';
+  }
+
+  @override
+  String get agentsUntrustedBodyNoPath =>
+      'Определения проекта в .codelab/agents не читаются: проект недоверенный.';
+
+  @override
+  String get agentsTimedOut => 'Определения агентов не прочитаны за 5 с.';
+
+  @override
+  String get agentsFailed => 'Не удалось прочитать определения агентов.';
+
+  @override
+  String get agentsOpenFailedTitle => 'Не удалось открыть папку';
+
+  @override
+  String agentsOpenFailedBody(String label) {
+    return 'Не удалось открыть $label.';
+  }
+
+  @override
+  String skillsOpenCodelabTooltipHome(String home) {
+    return 'Открыть домашнюю папку CodeLab: $home';
+  }
+
+  @override
+  String get skillsOpenCodelabTooltipDefault =>
+      'Открыть домашнюю папку CodeLab';
+
+  @override
+  String skillsOpenCodelabTooltip(String folder) {
+    return 'Открыть $folder';
+  }
+
+  @override
+  String skillsOpenCodelabTooltipOr(String folder, String home) {
+    return 'Открыть $folder или $home, если её нет';
+  }
+
+  @override
+  String get skillsOpenCodelabButton => 'Открыть папку .codelab';
+
+  @override
+  String get skillsReload => 'Перечитать';
+
+  @override
+  String get skillsNoFolder =>
+      'Откройте папку проекта, чтобы увидеть файлы контекста, навыки и шаблоны промптов, которые агент использует в ней.';
+
+  @override
+  String get skillsReadOnlyHint =>
+      'Навыки, файлы контекста и шаблоны промптов читаются на том хосте: codelab-agent config check.';
+
+  @override
+  String skillsReadOnlyManaged(String agent) {
+    return 'Навыками управляет $agent.';
+  }
+
+  @override
+  String get skillsBannerSaved => 'Сохранено';
+
+  @override
+  String get skillsBannerNotSaved => 'Не сохранено';
+
+  @override
+  String get skillsBannerCannotOpen => 'Не удалось открыть папку';
+
+  @override
+  String skillsMsgOpenFailed(String path) {
+    return 'Не удалось открыть $path.';
+  }
+
+  @override
+  String get skillsMsgSaved =>
+      'Сохранено. Новые сессии используют это; у открытых сессий навыки остаются прежними.';
+
+  @override
+  String get skillsMsgConflict =>
+      'Файл конфигурации изменился на диске, поэтому ничего не записано. Страница перечитана; проверьте её и повторите.';
+
+  @override
+  String skillsMsgRejected(String issues) {
+    return 'Конфигурация не сохранена: $issues';
+  }
+
+  @override
+  String get skillsMsgNotSaved => 'Конфигурация не сохранена.';
+
+  @override
+  String skillsRefusalNotEditable(String source) {
+    return 'Задано в $source; измените этот файл.';
+  }
+
+  @override
+  String skillsRefusalDisabledByProject(String source) {
+    return 'Отключено конфигурацией проекта ($source).';
+  }
+
+  @override
+  String skillsRefusalUntrusted(String element) {
+    return 'Сделайте проект доверенным, чтобы читать $element.';
+  }
+
+  @override
+  String get skillsRefusalUntrustedFolder =>
+      'Сделайте проект доверенным, чтобы читать эту папку.';
+
+  @override
+  String get skillsRefusalLayerUnreadable =>
+      'Файл конфигурации этого слоя не читается. Сначала исправьте его.';
+
+  @override
+  String get skillsUntrustedTitle =>
+      'Этого проекта нет в trusted_projects, поэтому агент не читает его навыки и шаблоны промптов. Показаны ваши навыки и файлы AGENTS.md.';
+
+  @override
+  String skillsUntrustedHint(String path) {
+    return 'Доверие задаётся в trusted_projects файла $path.';
+  }
+
+  @override
+  String get skillsSectionContext => 'Файлы контекста';
+
+  @override
+  String get skillsSectionTemplates => 'Шаблоны промптов';
+
+  @override
+  String get skillsSectionSkills => 'Навыки';
+
+  @override
+  String get skillsContextEmpty => 'Для этой папки нет файлов AGENTS.md.';
+
+  @override
+  String get skillsColFile => 'Файл';
+
+  @override
+  String get skillsColSize => 'Размер';
+
+  @override
+  String get skillsColCommand => 'Команда';
+
+  @override
+  String get skillsColSource => 'Источник';
+
+  @override
+  String get skillsColSkill => 'Навык';
+
+  @override
+  String get skillsColInvokeAs => 'Вызов как';
+
+  @override
+  String get skillsColOtherAgents => 'Навыки других агентов';
+
+  @override
+  String get skillsColMessage => 'Сообщение';
+
+  @override
+  String skillsContextTotal(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count файла',
+      many: '$count файлов',
+      few: '$count файла',
+      one: '$count файл',
+    );
+    return '$_temp0 · $size';
+  }
+
+  @override
+  String get skillsContextClaudeAlias =>
+      'используется, потому что в этой папке нет AGENTS.md';
+
+  @override
+  String get skillsContextOmitted => 'не включён (бюджет)';
+
+  @override
+  String skillsContextTruncated(String size) {
+    return 'усечён до $size';
+  }
+
+  @override
+  String get skillsOpen => 'Открыть';
+
+  @override
+  String get skillsTemplatesEmpty => 'Шаблонов промптов нет.';
+
+  @override
+  String get skillsEmpty => 'Навыки не найдены.';
+
+  @override
+  String get skillsSearchOrder =>
+      'Порядок поиска: .codelab/skills, затем .agents/skills от этой папки до корня репозитория; затем \$CODELAB_HOME/skills, ~/.agents/skills; дополнительные папки — последними. Ближайший навык переопределяет дальний.';
+
+  @override
+  String get skillsListFixed =>
+      'Список фиксируется при открытии сессии: новые и изменённые навыки применяются к новым сессиям.';
+
+  @override
+  String get skillsTagCommandOnly => 'Только команда';
+
+  @override
+  String get skillsInvokeModelOnly => 'Только модель';
+
+  @override
+  String skillsToggleLabel(String name) {
+    return 'Включён: $name';
+  }
+
+  @override
+  String get skillsOverridesUser => 'Переопределяет навык пользователя';
+
+  @override
+  String get skillsOverridesProject => 'Переопределяет навык проекта';
+
+  @override
+  String get skillsOverridesExtra =>
+      'Переопределяет навык из дополнительной папки';
+
+  @override
+  String get skillsOverridesOther => 'Переопределяет другой навык';
+
+  @override
+  String skillsExtraRoot(String entry) {
+    return '$entry (дополнительная папка)';
+  }
+
+  @override
+  String get skillsUnknownRoot => '(неизвестная папка)';
+
+  @override
+  String skillsWarningCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count предупреждения',
+      many: '$count предупреждений',
+      few: '$count предупреждения',
+      one: '$count предупреждение',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String skillsConsentRead(String entry) {
+    return 'Читать $entry';
+  }
+
+  @override
+  String skillsConsentFound(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Найдено $count папки навыков.',
+      many: 'Найдено $count папок навыков.',
+      few: 'Найдено $count папки навыков.',
+      one: 'Найдена $count папка навыков.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skillsConsentNotCounted => 'Число папок навыков не подсчитано.';
+
+  @override
+  String get skillsConsentEveryProject =>
+      'Согласие действует во всех доверенных проектах.';
+
+  @override
+  String get skillsConsentAgentsFolder =>
+      'Папка .agents/skills доверенного проекта читается без согласия.';
+
+  @override
+  String get skillsPhaseTimedOutContext =>
+      'Файлы контекста не прочитаны за 5 с.';
+
+  @override
+  String get skillsPhaseTimedOutTemplates =>
+      'Шаблоны промптов не прочитаны за 5 с.';
+
+  @override
+  String get skillsPhaseTimedOutSkills => 'Навыки не прочитаны за 5 с.';
+
+  @override
+  String skillsPhaseFailedContext(String errorType) {
+    return 'Файлы контекста не удалось прочитать ($errorType).';
+  }
+
+  @override
+  String skillsPhaseFailedTemplates(String errorType) {
+    return 'Шаблоны промптов не удалось прочитать ($errorType).';
+  }
+
+  @override
+  String skillsPhaseFailedSkills(String errorType) {
+    return 'Навыки не удалось прочитать ($errorType).';
+  }
+
+  @override
+  String skillsPhaseOff(String source) {
+    return 'Навыки отключены: skills.enabled равно false в $source.';
+  }
+
+  @override
+  String skillsSizeBytes(String size) {
+    return '$size Б';
+  }
+
+  @override
+  String skillsSizeKilobytes(String size) {
+    return '$size КБ';
+  }
+
+  @override
+  String skillsSizeMegabytes(String size) {
+    return '$size МБ';
+  }
+
+  @override
+  String get settingsProblemCannotReadExtensions =>
+      'Не удалось прочитать навыки и расширения этой папки.';
+
+  @override
+  String get agentsErrorFallbackModel =>
+      'Модель этого определения не настроена.';
+
+  @override
+  String get agentsErrorFallbackDuplicate =>
+      'Не загружено: у другого определения то же имя.';
+
+  @override
+  String get agentsErrorFallbackOther => 'Определение не удаётся загрузить.';
 }

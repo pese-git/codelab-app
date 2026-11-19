@@ -17,6 +17,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/platform/local_folder_opener.dart';
+import 'provider_messages.dart' show configIssuesText;
 import 'provider_settings_session.dart';
 import 'skills_settings_state.dart';
 
@@ -127,7 +128,9 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
         'skills_settings.unreadable',
         context: {'error_type': error.runtimeType.toString()},
       );
-      _setUnreadable(const ['Cannot read the agent settings.'], log: false);
+      _setUnreadable(const [
+        AppSettingsProblem(AppSettingsProblemKind.cannotReadSettings),
+      ], log: false);
       return;
     }
     if (_stale(attempt)) {
@@ -136,17 +139,11 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
     switch (_accessOf(profile, folder)) {
       case RemoteReadOnly(:final endpoint):
         _setReadOnly(
-          notice: 'Read-only: this agent runs on ${profileOrigin(endpoint)}.',
-          hint:
-              'Its skills, context files and prompt templates are read on '
-              'that host: codelab-agent config check.',
+          RemoteAgentReadOnly(profileOrigin(endpoint)),
           access: 'remote',
         );
       case NotManaged(:final agentName):
-        _setReadOnly(
-          notice: 'Skills are managed by $agentName.',
-          access: 'not_managed',
-        );
+        _setReadOnly(ForeignAgentReadOnly(agentName), access: 'not_managed');
       case EditableSettings access:
         await _loadEditable(attempt, profile, access, folder);
     }
@@ -177,16 +174,12 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
     };
   }
 
-  void _setReadOnly({
-    required String notice,
-    String? hint,
-    required String access,
-  }) {
+  void _setReadOnly(ReadOnlyReason reason, {required String access}) {
     _profileHome = null;
     _session = null;
     _openable = const {};
     _logger?.debug('skills_settings.read_only', context: {'access': access});
-    _emit(SkillsSettingsReadOnly(notice: notice, hint: hint));
+    _emit(SkillsSettingsReadOnly(reason: reason));
   }
 
   Future<void> _loadEditable(
@@ -199,7 +192,9 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
         ? null
         : access.paths.codelabHome;
     if (_profileHome == null) {
-      _setUnreadable(const ['The CodeLab home folder is not available.']);
+      _setUnreadable(const [
+        AppSettingsProblem(AppSettingsProblemKind.homeUnavailable),
+      ]);
       return;
     }
     if (folder == null) {
@@ -225,8 +220,12 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
           return;
         }
         _setUnreadable([
-          for (final issue in snapshot.issues) issue.toString(),
-          if (snapshot.issues.isEmpty) 'The user config.yaml cannot be read.',
+          for (final issue in snapshot.issues)
+            LoaderSettingsProblem(issue.toString()),
+          if (snapshot.issues.isEmpty)
+            const AppSettingsProblem(
+              AppSettingsProblemKind.userConfigUnreadable,
+            ),
         ], issues: snapshot.issues.length);
         return;
       }
@@ -242,7 +241,7 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
         context: {'error_type': error.runtimeType.toString()},
       );
       _setUnreadable(const [
-        'Cannot read the skills and extensions of this folder.',
+        AppSettingsProblem(AppSettingsProblemKind.cannotReadExtensions),
       ], log: false);
       return;
     }
@@ -267,7 +266,11 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
     );
   }
 
-  void _setUnreadable(List<String> problems, {int? issues, bool log = true}) {
+  void _setUnreadable(
+    List<SettingsProblem> problems, {
+    int? issues,
+    bool log = true,
+  }) {
     _openable = const {};
     if (log) {
       _logger?.warning(
@@ -275,7 +278,7 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
         context: {'issues': issues ?? problems.length},
       );
     }
-    _emit(SkillsSettingsUnreadable(problems: problems));
+    _emit(SkillsSettingsUnreadable(issues: problems));
   }
 
   /// Результат устаревшей загрузки не применяется (D14).
@@ -399,7 +402,10 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
   }) {
     final banner = outcome == FolderOpenOutcome.opened || path == null
         ? null
-        : SkillsBanner(SkillsBannerKind.openFailed, 'Could not open $path.');
+        : SkillsBanner(
+            SkillsBannerKind.openFailed,
+            message: SkillsOpenFailedMessage(path),
+          );
     if (banner != null) {
       // Путь — в баннере для пользователя, в журнале его нет (D10).
       _logger?.warning(
@@ -487,7 +493,7 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
         case SkillsListRefused(:final refusal):
           banner = SkillsBanner(
             SkillsBannerKind.error,
-            skillsRefusalText(refusal, element: element),
+            message: SkillsRefusedMessage(refusal, element: element),
           );
         case SkillsListPlan(:final edits) when edits.isEmpty:
           // Уже так: файл не пишется, баннера и события нет.
@@ -496,26 +502,28 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
           switch (await session.config.apply(base, edits)) {
             case ConfigSaved():
               onSaved(layer);
-              banner = const SkillsBanner(SkillsBannerKind.saved, _savedText);
+              banner = const SkillsBanner(
+                SkillsBannerKind.saved,
+                message: SkillsSavedMessage(),
+              );
             case ConfigConflict():
               _logSaveFailed('conflict');
               banner = const SkillsBanner(
                 SkillsBannerKind.conflict,
-                'The config changed on disk, so nothing was saved. The page '
-                'was reloaded; review it and try again.',
+                message: SkillsConflictMessage(),
               );
             case ConfigRejected(:final issues):
               _logSaveFailed('rejected');
+              // Тексты проверки ядра — аргумент как есть (D6).
               banner = SkillsBanner(
                 SkillsBannerKind.error,
-                'The config was not saved: ${[for (final i in issues) i.key.isEmpty ? i.message : '${i.key}: ${i.message}'].join('; ')}',
+                message: SkillsRejectedMessage(configIssuesText(issues)),
               );
             case ConfigInlineSecret(:final key):
               _logSaveFailed('inline_secret');
               banner = SkillsBanner(
                 SkillsBannerKind.error,
-                'The config was not saved: $key must not hold a literal '
-                'secret.',
+                message: SkillsInlineSecretMessage(key),
               );
           }
       }
@@ -524,7 +532,7 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
       _logSaveFailed(error.runtimeType.toString());
       banner = const SkillsBanner(
         SkillsBannerKind.error,
-        'The config was not saved.',
+        message: SkillsNotSavedMessage(),
       );
     }
     if (changed) {
@@ -545,9 +553,6 @@ class SkillsSettingsCubit extends Cubit<SkillsSettingsState> {
       _emit(current.settled());
     }
   }
-
-  static const _savedText =
-      'Saved. New sessions use it; open sessions keep their skills.';
 
   void _logSaveFailed(String outcome) => _logger?.warning(
     'skills_settings.save_failed',

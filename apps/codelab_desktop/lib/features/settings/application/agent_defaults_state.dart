@@ -83,7 +83,6 @@ final class AgentDefaultsBanner {
     this.kind, {
     this.key,
     this.restart = AgentDefaultsRestart.none,
-    this.overriddenBy,
     this.overriddenByKind,
     this.effective,
     this.problems = const [],
@@ -96,12 +95,8 @@ final class AgentDefaultsBanner {
 
   final AgentDefaultsRestart restart;
 
-  /// Прежняя готовая подпись слоя (`project`, `local`, `env`, `config`);
-  /// удаляется в задаче 5.2.
-  final String? overriddenBy;
-
   /// Вид слоя, перекрывшего запись: подпись строит страница по
-  /// `ConfigSourceKind` (D7, В1). Заглушка задачи 5.1c: пока `null`.
+  /// `ConfigSourceKind` (D7, В1).
   final ConfigSourceKind? overriddenByKind;
 
   /// Действующее значение нового снимка (`SettingFieldView.displayValue`).

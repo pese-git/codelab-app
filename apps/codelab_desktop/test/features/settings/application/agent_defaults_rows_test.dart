@@ -317,7 +317,7 @@ void main() {
 
       for (final row in [fromUser, byDefault]) {
         expect(row.refusal, isNull);
-        expect(row.overriddenBy, isNull);
+        expect(row.overriddenByKind, isNull);
       }
     });
 
@@ -339,7 +339,7 @@ void main() {
       final row = rowOf(_field('budget.max_steps', value: 11, source: env));
 
       expect(row.refusal, isA<ExternalSourceSetting>());
-      expect(row.overriddenBy, isNull);
+      expect(row.overriddenByKind, isNull);
     });
   });
 }
