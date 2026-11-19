@@ -3798,12 +3798,6 @@ abstract class AppLocalizations {
   /// **'Secret — stored in {backend} as {name}'**
   String mcpSecretStoredInAs(String backend, String name);
 
-  /// Предупреждение у таблицы значений, когда хранилище секретов не принимает запись. Метка security (D14): перевод не смягчает смысл.
-  ///
-  /// In en, this message translates to:
-  /// **'The secret store is read-only.'**
-  String get mcpStoreReadOnly;
-
   /// Заголовок вопроса о замене секрета. Метка security (D14): перевод не смягчает смысл.
   ///
   /// In en, this message translates to:

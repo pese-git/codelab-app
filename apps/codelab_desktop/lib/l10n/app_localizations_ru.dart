@@ -2373,9 +2373,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get mcpStoreReadOnly => 'Хранилище секретов только для чтения.';
-
-  @override
   String get mcpReplaceTitle => 'Секрет с таким именем уже есть в хранилище';
 
   @override

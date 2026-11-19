@@ -345,6 +345,8 @@ void main() {
       // 760 px (колонка ~360 pt): переполнения нет; длинные заголовки могут
       // уйти в многоточие с подсказкой кита (D8).
       expect(tester.takeException(), isNull);
+      // Подпись переключателя сервера не рвётся на слоги даже на узкой колонке.
+      expect(tester.getSize(find.text('Вкл')).height, lessThan(26));
       expect(find.text('Сервер'), findsOneWidget);
       expect(find.text('Последняя ошибка'), findsOneWidget);
       // Окно 800 pt (колонка ~400 pt, веса D8): переполнения нет, а подпись

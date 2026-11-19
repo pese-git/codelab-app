@@ -3257,10 +3257,6 @@
       }
     }
   },
-  "mcpStoreReadOnly": "The secret store is read-only.",
-  "@mcpStoreReadOnly": {
-    "description": "Предупреждение у таблицы значений, когда хранилище секретов не принимает запись. Метка security (D14): перевод не смягчает смысл."
-  },
   "mcpReplaceTitle": "A secret with this name is already stored",
   "@mcpReplaceTitle": {
     "description": "Заголовок вопроса о замене секрета. Метка security (D14): перевод не смягчает смысл."

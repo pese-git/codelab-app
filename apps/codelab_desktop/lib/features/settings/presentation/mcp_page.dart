@@ -550,9 +550,16 @@ class _ServerCard extends StatelessWidget {
               onChanged: row.canToggle && !state.saving
                   ? (value) => unawaited(cubit.setEnabled(name, enabled: value))
                   : null,
-              content: SizedBox(
-                width: 24,
-                child: Text(row.enabled ? l10n.mcpOn : l10n.mcpOff),
+              // Подпись по содержимому и без переноса: фиксированные 24 pt рвали
+              // «Вкл» и «Выкл» на слоги; минимальная ширина держит строки
+              // ровными между «Вкл» и «Выкл».
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 36),
+                child: Text(
+                  row.enabled ? l10n.mcpOn : l10n.mcpOff,
+                  maxLines: 1,
+                  softWrap: false,
+                ),
               ),
             ),
           ],
@@ -951,7 +958,7 @@ class _McpEditorState extends State<_McpEditor> {
                   if (!storage.writable) ...[
                     // Заголовок переведён, причина хранилища — как есть (D6).
                     CodeLabFormNote(
-                      l10n.mcpStoreReadOnly,
+                      l10n.secretStoreReadOnly,
                       tone: CodeLabFormNoteTone.warning,
                     ),
                     if (storage.unavailableReason case final reason?)
@@ -1238,15 +1245,19 @@ class _StatusPanel extends StatelessWidget {
             l10n.mcpColTools,
             l10n.mcpColLastError,
           ],
-          // Веса под колонку страницы ~400 pt (окно 800 pt) и полные русские
-          // подписи «Инструменты» и «сбой · повтор через 24 с» без обрезания
-          // (D8, решение пользователя 2026-11-19): из 256 pt (400 минус поля и
-          // колонка действий) выходит около 48 / 48 / 96 / 64 pt: «Инструменты»
-          // (~90 pt реальным шрифтом) помещается целиком. Состояние и ошибка
-          // переносятся, длинные заголовки на узкой колонке уходят в многоточие
-          // с подсказкой кита. Веса одни для en и
-          // ru.
-          columnFlex: const [3, 3, 6, 4],
+          // Веса под колонку страницы ~400 pt (окно 800 pt), D8: из 400 pt
+          // остаётся около 226 pt после полей и колонки действий (150 pt) —
+          // примерно 30 / 60 / 75 / 60 pt. «Состояние», «Инструменты» и слова
+          // «Последняя ошибка» (перенос заголовка) по настоящему шрифту
+          // помещаются целиком; имена серверов и ошибки переносятся. Веса одни
+          // для en и ru. Проверка «целиком» — глазами на macOS: тестовый шрифт
+          // Ahem вдвое шире настоящего.
+          wrapHeaders: true,
+          // Кнопка строки «Переподключить» шире стандартных 120 pt и раньше
+          // обрезалась; колонке действий отдано под неё 150 pt (132 pt не хватило
+          // на несколько пикселей по проверке на macOS).
+          actionWidth: 150,
+          columnFlex: const [2, 4, 5, 4],
           rows: [
             for (final row in rows)
               CodeLabStatusTableRow(

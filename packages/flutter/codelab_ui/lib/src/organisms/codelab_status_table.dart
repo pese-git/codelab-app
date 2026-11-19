@@ -184,6 +184,8 @@ class CodeLabStatusTable extends StatelessWidget {
     required this.rows,
     this.actionsLabel,
     this.columnFlex,
+    this.actionWidth,
+    this.wrapHeaders = false,
     super.key,
   }) : assert(
          columnFlex == null || columnFlex.length == columns.length,
@@ -209,6 +211,23 @@ class CodeLabStatusTable extends StatelessWidget {
   /// веса положительны. Страница «Skills & extensions» задаёт веса так же
   /// (change `add-app-skills-page`, D12).
   final List<int>? columnFlex;
+
+  /// Ширина колонки действий; `null` — 120 pt (190 pt, если в строках есть и
+  /// переключатель, и кнопка).
+  ///
+  /// Почему: подпись кнопки строки на другом языке («Переподключить») длиннее
+  /// английской, и при 120 pt кнопка обрезалась до «Переподклю…». Владелец
+  /// таблицы знает свои подписи и задаёт ширину сам; `0` — у таблицы без
+  /// действий (вся ширина отдаётся колонкам).
+  final double? actionWidth;
+
+  /// Переносить длинный заголовок колонки на вторую строку вместо многоточия.
+  ///
+  /// Почему: на странице ~400 pt русские заголовки («Последняя ошибка»)
+  /// иначе обрезаются; перенос по пробелу сохраняет подпись целиком. По
+  /// умолчанию `false`: заголовок в одну строку с подсказкой (прежнее
+  /// поведение остальных таблиц).
+  final bool wrapHeaders;
 
   static const _actionWidth = 120.0;
   static const _actionWidthWithToggle = 190.0;
@@ -303,9 +322,11 @@ class CodeLabStatusTable extends StatelessWidget {
       return control;
     }
 
-    final actionWidth = rows.any((r) => r.toggle != null && r.action != null)
-        ? _actionWidthWithToggle
-        : _actionWidth;
+    final actionWidth =
+        this.actionWidth ??
+        (rows.any((r) => r.toggle != null && r.action != null)
+            ? _actionWidthWithToggle
+            : _actionWidth);
 
     Widget actionButton(CodeLabStatusTableAction action) => CodeLabButton(
       key: action.key,
@@ -380,8 +401,8 @@ class CodeLabStatusTable extends StatelessWidget {
                   message: title,
                   child: Text(
                     title,
-                    maxLines: 1,
-                    softWrap: false,
+                    maxLines: wrapHeaders ? 2 : 1,
+                    softWrap: wrapHeaders,
                     overflow: TextOverflow.ellipsis,
                     style: mono.copyWith(
                       color: secondary,

@@ -44,6 +44,54 @@ CodeLabStatusTableRow _row(
 );
 
 void main() {
+  group('actionWidth и wrapHeaders (change add-desktop-localization, '
+      'итерация 5)', () {
+    Widget wide({double? actionWidth, bool wrapHeaders = false}) => FluentApp(
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: 600,
+          child: CodeLabStatusTable(
+            columns: _columns,
+            actionWidth: actionWidth,
+            wrapHeaders: wrapHeaders,
+            rows: [_row('github')],
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('actionWidth задаёт ширину колонки действий', (tester) async {
+      await tester.pumpWidget(wide(actionWidth: 240));
+      final tableRight = tester.getTopRight(find.byType(CodeLabStatusTable)).dx;
+      // Колонка действий 240 pt: кнопка стоит правее начала этой колонки.
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('act-github'))).dx,
+        greaterThanOrEqualTo(tableRight - 12 - 240),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('actionWidth: 0 отдаёт всю ширину колонкам', (tester) async {
+      await tester.pumpWidget(wide(actionWidth: 0));
+      final withoutAction = tester.getTopLeft(find.text('STATE')).dx;
+
+      await tester.pumpWidget(wide());
+      final withAction = tester.getTopLeft(find.text('STATE')).dx;
+
+      // Заголовок второй колонки сместился правее: колонки шире.
+      expect(withoutAction, greaterThan(withAction));
+    });
+
+    testWidgets('wrapHeaders переносит длинный заголовок вместо многоточия', (
+      tester,
+    ) async {
+      await tester.pumpWidget(wide(wrapHeaders: true, actionWidth: 340));
+      expect(tester.getSize(find.text('LAST ERROR')).height, greaterThan(24));
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   Future<void> pumpTable(
     WidgetTester tester,
     List<CodeLabStatusTableRow> rows, {
