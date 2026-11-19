@@ -512,6 +512,18 @@
       }
     }
   },
+  "workbenchRestartMessageEmbedded": "Restart the embedded agent? This interrupts {count, plural, one{{count} running session} other{{count} running sessions}}: {sessions}. Queued prompts stay.",
+  "@workbenchRestartMessageEmbedded": {
+    "description": "Текст подтверждения перезапуска, когда перезапускается встроенный агент: отдельная фраза без подстановки подписи профиля. Плейсхолдеры: count — число идущих сессий, sessions — названия сессий через запятую; не переводить.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "sessions": {
+        "type": "String"
+      }
+    }
+  },
   "workbenchInspectorTitle": "Inspector",
   "@workbenchInspectorTitle": {
     "description": "Заголовок панели инспектора в панели Protocol. Содержимое инспектора не переводится."
@@ -1331,6 +1343,10 @@
       }
     }
   },
+  "connectionRestartDescriptionEmbedded": "Reconnects the embedded agent and reloads open sessions. A running turn is interrupted; queued prompts stay.",
+  "@connectionRestartDescriptionEmbedded": {
+    "description": "Описание блока Behavior, когда цель перезапуска — встроенный агент. Отдельная фраза без подстановки подписи профиля: «Встроенный агент» в середине предложения на русском не склоняется и пишется с заглавной."
+  },
   "connectionRestartSubjectWindow": "the profile of this window",
   "@connectionRestartSubjectWindow": {
     "description": "Подлежащее описания перезапуска, пока цели перезапуска ещё нет. Вставляется в connectionRestartDescription."
@@ -1343,6 +1359,10 @@
         "type": "String"
       }
     }
+  },
+  "connectionRestartToUseEmbedded": "Restart the agent to switch to the embedded agent.",
+  "@connectionRestartToUseEmbedded": {
+    "description": "Описание блока Behavior, когда выбран встроенный агент, а работает другой профиль. Отдельная фраза без подстановки подписи профиля."
   },
   "addProfileTitle": "Add connection profile",
   "@addProfileTitle": {
@@ -1483,7 +1503,7 @@
   },
   "addProfileSecretStoreReadOnly": "Secret store {backend} is read-only.",
   "@addProfileSecretStoreReadOnly": {
-    "description": "Причина недоступности варианта «Сохранить новый токен», когда у хранилища нет собственной причины. Плейсхолдер backend — id бэкенда, не переводить.",
+    "description": "Первая фраза под недоступным вариантом «Сохранить новый токен»: хранилище только для чтения; причину, названную хранилищем, показываем под ней как есть. Плейсхолдер backend — id бэкенда, не переводить.",
     "placeholders": {
       "backend": {
         "type": "String"
@@ -1645,7 +1665,7 @@
   },
   "secretStoreReadOnly": "The secret store is read-only.",
   "@secretStoreReadOnly": {
-    "description": "Отказ записи секрета: хранилище только для чтения, а само хранилище причину не назвало. Причину, названную хранилищем, показываем как есть."
+    "description": "Заголовок отказа записи секрета (диалог профиля, шаг ключа мастера провайдера): хранилище только для чтения. Причину и подсказку, названные самим хранилищем, показываем под заголовком как есть. Метка security (D14): перевод не смягчает смысл."
   },
   "addProfileErrorEnvSecretLike": "{key} looks like a secret. Set it in the system environment or reference it from the agent config as {syntax}.",
   "@addProfileErrorEnvSecretLike": {

@@ -677,8 +677,34 @@ void main() {
       await tearDownApp(tester);
     });
 
-    testWidgets('хранилище отказало с причиной: причина как есть (сценарий '
-        '«Текст хранилища секретов не переводится»)', (tester) async {
+    testWidgets('хранилище только для чтения: русская первая фраза, причина '
+        'хранилища под ней как есть', (tester) async {
+      final secrets = FakeProfileSecrets(
+        backend: const ProfileSecretBackend(
+          id: 'env',
+          writable: false,
+          unavailableReason: 'secret store env is read-only. Add config.',
+        ),
+      );
+      await openDialog(tester, locale: const Locale('ru'), secrets: secrets);
+      await toWebSocket(tester);
+
+      expect(
+        find.text('Хранилище секретов env доступно только для чтения.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('secret store env is read-only. Add config.'),
+        findsOneWidget,
+      );
+      await tester.tap(_key('add-profile-cancel'));
+      await tester.pumpAndSettle();
+      await tearDownApp(tester);
+    });
+
+    testWidgets('хранилище отказало с причиной: заголовок на русском, причина '
+        'под ним как есть (сценарий «Текст хранилища секретов не '
+        'переводится»)', (tester) async {
       final secrets = FakeProfileSecrets()
         ..nextWrite = const ReadOnly('secret store keychain is read-only.');
       await openDialog(tester, locale: const Locale('ru'), secrets: secrets);
@@ -693,6 +719,10 @@ void main() {
       await tester.tap(_key('add-profile-save'));
       await tester.pumpAndSettle();
 
+      expect(
+        find.text('Хранилище секретов доступно только для чтения.'),
+        findsOneWidget,
+      );
       expect(find.text('secret store keychain is read-only.'), findsOneWidget);
       await tester.tap(_key('add-profile-cancel'));
       await tester.pumpAndSettle();

@@ -44,6 +44,7 @@ final class AddProfileForm {
     required this.storedSecretsHint,
     required this.newTokenAvailable,
     required this.newTokenHint,
+    this.newTokenDetail,
     required this.touched,
     required this.errors,
     required this.warning,
@@ -80,6 +81,11 @@ final class AddProfileForm {
   /// Подсказка под «Store a new token»: куда сохранится значение или почему
   /// вариант недоступен (D3, D14).
   final String newTokenHint;
+
+  /// Причина недоступности «Store a new token», названная самим хранилищем:
+  /// текст как есть (D6), показывается под [newTokenHint]; `null` — причины
+  /// нет.
+  final String? newTokenDetail;
 
   /// Вариант токена, выбранный в черновике.
   AddProfileTokenKind get tokenKind => switch (draft.token) {
@@ -257,8 +263,8 @@ final class Saved extends AddProfileState {
   final bool useByDefault;
 }
 
-/// Текст отказа записи по типу на языке [l10n] (D5): причину хранилища
-/// секретов показывает как есть, остальное переводит; значений токена и
+/// Заголовок отказа записи по типу на языке [l10n] (D5): всё переводит, текст
+/// хранилища секретов вынесен в [addProfileFailureDetail]; значений токена и
 /// текстов исключений нет. Команда `codelab secret delete` и имя секрета —
 /// плейсхолдеры (D7).
 String addProfileFailureText(
@@ -269,8 +275,17 @@ String addProfileFailureText(
   SecretWriteFailed() => l10n.addProfileFailureSecret,
   OrphanedTokenFailure(:final backendId, :final secretName) =>
     l10n.addProfileFailureOrphanedToken(backendId, secretName),
-  SecretStoreReadOnlyFailure(:final reason) =>
-    reason ?? l10n.secretStoreReadOnly,
+  // Заголовок — всегда из каталога (security: смысл не смягчается), причина
+  // хранилища идёт отдельно как подробность (`addProfileFailureDetail`).
+  SecretStoreReadOnlyFailure() => l10n.secretStoreReadOnly,
+};
+
+/// Подробность отказа: текст, названный самим хранилищем секретов, как есть
+/// (D6: не переводится); `null` — подробности нет. Показывается под
+/// заголовком [addProfileFailureText].
+String? addProfileFailureDetail(AddProfileFailure failure) => switch (failure) {
+  SecretStoreReadOnlyFailure(:final reason) => reason,
+  _ => null,
 };
 
 /// Текст подтверждения `ws://` перед записью: про токен, если он выбран,

@@ -250,6 +250,57 @@ void main() {
     });
   });
 
+  group('secretStoreReadOnly: заголовок каталога, подсказка хранилища — '
+      'подробность (wizardReadOnlyDetail)', () {
+    Future<ChoosingKey> readOnlyKey({String? hint}) async {
+      store.backend = const SecretBackendInfo(
+        id: 'env',
+        writable: false,
+        unavailableReason: 'Secrets are read from the environment.',
+      );
+      session.readOnlyHint = hint;
+      final cubit = await open();
+      await toKeyStep(cubit);
+      cubit.dispatch(KeySubmitted(StoreSecret(SecretValue('v'))));
+      await pumpEventQueue();
+      final key = cubit.state.setup as ChoosingKey;
+      expect(key.errorCode, ProviderSetupErrorCode.secretStoreReadOnly);
+      return key;
+    }
+
+    test('en и ru: заголовок из каталога, подробность — текст хранилища '
+        'как есть', () async {
+      final key = await readOnlyKey(hint: 'Set CODELAB_SECRET_<NAME> instead.');
+
+      expect(wizardErrorText(key, _en), 'The secret store is read-only.');
+      expect(
+        wizardErrorText(key, _ru),
+        'Хранилище секретов доступно только для чтения.',
+      );
+      expect(wizardReadOnlyDetail(key), 'Set CODELAB_SECRET_<NAME> instead.');
+    });
+
+    test('подсказки нет: подробность — причина бэкенда', () async {
+      final key = await readOnlyKey();
+
+      expect(
+        wizardErrorText(key, _ru),
+        'Хранилище секретов доступно только для чтения.',
+      );
+      expect(
+        wizardReadOnlyDetail(key),
+        'Secrets are read from the environment.',
+      );
+    });
+
+    test('бэкенд пишущий: подробности нет', () async {
+      final cubit = await open();
+      await toKeyStep(cubit);
+
+      expect(wizardReadOnlyDetail(cubit.state.setup), isNull);
+    });
+  });
+
   group('дедупликация keyAlreadyStored — по коду', () {
     test(
       'подпись и ошибка строятся из одного сообщения, ошибка скрыта',

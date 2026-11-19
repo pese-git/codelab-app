@@ -1253,7 +1253,7 @@ void main() {
         expect(state.restartTitle, 'Restart agent');
         expect(
           state.restartDescription,
-          startsWith('Reconnects Embedded agent'),
+          startsWith('Reconnects the embedded agent'),
         );
         expect(state.canRestart, isTrue);
         expect(state.showsReadOnlyNotice, isFalse);

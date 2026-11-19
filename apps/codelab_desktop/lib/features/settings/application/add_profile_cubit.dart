@@ -913,12 +913,13 @@ AddProfileForm _composeForm({
         ? l10n.addProfileStoredSecretsHint(backend.id)
         : null,
     newTokenAvailable: backend.writable,
-    // Причина бэкенда (`unavailableReason`) — текст хранилища без типа, как
-    // есть (D6, D7); запасной текст приложения переводится.
+    // Первая фраза — текст приложения (переводится); причина бэкенда
+    // (`unavailableReason`) — текст хранилища без типа, как есть (D6, D7),
+    // отдельным полем под ней.
     newTokenHint: backend.writable
         ? l10n.addProfileNewTokenHint(ownName, backend.id)
-        : (backend.unavailableReason ??
-              l10n.addProfileSecretStoreReadOnly(backend.id)),
+        : l10n.addProfileSecretStoreReadOnly(backend.id),
+    newTokenDetail: backend.writable ? null : backend.unavailableReason,
     touched: touched,
     errors: {
       ...errorTexts,

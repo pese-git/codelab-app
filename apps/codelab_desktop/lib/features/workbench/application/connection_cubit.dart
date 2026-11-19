@@ -103,10 +103,20 @@ final class ProviderSetupNotice {
 /// Как использовать: виджет показывает сообщение по [title] и [sessions] и
 /// возвращает ответ `ConnectionCubit.confirmRestart` / `cancelRestart`.
 final class RestartConfirmation {
-  const RestartConfirmation({required this.title, required this.sessions});
+  const RestartConfirmation({
+    required this.title,
+    required this.sessions,
+    this.embedded = false,
+  });
 
   /// Название профиля, который будет перезапущен.
   final String title;
+
+  /// Перезапускается встроенный агент (`EmbeddedProfile`): диалог берёт для
+  /// него отдельную фразу, а не подставляет [title] в середину предложения
+  /// (на русском «Встроенный агент» посреди фразы выглядит ошибкой).
+  /// Выбор — по типу профиля, не по сравнению строк.
+  final bool embedded;
 
   /// Названия сессий в ходе, ждущих одобрения или отменяемых.
   final List<String> sessions;
@@ -115,10 +125,11 @@ final class RestartConfirmation {
   bool operator ==(Object other) =>
       other is RestartConfirmation &&
       other.title == title &&
+      other.embedded == embedded &&
       _sameList(other.sessions, sessions);
 
   @override
-  int get hashCode => Object.hash(title, Object.hashAll(sessions));
+  int get hashCode => Object.hash(title, embedded, Object.hashAll(sessions));
 
   static bool _sameList(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
@@ -563,6 +574,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         state._copyWith(
           pendingRestart: RestartConfirmation(
             title: localizedProfileTitle(state.profile, _strings.current),
+            embedded: state.profile is EmbeddedProfile,
             sessions: working,
           ),
         ),
@@ -889,6 +901,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         ? null
         : RestartConfirmation(
             title: localizedProfileTitle(state.profile, l10n),
+            embedded: state.profile is EmbeddedProfile,
             sessions: pending.sessions,
           );
     emit(

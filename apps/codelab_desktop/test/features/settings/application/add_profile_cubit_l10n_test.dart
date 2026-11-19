@@ -376,6 +376,7 @@ void main() {
       );
       final cubit = await started(strings);
       expect(_form(cubit).newTokenHint, 'Secret store env is read-only.');
+      expect(_form(cubit).newTokenDetail, isNull);
 
       await switchTo(AppLocalizationsRu());
 
@@ -398,7 +399,14 @@ void main() {
 
       await switchTo(AppLocalizationsRu());
 
-      expect(_form(cubit).newTokenHint, 'OS key stores are not available yet');
+      expect(
+        _form(cubit).newTokenHint,
+        'Хранилище секретов env доступно только для чтения.',
+      );
+      expect(
+        _form(cubit).newTokenDetail,
+        'OS key stores are not available yet',
+      );
     });
 
     test('предупреждение `ws://` с токеном и без токена (security)', () async {

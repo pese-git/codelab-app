@@ -921,7 +921,8 @@ void main() {
 
       final form = formOf(cubit);
       expect(form.newTokenAvailable, isFalse);
-      expect(form.newTokenHint, readOnlyHint);
+      expect(form.newTokenHint, 'Secret store env is read-only.');
+      expect(form.newTokenDetail, readOnlyHint);
       cubit.selectTokenNew();
       expect(formOf(cubit).tokenKind, AddProfileTokenKind.none);
       cubit.selectTokenEnv();
@@ -1108,7 +1109,7 @@ void main() {
         expect(cubit.state, isA<SaveFailed>());
         expect(
           (cubit.state as SaveFailed).message,
-          'Secret store env is read-only.',
+          'The secret store is read-only. Secret store env is read-only.',
         );
         expect(store.saves, 0);
         expect(logger.entries.toString(), isNot(contains(_leak)));
@@ -1378,7 +1379,8 @@ void main() {
           texts
             ..addAll(form.errors.values)
             ..add(form.warning ?? '')
-            ..add(form.newTokenHint);
+            ..add(form.newTokenHint)
+            ..add(form.newTokenDetail ?? '');
         }
         if (state case SaveFailed(:final message)) {
           texts.add(message);

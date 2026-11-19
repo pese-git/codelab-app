@@ -668,6 +668,12 @@ abstract class AppLocalizations {
   /// **'Restart {title}? This interrupts {count, plural, one{{count} running session} other{{count} running sessions}}: {sessions}. Queued prompts stay.'**
   String workbenchRestartMessage(String title, int count, String sessions);
 
+  /// Текст подтверждения перезапуска, когда перезапускается встроенный агент: отдельная фраза без подстановки подписи профиля. Плейсхолдеры: count — число идущих сессий, sessions — названия сессий через запятую; не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart the embedded agent? This interrupts {count, plural, one{{count} running session} other{{count} running sessions}}: {sessions}. Queued prompts stay.'**
+  String workbenchRestartMessageEmbedded(int count, String sessions);
+
   /// Заголовок панели инспектора в панели Protocol. Содержимое инспектора не переводится.
   ///
   /// In en, this message translates to:
@@ -1616,6 +1622,12 @@ abstract class AppLocalizations {
   /// **'Reconnects {subject} and reloads open sessions. A running turn is interrupted; queued prompts stay.'**
   String connectionRestartDescription(String subject);
 
+  /// Описание блока Behavior, когда цель перезапуска — встроенный агент. Отдельная фраза без подстановки подписи профиля: «Встроенный агент» в середине предложения на русском не склоняется и пишется с заглавной.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnects the embedded agent and reloads open sessions. A running turn is interrupted; queued prompts stay.'**
+  String get connectionRestartDescriptionEmbedded;
+
   /// Подлежащее описания перезапуска, пока цели перезапуска ещё нет. Вставляется в connectionRestartDescription.
   ///
   /// In en, this message translates to:
@@ -1627,6 +1639,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Restart {subject} to use it.'**
   String connectionRestartToUse(String subject);
+
+  /// Описание блока Behavior, когда выбран встроенный агент, а работает другой профиль. Отдельная фраза без подстановки подписи профиля.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart the agent to switch to the embedded agent.'**
+  String get connectionRestartToUseEmbedded;
 
   /// Заголовок диалога добавления профиля подключения.
   ///
@@ -1802,7 +1820,7 @@ abstract class AppLocalizations {
   /// **'Saved as {name} in {backend}. The value is never shown again or written to profiles.json.'**
   String addProfileNewTokenHint(String name, String backend);
 
-  /// Причина недоступности варианта «Сохранить новый токен», когда у хранилища нет собственной причины. Плейсхолдер backend — id бэкенда, не переводить.
+  /// Первая фраза под недоступным вариантом «Сохранить новый токен»: хранилище только для чтения; причину, названную хранилищем, показываем под ней как есть. Плейсхолдер backend — id бэкенда, не переводить.
   ///
   /// In en, this message translates to:
   /// **'Secret store {backend} is read-only.'**
@@ -1976,7 +1994,7 @@ abstract class AppLocalizations {
   /// **'The profile was not saved; the token stays in {backend} as {name}. Remove it with codelab secret delete {name}.'**
   String addProfileFailureOrphanedToken(String backend, String name);
 
-  /// Отказ записи секрета: хранилище только для чтения, а само хранилище причину не назвало. Причину, названную хранилищем, показываем как есть.
+  /// Заголовок отказа записи секрета (диалог профиля, шаг ключа мастера провайдера): хранилище только для чтения. Причину и подсказку, названные самим хранилищем, показываем под заголовком как есть. Метка security (D14): перевод не смягчает смысл.
   ///
   /// In en, this message translates to:
   /// **'The secret store is read-only.'**

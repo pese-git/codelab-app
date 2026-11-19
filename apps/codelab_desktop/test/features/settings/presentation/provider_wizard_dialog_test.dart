@@ -260,6 +260,7 @@ void main() {
     await toKeyStep(tester);
 
     expect(_key('provider-wizard-key-store'), findsNothing);
+    expect(find.text('The secret store is read-only.'), findsOneWidget);
     expect(find.text('Set CODELAB_SECRET_<NAME> instead.'), findsOneWidget);
     expect(_key('provider-wizard-key-env'), findsOneWidget);
     expect(_key('provider-wizard-key-none'), findsOneWidget);

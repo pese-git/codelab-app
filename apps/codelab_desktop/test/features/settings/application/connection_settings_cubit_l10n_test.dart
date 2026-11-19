@@ -175,6 +175,31 @@ void main() {
       );
     });
 
+    test('цель — встроенный агент: своя формулировка без подстановки '
+        'подписи', () async {
+      connected(running: embeddedConnectionProfile);
+
+      final state = await loaded(build(fixedEn));
+
+      expect(
+        state.restartDescription,
+        'Reconnects the embedded agent and reloads open sessions. A running '
+        'turn is interrupted; queued prompts stay.',
+      );
+    });
+
+    test('выбран встроенный агент, а работает другой: «Restart the embedded '
+        'agent to use it.»', () async {
+      connected(running: _dev, target: embeddedConnectionProfile);
+
+      final state = await loaded(build(fixedEn));
+
+      expect(
+        state.restartDescription,
+        'Restart the agent to switch to the embedded agent.',
+      );
+    });
+
     test('цель — удалённый агент: «Reconnect» и описание по подписи '
         'профиля', () async {
       connected(running: _remote);
@@ -283,6 +308,37 @@ void main() {
       );
       expect(state.restartHint, 'Запустится, когда вы откроете проект.');
     });
+
+    test('цель — встроенный агент: строчная «встроенного агента» без '
+        'подстановки подписи', () async {
+      connected(running: embeddedConnectionProfile);
+      strings = TestAppStrings(AppLocalizationsRu());
+      final cubit = build(strings);
+
+      final state = await loaded(cubit);
+
+      expect(
+        state.restartDescription,
+        'Переподключает встроенного агента и перезагружает открытые сессии. '
+        'Выполняющийся ход прерывается; промпты в очереди сохраняются.',
+      );
+    });
+
+    test(
+      'выбран встроенный агент, а работает другой: описание на ru',
+      () async {
+        connected(running: _dev, target: embeddedConnectionProfile);
+        strings = TestAppStrings(AppLocalizationsRu());
+        final cubit = build(strings);
+
+        final state = await loaded(cubit);
+
+        expect(
+          state.restartDescription,
+          'Перезапустите агента, чтобы переключиться на встроенного агента.',
+        );
+      },
+    );
 
     test('цели ещё нет: описание называет профиль этого окна', () async {
       strings = TestAppStrings(AppLocalizationsRu());

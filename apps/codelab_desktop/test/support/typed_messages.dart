@@ -17,7 +17,11 @@ extension ProviderBannerText on ProviderBanner {
 }
 
 extension SaveFailedText on SaveFailed {
-  String get message => addProfileFailureText(AppLocalizationsEn(), failure);
+  String get message {
+    final l10n = AppLocalizationsEn();
+    final detail = addProfileFailureDetail(failure);
+    return [addProfileFailureText(l10n, failure), ?detail].join(' ');
+  }
 }
 
 extension ConfirmingPlaintextText on ConfirmingPlaintext {

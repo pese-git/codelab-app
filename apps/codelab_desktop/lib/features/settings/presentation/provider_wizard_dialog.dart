@@ -430,9 +430,8 @@ class _KeyStepState extends State<_KeyStep> {
             setup.existingSecret!,
             setup.backend.id,
           );
-    final readOnly = setup.canStoreSecret
-        ? null
-        : setup.readOnlyHint ?? setup.backend.unavailableReason;
+    final readOnly = !setup.canStoreSecret;
+    final readOnlyDetail = wizardReadOnlyDetail(setup);
     return _Frame(
       state: widget.state,
       bodyKey: const ValueKey('provider-wizard-key'),
@@ -455,12 +454,15 @@ class _KeyStepState extends State<_KeyStep> {
               padding: const EdgeInsets.only(bottom: 8),
               child: CodeLabText(existingNote, role: CodeLabTextRole.caption),
             ),
-          if (readOnly != null)
+          if (readOnly)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
+              // Заголовок из каталога (security), подсказка хранилища — как
+              // есть под ним (D6).
               child: InfoBar(
                 key: const ValueKey('provider-wizard-key-readonly'),
-                title: Text(readOnly),
+                title: Text(l10n.secretStoreReadOnly),
+                content: readOnlyDetail == null ? null : Text(readOnlyDetail),
                 severity: InfoBarSeverity.warning,
                 isLong: true,
               ),
@@ -505,7 +507,8 @@ class _KeyStepState extends State<_KeyStep> {
               controller: _env,
             ),
           ],
-          if (!isKeyAlreadyStoredError(setup))
+          if (!isKeyAlreadyStoredError(setup) &&
+              !isSecretStoreReadOnlyError(setup))
             if (wizardErrorText(setup, l10n) case final error?) _error(error),
           if (!setup.ready)
             const Padding(

@@ -372,6 +372,19 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String workbenchRestartMessageEmbedded(int count, String sessions) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count выполняющейся сессии',
+      many: '$count выполняющихся сессий',
+      few: '$count выполняющиеся сессии',
+      one: '$count выполняющуюся сессию',
+    );
+    return 'Перезапустить встроенного агента? Это прервёт $_temp0: $sessions. Промпты в очереди сохранятся.';
+  }
+
+  @override
   String get workbenchInspectorTitle => 'Инспектор';
 
   @override
@@ -975,12 +988,20 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get connectionRestartDescriptionEmbedded =>
+      'Переподключает встроенного агента и перезагружает открытые сессии. Выполняющийся ход прерывается; промпты в очереди сохраняются.';
+
+  @override
   String get connectionRestartSubjectWindow => 'профиль этого окна';
 
   @override
   String connectionRestartToUse(String subject) {
     return 'Перезапустите агента, чтобы использовать $subject.';
   }
+
+  @override
+  String get connectionRestartToUseEmbedded =>
+      'Перезапустите агента, чтобы переключиться на встроенного агента.';
 
   @override
   String get addProfileTitle => 'Добавить профиль подключения';

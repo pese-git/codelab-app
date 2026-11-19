@@ -369,6 +369,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String workbenchRestartMessageEmbedded(int count, String sessions) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count running sessions',
+      one: '$count running session',
+    );
+    return 'Restart the embedded agent? This interrupts $_temp0: $sessions. Queued prompts stay.';
+  }
+
+  @override
   String get workbenchInspectorTitle => 'Inspector';
 
   @override
@@ -961,12 +972,20 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get connectionRestartDescriptionEmbedded =>
+      'Reconnects the embedded agent and reloads open sessions. A running turn is interrupted; queued prompts stay.';
+
+  @override
   String get connectionRestartSubjectWindow => 'the profile of this window';
 
   @override
   String connectionRestartToUse(String subject) {
     return 'Restart $subject to use it.';
   }
+
+  @override
+  String get connectionRestartToUseEmbedded =>
+      'Restart the agent to switch to the embedded agent.';
 
   @override
   String get addProfileTitle => 'Add connection profile';
