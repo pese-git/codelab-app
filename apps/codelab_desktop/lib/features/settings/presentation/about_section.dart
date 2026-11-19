@@ -13,6 +13,7 @@ import '../../../core/platform/local_folder_opener.dart';
 import '../../../l10n/l10n.dart';
 import '../application/about_diagnostics.dart';
 import '../application/about_ports.dart';
+import '../application/third_party_notices.dart';
 
 /// Раздел «About» страницы «General»: версии, лицензия, папка настроек,
 /// диагностика, сторонние уведомления, заметки о выпуске и папка журналов
@@ -339,6 +340,9 @@ class _ThirdPartyDialog extends StatefulWidget {
 class _ThirdPartyDialogState extends State<_ThirdPartyDialog> {
   late final Future<Map<String, List<String>>> _licenses = _collect();
 
+  /// Записи реестра: выделяются один раз, а не при каждой перестройке диалога.
+  late final String _records = thirdPartyRecordsOf(widget.notices);
+
   /// Лицензии пакетов по имени пакета; сбой реестра не мешает показать
   /// уведомления — остаётся то, что успело собраться.
   Future<Map<String, List<String>>> _collect() async {
@@ -367,7 +371,15 @@ class _ThirdPartyDialogState extends State<_ThirdPartyDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            CodeLabMarkdown(id: 'third-party-notices', text: widget.notices),
+            // Подпись объясняет, почему записи на русском при любом языке
+            // интерфейса: это юридический текст реестра, он не переводится
+            // (D13).
+            CodeLabText(
+              l10n.settingsGeneralAboutThirdPartyCaption,
+              role: CodeLabTextRole.caption,
+            ),
+            const SizedBox(height: 8),
+            CodeLabMarkdown(id: 'third-party-notices', text: _records),
             const SizedBox(height: 16),
             CodeLabText(
               l10n.settingsGeneralAboutPackageLicenses,

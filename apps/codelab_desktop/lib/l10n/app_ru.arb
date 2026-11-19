@@ -291,5 +291,10 @@
   "settingsSearchKeywordsMcpServers": "сервер, инструменты, заголовки",
   "settingsSearchKeywordsAgentsAndModes": "режим, разрешение, план, рассуждение, определение, субагент",
   "settingsSearchKeywordsSkillsAndExtensions": "навык, контекст, шаблон, промпт, расширение",
-  "settingsSearchKeywordsGeneral": "язык, бюджет, шаги, сжатие, субагент, уровень журнала, запуск, открывать, игнорируемые, о программе, версия, лицензия, диагностика"
+  "settingsSearchKeywordsGeneral": "язык, бюджет, шаги, сжатие, субагент, уровень журнала, запуск, открывать, игнорируемые, о программе, версия, лицензия, диагностика",
+  "settingsGeneralGroupBudget": "Бюджет",
+  "settingsGeneralGroupAgent": "Агент",
+  "settingsGeneralGroupSubagents": "Субагенты",
+  "settingsGeneralGroupLogging": "Журнал агента",
+  "settingsGeneralAboutThirdPartyCaption": "Записи реестра сторонних уведомлений CodeLab в том виде, в каком они хранятся в репозитории."
 }

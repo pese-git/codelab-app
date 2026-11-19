@@ -1849,6 +1849,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics'**
   String get settingsSearchKeywordsGeneral;
+
+  /// Подзаголовок группы строк Agent defaults: раздел реестра настроек агента Budget (ключи budget.*). Английский текст равен имени раздела реестра.
+  ///
+  /// In en, this message translates to:
+  /// **'Budget'**
+  String get settingsGeneralGroupBudget;
+
+  /// Подзаголовок группы строк Agent defaults: раздел реестра Agent (compaction.enabled). Английский текст равен имени раздела реестра.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent'**
+  String get settingsGeneralGroupAgent;
+
+  /// Подзаголовок группы строк Agent defaults: раздел реестра Subagents (ключи subagents.*). Английский текст равен имени раздела реестра.
+  ///
+  /// In en, this message translates to:
+  /// **'Subagents'**
+  String get settingsGeneralGroupSubagents;
+
+  /// Подзаголовок группы строк Agent defaults: раздел реестра Logging (logging.level); речь о журнале агента, а не журнале app. Английский текст равен имени раздела реестра.
+  ///
+  /// In en, this message translates to:
+  /// **'Logging'**
+  String get settingsGeneralGroupLogging;
+
+  /// Подпись над записями в диалоге Third-party notices: сами записи показываются как есть, на языке реестра (русский), и не переводятся; подпись объясняет это при любом языке интерфейса. CodeLab — название продукта, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Entries of the CodeLab third-party notices register, as kept in the repository.'**
+  String get settingsGeneralAboutThirdPartyCaption;
 }
 
 class _AppLocalizationsDelegate

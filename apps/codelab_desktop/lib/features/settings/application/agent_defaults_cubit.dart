@@ -364,6 +364,11 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
       );
       return;
     }
+    // Новая правка — в том числе неверный ввод и пустое поле без записи —
+    // снимает баннер прошлой записи (D7): иначе под подсказкой формата висело
+    // бы устаревшее «Saved.». Правка во время `saving` отсеяна выше и баннер
+    // не трогает.
+    _banner = null;
     final ConfigEdit edit;
     if (raw.trim().isEmpty) {
       _fieldErrors.remove(key);

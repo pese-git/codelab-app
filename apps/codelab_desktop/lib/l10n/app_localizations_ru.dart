@@ -1117,4 +1117,20 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsSearchKeywordsGeneral =>
       'язык, бюджет, шаги, сжатие, субагент, уровень журнала, запуск, открывать, игнорируемые, о программе, версия, лицензия, диагностика';
+
+  @override
+  String get settingsGeneralGroupBudget => 'Бюджет';
+
+  @override
+  String get settingsGeneralGroupAgent => 'Агент';
+
+  @override
+  String get settingsGeneralGroupSubagents => 'Субагенты';
+
+  @override
+  String get settingsGeneralGroupLogging => 'Журнал агента';
+
+  @override
+  String get settingsGeneralAboutThirdPartyCaption =>
+      'Записи реестра сторонних уведомлений CodeLab в том виде, в каком они хранятся в репозитории.';
 }

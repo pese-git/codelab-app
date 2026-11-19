@@ -461,6 +461,15 @@ void main() {
 
     Finder row(String k) => key('settings-general-agent-row-$k');
 
+    /// Ключ реестра в строке: набор сегментов (перенос после `.` и `_`) с одной
+    /// семантической меткой `Semantics(label: key)` (D17).
+    Finder keyLabel(String k) => find.descendant(
+      of: row(k),
+      matching: find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.label == k,
+      ),
+    );
+
     /// Текст [text] внутри строки ключа [k].
     Finder inRow(String k, String text) =>
         find.descendant(of: row(k), matching: find.text(text));
@@ -693,7 +702,7 @@ void main() {
 
         const k = 'budget.max_steps';
         expect(inRow(k, 'Max steps'), findsOneWidget);
-        expect(inRow(k, k), findsOneWidget);
+        expect(keyLabel(k), findsOneWidget);
         expect(inRow(k, '80'), findsOneWidget);
         expect(inRow(k, 'user'), findsOneWidget);
         expect(inRow(k, 'shared'), findsOneWidget);
@@ -1785,7 +1794,7 @@ void main() {
           inRow('budget.max_steps', 'Запросов к модели за ход.'),
           findsOneWidget,
         );
-        expect(inRow('budget.max_steps', 'budget.max_steps'), findsOneWidget);
+        expect(keyLabel('budget.max_steps'), findsOneWidget);
         expect(inRow('budget.max_steps', 'user'), findsOneWidget);
         expect(inRow('budget.max_steps', 'Общая'), findsOneWidget);
         expect(inRow('budget.max_steps', 'Max steps'), findsNothing);

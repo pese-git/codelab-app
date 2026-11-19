@@ -264,7 +264,11 @@ class _AgentDefaultsBlock extends StatelessWidget {
             const SizedBox(height: 8),
             if (state.banner case final banner?)
               _Banner(banner: banner, configHome: state.configHome),
-            for (final group in state.groups)
+            for (final group in state.groups) ...[
+              // Подзаголовок раздела реестра: строки `budget.max_steps` и
+              // `subagents.max_steps` называются одинаково, различает их
+              // только группа (D2).
+              _GroupTitle(section: group.section),
               for (final row in group.rows) ...[
                 _AgentRow(
                   key: ValueKey('settings-general-agent-row-${row.field.key}'),
@@ -274,6 +278,7 @@ class _AgentDefaultsBlock extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
               ],
+            ],
           ],
         };
         return Column(
@@ -434,11 +439,7 @@ class _AgentRow extends StatelessWidget {
                   Wrap(
                     spacing: 8,
                     children: [
-                      CodeLabText(
-                        field.key,
-                        role: CodeLabTextRole.mono,
-                        color: secondary,
-                      ),
+                      _KeyText(field.key, color: secondary),
                       CodeLabText(
                         field.sourceName,
                         role: CodeLabTextRole.caption,
@@ -447,11 +448,11 @@ class _AgentRow extends StatelessWidget {
                     ],
                   ),
                   if (description != null)
+                    // Без ограничения строк: на узком окне описание переносится
+                    // целиком, многоточие съедало смысл (D17).
                     CodeLabText(
                       description,
                       role: CodeLabTextRole.caption,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       color: secondary,
                     ),
                   if (row.overriddenBy case final layer?)
@@ -724,11 +725,69 @@ class _StartupSection extends StatelessWidget {
             key: const ValueKey('settings-general-reopen-last-project'),
             title: l10n.settingsGeneralReopenTitle,
             description: l10n.settingsGeneralReopenDescription,
+            // Описание переносится целиком: у обрезанного «Applies at the next
+            // start» терялся смысл строки (D17).
+            descriptionMaxLines: null,
             trailing: ToggleSwitch(
               checked: state.reopenLastProject,
               onChanged: (value) => unawaited(cubit.select(value)),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Подзаголовок группы строк «Agent defaults»: раздел реестра на языке
+/// интерфейса, ключ `settings-general-agent-group-<раздел строчными>` (D2).
+class _GroupTitle extends StatelessWidget {
+  const _GroupTitle({required this.section});
+
+  /// Имя раздела реестра: `Budget`, `Agent`, `Subagents`, `Logging`.
+  final String section;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final title = switch (section) {
+      'Budget' => l10n.settingsGeneralGroupBudget,
+      'Agent' => l10n.settingsGeneralGroupAgent,
+      'Subagents' => l10n.settingsGeneralGroupSubagents,
+      'Logging' => l10n.settingsGeneralGroupLogging,
+      // Раздел без перевода (новый ключ реестра): показывается как есть.
+      _ => section,
+    };
+    return Padding(
+      key: ValueKey('settings-general-agent-group-${section.toLowerCase()}'),
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: CodeLabText(title, role: CodeLabTextRole.caption),
+    );
+  }
+}
+
+/// Ключ реестра (`subagents.heartbeat_interval`) моноширинным шрифтом.
+///
+/// Почему сегменты: на узком окне длинный ключ ломался посреди слова. Ключ
+/// режется после `.` и `_`, сегменты идут `Wrap`-ом, и перенос возможен только
+/// между ними (D17). Для скринридера весь ключ — одна метка, а не набор
+/// обрывков.
+class _KeyText extends StatelessWidget {
+  const _KeyText(this.text, {required this.color});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final segments = text.split(RegExp(r'(?<=[._])'));
+    return Semantics(
+      label: text,
+      excludeSemantics: true,
+      child: Wrap(
+        children: [
+          for (final segment in segments)
+            CodeLabText(segment, role: CodeLabTextRole.mono, color: color),
         ],
       ),
     );

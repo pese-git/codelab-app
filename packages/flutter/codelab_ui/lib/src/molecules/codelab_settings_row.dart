@@ -8,7 +8,7 @@ import '../atomics/codelab_text.dart';
 ///
 /// Почему: строки «Connect on start», «Restart agent», «Theme» и другие в
 /// макете настроек (артборды `Connection`, `General`, класс `.f-sc`) имеют
-/// одну вёрстку — карточка с необязательным значком, двумя строками текста и
+/// одну вёрстку — карточка с необязательным значком, заголовком, описанием и
 /// управляющим элементом. Без общего виджета каждая страница повторяла бы её
 /// и расходилась с макетом (design.md change `add-app-settings-shell`, D16).
 ///
@@ -38,14 +38,16 @@ class CodeLabSettingsRow extends StatelessWidget {
   /// Заголовок строки.
   final String title;
 
-  /// Пояснение под заголовком, до двух строк.
+  /// Пояснение под заголовком; число его строк задаёт [descriptionMaxLines].
   final String? description;
 
   /// Сколько строк занимает [description]: по умолчанию 2 (с многоточием), `null`
   /// — без ограничения, описание переносится целиком (change
   /// `add-app-general-page`, D17).
   ///
-  /// Заглушка красных тестов 7.5: параметр принят, но пока не применяется.
+  /// Почему параметр: на узком окне многоточие съедало смысл описания
+  /// («Применится при следующем запуске»); страница, которой важен весь текст,
+  /// передаёт `null`, остальные страницы остаются на двух строках.
   final int? descriptionMaxLines;
 
   /// Значок слева.
@@ -109,8 +111,10 @@ class CodeLabSettingsRow extends StatelessWidget {
                           CodeLabText(
                             description,
                             role: CodeLabTextRole.caption,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                            maxLines: descriptionMaxLines,
+                            overflow: descriptionMaxLines == null
+                                ? TextOverflow.clip
+                                : TextOverflow.ellipsis,
                             color: resources.textFillColorSecondary,
                           ),
                       ],

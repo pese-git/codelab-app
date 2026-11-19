@@ -1477,5 +1477,25 @@
   "settingsSearchKeywordsGeneral": "language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics",
   "@settingsSearchKeywordsGeneral": {
     "description": "Ключевые слова поиска «Find a setting» для страницы General: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда."
+  },
+  "settingsGeneralGroupBudget": "Budget",
+  "@settingsGeneralGroupBudget": {
+    "description": "Подзаголовок группы строк Agent defaults: раздел реестра настроек агента Budget (ключи budget.*). Английский текст равен имени раздела реестра."
+  },
+  "settingsGeneralGroupAgent": "Agent",
+  "@settingsGeneralGroupAgent": {
+    "description": "Подзаголовок группы строк Agent defaults: раздел реестра Agent (compaction.enabled). Английский текст равен имени раздела реестра."
+  },
+  "settingsGeneralGroupSubagents": "Subagents",
+  "@settingsGeneralGroupSubagents": {
+    "description": "Подзаголовок группы строк Agent defaults: раздел реестра Subagents (ключи subagents.*). Английский текст равен имени раздела реестра."
+  },
+  "settingsGeneralGroupLogging": "Logging",
+  "@settingsGeneralGroupLogging": {
+    "description": "Подзаголовок группы строк Agent defaults: раздел реестра Logging (logging.level); речь о журнале агента, а не журнале app. Английский текст равен имени раздела реестра."
+  },
+  "settingsGeneralAboutThirdPartyCaption": "Entries of the CodeLab third-party notices register, as kept in the repository.",
+  "@settingsGeneralAboutThirdPartyCaption": {
+    "description": "Подпись над записями в диалоге Third-party notices: сами записи показываются как есть, на языке реестра (русский), и не переводятся; подпись объясняет это при любом языке интерфейса. CodeLab — название продукта, не переводить."
   }
 }

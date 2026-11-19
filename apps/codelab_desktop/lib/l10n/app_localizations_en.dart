@@ -1100,4 +1100,20 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsSearchKeywordsGeneral =>
       'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics';
+
+  @override
+  String get settingsGeneralGroupBudget => 'Budget';
+
+  @override
+  String get settingsGeneralGroupAgent => 'Agent';
+
+  @override
+  String get settingsGeneralGroupSubagents => 'Subagents';
+
+  @override
+  String get settingsGeneralGroupLogging => 'Logging';
+
+  @override
+  String get settingsGeneralAboutThirdPartyCaption =>
+      'Entries of the CodeLab third-party notices register, as kept in the repository.';
 }
