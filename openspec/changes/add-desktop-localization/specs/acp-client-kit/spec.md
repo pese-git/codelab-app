@@ -24,6 +24,30 @@
 - **WHEN** CLI показывает ленту хода, остановленного по `max_tokens`
 - **THEN** строка заметки — `The model reached its token limit, so the turn ended.`, как до изменения
 
+### Requirement: Подпись агента у решённого одобрения
+`ApprovalStateView.resolved` (`ResolvedApprovalView`) SHALL нести подпись от агента `agentLabel` (`String?`), по которой хост отличает название варианта агента от запасной подписи ядра:
+- выбран вариант из `options` запроса — `agentLabel` SHALL быть его названием (`name`);
+- выбран id варианта, которого нет среди `options`, — `agentLabel` SHALL быть этим id;
+- запрос отменён или вариант не выбран — `agentLabel` SHALL быть `null`.
+
+Поле `label` и его значения SHALL не меняться: при `agentLabel` оно равно `agentLabel`, иначе — запасная подпись ядра `Cancelled` (отмена) или `Resolved` (вариант не выбран). CLI и TUI по-прежнему показывают `label`. Поле SHALL быть аддитивным; ядро клиента SHALL оставаться web-безопасным и без зависимости от локали. Для любой последовательности обновлений инкрементальная проекция и проекция с нуля SHALL давать равные `agentLabel`.
+
+#### Scenario: Выбран вариант агента
+- **WHEN** агент запросил разрешение с вариантом `allow-once` под названием `Allow once`, и пользователь выбрал его
+- **THEN** решённое одобрение несёт `agentLabel` `Allow once` и `label` `Allow once`
+
+#### Scenario: Неизвестный id варианта
+- **WHEN** запрос решён вариантом `custom-1`, которого нет среди `options`
+- **THEN** `agentLabel` и `label` равны `custom-1`
+
+#### Scenario: Отмена и невыбранный вариант
+- **WHEN** запрос разрешения отменён, или он решён без выбранного варианта
+- **THEN** `agentLabel` — `null`, а `label` — `Cancelled` при отмене и `Resolved` без варианта
+
+#### Scenario: CLI не меняет подпись решённого одобрения
+- **WHEN** CLI показывает ленту с отменённым запросом разрешения
+- **THEN** строка исхода — `Cancelled`, как до изменения
+
 ## MODIFIED Requirements
 
 ### Requirement: Каталог команд палитры
