@@ -15,6 +15,7 @@ import 'codelab_file_tree.dart';
 import 'codelab_progress_checklist.dart';
 import 'codelab_session_pane_header.dart';
 import 'codelab_session_sidebar.dart';
+import 'codelab_shortcut_table.dart';
 import 'codelab_settings_navigation.dart';
 import 'codelab_start_screen.dart';
 import 'codelab_status_table.dart';
@@ -1055,6 +1056,91 @@ Widget codelabTerminalPanePreview() {
     ),
   );
 }
+
+/// Таблица сочетаний страницы «Keyboard» на английском (change
+/// `add-app-keyboard-page`, D6). Тексты передаёт app, здесь они фиктивные.
+@Preview(
+  name: 'Shortcut table',
+  group: codelabOrganismPreviewGroup,
+  size: Size(860, 360),
+)
+Widget codelabShortcutTablePreview() {
+  return _AcpOrganismPreviewSurface(
+    child: CodeLabShortcutTable(
+      actionHeader: 'Action',
+      shortcutHeader: 'Shortcut',
+      whereHeader: 'Where',
+      groups: _shortcutTableGroups(
+        global: 'Global',
+        approvals: 'Approvals',
+        openPalette: 'Open the command palette',
+        workbench: 'Workbench',
+        allowAlways: 'Allow always',
+        pendingApproval: 'Pending approval in focus',
+      ),
+    ),
+  );
+}
+
+/// Тот же экран на русском: делегат кита переводит союз в подписи
+/// альтернатив, клавиши не переводятся (D5).
+@Preview(
+  name: 'Shortcut table (ru)',
+  group: codelabOrganismPreviewGroup,
+  size: Size(860, 360),
+)
+Widget codelabShortcutTableRuPreview() {
+  return _AcpOrganismPreviewSurface(
+    locale: const Locale('ru'),
+    child: CodeLabShortcutTable(
+      actionHeader: 'Действие',
+      shortcutHeader: 'Сочетание',
+      whereHeader: 'Где',
+      groups: _shortcutTableGroups(
+        global: 'Общие',
+        approvals: 'Одобрения',
+        openPalette: 'Открыть палитру команд',
+        workbench: 'Рабочее место',
+        allowAlways: 'Всегда разрешать',
+        pendingApproval: 'Ожидающее одобрение в фокусе',
+      ),
+    ),
+  );
+}
+
+List<CodeLabShortcutTableGroup> _shortcutTableGroups({
+  required String global,
+  required String approvals,
+  required String openPalette,
+  required String workbench,
+  required String allowAlways,
+  required String pendingApproval,
+}) => [
+  CodeLabShortcutTableGroup(
+    key: const ValueKey('preview-group-global'),
+    title: global,
+    rows: [
+      CodeLabShortcutTableRow(
+        key: const ValueKey('preview-row-command-palette'),
+        action: openPalette,
+        combos: CodeLabShortcut.commandPalette.combos,
+        where: workbench,
+      ),
+    ],
+  ),
+  CodeLabShortcutTableGroup(
+    key: const ValueKey('preview-group-approvals'),
+    title: approvals,
+    rows: [
+      CodeLabShortcutTableRow(
+        key: const ValueKey('preview-row-allow-always'),
+        action: allowAlways,
+        combos: CodeLabShortcut.allowAlways.combos,
+        where: pendingApproval,
+      ),
+    ],
+  ),
+];
 
 class _AcpOrganismPreviewSurface extends StatelessWidget {
   const _AcpOrganismPreviewSurface({

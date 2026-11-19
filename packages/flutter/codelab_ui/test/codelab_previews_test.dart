@@ -244,4 +244,29 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('превью кейкапов и таблицы сочетаний рисуются без ошибок', (
+    tester,
+  ) async {
+    await tester.pumpWidget(codelabKeycapsPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabKeycaps), findsNWidgets(2));
+
+    await tester.pumpWidget(codelabShortcutTablePreview());
+    expect(tester.takeException(), isNull);
+    expect(find.text('Allow always'), findsOneWidget);
+  });
+
+  testWidgets('превью таблицы сочетаний на русском: тексты и перевод союза', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(codelabShortcutTableRuPreview());
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Сочетание'), findsOneWidget);
+    expect(find.text('Всегда разрешать'), findsOneWidget);
+    expect(find.text('Allow always'), findsNothing);
+    handle.dispose();
+  });
 }

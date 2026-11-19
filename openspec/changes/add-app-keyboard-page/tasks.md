@@ -59,11 +59,11 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 2. Итерация 2 — виджеты кита
 
-- [ ] 2.1 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_shortcut_table_test.dart` (D6, D9; spec «…обозначения клавиш», «…язык, доступность и узкое окно»):
+- [x] 2.1 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_shortcut_table_test.dart` (D6, D9; spec «…обозначения клавиш», «…язык, доступность и узкое окно»):
   - `CodeLabKeycaps`: по кейкапу на клавишу, роль `mono`, одна подпись `Semantics` словами (`Option+Cmd+Enter`), альтернативы — `Up or Down` по `codeLabShortcutAlternatives` (подпись словами, D4), на `ru` с делегатом — перевод `or`;
   - `CodeLabShortcutTable`: шапка из переданных подписей, группы с заголовком `header: true`, ключи групп и строк от вызывающего, строки не фокусируются (Tab их не обходит);
   - ширина 400 px: горизонтальная прокрутка без переполнения, кейкапы не переносятся, текст действия переносится.
-- [ ] 2.2 `[desktop]` Реализация 2.1: `atomics/codelab_keycaps.dart`, `organisms/codelab_shortcut_table.dart`, экспорт из барелей, сообщение `codeLabShortcutAlternatives` в `codelab_ui_en.arb` и `codelab_ui_ru.arb`, примеры в `codelab_molecule_previews.dart`/`codelab_organism_previews.dart` (один экран — на `ru`), `codelab_previews_test.dart`. 2.1 зелёный, `l10n:check` зелёный.
+- [x] 2.2 `[desktop]` Реализация 2.1: `atomics/codelab_keycaps.dart`, `organisms/codelab_shortcut_table.dart`, экспорт из барелей, сообщение `codeLabShortcutAlternatives` в `codelab_ui_en.arb` и `codelab_ui_ru.arb`, примеры в `codelab_molecule_previews.dart`/`codelab_organism_previews.dart` (один экран — на `ru`), `codelab_previews_test.dart`. 2.1 зелёный, `l10n:check` зелёный.
 
 ## 3. Итерация 3 — страница «Keyboard»
 

@@ -666,5 +666,17 @@
   "codeLabMarkdownShowImage": "Show image",
   "@codeLabMarkdownShowImage": {
     "description": "Кнопка заглушки изображения: загрузить и показать картинку."
+  },
+  "codeLabShortcutAlternatives": "{first} or {second}",
+  "@codeLabShortcutAlternatives": {
+    "description": "Подпись для чтения с экрана у альтернативных клавиш одной строки сочетаний («Up or Down»). Плейсхолдеры first и second — подписи словами; союз переводится, сами клавиши нет.",
+    "placeholders": {
+      "first": {
+        "type": "String"
+      },
+      "second": {
+        "type": "String"
+      }
+    }
   }
 }

@@ -117,7 +117,6 @@ void main() {
       tester,
     ) async {
       final handle = tester.ensureSemantics();
-      addTearDown(handle.dispose);
       await tester.pumpWidget(
         _enHost(CodeLabKeycaps(combos: [_combo(CodeLabShortcut.allowAlways)])),
       );
@@ -129,13 +128,13 @@ void main() {
       for (final symbol in const ['⌥', '⌘', '⏎']) {
         expect(find.bySemanticsLabel(symbol), findsNothing, reason: symbol);
       }
+      handle.dispose();
     }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
     testWidgets('альтернативы: плашки обеих клавиш и подпись «Up or Down»', (
       tester,
     ) async {
       final handle = tester.ensureSemantics();
-      addTearDown(handle.dispose);
       await tester.pumpWidget(
         _enHost(CodeLabKeycaps(combos: CodeLabShortcut.fileTreeMove.combos)),
       );
@@ -145,12 +144,12 @@ void main() {
         tester.getSemantics(find.byType(CodeLabKeycaps)).label,
         'Up or Down',
       );
+      handle.dispose();
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
     testWidgets('на ru с делегатом «or» переведено сообщением '
         'codeLabShortcutAlternatives', (tester) async {
       final handle = tester.ensureSemantics();
-      addTearDown(handle.dispose);
       await tester.pumpWidget(
         _ruHost(CodeLabKeycaps(combos: CodeLabShortcut.fileTreeMove.combos)),
       );
@@ -158,6 +157,7 @@ void main() {
       final label = tester.getSemantics(find.byType(CodeLabKeycaps)).label;
       expect(label, 'Up или Down');
       expect(label, isNot(contains(' or ')));
+      handle.dispose();
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
   });
 
@@ -201,7 +201,6 @@ void main() {
 
     testWidgets('заголовок группы помечен header: true', (tester) async {
       final handle = tester.ensureSemantics();
-      addTearDown(handle.dispose);
       await tester.pumpWidget(_enHost(_table()));
 
       for (final key in const [
@@ -215,6 +214,7 @@ void main() {
           reason: key,
         );
       }
+      handle.dispose();
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
     testWidgets('строки не фокусируются: Tab таблицу не обходит', (

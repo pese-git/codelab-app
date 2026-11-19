@@ -387,6 +387,26 @@ class _BreadcrumbSample extends StatelessWidget {
   }
 }
 
+/// Кейкапы сочетаний: одна комбинация и альтернативы (change
+/// `add-app-keyboard-page`, D6). Клавиши по платформе выбирает каталог.
+@Preview(
+  name: 'Keycaps',
+  group: codelabMoleculePreviewGroup,
+  size: Size(420, 120),
+)
+Widget codelabKeycapsPreview() {
+  return _AcpPreviewSurface(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CodeLabKeycaps(combos: CodeLabShortcut.allowAlways.combos),
+        const SizedBox(height: 12),
+        CodeLabKeycaps(combos: CodeLabShortcut.fileTreeMove.combos),
+      ],
+    ),
+  );
+}
+
 class _AcpPreviewSurface extends StatelessWidget {
   const _AcpPreviewSurface({
     required this.child,

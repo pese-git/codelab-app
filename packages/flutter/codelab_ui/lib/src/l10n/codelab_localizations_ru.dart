@@ -516,4 +516,9 @@ class CodeLabLocalizationsRu extends CodeLabLocalizations {
 
   @override
   String get codeLabMarkdownShowImage => 'Показать изображение';
+
+  @override
+  String codeLabShortcutAlternatives(String first, String second) {
+    return '$first или $second';
+  }
 }
