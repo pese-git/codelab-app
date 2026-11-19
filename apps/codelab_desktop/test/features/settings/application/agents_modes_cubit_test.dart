@@ -57,6 +57,7 @@ void main() {
   late List<AgentsModesCubit> cubits;
   late List<ModesFixture> fixtures;
   late List<EditableSettings> opened;
+  late List<Map<String, String>> openedEnvironments;
   String? Function() projectDir = () => null;
 
   Future<ModesFixture> fixture({
@@ -83,12 +84,14 @@ void main() {
     FakeDefinitionsLoader? loader,
     FakeLocalFolderOpener? opener,
     Map<String, String>? environment,
+    ConnectionProfile defaultProfile = embeddedConnectionProfile,
   }) {
     final cubit = AgentsModesCubit(
       workspace: workspace,
-      defaultProfile: () async => embeddedConnectionProfile,
+      defaultProfile: () async => defaultProfile,
       open: (access, env) async {
         opened.add(access);
+        openedEnvironments.add(env);
         return ModesSession(fx.store);
       },
       environment: environment ?? {'HOME': fx.home},
@@ -108,6 +111,7 @@ void main() {
     cubits = [];
     fixtures = [];
     opened = [];
+    openedEnvironments = [];
     projectDir = () => null;
   });
 
@@ -232,6 +236,66 @@ void main() {
       await cubit.reload();
       expect(now(cubit).canTargetProject, isTrue);
       expect(now(cubit).target, ConfigLayer.user);
+    });
+  });
+
+  group('Окружение агента для сессии настроек', () {
+    // Слой `environment` снимка строится из окружения, переданного фабрике
+    // сессии; `env` stdio-профиля в нём обязан быть и для профиля по
+    // умолчанию без подключения, иначе ключ, заданный переменной профиля,
+    // выглядит редактируемым (doc `ProviderSettingsOpener`; spec app-settings
+    // «Страница «Agents & modes» только для чтения»: доступ — как у
+    // «Providers»). Загрузчик определений получает то же окружение, а
+    // значения `env` в журнал не попадают.
+    const marker = 'sk-profile-env-marker-0123456789';
+    const withEnv = ConnectionProfile.stdio(
+      id: 'dev',
+      label: 'Dev',
+      command: '/opt/bin/codelab-agent',
+      args: ['serve', '--stdio'],
+      env: {'CODELAB_PERMISSION_MODE': 'plan', 'TEAM_TOKEN': marker},
+    );
+
+    test(
+      'the default stdio profile adds its env without a connection',
+      () async {
+        final fx = await fixture();
+        final loader = FakeDefinitionsLoader(
+          const AgentDefinitionsLoad(
+            rows: [],
+            userDirectory: userAgentsDir,
+            userDirectoryExists: true,
+          ),
+        );
+        final cubit = make(fx, loader: loader, defaultProfile: withEnv);
+
+        await cubit.reload();
+
+        expect(cubit.state, isA<AgentsModesReady>());
+        expect(openedEnvironments.single, containsPair('HOME', fx.home));
+        expect(
+          openedEnvironments.single,
+          containsPair('CODELAB_PERMISSION_MODE', 'plan'),
+        );
+        expect(
+          loader.environments.single,
+          containsPair('CODELAB_PERMISSION_MODE', 'plan'),
+        );
+        expect(logger.entries.toString(), isNot(contains(marker)));
+      },
+    );
+
+    test('the connected stdio profile adds its env', () async {
+      final fx = await fixture();
+      final cubit = make(fx);
+      workspace.emit(WorkspaceState(connection: _connected, profile: withEnv));
+
+      await cubit.reload();
+
+      expect(
+        openedEnvironments.last,
+        containsPair('CODELAB_PERMISSION_MODE', 'plan'),
+      );
     });
   });
 

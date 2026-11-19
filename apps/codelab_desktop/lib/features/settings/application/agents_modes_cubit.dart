@@ -194,7 +194,7 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
           'not_managed',
         );
       case EditableSettings():
-        await _loadEditable(attempt, access);
+        await _loadEditable(attempt, profile, access);
     }
   }
 
@@ -259,12 +259,20 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
     _openFailure = null;
   }
 
-  Future<void> _loadEditable(int attempt, EditableSettings access) async {
+  /// [profile] — профиль, по которому решён доступ: подключённый или профиль
+  /// по умолчанию. `env` stdio-профиля входит в окружение сессии и без
+  /// подключения: из него строится слой `environment` снимка (doc
+  /// `ProviderSettingsOpener`), иначе ключ, заданный переменной профиля,
+  /// выглядел бы редактируемым.
+  Future<void> _loadEditable(
+    int attempt,
+    ConnectionProfile profile,
+    EditableSettings access,
+  ) async {
     if (access.paths.codelabHome.isEmpty) {
       _setUnreadable(const ['The CodeLab home folder is not available.']);
       return;
     }
-    final profile = _accessProfile;
     final environment = {
       ..._environment,
       if (profile is StdioProfile) ...profile.env,
