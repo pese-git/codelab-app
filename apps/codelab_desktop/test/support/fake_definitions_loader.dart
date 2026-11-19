@@ -16,6 +16,9 @@ final class FakeDefinitionsLoader {
   /// Вызовы: токен отмены виден тесту.
   final tokens = <CancelToken?>[];
 
+  /// Окружение агента каждого вызова: тест сверяет `env` профиля.
+  final environments = <Map<String, String>>[];
+
   /// Сценарий вызова с номером от 1 (удержание, исключение); `null` — [load].
   Future<AgentDefinitionsLoad> Function(int call)? script;
 
@@ -26,6 +29,7 @@ final class FakeDefinitionsLoader {
     CancelToken? cancel,
   }) {
     tokens.add(cancel);
+    environments.add(environment);
     return script?.call(tokens.length) ?? Future.value(load);
   }
 }
