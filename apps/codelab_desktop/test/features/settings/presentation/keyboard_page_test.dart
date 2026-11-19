@@ -497,6 +497,46 @@ void main() {
       expect(tester.takeException(), isNull);
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
+    // Минимальное окно app — 800 px; навигация слева и поля тела уменьшают
+    // область страницы примерно до 500 px, и таблица не должна прятать
+    // колонку «Where» за горизонтальной прокруткой (ручная проверка на macOS,
+    // D9: прокрутка только для действительно узкой области).
+    testWidgets('окно 800x600: все три колонки видны без горизонтальной '
+        'прокрутки', (tester) async {
+      await _pumpPage(tester, size: const Size(800, 600));
+
+      expect(tester.takeException(), isNull);
+      final horizontal = tester
+          .widgetList<SingleChildScrollView>(
+            find.descendant(
+              of: find.byKey(_body),
+              matching: find.byType(SingleChildScrollView),
+            ),
+          )
+          .where((s) => s.scrollDirection == Axis.horizontal);
+      expect(horizontal, isEmpty, reason: 'таблица помещается без прокрутки');
+
+      final area = tester.getRect(find.byKey(_body));
+      final windowRight = tester.view.physicalSize.width;
+      final where = find.descendant(
+        of: _row('new-session'),
+        matching: find.text('Workbench, when a project is selected'),
+      );
+      expect(where, findsOneWidget);
+      for (final finder in [find.text('Where'), where]) {
+        final rect = tester.getRect(finder);
+        expect(rect.left, greaterThanOrEqualTo(area.left));
+        expect(rect.right, lessThanOrEqualTo(area.right));
+        expect(rect.right, lessThanOrEqualTo(windowRight));
+      }
+      // Колонки «Action» и «Where» переносят текст, а не обрезают его.
+      expect(
+        tester.getSize(where).height,
+        greaterThan(tester.getSize(find.text('Where')).height),
+        reason: 'длинное «Where» переносится на несколько строк',
+      );
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
     testWidgets('Tab с пункта навигации «Keyboard» переводит фокус в поле '
         'поиска, а не на строки таблицы', (tester) async {
       await _pumpPage(tester);

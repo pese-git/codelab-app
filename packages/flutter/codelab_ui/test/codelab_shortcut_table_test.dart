@@ -161,6 +161,66 @@ void main() {
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
   });
 
+  // Символы клавиш (⌘ ⇧ ⌥ ⏎ ⌫ и стрелки) в моноширинном шрифте роли `mono`
+  // (`Menlo` с запасными шрифтами) берутся из запасного шрифта и выглядят
+  // мельче букв. Проверяется стиль, а не отрисовка: у плашки-символа тот же
+  // кегль, что у буквы, но свой шрифт, где знаки есть (ручная проверка на
+  // macOS, change `add-app-keyboard-page`).
+  group('символы клавиш и буквы', () {
+    TextStyle styleOf(WidgetTester tester, String text) {
+      final style = tester.widget<Text>(find.text(text)).style;
+      expect(style, isNotNull, reason: text);
+      return style!;
+    }
+
+    testWidgets('macOS: ⌘ имеет тот же кегль, что K, но не шрифт букв', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _enHost(
+          CodeLabKeycaps(combos: [_combo(CodeLabShortcut.commandPalette)]),
+        ),
+      );
+
+      final letter = styleOf(tester, 'K');
+      final symbol = styleOf(tester, '⌘');
+      expect(symbol.fontSize, isNotNull);
+      expect(symbol.fontSize, letter.fontSize, reason: 'кегль как у буквы');
+      expect(
+        symbol.fontFamily,
+        isNot(letter.fontFamily),
+        reason: 'знак берётся не из шрифта букв, где его нет',
+      );
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets('все символы плашек (⇧ ⌥ ⏎ ⌫ ↑ ↓) — тем же шрифтом и кеглем, '
+        'что ⌘', (tester) async {
+      await tester.pumpWidget(
+        _enHost(
+          Column(
+            children: [
+              CodeLabKeycaps(combos: [_combo(CodeLabShortcut.commandPalette)]),
+              CodeLabKeycaps(combos: [_combo(CodeLabShortcut.toggleFiles)]),
+              CodeLabKeycaps(combos: [_combo(CodeLabShortcut.rejectAlways)]),
+              CodeLabKeycaps(combos: [_combo(CodeLabShortcut.allowAlways)]),
+              CodeLabKeycaps(combos: CodeLabShortcut.fileTreeMove.combos),
+            ],
+          ),
+        ),
+      );
+
+      final reference = styleOf(tester, '⌘').fontFamily;
+      final size = styleOf(tester, '⌘').fontSize;
+      for (final symbol in const ['⇧', '⌥', '⏎', '⌫', '↑', '↓']) {
+        final style = tester.widgetList<Text>(find.text(symbol)).first.style!;
+        expect(style.fontFamily, reason: symbol, reference);
+        expect(style.fontSize, size, reason: symbol);
+      }
+      // Буквы и слова остаются в моноширинном шрифте роли `mono`.
+      expect(styleOf(tester, 'K').fontFamily, isNot(reference));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+  });
+
   group('CodeLabShortcutTable', () {
     testWidgets('шапка из переданных подписей и группы с заголовками', (
       tester,
