@@ -549,7 +549,7 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 | 24 | Settings › Skills & extensions | — | E-01, E-17 (только чтение) | — | E-06 (страница app — будущий change; в `add-agent-skills` её нет, Q8 (а); сам E-06 в агенте реализован, §6.1 строка 11), E-09, E-10, E-18, E-19 |
 | 25 | Settings › Code & web | — | — | — | T-13, T-14, T-15, T-17, E-12 |
 | 26 | Settings › General | — | — | E-15 (8.10), D-16, D-18 («About») | D-19 |
-| 27 | Settings › Keyboard | список сочетаний A13 | — | — | — |
+| 27 | Settings › Keyboard | список сочетаний A13 — только привязки сборки (change `add-app-keyboard-page`); сочетания холста без поведения — со своими changes | — | — | — |
 | 28 | панель Terminal в доке (A16) | — | — | — | D-28 (change `add-integrated-terminal`) |
 | 29 | split view сессий, сайдбар по проектам, док панелей инструментов (A13, шаг 0) | — | — | — | R-21, S-18 (раскладка; док с панелями Plan и Protocol введён change `redesign-workbench-shell`, Files добавляет D-13, Terminal — D-28) |
 
