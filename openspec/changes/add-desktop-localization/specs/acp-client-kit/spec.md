@@ -48,6 +48,26 @@
 - **WHEN** CLI показывает ленту с отменённым запросом разрешения
 - **THEN** строка исхода — `Cancelled`, как до изменения
 
+### Requirement: Причина хранилища у отказа записи профиля
+`ProfileSaveFailed` SHALL нести поле `storeReason` (`String?`), по которому хост отличает причину, названную хранилищем секретов, от запасной строки ядра:
+- причина `secretReadOnly`, и хранилище назвало причину (`ReadOnly.reason`) — `storeReason` SHALL быть этой причиной;
+- причина `secretReadOnly` без причины хранилища — `storeReason` SHALL быть `null`;
+- другие причины (`secretWrite`, `profileWrite`) — `storeReason` SHALL быть `null`.
+
+Поле `message` и его значения SHALL не меняться: при `secretReadOnly` оно равно причине хранилища, а без неё — запасной строке ядра `The secret store is read-only.`. CLI показывает `message`, как раньше. Поле SHALL быть аддитивным; ядро клиента SHALL оставаться web-безопасным и без зависимости от локали.
+
+#### Scenario: Хранилище назвало причину
+- **WHEN** `ProfileCommitter` сохраняет профиль `devbox` с новым токеном, а `ProfileSecrets.store` возвращает `ReadOnly('secret store keychain is read-only.')`
+- **THEN** результат — `ProfileSaveFailed` с причиной `secretReadOnly`, `storeReason` и `message` — `secret store keychain is read-only.`, профиль не записан
+
+#### Scenario: Хранилище без причины
+- **WHEN** `ProfileSecrets.store` возвращает `ReadOnly()` без причины
+- **THEN** `storeReason` — `null`, а `message` — `The secret store is read-only.`
+
+#### Scenario: Сбой записи секрета
+- **WHEN** `ProfileSecrets.store` возвращает `Failed('disk full')`
+- **THEN** результат — `ProfileSaveFailed` с причиной `secretWrite` и `storeReason` `null`
+
 ## MODIFIED Requirements
 
 ### Requirement: Каталог команд палитры
