@@ -351,7 +351,11 @@ void main() {
       ...settingsEvents('settings.pending_approval_shown'),
       ...settingsEvents('settings.back_to_approval'),
     ]) {
-      final text = event.toString();
+      // Отметку времени не проверяем: в ней случайно бывают цифры id запроса
+      // (`…53.702891Z`), и тест падал без утечки.
+      final text = (Map<String, Object?>.of(
+        event,
+      )..remove('timestamp')).toString();
       expect(text, isNot(contains('702')));
       expect(text, isNot(contains('call-')));
       expect(text, isNot(contains('session-A')));
