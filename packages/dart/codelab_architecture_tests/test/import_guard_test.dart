@@ -1634,4 +1634,45 @@ void main() {
       expect(violations, isEmpty, reason: violations.join('\n'));
     });
   });
+
+  // Ядро клиента не зависит от языка интерфейса: intl и flutter_localizations
+  // в `codelab_client_core` и `codelab_client_acp` запрещены (spec
+  // workspace-architecture «intl в ядре клиента»; design.md change
+  // `add-desktop-localization`, D6, D10). `webUnsafe` их не ловит: intl
+  // web-безопасен.
+  group('язык интерфейса не попадает в ядро клиента', () {
+    for (final dir in [
+      'packages/dart/codelab_client_core',
+      'packages/dart/codelab_client_acp',
+    ]) {
+      for (final uri in [
+        'package:intl/intl.dart',
+        'package:flutter_localizations/flutter_localizations.dart',
+      ]) {
+        test('$dir: $uri запрещён правилом', () {
+          final rule = rules.where((r) => r.dir == dir).toList();
+          expect(rule, isNotEmpty, reason: '$dir не описан в rules.dart');
+          final forbidden = [for (final r in rule) ...r.forbidden];
+          expect(
+            forbidden.any(uri.startsWith),
+            isTrue,
+            reason: 'правило $dir не запрещает $uri',
+          );
+
+          final tmp = Directory.systemTemp.createTempSync('guard_l10n_');
+          addTearDown(() => tmp.deleteSync(recursive: true));
+          File(p.join(tmp.path, 'lib', 'src', 'x.dart'))
+            ..createSync(recursive: true)
+            ..writeAsStringSync("import '$uri';\n");
+
+          final violations = scan(
+            tmp.path,
+            PackageRule('.', forbidden: forbidden),
+          );
+
+          expect(violations.single, endsWith('lib/src/x.dart:1 -> $uri'));
+        });
+      }
+    }
+  });
 }
