@@ -9,7 +9,7 @@
 
 Строка без поведения в текущей сборке НЕ SHALL показываться (SETUP-17). Строки «When I press Enter during a turn», «Sidebar opens on», «Send crash reports» и ссылка «Privacy policy» НЕ SHALL показываться (design.md, D8, D17). Блок, в котором не осталось видимых строк, SHALL быть скрыт вместе с заголовком.
 
-Поиск «Find a setting» SHALL находить «General» по ключевым словам `language`, `budget`, `steps`, `compaction`, `subagent`, `log level`, `startup`, `reopen`, `ignored`, `about`, `version`, `license`, `diagnostics` и по русским словам `язык`, `бюджет`, `шаги`, `сжатие`, `субагент`, `уровень журнала`, `запуск`, `открывать`, `игнорируемые`, `о программе`, `версия`, `лицензия`, `диагностика` при любом языке интерфейса. Слова обоих языков хранятся в одном статическом списке ключевых слов страницы, а не в каталогах ARB (spec app-settings «Навигация настроек»; design.md change `add-desktop-localization`, D5 п. 8).
+Поиск «Find a setting» SHALL находить «General» по английским ключевым словам `language`, `budget`, `steps`, `compaction`, `subagent`, `log level`, `startup`, `reopen`, `ignored`, `about`, `version`, `license`, `diagnostics` при любом языке интерфейса, а при русском интерфейсе — ещё по русским `язык`, `бюджет`, `шаги`, `сжатие`, `субагент`, `уровень журнала`, `запуск`, `открывать`, `игнорируемые`, `о программе`, `версия`, `лицензия`, `диагностика`. Слова обоих языков SHALL храниться в каталогах ARB `en` и `ru` (`settingsSearchKeywordsGeneral`, список через запятую; spec app-settings «Навигация настроек», change `add-desktop-localization`).
 
 Все тексты страницы SHALL браться из каталогов ARB `en` и `ru` (spec app-settings «Локализация интерфейса app»). Ключи конфигурации, значения, источники `default`, `user`, `project`, `local`, `config`, `env`, пути и версии SHALL показываться как есть.
 
@@ -20,6 +20,10 @@
 #### Scenario: Поиск по ключевому слову
 - **WHEN** пользователь вводит `compaction` в «Find a setting»
 - **THEN** в навигации остаётся «General», а выбор результата открывает её
+
+#### Scenario: Русское ключевое слово «General» зависит от языка интерфейса
+- **WHEN** пользователь вводит `сжатие` в «Find a setting» сначала на русском интерфейсе, затем на английском
+- **THEN** на русском в навигации остаётся «General», на английском ни одной страницы не найдено и показано `No settings match "сжатие"`
 
 ### Requirement: Умолчания агента на странице «General»: доступ и строки
 Блок «Agent defaults» SHALL вычислять доступ так же, как «Providers», «MCP servers» и «Agents & modes»: `resolveSettingsAccess` для профиля текущего подключения, без подключения — для профиля по умолчанию; папка — папка сессии в фокусе, иначе выбранный проект, иначе без папки (требование «Доступ к настройкам агента на страницах Providers и MCP servers»). Смена подключения или папки SHALL перечитывать доступ и снимок. Снимок и запись SHALL идти через `AgentConfigStore` сессии страницы, строки — через `settingFieldsOf` моста `codelab_setup` (spec client-agent-setup «Состав моста codelab_setup для настройки агента»).

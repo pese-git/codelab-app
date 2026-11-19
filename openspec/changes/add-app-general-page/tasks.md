@@ -69,7 +69,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - строка «Language» и её ключи не изменились (существующие тесты языка зелёные);
   - `expectNoStaleLanguage` для страницы с баннером;
   - русская раскладка без переполнения при 760 px.
-- [x] 2.6 `[desktop]` Реализация 2.5: блоки в `general_page.dart` (строка «Language» без изменений), ключевые слова `SettingsSearchIndex.keywords[SettingsPage.general]` в `en` и `ru`, сообщения ARB. 2.5 зелёный, `l10n:check` зелёный.
+- [x] 2.6 `[desktop]` Реализация 2.5: блоки в `general_page.dart` (строка «Language» без изменений), ключевые слова «General» в `en` и `ru` (после решения пользователя 2026-11-19 — в ARB, задачи 6.4 и 6.5), сообщения ARB. 2.5 зелёный, `l10n:check` зелёный.
 
 ## 3. Итерация 3 — «Reopen the last project and its tabs»
 
@@ -125,3 +125,9 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - события (D16).
 - [x] 6.2 `[desktop]` `docs-writer`: `apps/codelab_desktop/doc/user-guide.md` (раздел о странице «General»: умолчания агента, запуск без прошлого проекта, «About», что копирует «Copy diagnostics») и `docs/user/configuration.md` (умолчания агента правятся и в app, запись в `$CODELAB_HOME/config.yaml`).
 - [x] 6.3 `[desktop]` Сверка §12.4.9, A11 и D17 с кодом, `openspec validate add-app-general-page --strict`, проверки затронутого (§21) по итерациям.
+- [x] 6.4 `[desktop]` Красный: ключевые слова поиска настроек в ARB (решение пользователя 2026-11-19; design.md D15; заменяет D5 п. 8 `add-desktop-localization` в редакции 2026-11-18). `test/features/settings/application/settings_search_index_test.dart` и тест оболочки настроек:
+  - сценарии app-settings «Навигация настроек» change `add-desktop-localization`: «Русское ключевое слово при русском интерфейсе» (`токен` → `settings-nav-connection`), «Английское ключевое слово при русском интерфейсе» (`token` → `settings-nav-connection`), «Русское ключевое слово при английском интерфейсе» (`токен` → `No settings match "токен"`);
+  - сценарий этого change «Русское ключевое слово «General» зависит от языка интерфейса» (`сжатие`);
+  - у каждой видимой страницы есть `settingsSearchKeywords<Page>` в `app_en.arb` и `app_ru.arb`, ни одно слово после разбиения по запятой не пусто;
+  - прежние английские ключевые слова всех страниц находят свою страницу на обоих языках, слова одной страницы не находят другую (`restart`, `token`, `profile`).
+- [ ] 6.5 `[desktop]` Реализация 6.4: сообщения `settingsSearchKeywords<Page>` для всех страниц, `SettingsSearchIndex.search(visible, query, titlesOf:, localizedKeywordsOf:)` без статического `keywords`, `SettingsShell` передаёт слова языка интерфейса и английские (`AppLocalizationsEn`). 6.4 зелёный, `l10n:check` зелёный.
