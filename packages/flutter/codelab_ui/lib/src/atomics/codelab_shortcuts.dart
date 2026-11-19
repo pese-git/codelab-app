@@ -49,9 +49,17 @@ final class CodeLabKeyCombo {
   /// Дополнительные клавиши с тем же действием (numpad Enter у дерева Files).
   final List<LogicalKeyboardKey> alsoKeys;
 
-  /// Основной модификатор: Ctrl или ⌘.
+  /// Основной модификатор: Ctrl или ⌘ (по одному, не оба сразу).
   final bool primary;
+
+  /// Нужен ли Alt (⌥ на macOS). Почему поле, а не клавиша: модификаторы
+  /// сверяются точно, как у `SingleActivator`, поэтому Cmd/Ctrl+Enter и
+  /// Cmd/Ctrl+Alt+Enter — разные сочетания. Для чего: `activators`,
+  /// `accepts` и обозначения клавиш. Как использовать: задаётся в записи
+  /// каталога.
   final bool alt;
+
+  /// Нужен ли Shift (⇧ на macOS); смысл и использование как у [alt].
   final bool shift;
 
   List<LogicalKeyboardKey> get _keys => [key, ...alsoKeys];
@@ -74,8 +82,12 @@ final class CodeLabKeyCombo {
     if (event is KeyUpEvent || !_keys.contains(event.logicalKey)) {
       return false;
     }
-    final primaryPressed = keyboard.isControlPressed || keyboard.isMetaPressed;
-    return primaryPressed == primary &&
+    final control = keyboard.isControlPressed;
+    final meta = keyboard.isMetaPressed;
+    // Как `SingleActivator`: основной модификатор — ровно один из Ctrl и ⌘
+    // (активаторы `control` и `meta` по отдельности), а не оба сразу.
+    final primaryOk = primary ? control != meta : !control && !meta;
+    return primaryOk &&
         keyboard.isAltPressed == alt &&
         keyboard.isShiftPressed == shift;
   }

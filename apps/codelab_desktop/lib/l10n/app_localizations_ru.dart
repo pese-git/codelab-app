@@ -2237,4 +2237,153 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsGeneralAboutThirdPartyCaption =>
       'Записи реестра сторонних уведомлений CodeLab в том виде, в каком они хранятся в репозитории.';
+
+  @override
+  String get settingsKeyboardTitle => 'Сочетания клавиш';
+
+  @override
+  String get settingsKeyboardSearchPlaceholder =>
+      'Поиск по действию или клавише';
+
+  @override
+  String get settingsKeyboardReadOnly =>
+      'Только для чтения. Сочетания заданы в приложении.';
+
+  @override
+  String get settingsKeyboardColumnAction => 'Действие';
+
+  @override
+  String get settingsKeyboardColumnShortcut => 'Сочетание';
+
+  @override
+  String get settingsKeyboardColumnWhere => 'Где';
+
+  @override
+  String get settingsKeyboardGroupGlobal => 'Общие';
+
+  @override
+  String get settingsKeyboardGroupNavigation => 'Навигация';
+
+  @override
+  String get settingsKeyboardGroupTranscript => 'Лента';
+
+  @override
+  String get settingsKeyboardGroupComposer => 'Поле ввода';
+
+  @override
+  String get settingsKeyboardGroupApprovals => 'Одобрения';
+
+  @override
+  String get settingsKeyboardFooter =>
+      'У команд агента нет сочетаний — открывайте их из палитры команд.';
+
+  @override
+  String settingsKeyboardEmpty(String query) {
+    return 'Нет сочетаний по запросу «$query»';
+  }
+
+  @override
+  String get settingsKeyboardActionCommandPalette => 'Открыть палитру команд';
+
+  @override
+  String get settingsKeyboardActionOpenSettings => 'Открыть настройки';
+
+  @override
+  String get settingsKeyboardActionCloseOverlay =>
+      'Закрыть палитру команд, диалог или выдвижную панель';
+
+  @override
+  String get settingsKeyboardActionLeaveSettings =>
+      'Вернуться на рабочее место';
+
+  @override
+  String get settingsKeyboardActionToggleSidebar =>
+      'Показать или скрыть боковую панель';
+
+  @override
+  String get settingsKeyboardActionToggleFiles =>
+      'Показать или скрыть панель файлов';
+
+  @override
+  String get settingsKeyboardActionFileTreeMove => 'Перемещаться по файлам';
+
+  @override
+  String get settingsKeyboardActionFileTreeFold =>
+      'Раскрыть или свернуть папку';
+
+  @override
+  String get settingsKeyboardActionFileTreeOpen =>
+      'Открыть файл или раскрыть папку';
+
+  @override
+  String get settingsKeyboardActionCancelTurn => 'Отменить идущий ход';
+
+  @override
+  String get settingsKeyboardActionSend =>
+      'Отправить сообщение; пока сессия занята, оно встаёт в очередь';
+
+  @override
+  String get settingsKeyboardActionCommandMenuMove =>
+      'Перемещаться по командам';
+
+  @override
+  String get settingsKeyboardActionCommandMenuRun =>
+      'Выполнить выбранную команду';
+
+  @override
+  String get settingsKeyboardActionCommandMenuClose => 'Закрыть меню команд';
+
+  @override
+  String get settingsKeyboardActionAllowOnce => 'Разрешить только сейчас';
+
+  @override
+  String get settingsKeyboardActionAllowAlways => 'Всегда разрешать';
+
+  @override
+  String get settingsKeyboardActionRejectOnce => 'Отклонить только сейчас';
+
+  @override
+  String get settingsKeyboardActionRejectAlways => 'Всегда отклонять';
+
+  @override
+  String get settingsKeyboardWhereWorkbench => 'Рабочее место';
+
+  @override
+  String get settingsKeyboardWhereWorkbenchProject =>
+      'Рабочее место, когда выбран проект';
+
+  @override
+  String get settingsKeyboardWhereOverlay =>
+      'Палитра команд, диалог или выдвижная панель';
+
+  @override
+  String get settingsKeyboardWhereSettings => 'Настройки';
+
+  @override
+  String get settingsKeyboardWhereWorkbenchFiles =>
+      'Рабочее место, когда доступна панель файлов';
+
+  @override
+  String get settingsKeyboardWhereFilesTree => 'Дерево файлов';
+
+  @override
+  String get settingsKeyboardWhereFilesTreeFolder => 'Дерево файлов, на папке';
+
+  @override
+  String get settingsKeyboardWhereTurnRunning =>
+      'Рабочее место или поле ввода, пока идёт ход';
+
+  @override
+  String get settingsKeyboardWhereComposer => 'Поле ввода';
+
+  @override
+  String get settingsKeyboardWhereCommandMenu => 'Меню команд после /';
+
+  @override
+  String get settingsKeyboardWhereApproval =>
+      'Ожидающее одобрение в фокусе, когда агент предлагает этот вариант';
+
+  @override
+  String get settingsSearchKeywordsKeyboard =>
+      'сочетание, горячие клавиши, клавиатура, клавиша';
 }

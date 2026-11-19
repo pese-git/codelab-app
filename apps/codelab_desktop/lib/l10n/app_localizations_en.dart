@@ -2205,4 +2205,148 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsGeneralAboutThirdPartyCaption =>
       'Entries of the CodeLab third-party notices register, as kept in the repository.';
+
+  @override
+  String get settingsKeyboardTitle => 'Keyboard shortcuts';
+
+  @override
+  String get settingsKeyboardSearchPlaceholder => 'Search by action or key';
+
+  @override
+  String get settingsKeyboardReadOnly =>
+      'Read-only list. Shortcuts are fixed in the app.';
+
+  @override
+  String get settingsKeyboardColumnAction => 'Action';
+
+  @override
+  String get settingsKeyboardColumnShortcut => 'Shortcut';
+
+  @override
+  String get settingsKeyboardColumnWhere => 'Where';
+
+  @override
+  String get settingsKeyboardGroupGlobal => 'Global';
+
+  @override
+  String get settingsKeyboardGroupNavigation => 'Navigation';
+
+  @override
+  String get settingsKeyboardGroupTranscript => 'Transcript';
+
+  @override
+  String get settingsKeyboardGroupComposer => 'Composer';
+
+  @override
+  String get settingsKeyboardGroupApprovals => 'Approvals';
+
+  @override
+  String get settingsKeyboardFooter =>
+      'Agent commands have no shortcuts; open them from the command palette.';
+
+  @override
+  String settingsKeyboardEmpty(String query) {
+    return 'No shortcuts match \"$query\"';
+  }
+
+  @override
+  String get settingsKeyboardActionCommandPalette => 'Open the command palette';
+
+  @override
+  String get settingsKeyboardActionOpenSettings => 'Open settings';
+
+  @override
+  String get settingsKeyboardActionCloseOverlay =>
+      'Close the command palette, a dialog or a sliding panel';
+
+  @override
+  String get settingsKeyboardActionLeaveSettings => 'Back to the workbench';
+
+  @override
+  String get settingsKeyboardActionToggleSidebar => 'Show or hide the sidebar';
+
+  @override
+  String get settingsKeyboardActionToggleFiles => 'Show or hide the Files pane';
+
+  @override
+  String get settingsKeyboardActionFileTreeMove => 'Move through files';
+
+  @override
+  String get settingsKeyboardActionFileTreeFold =>
+      'Expand or collapse a folder';
+
+  @override
+  String get settingsKeyboardActionFileTreeOpen =>
+      'Open a file or expand a folder';
+
+  @override
+  String get settingsKeyboardActionCancelTurn => 'Cancel the running turn';
+
+  @override
+  String get settingsKeyboardActionSend =>
+      'Send the message; it is queued while the session is busy';
+
+  @override
+  String get settingsKeyboardActionCommandMenuMove => 'Move through commands';
+
+  @override
+  String get settingsKeyboardActionCommandMenuRun =>
+      'Run the highlighted command';
+
+  @override
+  String get settingsKeyboardActionCommandMenuClose => 'Close the command menu';
+
+  @override
+  String get settingsKeyboardActionAllowOnce => 'Allow once';
+
+  @override
+  String get settingsKeyboardActionAllowAlways => 'Allow always';
+
+  @override
+  String get settingsKeyboardActionRejectOnce => 'Reject once';
+
+  @override
+  String get settingsKeyboardActionRejectAlways => 'Reject always';
+
+  @override
+  String get settingsKeyboardWhereWorkbench => 'Workbench';
+
+  @override
+  String get settingsKeyboardWhereWorkbenchProject =>
+      'Workbench, when a project is selected';
+
+  @override
+  String get settingsKeyboardWhereOverlay =>
+      'Command palette, dialog or sliding panel';
+
+  @override
+  String get settingsKeyboardWhereSettings => 'Settings';
+
+  @override
+  String get settingsKeyboardWhereWorkbenchFiles =>
+      'Workbench, when the Files pane is available';
+
+  @override
+  String get settingsKeyboardWhereFilesTree => 'Files tree';
+
+  @override
+  String get settingsKeyboardWhereFilesTreeFolder => 'Files tree, on a folder';
+
+  @override
+  String get settingsKeyboardWhereTurnRunning =>
+      'Workbench or composer, while a turn runs';
+
+  @override
+  String get settingsKeyboardWhereComposer => 'Composer';
+
+  @override
+  String get settingsKeyboardWhereCommandMenu => 'Command menu after /';
+
+  @override
+  String get settingsKeyboardWhereApproval =>
+      'Pending approval in focus, when the agent offers this option';
+
+  @override
+  String get settingsSearchKeywordsKeyboard =>
+      'shortcut, hotkey, keybinding, key';
 }

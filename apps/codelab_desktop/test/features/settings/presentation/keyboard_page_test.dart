@@ -103,6 +103,13 @@ Future<void> _pumpDefaultShell(
         selected: selected,
         onSelected: (_) {},
         onBack: () {},
+        // Тела прочих страниц не нужны (им требуется scope app); построитель
+        // «Keyboard» — из рабочей таблицы, поэтому регистрация проверяется.
+        builders: {
+          for (final page in SettingsPage.values)
+            page: (_) => Text('body of ${page.slug}'),
+          SettingsPage.keyboard: settingsPageBuilders[SettingsPage.keyboard]!,
+        },
       ),
     ),
   );
@@ -126,6 +133,8 @@ void main() {
         greaterThan(tester.getTopLeft(_nav(SettingsPage.general)).dy),
       );
       expect(SettingsPage.keyboard.group, SettingsGroup.app);
+      expect(defaultSettingsPages.visible, contains(SettingsPage.keyboard));
+      expect(settingsPageBuilders, contains(SettingsPage.keyboard));
 
       await _pumpDefaultShell(tester, selected: SettingsPage.keyboard);
       expect(find.byKey(_body), findsOneWidget);
@@ -488,8 +497,8 @@ void main() {
       expect(tester.takeException(), isNull);
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-    testWidgets('Tab из навигации идёт в поле поиска, строки таблицы не '
-        'остановки', (tester) async {
+    testWidgets('Tab с пункта навигации «Keyboard» переводит фокус в поле '
+        'поиска, а не на строки таблицы', (tester) async {
       await _pumpPage(tester);
       expect(find.byKey(_search), findsOneWidget);
 
@@ -514,18 +523,23 @@ void main() {
         return found;
       }
 
-      var reached = false;
-      for (var i = 0; i < 40 && !reached; i++) {
-        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-        await tester.pump();
-        expect(
-          inRows(FocusManager.instance.primaryFocus?.context),
-          isFalse,
-          reason: 'Tab остановился на строке таблицы (шаг $i)',
-        );
-        reached = searchField.focusNode.hasFocus;
-      }
-      expect(reached, isTrue, reason: 'Tab дошёл до поля поиска');
+      // Начало сценария спецификации: фокус на пункте `settings-nav-keyboard`.
+      final nav = _nav(SettingsPage.keyboard).evaluate().single;
+      // Узел фокуса пункта: ближайший сверху от ключа либо первый внутри него.
+      final navFocus =
+          Focus.maybeOf(nav) ??
+          FocusManager.instance.rootScope.descendants.firstWhere(
+            (node) => node.canRequestFocus && node.context == nav,
+          );
+      navFocus.requestFocus();
+      await tester.pump();
+      expect(searchField.focusNode.hasFocus, isFalse);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+
+      expect(searchField.focusNode.hasFocus, isTrue);
+      expect(inRows(FocusManager.instance.primaryFocus?.context), isFalse);
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
   });
 }

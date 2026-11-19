@@ -56,9 +56,19 @@ class CodeLabShortcutTableGroup {
   /// Текст заголовка на языке интерфейса.
   final String title;
 
+  /// Строки группы в порядке показа; группа без строк вызывающим не
+  /// передаётся (при поиске пустые группы скрываются целиком, D8).
   final List<CodeLabShortcutTableRow> rows;
 }
 
+/// Таблица «Action · Shortcut · Where» с группами, только для чтения.
+///
+/// Почему отдельный виджет и состояние: см. описание библиотеки; состояние
+/// нужно ради `ScrollController` горизонтальной прокрутки, которую таблица
+/// включает сама в узком теле (D9).
+///
+/// Для чего и как использовать: страница «Keyboard» передаёт три подписи
+/// шапки и группы со строками; ключи групп и строк задаёт вызывающий.
 class CodeLabShortcutTable extends StatefulWidget {
   const CodeLabShortcutTable({
     required this.actionHeader,
@@ -68,9 +78,18 @@ class CodeLabShortcutTable extends StatefulWidget {
     super.key,
   });
 
+  /// Подпись колонки «Action» на языке интерфейса. Три подписи шапки
+  /// приходят от app: кит текстов страницы не знает и не переводит их (D5).
   final String actionHeader;
+
+  /// Подпись колонки «Shortcut» (клавиши).
   final String shortcutHeader;
+
+  /// Подпись колонки «Where» (где сочетание действует).
   final String whereHeader;
+
+  /// Группы по порядку: заголовок и готовые строки. Отбор, порядок и тексты
+  /// решает app, таблица только раскладывает их (AGENTS кита §2).
   final List<CodeLabShortcutTableGroup> groups;
 
   /// Минимальная ширина таблицы: уже неё включается горизонтальная прокрутка.

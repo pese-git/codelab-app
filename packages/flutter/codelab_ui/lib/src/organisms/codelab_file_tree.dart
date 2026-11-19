@@ -148,7 +148,8 @@ class _CodeLabFileTreeState extends State<CodeLabFileTree> {
     }
     final row = widget.rows[_focusedIndex];
     final keyboard = HardwareKeyboard.instance;
-    // Альтернативы записей — в порядке показа: ↑ / ↓, → / ←.
+    // Альтернативы записей — в порядке показа: ↑ / ↓, → / ← (порядок
+    // защищают тест каталога и сторож 2).
     final move = CodeLabShortcut.fileTreeMove.combos;
     final fold = CodeLabShortcut.fileTreeFold.combos;
     if (move[1].accepts(event, keyboard)) {

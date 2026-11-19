@@ -288,8 +288,11 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
     };
 
     if (showInlinePalette) {
-      // Альтернативы записи идут в порядке показа: ↑ первая, ↓ вторая.
+      // Альтернативы записи идут в порядке показа: ↑ первая, ↓ вторая
+      // (порядок защищают тест каталога и сторож 2).
       final move = CodeLabShortcut.commandMenuMove.combos;
+      final up = move[0];
+      final down = move[1];
       bindings
         ..addEntries(
           CodeLabShortcut.commandMenuRun
@@ -298,9 +301,9 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
         )
         ..addEntries(
           {
-            for (final a in move[1].activators)
+            for (final a in down.activators)
               a: () => _moveInlineSelection(1, filteredCommands.length),
-            for (final a in move[0].activators)
+            for (final a in up.activators)
               a: () => _moveInlineSelection(-1, filteredCommands.length),
           }.entries,
         )

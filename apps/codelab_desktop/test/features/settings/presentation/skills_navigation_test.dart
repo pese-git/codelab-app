@@ -29,7 +29,8 @@ void main() {
         SettingsShell(
           pages: SettingsPages(
             available: {...defaultSettingsPages.available}
-              ..remove(SettingsPage.general),
+              ..remove(SettingsPage.general)
+              ..remove(SettingsPage.keyboard),
           ),
           selected: SettingsPage.connection,
           onSelected: (_) {},
@@ -53,6 +54,7 @@ void main() {
       SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
       SettingsPage.general,
+      SettingsPage.keyboard,
     ]);
     expect(settingsPageBuilders, contains(SettingsPage.skillsAndExtensions));
   });

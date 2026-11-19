@@ -15,8 +15,9 @@
 //   `allow_once`, с фокусом в композере — сообщение в очереди;
 // - подсказки шапки и сайдбара берут клавиши из каталога.
 //
-// Клавиши берутся из `CodeLabShortcut` (`pressShortcut`). Красный до задач
-// 1.4 и 1.6: у каталога нет комбинаций.
+// Клавиши берутся из `CodeLabShortcut` (`pressShortcut`). Esc диалогов
+// закрывает их без записи: хранилище профилей, секреты и конфиг агента не
+// меняются.
 
 import 'dart:async';
 
@@ -354,9 +355,10 @@ void main() {
   group('диалоги: close-overlay', () {
     testWidgets('Esc закрывает «Add connection profile»', (tester) async {
       final secrets = FakeProfileSecrets();
+      final profiles = InMemoryProfileStore();
       final cubit = AddProfileCubit(
         strings: FixedAppStrings(AppLocalizationsEn()),
-        store: InMemoryProfileStore(),
+        store: profiles,
         openSecrets: () async => secrets,
         preferences: const SharedPreferencesConnectionPreferences(),
         kinds: const [ProfileKind.stdio, ProfileKind.webSocket],
@@ -385,20 +387,22 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Add connection profile'), findsNothing);
+      // Esc — отмена: ни профиль, ни секрет не записаны.
+      expect(profiles.profiles, isEmpty);
+      expect(secrets.values, isEmpty);
     });
 
     testWidgets('Esc закрывает мастер провайдера', (tester) async {
-      final store = FakeAgentConfigStore(
-        user: {
-          'agent': {'default_model': 'local/qwen'},
-          'providers': {
-            'local': providerMap(
-              baseUrl: 'http://localhost:11434/v1',
-              models: ['qwen'],
-            ),
-          },
+      Map<String, Object?> existing() => {
+        'agent': {'default_model': 'local/qwen'},
+        'providers': {
+          'local': providerMap(
+            baseUrl: 'http://localhost:11434/v1',
+            models: ['qwen'],
+          ),
         },
-      );
+      };
+      final store = FakeAgentConfigStore(user: existing());
       final session = FakeProviderSettingsSession(store);
       final flow = (await tester.runAsync(() => session.openWizard()))!;
       final cubit = ProviderWizardCubit(
@@ -434,6 +438,9 @@ void main() {
       await dialog;
 
       expect(_key('provider-wizard'), findsNothing);
+      // Esc — отмена: конфиг агента не записан и не изменён.
+      expect(store.applied, isEmpty);
+      expect(store.user, existing());
     });
 
     testWidgets('Esc закрывает подтверждение bypass', (tester) async {

@@ -49,12 +49,13 @@ List<String> _caps(WidgetTester tester, Finder scope) => [
     if (text.role == CodeLabTextRole.mono) text.data,
 ];
 
-/// Тексты строки (не плашки): `CodeLabText` не роли `mono`.
+/// Тексты строки (не плашки и не разделитель `/` альтернатив): `CodeLabText`
+/// не роли `mono`.
 List<String> _texts(WidgetTester tester, Finder scope) => [
   for (final text in tester.widgetList<CodeLabText>(
     find.descendant(of: scope, matching: find.byType(CodeLabText)),
   ))
-    if (text.role != CodeLabTextRole.mono) text.data,
+    if (text.role != CodeLabTextRole.mono && text.data != '/') text.data,
 ];
 
 Widget _shell(Locale locale) => localizedFluentApp(
@@ -67,6 +68,14 @@ Widget _shell(Locale locale) => localizedFluentApp(
     builders: {SettingsPage.keyboard: buildKeyboardPage},
   ),
 );
+
+/// Тела-заглушки всех страниц, кроме «Keyboard»: её построитель берётся из
+/// рабочей таблицы `settingsPageBuilders` (проверяет регистрацию).
+Map<SettingsPage, WidgetBuilder> get _stubBodies => {
+  for (final page in SettingsPage.values)
+    page: (_) => Text('body of ${page.slug}'),
+  SettingsPage.keyboard: settingsPageBuilders[SettingsPage.keyboard]!,
+};
 
 Future<void> _pump(WidgetTester tester, Locale locale) async {
   tester.view.physicalSize = const Size(1280, 900);
@@ -229,6 +238,7 @@ void main() {
             selected: SettingsPage.general,
             onSelected: (_) {},
             onBack: () {},
+            builders: _stubBodies,
           ),
         ),
       );

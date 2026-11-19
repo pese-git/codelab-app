@@ -23,6 +23,18 @@ import '../l10n/strings.dart';
 import 'codelab_shortcuts.dart';
 import 'codelab_text.dart';
 
+/// Плашки клавиш одного сочетания (или альтернатив) с подписью словами.
+///
+/// Почему: вид (плашки) и чтение с экрана (слова) разведены, иначе программы
+/// чтения произносят ⌥⌘⏎ непредсказуемо (D4, D9).
+///
+/// Для чего: единственный способ показать клавиши в таблице сочетаний и
+/// превью; цвета из `FluentTheme`, платформа — `defaultTargetPlatform`
+/// через каталог.
+///
+/// Как использовать: `CodeLabKeycaps(combos: CodeLabShortcut.x.combos)`;
+/// несколько комбинаций показываются как альтернативы через `/`. Виджет не
+/// фокусируется и не нажимается.
 class CodeLabKeycaps extends StatelessWidget {
   const CodeLabKeycaps({required this.combos, super.key});
 

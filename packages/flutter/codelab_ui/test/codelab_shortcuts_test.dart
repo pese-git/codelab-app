@@ -418,6 +418,19 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     });
 
+    testWidgets('основной модификатор — ровно один из Ctrl и ⌘, как у '
+        'SingleActivator: Ctrl+⌘+K не принимается', (tester) async {
+      final combo = _combo(CodeLabShortcut.commandPalette);
+      final k = down(LogicalKeyboardKey.keyK, PhysicalKeyboardKey.keyK);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      expect(combo.accepts(k, HardwareKeyboard.instance), isFalse);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      expect(combo.accepts(k, HardwareKeyboard.instance), isTrue);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    });
+
     testWidgets('Alt и Shift требуются точно: ⏎ без Alt — не allow-always', (
       tester,
     ) async {

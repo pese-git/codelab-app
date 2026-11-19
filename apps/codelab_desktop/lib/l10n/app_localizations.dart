@@ -3575,6 +3575,264 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Entries of the CodeLab third-party notices register, as kept in the repository.'**
   String get settingsGeneralAboutThirdPartyCaption;
+
+  /// Заголовок страницы настроек «Keyboard».
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard shortcuts'**
+  String get settingsKeyboardTitle;
+
+  /// Подсказка поля поиска страницы «Keyboard»: ищет по тексту действия и по клавишам в любой нотации.
+  ///
+  /// In en, this message translates to:
+  /// **'Search by action or key'**
+  String get settingsKeyboardSearchPlaceholder;
+
+  /// Подпись под полем поиска страницы «Keyboard»: сочетания нельзя менять.
+  ///
+  /// In en, this message translates to:
+  /// **'Read-only list. Shortcuts are fixed in the app.'**
+  String get settingsKeyboardReadOnly;
+
+  /// Заголовок колонки таблицы сочетаний: что делает сочетание.
+  ///
+  /// In en, this message translates to:
+  /// **'Action'**
+  String get settingsKeyboardColumnAction;
+
+  /// Заголовок колонки таблицы сочетаний: клавиши.
+  ///
+  /// In en, this message translates to:
+  /// **'Shortcut'**
+  String get settingsKeyboardColumnShortcut;
+
+  /// Заголовок колонки таблицы сочетаний: где сочетание действует.
+  ///
+  /// In en, this message translates to:
+  /// **'Where'**
+  String get settingsKeyboardColumnWhere;
+
+  /// Заголовок группы таблицы сочетаний: сочетания рабочего места, настроек и диалогов.
+  ///
+  /// In en, this message translates to:
+  /// **'Global'**
+  String get settingsKeyboardGroupGlobal;
+
+  /// Заголовок группы таблицы сочетаний: сайдбар, панель файлов, дерево файлов.
+  ///
+  /// In en, this message translates to:
+  /// **'Navigation'**
+  String get settingsKeyboardGroupNavigation;
+
+  /// Заголовок группы таблицы сочетаний: действия над идущим ходом в ленте.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript'**
+  String get settingsKeyboardGroupTranscript;
+
+  /// Заголовок группы таблицы сочетаний: поле ввода сообщения и меню команд.
+  ///
+  /// In en, this message translates to:
+  /// **'Composer'**
+  String get settingsKeyboardGroupComposer;
+
+  /// Заголовок группы таблицы сочетаний: ответы на запросы разрешения агента. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Approvals'**
+  String get settingsKeyboardGroupApprovals;
+
+  /// Строка под таблицей сочетаний.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent commands have no shortcuts; open them from the command palette.'**
+  String get settingsKeyboardFooter;
+
+  /// Строка вместо таблицы, когда поиск ничего не нашёл. Плейсхолдер query — запрос пользователя как есть, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'No shortcuts match \"{query}\"'**
+  String settingsKeyboardEmpty(String query);
+
+  /// Действие сочетания Cmd/Ctrl+K в таблице страницы «Keyboard».
+  ///
+  /// In en, this message translates to:
+  /// **'Open the command palette'**
+  String get settingsKeyboardActionCommandPalette;
+
+  /// Действие сочетания Cmd/Ctrl+, в таблице страницы «Keyboard».
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get settingsKeyboardActionOpenSettings;
+
+  /// Действие Esc в палитре, диалоге или выдвижной панели.
+  ///
+  /// In en, this message translates to:
+  /// **'Close the command palette, a dialog or a sliding panel'**
+  String get settingsKeyboardActionCloseOverlay;
+
+  /// Действие Esc на экране настроек.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to the workbench'**
+  String get settingsKeyboardActionLeaveSettings;
+
+  /// Действие сочетания Cmd/Ctrl+B.
+  ///
+  /// In en, this message translates to:
+  /// **'Show or hide the sidebar'**
+  String get settingsKeyboardActionToggleSidebar;
+
+  /// Действие сочетания Cmd/Ctrl+Shift+E. Files — название панели.
+  ///
+  /// In en, this message translates to:
+  /// **'Show or hide the Files pane'**
+  String get settingsKeyboardActionToggleFiles;
+
+  /// Действие стрелок ↑ и ↓ в дереве файлов.
+  ///
+  /// In en, this message translates to:
+  /// **'Move through files'**
+  String get settingsKeyboardActionFileTreeMove;
+
+  /// Действие стрелок → и ← в дереве файлов.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand or collapse a folder'**
+  String get settingsKeyboardActionFileTreeFold;
+
+  /// Действие Enter в дереве файлов.
+  ///
+  /// In en, this message translates to:
+  /// **'Open a file or expand a folder'**
+  String get settingsKeyboardActionFileTreeOpen;
+
+  /// Действие Esc, пока идёт ход агента.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel the running turn'**
+  String get settingsKeyboardActionCancelTurn;
+
+  /// Действие сочетания Cmd/Ctrl+Enter в поле ввода.
+  ///
+  /// In en, this message translates to:
+  /// **'Send the message; it is queued while the session is busy'**
+  String get settingsKeyboardActionSend;
+
+  /// Действие стрелок ↑ и ↓ в меню команд после /.
+  ///
+  /// In en, this message translates to:
+  /// **'Move through commands'**
+  String get settingsKeyboardActionCommandMenuMove;
+
+  /// Действие Enter в меню команд после /.
+  ///
+  /// In en, this message translates to:
+  /// **'Run the highlighted command'**
+  String get settingsKeyboardActionCommandMenuRun;
+
+  /// Действие Esc в меню команд после /.
+  ///
+  /// In en, this message translates to:
+  /// **'Close the command menu'**
+  String get settingsKeyboardActionCommandMenuClose;
+
+  /// Действие сочетания Cmd/Ctrl+Enter при ожидающем одобрении: разрешить один раз. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow once'**
+  String get settingsKeyboardActionAllowOnce;
+
+  /// Действие сочетания Cmd/Ctrl+Alt+Enter при ожидающем одобрении: разрешить всегда. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow always'**
+  String get settingsKeyboardActionAllowAlways;
+
+  /// Действие сочетания Cmd/Ctrl+Backspace при ожидающем одобрении: отклонить один раз. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Reject once'**
+  String get settingsKeyboardActionRejectOnce;
+
+  /// Действие сочетания Cmd/Ctrl+Alt+Backspace при ожидающем одобрении: отклонить всегда. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Reject always'**
+  String get settingsKeyboardActionRejectAlways;
+
+  /// Колонка «Где»: рабочее место.
+  ///
+  /// In en, this message translates to:
+  /// **'Workbench'**
+  String get settingsKeyboardWhereWorkbench;
+
+  /// Колонка «Где»: рабочее место при выбранном проекте.
+  ///
+  /// In en, this message translates to:
+  /// **'Workbench, when a project is selected'**
+  String get settingsKeyboardWhereWorkbenchProject;
+
+  /// Колонка «Где»: поверхности, которые закрывает Esc.
+  ///
+  /// In en, this message translates to:
+  /// **'Command palette, dialog or sliding panel'**
+  String get settingsKeyboardWhereOverlay;
+
+  /// Колонка «Где»: экран настроек.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settingsKeyboardWhereSettings;
+
+  /// Колонка «Где»: рабочее место при доступной панели Files.
+  ///
+  /// In en, this message translates to:
+  /// **'Workbench, when the Files pane is available'**
+  String get settingsKeyboardWhereWorkbenchFiles;
+
+  /// Колонка «Где»: дерево файлов.
+  ///
+  /// In en, this message translates to:
+  /// **'Files tree'**
+  String get settingsKeyboardWhereFilesTree;
+
+  /// Колонка «Где»: дерево файлов при выбранной папке.
+  ///
+  /// In en, this message translates to:
+  /// **'Files tree, on a folder'**
+  String get settingsKeyboardWhereFilesTreeFolder;
+
+  /// Колонка «Где»: рабочее место или поле ввода во время хода.
+  ///
+  /// In en, this message translates to:
+  /// **'Workbench or composer, while a turn runs'**
+  String get settingsKeyboardWhereTurnRunning;
+
+  /// Колонка «Где»: поле ввода сообщения.
+  ///
+  /// In en, this message translates to:
+  /// **'Composer'**
+  String get settingsKeyboardWhereComposer;
+
+  /// Колонка «Где»: меню команд, открытое символом /. Символ / не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Command menu after /'**
+  String get settingsKeyboardWhereCommandMenu;
+
+  /// Колонка «Где» строк одобрения. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending approval in focus, when the agent offers this option'**
+  String get settingsKeyboardWhereApproval;
+
+  /// Ключевые слова поиска «Find a setting» для страницы Keyboard: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять.
+  ///
+  /// In en, this message translates to:
+  /// **'shortcut, hotkey, keybinding, key'**
+  String get settingsSearchKeywordsKeyboard;
 }
 
 class _AppLocalizationsDelegate

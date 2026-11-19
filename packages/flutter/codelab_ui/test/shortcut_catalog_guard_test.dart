@@ -21,6 +21,15 @@ final _forbidden = <RegExp>[
   RegExp(r'\bLogicalKeySet\('),
   RegExp(r'(==|!=)\s*LogicalKeyboardKey\.'),
   RegExp(r'LogicalKeyboardKey\.\w+\s*(==|!=)'),
+  // Чтение клавиши события в обход каталога: `event.logicalKey`,
+  // `event.physicalKey`, `keys.contains(event.logicalKey)` и т. п.
+  RegExp(r'\.(logicalKey|physicalKey)\b'),
+  RegExp(r'\bPhysicalKeyboardKey\.'),
+  // Выбор по клавише через `switch`.
+  RegExp(r'\bcase\s+LogicalKeyboardKey\.'),
+  RegExp(r'LogicalKeyboardKey\.\w+\s*=>'),
+  RegExp(r'\bLogicalKeySet\.fromSet\('),
+  RegExp(r'\bisLogicalKeyPressed\('),
 ];
 
 /// Нарушения в [source]: строки вида `путь:номер: текст`. Строки-комментарии
@@ -54,6 +63,19 @@ void main() {
       violationsIn('x.dart', 'bool b = LogicalKeyboardKey.enter == key;'),
       hasLength(1),
     );
+    // Обходы без литерала активатора: чтение клавиши события, `switch` по
+    // клавише, `LogicalKeySet.fromSet`, `isLogicalKeyPressed`.
+    for (final line in const [
+      'if (event.physicalKey == PhysicalKeyboardKey.enter) {}',
+      'case LogicalKeyboardKey.enter:',
+      'LogicalKeyboardKey.enter => open(),',
+      'if (keys.contains(event.logicalKey)) {}',
+      'final set = LogicalKeySet.fromSet({a});',
+      'if (keyboard.isLogicalKeyPressed(k)) {}',
+      'final p = PhysicalKeyboardKey.keyK;',
+    ]) {
+      expect(violationsIn('x.dart', line), hasLength(1), reason: line);
+    }
     expect(violationsIn('x.dart', '/// см. SingleActivator(…)'), isEmpty);
     expect(
       violationsIn('x.dart', 'final k = LogicalKeyboardKey.enter;'),
