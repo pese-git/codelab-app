@@ -2,6 +2,7 @@
 
 Метки исполнителей (CLAUDE.md, таблица зон):
 - `[client]` — `codelab_client_core`;
+- `[agent]` — мост настроек `codelab_setup` (итерация 4), как в changes `add-provider-setup-ui` и `add-settings-agents-modes`;
 - `[desktop]` — `apps/codelab_desktop`, `packages/flutter/codelab_ui`, правила сторожа desktop и ядра клиента в `codelab_architecture_tests`, скрипт Melos `l10n:check` и его джоб в `tool/ci/ci_scope.dart`.
 
 Документы `docs/architecture/**` и `openspec/**` пишет `codelab-architect`; `README.md`, `doc/` пакетов и `docs/user/` — `docs-writer`; вложенные `AGENTS.md` — исполнитель итерации вместе с кодом.
@@ -15,7 +16,7 @@
 - 5 — настройки II;
 - 6 — закрытие.
 
-Зависимости: 1 ← 0; 2, 3, 4, 5 ← 1; 3 ← 2 (вкладки дока и строки ленты используют тексты кита); 6 ← 2, 3, 4, 5. Итерации 4 и 5 независимы.
+Зависимости: 1 ← 0; 2, 3, 4, 5 ← 1; 3 ← 2 (вкладки дока и строки ленты используют тексты кита); 6 ← 2, 3, 4, 5. Итерации 4 и 5 независимы. Внутри итерации 4: 4.2 ← 4.1b `[agent]` и 4.1d `[client]`; 4.1a/4.1b и 4.1c/4.1d независимы друг от друга.
 
 Решения пользователя 2026-11-18 (design.md, «Решения пользователя 2026-11-18»): Q1 — язык применяется сразу, механизм — вариант (б) с типизированными разовыми сообщениями (D2, D5); Q2–Q5 — (а); Q6 — исполнитель по глоссарию, сообщения с меткой security вычитывает пользователь.
 
@@ -28,7 +29,8 @@
 - `fvm dart run melos run l10n:check` — при правке ARB и `l10n.yaml`;
 - `fvm dart run melos run guard` — при правке `pubspec.yaml`, импортов и `rules.dart`;
 - `fvm dart run melos run web-compile` и `conformance:client` — при правке `codelab_client_core` (итерация 3);
-- `fvm dart run melos run test:e2e:cli:dart-agent` — при правке `codelab_client_core` (итерация 3: CLI не меняется, это проверяется);
+- `fvm dart run melos run test:e2e:cli:dart-agent` — при правке `codelab_client_core` (итерации 3 и 4: CLI не меняется, это проверяется) и `codelab_setup` (итерация 4);
+- `fvm dart run melos run web-compile` и `fvm dart test` в `apps/codelab_cli` — при правке основного бареля `codelab_setup` (итерация 4);
 - `test:e2e:app:*` — только в `release/*`.
 
 ## 0. Документы (итерация 0)
@@ -128,7 +130,29 @@
   - «Providers» и мастер: источники ключа одним сообщением с плейсхолдерами (нет склейки `'In $backendId as '`), исходы удаления с командой `codelab secret delete <имя>` без изменений (сценарий «Команда в переведённой фразе»), отказы удаления, ошибки записи конфига, InfoBar «Read-only»;
   - Cubit-ы (`ConnectionSettingsCubit`, `AddProfileCubit`, `ProviderSettingsCubit`, `ProviderWizardCubit`) с `FixedAppStrings(AppLocalizationsEn())` — прежние строки; с `TestAppStrings` — смена языка пересобирает производный текст; исходы удаления, ошибки записи конфига и отказы — типизированные сообщения; после `close` событий нет (D5, D9);
   - **смена языка на страницах** «Connection» (с InfoBar записи `default` и с ошибкой чтения `profiles.json`), «Providers» (только чтение; исход удаления), в открытых диалоге «Add connection profile» (черновик и предупреждение `ws://` сохраняются) и мастере провайдера → `expectNoStaleLanguage` (сценарий «Уже показанные ошибки и InfoBar пересобираются»).
-- [ ] 4.2 `[desktop]` Реализация: сообщения страниц и диалогов; `AppStrings` у Cubit-ов и `AppLocalizations` параметром у `provider_wizard_view.dart`; разовые сообщения — sealed-типы; перевод `ProfileDraftIssue` по коду (D6).
+  - *Уточнения по решениям пользователя 2026-11-19 (design.md, «Решения пользователя 2026-11-19», D6 «Тексты моста настроек»).* Красные тесты, написанные до этих решений, приводятся к ним:
+    - строки моста переводятся по типу. Комментарий `provider_wizard_dialog_l10n_test.dart` о том, что подписи пресетов и тексты шагов моста «остаются как есть», заменяется. На `ru`: подписи пресетов `ollama`, `custom-openai`, `custom-anthropic` и строка «Type» сводки — перевод по `id`; `OpenAI`, `Anthropic`, `OpenRouter` — как есть; ошибки шагов адреса, ключа, деталей модели и правки на «Review» — перевод по `errorCode`; отказ записи плана — по `refusal`; пояснение литерального ключа — по `literalKeyInConfig`; предупреждение `Not verified` — по `notVerified` («Не проверено: сервер недоступен», «Не проверено: истекло время ожидания»; на `en` — прежний текст со значением провода); `KeyStatusView` — по виду (сценарий app-settings «Сообщения мастера провайдера на русском»);
+    - дедупликация по типу: сообщение о существующем ключе на `ru` и на `en` показано один раз, и после `KeySubmitted(StoreSecret)` при существующем секрете тоже (ошибка `keyAlreadyStored` не дублирует подпись). Тест падает, если подпись и ошибка видны обе (D5, п. 5);
+    - как есть остаются `readOnlyHint`, `backend.unavailableReason`, причина `ProviderKeyNotStored` и `ConfigIssue.message` внутри переведённой рамки `The config was not saved: …`. `ProfileSaveFailed` при `secretReadOnly`: с `storeReason` — причина как есть, без неё — перевод `The secret store is read-only.` (сценарий app-settings «Текст хранилища секретов не переводится»);
+    - «ёлочки» вокруг id профиля, имени секрета и символов в `ru` (глоссарий §1, правило 5). Ожидание `'Сохранённый ключ codelab/llm-example уже есть в file.'` меняется на `«codelab/llm-example»`; так же сверяются остальные ожидания `ru` с именем секрета или id профиля;
+    - id провайдера в `ru` — без кавычек («Изменить провайдера local»), как сейчас в тестах;
+    - метка профиля `Current` на `ru` — «Текущий» (глоссарий §4).
+    Ожидания на экране (переведённый текст, одно сообщение о ключе, причина хранилища как есть) пишутся сейчас и остаются красными до 4.2. Тесты desktop, которые строят состояния моста или ядра с новыми полями (`errorCode`, `storeReason`), не компилируются до 4.1b и 4.1d, поэтому дописываются после них. Тесты самих полей — в 4.1a и 4.1c.
+- [ ] 4.1a `[agent]` Красные тесты моста `codelab_setup` (spec client-agent-setup «Типизированные ошибки и пояснения мастера провайдера», все сценарии; D6 «Тексты моста настроек»):
+  - `packages/dart/codelab_setup/test/provider_setup_error_code_test.dart` на фейках портов, как `provider_setup_flow_test.dart` (`pumpEventQueue()`, без таймеров): каждый код `ProviderSetupErrorCode` получается из своего события, а `error` равен прежнему английскому тексту; `keyAlreadyStored` — вместе с `existingSecret` (из `_onKey` и из `ProviderKeyAppeared` после `ConfirmSave`); `secretStoreReadOnly` — с подсказкой, с `unavailableReason` и без обеих; `keyNotStored` — `error` равен причине хранилища; userinfo у правки — код в первом состоянии; отказ записи плана — `refusal` без `errorCode`; ошибка правки на «Review» — `errorCode` без `refusal`;
+  - инвариант: в прогоне всех сценариев файла у каждого `EnteringBaseUrl`, `ChoosingKey`, `EnteringModelDetails` выполняется `(error == null) == (errorCode == null)`, а у `Reviewing` с `error` — ровно одно из `errorCode` и `refusal`;
+  - `literalKeyInConfig` — `true` у правки провайдера с `KeyLiteralInConfig`, `false` в остальных случаях, `notice` прежний; `Reviewing.notVerified` — `timeout` и `unreachable` после `SkipCheck`, `null` после успешной проверки, `warnings` прежние;
+  - `test/web_smoke_test.dart`: новые поля читаются в web-безопасном прогоне мастера.
+- [ ] 4.1b `[agent]` Реализация в `codelab_setup`: перечисление `ProviderSetupErrorCode` и аддитивные поля `errorCode` (`EnteringBaseUrl`, `ChoosingKey`, `EnteringModelDetails`, `Reviewing`), `ChoosingKey.literalKeyInConfig`, `Reviewing.notVerified` в `provider_setup_state.dart`. Заполнение в `ProviderSetupFlow` в тех же местах, где строится текст (`_parseAddress`, конструктор правки, `_onKey`, `_keyState`, `_onDetails`, `_onReviewEdited`, `_reviewing`, `_onCommitted`). Тексты `error`, `notice`, `warnings` не меняются. Экспорт из основного бареля, doc-комментарии (§15: почему, для чего, как использовать — «клиент строит текст по коду, `error` остаётся для CLI»), пункт состава в `packages/dart/codelab_setup/AGENTS.md`. Точные имена выбирает исполнитель, поведение задаёт spec. Проверки: `fvm dart analyze` и `fvm dart test` в `codelab_setup`, `melos run web-compile`, `fvm dart test` в `apps/codelab_cli` (CLI без изменений — сценарий «CLI не меняется»), `melos run test:e2e:cli:dart-agent`.
+- [ ] 4.1c `[client]` Красный тест ядра клиента (spec acp-client-kit «Причина хранилища у отказа записи профиля», все сценарии): `packages/dart/codelab_client_core/test/connection/profile_commit_test.dart` — `ReadOnly('…')` даёт `storeReason`, равный `message`; `ReadOnly()` даёт `storeReason == null` и прежний `message`; `Failed` и сбой записи профиля дают `storeReason == null`.
+- [ ] 4.1d `[client]` Реализация: аддитивное поле `ProfileSaveFailed.storeReason` (`String?`), заполнение в `ProfileCommitter.commit` в ветке `ReadOnly`, doc-комментарий поля (§15), `message` без изменений. Проверки: `fvm dart analyze` и `fvm dart test` в `codelab_client_core`, `melos run web-compile`, `fvm dart test` в `apps/codelab_cli`, `melos run test:e2e:cli:dart-agent`.
+- [ ] 4.2 `[desktop]` Реализация: сообщения страниц и диалогов; `AppStrings` у Cubit-ов и `AppLocalizations` параметром у `provider_wizard_view.dart`; разовые сообщения — sealed-типы; перевод `ProfileDraftIssue` по коду (D6). Зависит от 4.1b и 4.1d. *Уточнения 2026-11-19 (D6 «Тексты моста настроек»):*
+  - ошибки и пояснения шага мастера — функции `provider_wizard_view.dart` по `errorCode`, `refusal`, `literalKeyInConfig` и `notVerified` с `AppLocalizations`; presentation вызывает их с `context.l10n`. `setup.error`, `setup.notice` и `Reviewing.warnings` на экран не выводятся;
+  - `provider_wizard_dialog.dart`: сравнение `setup.error != existingNote` заменяется проверкой типа — ошибка `keyAlreadyStored` не показывается, если видна подпись существующего ключа. Подпись и ошибка строятся из одного сообщения ARB;
+  - подписи пресетов и строка «Type» — по `ProviderPreset.id`, без `replaceFirst(' endpoint', '')`; незнакомый `id` — `label` как есть. `KeyStatusView` — по виду, в `ProviderSettingsCubit` вместо `entry.key.label`;
+  - `AddProfileCubit`: отказ `secretReadOnly` хранится типизированно (`storeReason` или признак «без причины»); текст — перевод или причина как есть;
+  - как есть: `readOnlyHint`, `backend.unavailableReason`, причина `ProviderKeyNotStored`, `ConfigIssue.message`;
+  - «ёлочки» вокруг id профиля, имени секрета и символов в `ru`; `Current` — «Текущий». Новые термины — в глоссарий в том же PR.
 - [ ] 4.3 `[desktop]` Ревью пользователем переводов с меткой security (`ws://`, токены, секреты) (D14).
 
 ## 5. Настройки II: MCP, Agents & modes, Skills (итерация 5)
