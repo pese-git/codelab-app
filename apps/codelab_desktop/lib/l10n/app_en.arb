@@ -1453,5 +1453,29 @@
         "type": "int"
       }
     }
+  },
+  "settingsSearchKeywordsConnection": "profile, stdio, websocket, token, restart",
+  "@settingsSearchKeywordsConnection": {
+    "description": "Ключевые слова поиска «Find a setting» для страницы Connection: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда."
+  },
+  "settingsSearchKeywordsProviders": "provider, model, api key, key storage, base url",
+  "@settingsSearchKeywordsProviders": {
+    "description": "Ключевые слова поиска «Find a setting» для страницы Providers: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда."
+  },
+  "settingsSearchKeywordsMcpServers": "mcp, server, tools, headers",
+  "@settingsSearchKeywordsMcpServers": {
+    "description": "Ключевые слова поиска «Find a setting» для страницы MCP servers: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда."
+  },
+  "settingsSearchKeywordsAgentsAndModes": "mode, permission, bypass, plan, effort, reasoning, agent, definition, subagent",
+  "@settingsSearchKeywordsAgentsAndModes": {
+    "description": "Ключевые слова поиска «Find a setting» для страницы Agents & modes: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда."
+  },
+  "settingsSearchKeywordsSkillsAndExtensions": "skill, agents.md, context, template, prompt, extension",
+  "@settingsSearchKeywordsSkillsAndExtensions": {
+    "description": "Ключевые слова поиска «Find a setting» для страницы Skills & extensions: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда."
+  },
+  "settingsSearchKeywordsGeneral": "language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics",
+  "@settingsSearchKeywordsGeneral": {
+    "description": "Ключевые слова поиска «Find a setting» для страницы General: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда."
   }
 }

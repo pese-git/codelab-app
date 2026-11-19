@@ -130,4 +130,4 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - сценарий этого change «Русское ключевое слово «General» зависит от языка интерфейса» (`сжатие`);
   - у каждой видимой страницы есть `settingsSearchKeywords<Page>` в `app_en.arb` и `app_ru.arb`, ни одно слово после разбиения по запятой не пусто;
   - прежние английские ключевые слова всех страниц находят свою страницу на обоих языках, слова одной страницы не находят другую (`restart`, `token`, `profile`).
-- [ ] 6.5 `[desktop]` Реализация 6.4: сообщения `settingsSearchKeywords<Page>` для всех страниц, `SettingsSearchIndex.search(visible, query, titlesOf:, localizedKeywordsOf:)` без статического `keywords`, `SettingsShell` передаёт слова языка интерфейса и английские (`AppLocalizationsEn`). 6.4 зелёный, `l10n:check` зелёный.
+- [x] 6.5 `[desktop]` Реализация 6.4: сообщения `settingsSearchKeywords<Page>` для всех страниц, `SettingsSearchIndex.search(visible, query, titlesOf:, localizedKeywordsOf:)` без статического `keywords`, `SettingsShell` передаёт слова языка интерфейса и английские (`AppLocalizationsEn`). 6.4 зелёный, `l10n:check` зелёный.

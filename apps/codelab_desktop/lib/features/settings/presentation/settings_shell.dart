@@ -126,6 +126,12 @@ class _SettingsShellState extends State<SettingsShell> {
         settingsPageTitleOf(l10n, page),
         settingsPageTitleOf(AppLocalizationsEn(), page),
       },
+      // Слова языка интерфейса и английские: слова другого языка страницу не
+      // находят (D15, `add-app-general-page`).
+      localizedKeywordsOf: (page) => {
+        ...settingsPageKeywordsOf(l10n, page),
+        ...settingsPageKeywordsOf(AppLocalizationsEn(), page),
+      },
     );
     final body = builders[widget.selected];
 

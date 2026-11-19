@@ -1094,4 +1094,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String workbenchTokenRequired(int status) {
     return 'Агент требует токен (HTTP $status).';
   }
+
+  @override
+  String get settingsSearchKeywordsConnection => 'профиль, токен, перезапуск';
+
+  @override
+  String get settingsSearchKeywordsProviders =>
+      'провайдер, модель, ключ api, хранилище ключей, базовый url';
+
+  @override
+  String get settingsSearchKeywordsMcpServers =>
+      'сервер, инструменты, заголовки';
+
+  @override
+  String get settingsSearchKeywordsAgentsAndModes =>
+      'режим, разрешение, план, рассуждение, определение, субагент';
+
+  @override
+  String get settingsSearchKeywordsSkillsAndExtensions =>
+      'навык, контекст, шаблон, промпт, расширение';
+
+  @override
+  String get settingsSearchKeywordsGeneral =>
+      'язык, бюджет, шаги, сжатие, субагент, уровень журнала, запуск, открывать, игнорируемые, о программе, версия, лицензия, диагностика';
 }

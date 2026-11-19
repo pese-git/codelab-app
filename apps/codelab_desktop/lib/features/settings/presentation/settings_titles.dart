@@ -27,6 +27,39 @@ String settingsPageTitleOf(
   SettingsPage.keyboard => l10n.settingsPageKeyboardTitle,
 };
 
+/// Ключевые слова поиска страницы на языке [l10n]: сообщение
+/// `settingsSearchKeywords<Page>`, разбитое по запятой, с обрезанными
+/// пробелами и без пустых слов (`add-app-general-page`, D15; D5 п. 8
+/// `add-desktop-localization`).
+///
+/// Почему отдельная функция: `gen-l10n` даёт типизированные геттеры без
+/// динамического доступа по имени, поэтому соответствие страницы и сообщения
+/// — исчерпывающий `switch`. Страницы, которых нет в сборке (у них нет
+/// сообщения), слов не имеют: сообщение появляется вместе со страницей.
+///
+/// Как использовать: оболочка настроек передаёт слова языка интерфейса и
+/// английские (`AppLocalizationsEn`) в `SettingsSearchIndex.search`.
+List<String> settingsPageKeywordsOf(AppLocalizations l10n, SettingsPage page) {
+  final message = switch (page) {
+    SettingsPage.connection => l10n.settingsSearchKeywordsConnection,
+    SettingsPage.providers => l10n.settingsSearchKeywordsProviders,
+    SettingsPage.mcpServers => l10n.settingsSearchKeywordsMcpServers,
+    SettingsPage.agentsAndModes => l10n.settingsSearchKeywordsAgentsAndModes,
+    SettingsPage.skillsAndExtensions =>
+      l10n.settingsSearchKeywordsSkillsAndExtensions,
+    SettingsPage.general => l10n.settingsSearchKeywordsGeneral,
+    SettingsPage.permissionsAndTools ||
+    SettingsPage.redaction ||
+    SettingsPage.codeAndWeb ||
+    SettingsPage.appearance ||
+    SettingsPage.keyboard => '',
+  };
+  return [
+    for (final word in message.split(','))
+      if (word.trim().isNotEmpty) word.trim(),
+  ];
+}
+
 /// Заголовок группы страниц настроек на языке [l10n] (см.
 /// [settingsPageTitleOf]).
 String settingsGroupTitleOf(AppLocalizations l10n, SettingsGroup group) =>

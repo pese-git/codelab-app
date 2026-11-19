@@ -285,5 +285,11 @@
   "settingsShellPendingApproval": "Агент ждёт вашего одобрения",
   "settingsShellBackToSession": "Вернуться к сессии",
   "workbenchTokenRejected": "Агент отклонил токен (HTTP {status}).",
-  "workbenchTokenRequired": "Агент требует токен (HTTP {status})."
+  "workbenchTokenRequired": "Агент требует токен (HTTP {status}).",
+  "settingsSearchKeywordsConnection": "профиль, токен, перезапуск",
+  "settingsSearchKeywordsProviders": "провайдер, модель, ключ api, хранилище ключей, базовый url",
+  "settingsSearchKeywordsMcpServers": "сервер, инструменты, заголовки",
+  "settingsSearchKeywordsAgentsAndModes": "режим, разрешение, план, рассуждение, определение, субагент",
+  "settingsSearchKeywordsSkillsAndExtensions": "навык, контекст, шаблон, промпт, расширение",
+  "settingsSearchKeywordsGeneral": "язык, бюджет, шаги, сжатие, субагент, уровень журнала, запуск, открывать, игнорируемые, о программе, версия, лицензия, диагностика"
 }

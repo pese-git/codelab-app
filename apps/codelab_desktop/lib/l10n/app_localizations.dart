@@ -1813,6 +1813,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The agent requires a token (HTTP {status}).'**
   String workbenchTokenRequired(int status);
+
+  /// Ключевые слова поиска «Find a setting» для страницы Connection: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда.
+  ///
+  /// In en, this message translates to:
+  /// **'profile, stdio, websocket, token, restart'**
+  String get settingsSearchKeywordsConnection;
+
+  /// Ключевые слова поиска «Find a setting» для страницы Providers: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда.
+  ///
+  /// In en, this message translates to:
+  /// **'provider, model, api key, key storage, base url'**
+  String get settingsSearchKeywordsProviders;
+
+  /// Ключевые слова поиска «Find a setting» для страницы MCP servers: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда.
+  ///
+  /// In en, this message translates to:
+  /// **'mcp, server, tools, headers'**
+  String get settingsSearchKeywordsMcpServers;
+
+  /// Ключевые слова поиска «Find a setting» для страницы Agents & modes: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда.
+  ///
+  /// In en, this message translates to:
+  /// **'mode, permission, bypass, plan, effort, reasoning, agent, definition, subagent'**
+  String get settingsSearchKeywordsAgentsAndModes;
+
+  /// Ключевые слова поиска «Find a setting» для страницы Skills & extensions: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда.
+  ///
+  /// In en, this message translates to:
+  /// **'skill, agents.md, context, template, prompt, extension'**
+  String get settingsSearchKeywordsSkillsAndExtensions;
+
+  /// Ключевые слова поиска «Find a setting» для страницы General: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда.
+  ///
+  /// In en, this message translates to:
+  /// **'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics'**
+  String get settingsSearchKeywordsGeneral;
 }
 
 class _AppLocalizationsDelegate

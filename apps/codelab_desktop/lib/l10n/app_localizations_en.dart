@@ -1077,4 +1077,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String workbenchTokenRequired(int status) {
     return 'The agent requires a token (HTTP $status).';
   }
+
+  @override
+  String get settingsSearchKeywordsConnection =>
+      'profile, stdio, websocket, token, restart';
+
+  @override
+  String get settingsSearchKeywordsProviders =>
+      'provider, model, api key, key storage, base url';
+
+  @override
+  String get settingsSearchKeywordsMcpServers => 'mcp, server, tools, headers';
+
+  @override
+  String get settingsSearchKeywordsAgentsAndModes =>
+      'mode, permission, bypass, plan, effort, reasoning, agent, definition, subagent';
+
+  @override
+  String get settingsSearchKeywordsSkillsAndExtensions =>
+      'skill, agents.md, context, template, prompt, extension';
+
+  @override
+  String get settingsSearchKeywordsGeneral =>
+      'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics';
 }
