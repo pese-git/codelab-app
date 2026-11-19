@@ -11,6 +11,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         WebSocketProfile,
         ownTokenSecretName;
 
+import '../../../l10n/app_localizations.dart';
 import 'profile_view.dart';
 
 /// Состояние подключения окна для бейджа строки текущего профиля.
@@ -18,15 +19,13 @@ import 'profile_view.dart';
 /// Почему отдельный enum: бейдж показывает три исхода без текста ошибки — её
 /// показывает баннер соединения рабочего места (design.md change
 /// `add-app-settings-shell`, D4, находка ручного прогона итерации 2).
+///
+/// Подпись бейджа строит presentation по значению (`add-desktop-localization`,
+/// D5, правило 8): enum не хранит английский заголовок.
 enum ConnectionRowStatus {
-  connecting('Connecting…'),
-  connected('Connected'),
-  failed('Failed');
-
-  const ConnectionRowStatus(this.label);
-
-  /// Подпись бейджа.
-  final String label;
+  connecting,
+  connected,
+  failed;
 
   /// Статус по состоянию соединения workspace; `null` — бейджа нет.
   static ConnectionRowStatus? of(ConnectionView connection) =>
@@ -57,6 +56,7 @@ enum ConnectionRowStatus {
 final class ConnectionProfileRow {
   const ConnectionProfileRow._({
     required this.profile,
+    required this.title,
     required this.summary,
     required this.token,
     required this.isDefault,
@@ -69,13 +69,15 @@ final class ConnectionProfileRow {
   /// Встроенный агент: не из файла, всегда первый.
   factory ConnectionProfileRow.embedded({
     required ConnectionProfile profile,
+    required AppLocalizations l10n,
     required bool isDefault,
     required bool isCurrent,
     required ConnectionRowStatus? status,
     bool isSelected = false,
   }) => ConnectionProfileRow._(
     profile: profile,
-    summary: profileSummary(profile),
+    title: localizedProfileTitle(profile, l10n),
+    summary: profileSummary(profile, l10n),
     token: null,
     isDefault: isDefault,
     isCurrent: isCurrent,
@@ -87,6 +89,7 @@ final class ConnectionProfileRow {
   /// Профиль из `profiles.json`.
   factory ConnectionProfileRow.stored({
     required ConnectionProfile profile,
+    required AppLocalizations l10n,
     required ProfileTokenView? token,
     required bool isDefault,
     required bool isCurrent,
@@ -94,7 +97,8 @@ final class ConnectionProfileRow {
     bool isSelected = false,
   }) => ConnectionProfileRow._(
     profile: profile,
-    summary: profileSummary(profile),
+    title: localizedProfileTitle(profile, l10n),
+    summary: profileSummary(profile, l10n),
     token: token,
     isDefault: isDefault,
     isCurrent: isCurrent,
@@ -107,12 +111,14 @@ final class ConnectionProfileRow {
   /// saved)» (D4). Он текущий по определению.
   factory ConnectionProfileRow.unsaved({
     required ConnectionProfile profile,
+    required AppLocalizations l10n,
     required ProfileTokenView? token,
     required ConnectionRowStatus? status,
     bool isSelected = false,
   }) => ConnectionProfileRow._(
     profile: profile,
-    summary: profileSummary(profile),
+    title: localizedProfileTitle(profile, l10n),
+    summary: profileSummary(profile, l10n),
     token: token,
     isDefault: false,
     isCurrent: true,
@@ -122,6 +128,10 @@ final class ConnectionProfileRow {
   );
 
   final ConnectionProfile profile;
+
+  /// Заголовок строки на языке интерфейса (`localizedProfileTitle`): строка —
+  /// функция «(профиль, язык)», её пересобирает Cubit при смене языка (D5).
+  final String title;
 
   /// Команда или `scheme://host:port` (`profileSummary`).
   final String summary;
@@ -163,12 +173,6 @@ final class ConnectionProfileRow {
   String get label => profile.label;
   bool get isBuiltIn => profile is EmbeddedProfile;
 
-  /// Заголовок строки: `label`, а при пустом `label` и при `label` из
-  /// значения `--agent` (`stdio:…`, `ws://…`, `wss://…`; так CLI заполняет
-  /// `label` встроенного в строку профиля) — `id`. Иначе вся команда
-  /// повторялась бы в заголовке (D4).
-  String get title => profileTitle(profile);
-
   /// У строки из файла есть «Rename» и «Remove».
   bool get hasFileActions => !isBuiltIn && !isUnsaved;
 
@@ -198,6 +202,74 @@ final class ConnectionSettingsLoading extends ConnectionSettingsState {
   const ConnectionSettingsLoading();
 }
 
+/// Разовое сообщение о сбое действия страницы «Connection».
+///
+/// Почему закрытая иерархия, а не строка: сообщение — исход события, которое
+/// не повторится, поэтому строку из входов не пересобрать. Состояние хранит
+/// тип с аргументами, а текст собирает presentation по `context.l10n` и тем
+/// самым пересобирает его при смене языка (`add-desktop-localization`, D5,
+/// вид «разовое сообщение»). Значений токена и текста исключений здесь нет.
+sealed class ConnectionSettingsFailure {
+  const ConnectionSettingsFailure();
+}
+
+/// Запись изменения не удалась (переименование, удаление, выбор профиля).
+final class ProfileSaveFailure extends ConnectionSettingsFailure {
+  const ProfileSaveFailure();
+
+  @override
+  bool operator ==(Object other) => other is ProfileSaveFailure;
+
+  @override
+  int get hashCode => (ProfileSaveFailure).hashCode;
+}
+
+/// Профиль удалён, но собственный секрет токена [secretName] остался: страница
+/// называет команду `codelab secret delete` (D13, D18).
+final class TokenNotDeleted extends ConnectionSettingsFailure {
+  const TokenNotDeleted(this.secretName);
+
+  final String secretName;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TokenNotDeleted && other.secretName == secretName;
+
+  @override
+  int get hashCode => Object.hash(TokenNotDeleted, secretName);
+}
+
+/// Почему `profiles.json` не прочитан ([ConnectionSettingsUnreadable.reason]).
+///
+/// Почему тип, а не строка: причина без текста исключения (оно может нести
+/// содержимое файла). Фразу вокруг причины и сами причины приложения
+/// переводит presentation; причина composition root (`unavailable`) — текст
+/// без типа и показывается как есть (`add-desktop-localization`, D6, D7).
+sealed class ProfilesUnreadableReason {
+  const ProfilesUnreadableReason();
+}
+
+/// Неподдерживаемая версия или неверная структура файла.
+final class ProfilesUnsupportedFile extends ProfilesUnreadableReason {
+  const ProfilesUnsupportedFile();
+}
+
+/// Профили недоступны: причина названа composition root (недопустимый
+/// `CODELAB_HOME`); показывается как есть.
+final class ProfilesNotAvailable extends ProfilesUnreadableReason {
+  const ProfilesNotAvailable(this.message);
+
+  final String message;
+}
+
+/// Файл не читается по другой причине; [errorType] — только имя типа
+/// исключения.
+final class ProfilesCannotRead extends ProfilesUnreadableReason {
+  const ProfilesCannotRead(this.errorType);
+
+  final String errorType;
+}
+
 /// Общие поля состояний, в которых страница уже показывает строки и блок
 /// «Behavior». «Behavior» не зависит от `profiles.json`, поэтому есть и у
 /// [ConnectionSettingsUnreadable] (D4).
@@ -208,8 +280,14 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
     required this.currentProfile,
     required this.connection,
     required this.restartAvailable,
+    required this.l10n,
     this.failure,
   });
+
+  /// Каталог языка, на котором собран производный текст состояния (строки,
+  /// «Restart agent»). Состояние — функция «(входы, язык)»: при смене языка
+  /// Cubit публикует новое с новым каталогом (`add-desktop-localization`, D5).
+  final AppLocalizations l10n;
 
   /// Встроенный агент первым, затем профили файла в его порядке, затем при
   /// необходимости строка «not saved».
@@ -234,8 +312,9 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
   /// a project.`
   final bool restartAvailable;
 
-  /// Текст последнего сбоя действия страницы; `null` — сбоя нет.
-  final String? failure;
+  /// Последний сбой действия страницы; `null` — сбоя нет. Типизированное
+  /// разовое сообщение: текст строит presentation (D5).
+  final ConnectionSettingsFailure? failure;
 
   String? get currentProfileId => currentProfile?.id;
 
@@ -245,7 +324,7 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
 
   /// Подсказка недоступной «Restart agent» (D18).
   String? get restartHint =>
-      restartAvailable ? null : 'Starts when you open a project.';
+      restartAvailable ? null : l10n.connectionRestartHint;
 
   /// Живое соединение — с удалённым агентом (WebSocket).
   bool get isRemote => currentProfile is WebSocketProfile;
@@ -265,23 +344,24 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
   /// Подпись зависит от цели перезапуска, а не от живого соединения.
   bool get restartsRemote => restartTarget is WebSocketProfile;
 
-  String get restartTitle => restartsRemote ? 'Reconnect' : 'Restart agent';
+  String get restartTitle =>
+      restartsRemote ? l10n.connectionReconnect : l10n.commonRestartAgent;
 
-  String get restartButtonLabel => restartsRemote ? 'Reconnect' : 'Restart';
+  String get restartButtonLabel =>
+      restartsRemote ? l10n.connectionReconnect : l10n.connectionRestartButton;
 
   /// Описание строки «Restart agent»: называет цель и не обещает
   /// `session/cancel` (D9).
   String get restartDescription {
     final target = restartTarget;
     final subject = target == null
-        ? 'the profile of this window'
-        : profileTitle(target);
+        ? l10n.connectionRestartSubjectWindow
+        : localizedProfileTitle(target, l10n);
     final running = currentProfile;
     if (target != null && running != null && running.id != target.id) {
-      return 'Restart $subject to use it.';
+      return l10n.connectionRestartToUse(subject);
     }
-    return 'Reconnects $subject and reloads open sessions. A running turn is '
-        'interrupted; queued prompts stay.';
+    return l10n.connectionRestartDescription(subject);
   }
 }
 
@@ -293,6 +373,7 @@ final class ConnectionSettingsReady extends ConnectionSettingsLoaded {
     required super.currentProfile,
     required super.connection,
     required super.restartAvailable,
+    required super.l10n,
     required this.defaultProfileId,
     required this.ignoredDefaultEntry,
     super.failure,
@@ -319,6 +400,7 @@ final class ConnectionSettingsUnreadable extends ConnectionSettingsLoaded {
     required super.currentProfile,
     required super.connection,
     required super.restartAvailable,
+    required super.l10n,
     required this.path,
     required this.reason,
     super.failure,
@@ -328,6 +410,7 @@ final class ConnectionSettingsUnreadable extends ConnectionSettingsLoaded {
   /// `CODELAB_HOME` недопустим. В журнал не пишется.
   final String? path;
 
-  /// Причина без текста исключения: оно может нести содержимое файла.
-  final String reason;
+  /// Причина без текста исключения: оно может нести содержимое файла. Текст
+  /// фразы собирает presentation (`ProfilesUnreadableReason`).
+  final ProfilesUnreadableReason reason;
 }

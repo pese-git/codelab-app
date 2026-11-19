@@ -5,7 +5,9 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/app_scope.dart';
+import '../../../l10n/l10n.dart';
 import '../application/provider_settings_cubit.dart';
+import 'message_spans.dart';
 import 'provider_wizard_dialog.dart';
 
 /// Тело страницы «Providers» для таблицы `settingsPageBuilders`.
@@ -115,25 +117,28 @@ class _ProvidersPageState extends State<ProvidersPage> {
             padding: EdgeInsets.all(24),
             child: Center(child: ProgressRing()),
           ),
-          ProviderSettingsReadOnly() => _readOnly(state),
-          ProviderSettingsUnreadable() => _unreadable(state),
+          ProviderSettingsReadOnly() => _readOnly(context, state),
+          ProviderSettingsUnreadable() => _unreadable(context, state),
           ProviderSettingsReady() => _ready(context, state),
         },
       ),
     );
   }
 
-  Widget _header({required bool withAdd}) => Padding(
+  Widget _header(BuildContext context, {required bool withAdd}) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: Row(
       children: [
-        const Expanded(
-          child: CodeLabText('Providers', role: CodeLabTextRole.title),
+        Expanded(
+          child: CodeLabText(
+            context.l10n.settingsPageProvidersTitle,
+            role: CodeLabTextRole.title,
+          ),
         ),
         if (withAdd)
           CodeLabButton(
             key: const ValueKey('providers-add'),
-            label: 'Add provider',
+            label: context.l10n.providersAdd,
             icon: FluentIcons.add,
             emphasis: CodeLabButtonEmphasis.primary,
             onPressed: () => unawaited(_openWizard()),
@@ -160,47 +165,51 @@ class _ProvidersPageState extends State<ProvidersPage> {
     ),
   );
 
-  Widget _activeModelRow(String model) => Padding(
+  Widget _activeModelRow(BuildContext context, String model) => Padding(
     padding: const EdgeInsets.only(bottom: 4),
     child: CodeLabSettingsRow(
       key: const ValueKey('providers-active-model'),
-      title: 'Default model',
-      description: 'Active in this session: $model',
+      title: context.l10n.providersDefaultModel,
+      description: context.l10n.providersActiveInSession(model),
       leading: FluentIcons.settings,
     ),
   );
 
-  Widget _readOnly(ProviderSettingsReadOnly state) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      _header(withAdd: false),
-      _bar(
-        const ValueKey('providers-read-only'),
-        InfoBarSeverity.warning,
-        state.notice,
-        content: state.hint,
-      ),
-      if (state.activeModel case final model?) _activeModelRow(model),
-    ],
-  );
+  Widget _readOnly(BuildContext context, ProviderSettingsReadOnly state) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(context, withAdd: false),
+          _bar(
+            const ValueKey('providers-read-only'),
+            InfoBarSeverity.warning,
+            state.notice,
+            content: state.hint,
+          ),
+          if (state.activeModel case final model?)
+            _activeModelRow(context, model),
+        ],
+      );
 
-  Widget _unreadable(ProviderSettingsUnreadable state) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      _header(withAdd: false),
-      _bar(
-        const ValueKey('providers-unreadable'),
-        InfoBarSeverity.error,
-        'Cannot read the agent config. Fix or remove the file; CodeLab will '
-        'not overwrite it.',
-        content: state.problems.join('\n'),
-      ),
-      if (state.activeModel case final model?) _activeModelRow(model),
-    ],
-  );
+  Widget _unreadable(BuildContext context, ProviderSettingsUnreadable state) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(context, withAdd: false),
+          _bar(
+            const ValueKey('providers-unreadable'),
+            InfoBarSeverity.error,
+            context.l10n.providersUnreadable,
+            content: state.problems.join('\n'),
+          ),
+          if (state.activeModel case final model?)
+            _activeModelRow(context, model),
+        ],
+      );
 
   Widget _ready(BuildContext context, ProviderSettingsReady state) {
     final cubit = context.read<ProviderSettingsCubit>();
+    final l10n = context.l10n;
     final resources = FluentTheme.of(context).resources;
     final storage = state.keyStorage;
     final body = CodeLabText.styleOf(context, CodeLabTextRole.body);
@@ -215,7 +224,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
       key: const ValueKey('providers-default-model'),
       isExpanded: true,
       value: selected,
-      placeholder: const Text('Choose a model'),
+      placeholder: Text(l10n.providersChooseModel),
       // На узком окне строка сжимает ComboBox (CodeLabSettingsRow),
       // а список fluent_ui 4.16 той же ширины, что и кнопка: длинные
       // имена с общим началом без подсказки неразличимы, и легко
@@ -242,7 +251,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _header(withAdd: true),
+        _header(context, withAdd: true),
         if (state.banner case final banner?)
           _bar(
             const ValueKey('providers-banner'),
@@ -251,11 +260,13 @@ class _ProvidersPageState extends State<ProvidersPage> {
               ProviderBannerKind.conflict => InfoBarSeverity.warning,
               ProviderBannerKind.error => InfoBarSeverity.error,
             },
-            banner.text,
+            // Баннер хранится типизированным; текст строится на текущем
+            // языке, поэтому уже показанный баннер переводится (D5).
+            providerMessageText(l10n, banner.message),
             action: switch (banner.action) {
               ProviderBannerAction.retry => CodeLabButton(
                 key: const ValueKey('providers-banner-retry'),
-                label: 'Retry',
+                label: l10n.commonRetry,
                 icon: FluentIcons.refresh,
                 onPressed: () => unawaited(cubit.retryAgentStart()),
               ),
@@ -265,11 +276,13 @@ class _ProvidersPageState extends State<ProvidersPage> {
         Padding(
           padding: const EdgeInsets.only(bottom: 4),
           child: CodeLabSettingsRow(
-            title: 'Default model',
+            title: l10n.providersDefaultModel,
+            // Две независимые фразы через пробел, как раньше; каждая — своё
+            // сообщение каталога.
             description: [
-              'Used by new sessions.',
+              l10n.providersUsedByNewSessions,
               if (state.activeModel case final model?)
-                'Active in this session: $model',
+                l10n.providersActiveInSession(model),
             ].join(' '),
             leading: FluentIcons.settings,
             trailing: SizedBox(
@@ -288,13 +301,13 @@ class _ProvidersPageState extends State<ProvidersPage> {
           padding: const EdgeInsets.only(bottom: 4),
           child: CodeLabSettingsRow(
             key: const ValueKey('providers-key-storage'),
-            title: 'Key storage: ${storage.backendId}',
-            description:
-                'Only key names and presence are read — values never enter '
-                'the app',
+            title: l10n.providersKeyStorage(storage.backendId),
+            description: l10n.providersKeyStorageDescription,
             leading: FluentIcons.permissions,
             trailing: CodeLabBadge(
-              label: storage.writable ? 'writable' : 'read-only',
+              label: storage.writable
+                  ? l10n.providersStorageWritable
+                  : l10n.providersStorageReadOnly,
               tone: storage.writable
                   ? CodeLabTone.success
                   : CodeLabTone.warning,
@@ -305,7 +318,7 @@ class _ProvidersPageState extends State<ProvidersPage> {
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: CodeLabText(
-              'Keys are stored in an open file $path (mode 0600).',
+              l10n.providersKeysInOpenFile(path),
               role: CodeLabTextRole.caption,
               color: secondary,
             ),
@@ -316,10 +329,10 @@ class _ProvidersPageState extends State<ProvidersPage> {
             InfoBarSeverity.info,
             reason,
           ),
-        const Padding(
-          padding: EdgeInsets.only(top: 18, bottom: 4),
+        Padding(
+          padding: const EdgeInsets.only(top: 18, bottom: 4),
           child: CodeLabText(
-            'Configured providers',
+            l10n.providersConfigured,
             role: CodeLabTextRole.strong,
           ),
         ),
@@ -328,16 +341,15 @@ class _ProvidersPageState extends State<ProvidersPage> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: CodeLabText(
-                    'No providers yet. The embedded agent needs one to run a '
-                    'turn.',
-                    key: ValueKey('providers-empty'),
+                    l10n.providersEmpty,
+                    key: const ValueKey('providers-empty'),
                   ),
                 ),
                 CodeLabButton(
                   key: const ValueKey('providers-empty-add'),
-                  label: 'Add provider',
+                  label: l10n.providersAdd,
                   icon: FluentIcons.add,
                   onPressed: () => unawaited(_openWizard()),
                 ),
@@ -373,16 +385,14 @@ class _ProvidersPageState extends State<ProvidersPage> {
               context,
               CodeLabTextRole.caption,
             )?.copyWith(color: secondary),
-            children: [
-              const TextSpan(text: 'Config file: '),
+            // Одно сообщение, путь внутри моноширинный (D5, правило 7).
+            children: messageSpans((m) => l10n.providersConfigFile(m[0]), [
               TextSpan(text: state.configPath, style: mono),
-            ],
+            ]),
           ),
         ),
         CodeLabText(
-          'Remove asks to confirm with “Also delete the stored key”; removing '
-          'the default provider asks for a “New default model”. Rows defined '
-          'in the project file are not editable here.',
+          l10n.providersRemoveHelp,
           role: CodeLabTextRole.caption,
           color: secondary,
         ),
@@ -403,15 +413,14 @@ class _ProvidersPageState extends State<ProvidersPage> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => ContentDialog(
-          title: CodeLabDialogTitle('Remove provider $id?'),
+          // Текст строится по `context` диалога: открытый диалог
+          // переводится вместе с деревом (D5, п. 9).
+          title: CodeLabDialogTitle(context.l10n.providersRemoveTitle(id)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'The provider is removed from the config file. Sessions that '
-                'use its models keep running until the agent reloads.',
-              ),
+              Text(context.l10n.providersRemoveDetails),
               if (plan.offersKeyDeletion) ...[
                 const SizedBox(height: 12),
                 Checkbox(
@@ -419,20 +428,20 @@ class _ProvidersPageState extends State<ProvidersPage> {
                   checked: deleteKey,
                   onChanged: (value) =>
                       setDialogState(() => deleteKey = value ?? false),
-                  content: const Flexible(
-                    child: Text('Also delete the stored key'),
+                  content: Flexible(
+                    child: Text(context.l10n.providersRemoveDeleteKey),
                   ),
                 ),
               ],
               if (plan.needsNewDefault) ...[
                 const SizedBox(height: 12),
-                const Text('New default model'),
+                Text(context.l10n.providersRemoveNewDefault),
                 const SizedBox(height: 4),
                 ComboBox<String>(
                   key: const ValueKey('providers-remove-new-default'),
                   isExpanded: true,
                   value: newDefault,
-                  placeholder: const Text('Choose a model'),
+                  placeholder: Text(context.l10n.providersChooseModel),
                   items: [
                     for (final model in plan.newDefaultChoices)
                       ComboBoxItem<String>(value: model, child: Text(model)),
@@ -447,14 +456,14 @@ class _ProvidersPageState extends State<ProvidersPage> {
             Button(
               key: const ValueKey('providers-remove-cancel'),
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
+              child: Text(context.l10n.commonCancel),
             ),
             FilledButton(
               key: const ValueKey('providers-remove-confirm'),
               onPressed: plan.needsNewDefault && newDefault == null
                   ? null
                   : () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Remove'),
+              child: Text(context.l10n.commonRemove),
             ),
           ],
         ),
@@ -551,7 +560,14 @@ class _ProviderCard extends StatelessWidget {
               ),
               if (row.isDefault) ...[
                 const SizedBox(width: 8),
-                const CodeLabBadge(label: 'Default', tone: CodeLabTone.accent),
+                // Flexible: русская метка длиннее английской (D8), на узкой
+                // карточке она сжимается с многоточием, а не переполняет Row.
+                Flexible(
+                  child: CodeLabBadge(
+                    label: context.l10n.commonDefault,
+                    tone: CodeLabTone.accent,
+                  ),
+                ),
               ],
             ],
           ),
@@ -577,7 +593,7 @@ class _ProviderCard extends StatelessWidget {
             ),
           if (row.unencryptedHost case final host?)
             CodeLabText(
-              'The key is sent unencrypted to $host.',
+              context.l10n.settingsKeyUnencryptedToHost(host),
               key: ValueKey('providers-unencrypted-${row.id}'),
               role: CodeLabTextRole.caption,
               color: secondary,
@@ -589,7 +605,7 @@ class _ProviderCard extends StatelessWidget {
               child: Wrap(
                 spacing: 4,
                 runSpacing: 4,
-                children: _actions(subtle: true, gaps: false),
+                children: _actions(context, subtle: true, gaps: false),
               ),
             ),
         ],
@@ -599,19 +615,24 @@ class _ProviderCard extends StatelessWidget {
         children: [
           KeyedSubtree(
             key: ValueKey('providers-status-${row.id}'),
-            child: CodeLabBadge(
-              label: check.label,
-              tone: switch (check.kind) {
-                ProviderCheckKind.ok => CodeLabTone.success,
-                ProviderCheckKind.failed ||
-                ProviderCheckKind.keyMissing => CodeLabTone.danger,
-                _ => CodeLabTone.neutral,
-              },
+            // Верхняя граница ширины тега: русский итог проверки длиннее
+            // английского (D8), длиннее предела он сжимается с многоточием.
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: CodeLabBadge(
+                label: check.label,
+                tone: switch (check.kind) {
+                  ProviderCheckKind.ok => CodeLabTone.success,
+                  ProviderCheckKind.failed ||
+                  ProviderCheckKind.keyMissing => CodeLabTone.danger,
+                  _ => CodeLabTone.neutral,
+                },
+              ),
             ),
           ),
           if (!expanded && !narrow) ...[
             const SizedBox(width: 12),
-            ..._actions(subtle: true),
+            ..._actions(context, subtle: true),
           ],
         ],
       ),
@@ -625,22 +646,28 @@ class _ProviderCard extends StatelessWidget {
                 CodeLabKeyValueList(
                   entries: [
                     CodeLabKeyValueEntry(
-                      label: 'Key',
+                      label: context.l10n.providersRowKey,
                       value: row.keyText,
                       monoValue: row.keyMono,
+                      tail: row.keyTail,
                     ),
                     CodeLabKeyValueEntry(
-                      label: 'Last check',
+                      label: context.l10n.providersRowLastCheck,
                       value: check.detail,
                     ),
                     CodeLabKeyValueEntry(
-                      label: 'Source',
+                      label: context.l10n.providersRowSource,
                       monoValue: row.source,
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
-                Row(children: _actions(subtle: false)),
+                // Wrap: три русские кнопки могут не поместиться в строку (D8).
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: _actions(context, subtle: false, gaps: false),
+                ),
               ],
             )
           : null,
@@ -656,20 +683,25 @@ class _ProviderCard extends StatelessWidget {
   /// их задаёт `Wrap`), в раскрытом теле —
   /// «Check» и «Edit» обычные, «Remove» без рамки (артборд). У строки
   /// нередактируемого слоя только «Check».
-  List<Widget> _actions({required bool subtle, bool gaps = true}) {
+  List<Widget> _actions(
+    BuildContext context, {
+    required bool subtle,
+    bool gaps = true,
+  }) {
+    final l10n = context.l10n;
     final secondary = subtle
         ? CodeLabButtonEmphasis.subtle
         : CodeLabButtonEmphasis.secondary;
     final remove = CodeLabButton(
       key: ValueKey('providers-remove-${row.id}'),
-      label: 'Remove',
+      label: l10n.commonRemove,
       emphasis: CodeLabButtonEmphasis.danger,
       onPressed: row.canRemove && !busy ? onRemove : null,
     );
     return [
       CodeLabButton(
         key: ValueKey('providers-check-${row.id}'),
-        label: 'Check',
+        label: l10n.commonCheck,
         emphasis: secondary,
         onPressed: !row.canCheck || row.check.kind == ProviderCheckKind.running
             ? null
@@ -681,7 +713,7 @@ class _ProviderCard extends StatelessWidget {
           row.editHint,
           CodeLabButton(
             key: ValueKey('providers-edit-${row.id}'),
-            label: 'Edit',
+            label: l10n.commonEdit,
             emphasis: secondary,
             onPressed: row.canEdit && !busy ? onEdit : null,
           ),

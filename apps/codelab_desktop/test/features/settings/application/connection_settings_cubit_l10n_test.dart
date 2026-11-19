@@ -118,7 +118,7 @@ void main() {
     addTearDown(strings.close);
   });
 
-  ConnectionSettingsCubit build(AppStrings? port) {
+  ConnectionSettingsCubit build(AppStrings port) {
     final cubit = ConnectionSettingsCubit(
       store: store,
       openSecrets: () async => secrets,

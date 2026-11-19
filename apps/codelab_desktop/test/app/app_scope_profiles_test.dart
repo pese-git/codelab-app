@@ -135,7 +135,15 @@ void main() {
 
         final state = cubit.state as ConnectionSettingsUnreadable;
         expect([for (final row in state.rows) row.id], ['embedded']);
-        expect(state.reason, isNotEmpty);
+        // Причина composition root — тип с текстом без перевода (D5, D6, D7).
+        expect(
+          state.reason,
+          isA<ProfilesNotAvailable>().having(
+            (r) => r.message,
+            'message',
+            isNotEmpty,
+          ),
+        );
         // У окна всегда есть выбранный профиль, а проект выбран (D18):
         // «Restart agent» доступна и при нечитаемом `profiles.json`.
         expect(state.canRestart, isTrue);

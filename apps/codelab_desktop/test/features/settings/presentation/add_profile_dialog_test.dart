@@ -25,6 +25,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../support/fake_profile_secrets.dart';
 import '../../../support/in_memory_profile_store.dart';
 import '../../../support/test_app_scope.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
+import '../../../support/app_strings.dart';
+import '../../../support/l10n_app.dart';
+import '../../../support/no_text_leak.dart';
 
 const _both = [ProfileKind.stdio, ProfileKind.webSocket];
 const _defaultKey = 'codelab.connection.default_profile';
@@ -79,6 +83,7 @@ void main() {
   }) async {
     final secrets = profileSecrets ?? FakeProfileSecrets();
     final cubit = AddProfileCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       store: profileStore ?? store,
       openSecrets: () async => secrets,
       preferences: const SharedPreferencesConnectionPreferences(),
@@ -90,8 +95,8 @@ void main() {
     // Диалог открывает страница; она же загружает id профилей.
     await cubit.start();
     await tester.pumpWidget(
-      FluentApp(
-        home: Builder(
+      localizedFluentApp(
+        Builder(
           builder: (context) => Center(
             child: Button(
               key: const ValueKey('open-dialog'),
@@ -781,9 +786,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byType(ContentDialog),
-          matching: find.byWidgetPredicate(
-            (w) => w is Text && (w.data ?? '').contains('sk-test-leak'),
-          ),
+          matching: findVisibleTextContaining('sk-test-leak'),
         ),
         findsNothing,
       );
@@ -982,12 +985,7 @@ void main() {
       );
       expect(secrets.values, isEmpty);
       // Поле ввода остаётся на экране (скрытое); значения нет ни в одном `Text`.
-      expect(
-        find.byWidgetPredicate(
-          (w) => w is Text && (w.data ?? '').contains(_leak),
-        ),
-        findsNothing,
-      );
+      expect(findVisibleTextContaining(_leak), findsNothing);
     });
 
     testWidgets('Cancel and Esc are blocked while the secret is being '

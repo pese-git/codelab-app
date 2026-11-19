@@ -930,6 +930,7 @@ final class CodeLabPresentationModule extends Module {
         environment: environment.variables,
         profilesPath: environment.profilesPath,
         logger: _settingsLogger(),
+        strings: currentScope.resolve<AppStrings>(),
       );
     });
     // Страница «Connection»: новый Cubit на каждое открытие (файл
@@ -945,6 +946,7 @@ final class CodeLabPresentationModule extends Module {
         environment: environment.variables,
         profilesPath: environment.profilesPath,
         logger: _settingsLogger(),
+        strings: currentScope.resolve<AppStrings>(),
       );
     });
     // Страница «Providers»: новый Cubit на каждое открытие, снимок
@@ -972,6 +974,7 @@ final class CodeLabPresentationModule extends Module {
         logger: _settingsLogger(),
         retryStart: () =>
             currentScope.resolve<CodeLabShellCubit>().retryStart(),
+        strings: currentScope.resolve<AppStrings>(),
       );
     });
     // Страница «Agents & modes»: новый Cubit на каждое открытие (D11); сессия
@@ -1094,6 +1097,7 @@ final class CodeLabPresentationModule extends Module {
           // Баннер виден, пока агент не открылся: подключения нет.
           isAgentConnected: () => false,
           logger: _settingsLogger(),
+          strings: currentScope.resolve<AppStrings>(),
         );
       } on Object catch (error) {
         _settingsLogger().warning(

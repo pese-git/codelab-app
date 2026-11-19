@@ -18,6 +18,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../support/fake_profile_secrets.dart';
 import '../../../support/recording_logger.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
+import '../../../support/app_strings.dart';
+import '../../../support/typed_messages.dart';
 
 const _defaultKey = 'codelab.connection.default_profile';
 
@@ -104,6 +107,7 @@ void main() {
         const SharedPreferencesConnectionPreferences(),
   }) {
     final cubit = AddProfileCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       store: store,
       openSecrets: () async => secrets,
       preferences: preferences,
@@ -180,6 +184,7 @@ void main() {
   group('profiles file in the subtitle (D20)', () {
     AddProfileCubit withPath(String? path, Map<String, String> env) {
       final cubit = AddProfileCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         store: store,
         openSecrets: () async => secrets,
         preferences: const SharedPreferencesConnectionPreferences(),
@@ -1240,6 +1245,7 @@ void main() {
         'late open after close is dropped', () async {
       final gate = Completer<void>();
       final cubit = AddProfileCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         store: store,
         openSecrets: () async {
           await gate.future;
@@ -1275,6 +1281,7 @@ void main() {
       );
       AddProfileCubit dialog() {
         final cubit = AddProfileCubit(
+          strings: FixedAppStrings(AppLocalizationsEn()),
           store: store,
           openSecrets: reopen,
           preferences: const SharedPreferencesConnectionPreferences(),

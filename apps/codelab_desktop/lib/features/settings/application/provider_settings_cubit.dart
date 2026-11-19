@@ -22,6 +22,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import '../../../core/platform/home_path_label.dart';
+import '../../../l10n/app_localizations.dart';
 import 'provider_settings_session.dart';
 import 'provider_settings_state.dart';
 import 'provider_wizard_cubit.dart';
@@ -71,10 +72,9 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     Logger? logger,
     DateTime Function()? now,
     Future<void> Function()? retryStart,
-    // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): порт языка
-    // принят, но Cubit на него не подписывается; поведение — задача 4.2.
-    AppStrings? strings,
-  }) : _workspace = workspace,
+    required AppStrings strings,
+  }) : _strings = strings,
+       _workspace = workspace,
        _retryStart = retryStart,
        _defaultProfile = defaultProfile,
        _open = open,
@@ -85,9 +85,24 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
        _now = now ?? DateTime.now,
        super(const ProviderSettingsLoading()) {
     _accessProfile = _connectedProfile(_workspace.current);
+    // Одна подписка на язык на весь срок жизни Cubit (D5 п. 3, R3): строки,
+    // итоги проверок и InfoBar пересобираются из последних входов, конфиг и
+    // агент не затрагиваются; отменяется в `close()`.
+    _languageSubscription = strings.changes.listen(_handleLanguage);
     _workspaceSubscription = _workspace.state.listen(_onWorkspace);
     _bindSession(_workspace.current.activeSessionId);
   }
+
+  final AppStrings _strings;
+  late final StreamSubscription<AppLocalizations> _languageSubscription;
+
+  /// Причина «только чтение» последнего состояния [ProviderSettingsReadOnly]:
+  /// вход проекции, из которого текст пересобирается при смене языка.
+  _ReadOnlyCause? _readOnlyCause;
+
+  /// Проблемы последнего [ProviderSettingsUnreadable] как типизированные
+  /// входы: проблемы приложения переводятся, проблемы загрузчика — как есть.
+  List<_Problem> _problems = const [];
 
   final ClientWorkspace _workspace;
   final Future<ConnectionProfile> Function() _defaultProfile;
@@ -125,8 +140,9 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
   List<ProviderEntryView> _entries = const [];
   String? _activeModel;
 
-  /// Итоги проверок за жизнь страницы: id → итог (D10).
-  final _results = <String, ProviderCheckView>{};
+  /// Итоги проверок за жизнь страницы: id → данные итога (D10). Хранятся
+  /// данные, а не подписи: подписи строятся на текущем языке (D5, правило 1).
+  final _results = <String, ProviderCheckOutcome>{};
 
   /// Идущие проверки: id → номер и источник отмены. Новая проверка строки и
   /// [close] отменяют прежнюю (токен доходит до `ProviderCheck`, D21).
@@ -148,18 +164,9 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     final access = _accessOf(profile);
     switch (access) {
       case RemoteReadOnly(:final endpoint):
-        _setReadOnly(
-          'Read-only: this agent runs on ${profileOrigin(endpoint)}.',
-          hint:
-              'Change providers and MCP on that host: codelab provider add, '
-              'codelab mcp add, codelab config set.',
-          access: 'remote',
-        );
+        _setReadOnly(_RemoteCause(profileOrigin(endpoint)), access: 'remote');
       case NotManaged(:final agentName):
-        _setReadOnly(
-          'Provider settings are managed by $agentName.',
-          access: 'not_managed',
-        );
+        _setReadOnly(_UnmanagedCause(agentName), access: 'not_managed');
       case EditableSettings():
         await _loadEditable(attempt, profile, access);
     }
@@ -192,22 +199,33 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     };
   }
 
-  void _setReadOnly(String notice, {String? hint, required String access}) {
+  void _setReadOnly(_ReadOnlyCause cause, {required String access}) {
     _session = null;
     _access = null;
     _snapshot = null;
     _entries = const [];
+    _readOnlyCause = cause;
     _logger?.debug(
       'provider_settings.loaded',
       context: {'providers': 0, 'access': access},
     );
-    _emit(
-      ProviderSettingsReadOnly(
-        notice: notice,
-        hint: hint,
+    _emit(_readOnlyState(cause));
+  }
+
+  /// Состояние «только чтение» из причины и текущего языка.
+  ProviderSettingsReadOnly _readOnlyState(_ReadOnlyCause cause) {
+    final l10n = _strings.current;
+    return switch (cause) {
+      _RemoteCause(:final origin) => ProviderSettingsReadOnly(
+        notice: l10n.providersReadOnlyTitle(origin),
+        hint: l10n.settingsRemoteHostHint,
         activeModel: _activeModel,
       ),
-    );
+      _UnmanagedCause(:final agentName) => ProviderSettingsReadOnly(
+        notice: l10n.providersNotManaged(agentName),
+        activeModel: _activeModel,
+      ),
+    };
   }
 
   Future<void> _loadEditable(
@@ -216,7 +234,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     EditableSettings access,
   ) async {
     if (access.paths.codelabHome.isEmpty) {
-      _setUnreadable(const ['The CodeLab home folder is not available.']);
+      _setUnreadable(const [_NoHomeProblem()]);
       return;
     }
     final environment = {
@@ -244,7 +262,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
         'provider_settings.unreadable',
         context: {'error_type': error.runtimeType.toString()},
       );
-      _setUnreadable(const ['Cannot read the agent settings.'], log: false);
+      _setUnreadable(const [_CannotReadSettingsProblem()], log: false);
       return;
     }
     if (isClosed || attempt != _loadAttempt) {
@@ -252,8 +270,9 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     }
     if (snapshot.issues.isNotEmpty || !snapshot.isReadable(ConfigLayer.user)) {
       _setUnreadable([
-        for (final issue in snapshot.issues) issue.toString(),
-        if (snapshot.issues.isEmpty) 'The user config.yaml cannot be read.',
+        // Проблемы загрузчика — текст ядра агента, как есть (D7).
+        for (final issue in snapshot.issues) _LoaderProblem(issue.toString()),
+        if (snapshot.issues.isEmpty) const _UserConfigProblem(),
       ]);
       return;
     }
@@ -278,19 +297,36 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     _emit(_buildReady());
   }
 
-  void _setUnreadable(List<String> problems, {bool log = true}) {
+  void _setUnreadable(List<_Problem> problems, {bool log = true}) {
     _session = null;
     _access = null;
     _snapshot = null;
     _entries = const [];
+    _problems = problems;
     if (log) {
       _logger?.warning(
         'provider_settings.unreadable',
         context: {'error_type': 'ConfigIssue'},
       );
     }
-    _emit(
-      ProviderSettingsUnreadable(problems: problems, activeModel: _activeModel),
+    _emit(_unreadableState());
+  }
+
+  /// Состояние «config.yaml не читается» из типизированных проблем и языка.
+  ProviderSettingsUnreadable _unreadableState() {
+    final l10n = _strings.current;
+    return ProviderSettingsUnreadable(
+      problems: [
+        for (final problem in _problems)
+          switch (problem) {
+            _NoHomeProblem() => l10n.providersProblemNoHome,
+            _CannotReadSettingsProblem() =>
+              l10n.providersProblemCannotReadSettings,
+            _UserConfigProblem() => l10n.providersProblemUserConfig,
+            _LoaderProblem(:final text) => text,
+          },
+      ],
+      activeModel: _activeModel,
     );
   }
 
@@ -335,6 +371,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
   }
 
   ProviderRow _rowOf(ProviderEntryView entry) {
+    final l10n = _strings.current;
     final editable = entry.editable;
     final onlyOne = _entries.length == 1;
     final editRefusal = editable ? _editRefusal(entry) : null;
@@ -342,42 +379,33 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     final definedIn = editable
         ? null
         : switch (source.kind) {
-            ConfigSourceKind.environment => 'the environment',
-            _ => homePathLabel(source.label, _environment),
+            ConfigSourceKind.environment => l10n.providersDefinedInEnvironment,
+            _ => l10n.providersDefinedIn(
+              homePathLabel(source.label, _environment),
+            ),
           };
     final models = entry.models.length;
+    // Подпись строки — перечень независимых частей через « · », а не фраза:
+    // каждая часть — своё сообщение каталога (D5, правило 7).
+    final keyLabel = keyStatusLabel(l10n, entry.key);
     final subtitle = [
       entry.id,
-      _kindLabel(entry.kind),
+      _kindLabel(l10n, entry.kind),
       ?entry.displayBaseUrl,
-      entry.key.label,
-      models == 1 ? '1 model' : '$models models',
-      if (definedIn != null) 'defined in $definedIn',
+      keyLabel,
+      l10n.providersModelCount(models),
+      ?definedIn,
     ].join(' · ');
-    final (keyText, keyMono) = switch (entry.key) {
-      KeyInSecretStore(:final name, :final backendId) => (
-        'In $backendId as ',
-        name,
-      ),
-      KeySecretMissing(:final name, :final backendId) => (
-        'Not stored in $backendId as ',
-        name,
-      ),
-      KeyFromEnv(:final name, :final isSet) => (
-        'Environment variable $name (${isSet ? 'set' : 'not set'})',
-        null,
-      ),
-      KeyLiteralInConfig() => ('In the config file (plain text)', null),
-      KeyNone() => ('No key', null),
-    };
+    final detail = keyStatusDetail(l10n, entry.key);
     return ProviderRow(
       id: entry.id,
       subtitle: subtitle,
-      keyLabel: entry.key.label,
-      keyText: keyText,
-      keyMono: keyMono,
+      keyLabel: keyLabel,
+      keyText: detail.text,
+      keyMono: detail.mono,
+      keyTail: detail.tail,
       source: source.kind == ConfigSourceKind.environment
-          ? 'Environment'
+          ? l10n.providersSourceEnvironment
           : homePathLabel(source.label, _environment),
       isDefault: entry.isDefault,
       editable: editable,
@@ -389,17 +417,16 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
           entry.key is! KeyLiteralInConfig &&
           (entry.kind == null || supportsProviderCheck(entry.kind!)),
       checkHint: entry.kind != null && !supportsProviderCheck(entry.kind!)
-          ? 'Check is not available for ${entry.kind} providers yet.'
+          ? l10n.providersCheckUnavailable(entry.kind!)
           : null,
       keyHint: entry.key is KeyLiteralInConfig
-          ? 'The key is written in config.yaml. Move it to the secret store: '
-                'codelab secret migrate.'
+          ? l10n.providersKeyHintLiteral
           : null,
-      removeHint: editable && onlyOne
-          ? 'The agent needs at least one provider. Add another provider '
-                'first.'
-          : null,
-      check: _results[entry.id] ?? const ProviderCheckView.notChecked(),
+      removeHint: editable && onlyOne ? l10n.providersRemoveLast : null,
+      check: ProviderCheckView.of(
+        _results[entry.id] ?? const CheckNotRun(),
+        l10n,
+      ),
     );
   }
 
@@ -419,13 +446,16 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     return url.host;
   }
 
-  static String _kindLabel(String? kind) => switch (kind) {
-    'openai-compatible' => 'OpenAI-compatible',
-    'anthropic' => 'Anthropic',
-    'gemini' => 'Gemini',
-    final other? => other,
-    null => 'Unknown kind',
-  };
+  /// Подпись вида провайдера: названия продуктов не переводятся (D7), вид,
+  /// незнакомый app, — значение провода как есть; «Unknown kind» — текст app.
+  static String _kindLabel(AppLocalizations l10n, String? kind) =>
+      switch (kind) {
+        'openai-compatible' => 'OpenAI-compatible',
+        'anthropic' => 'Anthropic',
+        'gemini' => 'Gemini',
+        final other? => other,
+        null => l10n.providersUnknownKind,
+      };
 
   /// Почему «Edit» неактивна: правило моста `providerEditRefusal`, общее с
   /// «Remove» и с проверкой автомата при «Save» (D7, D9); тексты разные для
@@ -436,7 +466,9 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
       return null;
     }
     final refusal = providerEditRefusal(snapshot, entry.id);
-    return refusal == null ? null : _refusalText(refusal);
+    return refusal == null
+        ? null
+        : providerRefusalText(_strings.current, refusal);
   }
 
   // --- Мастер провайдера ----------------------------------------------------
@@ -481,6 +513,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
         startFailed: _startFailed,
         before: _snapshot,
         logger: _logger,
+        strings: _strings,
         readSnapshot: () => session.config.snapshot(
           cwd: access.cwd ?? access.paths.codelabHome,
         ),
@@ -492,7 +525,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
       );
       _banner = const ProviderBanner(
         ProviderBannerKind.error,
-        'Cannot open the provider wizard: the agent config cannot be read.',
+        CannotOpenWizardMessage(),
       );
       _publishReady();
       return null;
@@ -558,7 +591,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
       await _finishWrite(
         banner: const ProviderBanner(
           ProviderBannerKind.saved,
-          'Default model saved.',
+          DefaultModelSaved(),
         ),
       );
     } else {
@@ -585,7 +618,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     }
     if (key is KeySecretMissing || (key is KeyFromEnv && !key.isSet)) {
       // Запрос без ключа дал бы заведомый отказ и ввёл бы в заблуждение.
-      _results[id] = const ProviderCheckView.keyMissing();
+      _results[id] = const CheckKeyMissing();
       _publishReady();
       return;
     }
@@ -608,15 +641,15 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     _checks[id] = (operation: operation, cancel: cancel);
     if (kind == null || url == null || !url.hasScheme) {
       _checks.remove(id);
-      _results[id] = ProviderCheckView.failed(
-        label: 'bad response',
+      _results[id] = CheckRejected(
+        reason: ProviderCheckFailureKind.badResponse,
         at: _now(),
       );
       _publishReady();
       return;
     }
     final previous = _results[id];
-    _results[id] = const ProviderCheckView.running();
+    _results[id] = const CheckInProgress();
     _publishReady();
     final log = _logger?.withCorrelation(operationId: '$operation');
     log?.info(
@@ -668,7 +701,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     switch (result) {
       case CheckOk(:final models):
         outcome = 'ok';
-        _results[id] = ProviderCheckView.ok(
+        _results[id] = CheckSucceeded(
           models: models.length,
           durationMs: watch.elapsedMilliseconds,
           at: _now(),
@@ -678,8 +711,8 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
         return;
       case CheckFailure(:final failure):
         outcome = failure.kind.name;
-        _results[id] = ProviderCheckView.failed(
-          label: _failureLabel(failure.kind),
+        _results[id] = CheckRejected(
+          reason: failure.kind,
           status: failure.statusCode,
           at: _now(),
         );
@@ -696,15 +729,6 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     );
     _publishReady();
   }
-
-  static String _failureLabel(ProviderCheckFailureKind kind) => switch (kind) {
-    ProviderCheckFailureKind.unauthorized => 'unauthorized',
-    ProviderCheckFailureKind.notFound => 'not found',
-    ProviderCheckFailureKind.unreachable => 'unreachable',
-    ProviderCheckFailureKind.timeout => 'timeout',
-    ProviderCheckFailureKind.tlsError => 'TLS error',
-    ProviderCheckFailureKind.badResponse => 'bad response',
-  };
 
   // --- Remove --------------------------------------------------------------
 
@@ -775,23 +799,12 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
             'key_deleted': secret == SecretCleanup.deleted,
           },
         );
-        final text = switch (secret) {
-          SecretCleanup.stillReferenced =>
-            'Provider $id removed. The stored key $ownedSecret is kept '
-                'because other settings still use it.',
-          SecretCleanup.deleted =>
-            'Provider $id removed. Its stored key was deleted.',
-          SecretCleanup.failed =>
-            'Provider $id removed, but its stored key could not be deleted. '
-                'Delete it with: codelab secret delete $ownedSecret',
-          _ => 'Provider $id removed.',
-        };
         await _finishWrite(
           banner: ProviderBanner(
             secret == SecretCleanup.failed
                 ? ProviderBannerKind.error
                 : ProviderBannerKind.saved,
-            text,
+            ProviderRemovedMessage(id, secret, ownedSecret),
           ),
         );
         return true;
@@ -802,29 +815,12 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
         await _finishWrite(
           banner: ProviderBanner(
             ProviderBannerKind.error,
-            _refusalText(reason),
+            ProviderRemovalRefusedMessage(reason),
           ),
         );
         return false;
     }
   }
-
-  static String _refusalText(ProviderRemovalRefusal reason) => switch (reason) {
-    ProviderRemovalRefusal.lastProvider =>
-      'The agent needs at least one provider. Add another provider first.',
-    ProviderRemovalRefusal.newDefaultRequired ||
-    ProviderRemovalRefusal.newDefaultInvalid => 'Choose a new default model.',
-    ProviderRemovalRefusal.defaultOverridden =>
-      'The default model is set in a file CodeLab does not write. Change it '
-          'there first.',
-    ProviderRemovalRefusal.notEditable =>
-      'This provider is defined in a read-only file. Change it there.',
-    ProviderRemovalRefusal.multipleLayers =>
-      'This provider is defined in several config files. Change it there.',
-    ProviderRemovalRefusal.unknownProvider ||
-    ProviderRemovalRefusal.layerUnreadable =>
-      'The provider settings changed. Review the page and try again.',
-  };
 
   // --- Запись --------------------------------------------------------------
 
@@ -848,20 +844,20 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
       case ConfigConflict():
         _banner = const ProviderBanner(
           ProviderBannerKind.conflict,
-          'The config changed on disk, so nothing was saved. The page was '
-          'reloaded; review it and try again.',
+          ConfigConflictMessage(),
         );
         _logSaveFailed('conflict');
       case ConfigRejected(:final issues):
         _banner = ProviderBanner(
           ProviderBannerKind.error,
-          'The config was not saved: ${[for (final i in issues) i.key.isEmpty ? i.message : '${i.key}: ${i.message}'].join('; ')}',
+          // Тексты проверки ядра агента — как есть внутри переведённой рамки.
+          ConfigRejectedMessage(configIssuesText(issues)),
         );
         _logSaveFailed('rejected');
       case ConfigInlineSecret(:final key):
         _banner = ProviderBanner(
           ProviderBannerKind.error,
-          'The config was not saved: $key must not hold a literal secret.',
+          ConfigInlineSecretMessage(key),
         );
         _logSaveFailed('inline_secret');
       case ConfigSaved():
@@ -982,6 +978,29 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     }
   }
 
+  /// Смена языка: пересобирает текст текущего состояния из последних входов
+  /// (снимок, итоги проверок данными, причина «только чтение», проблемы).
+  /// Конфиг не перечитывается, агент не опрашивается, баннер (типизированный)
+  /// остаётся и переводится в presentation. После `close` — игнорируется.
+  void _handleLanguage(AppLocalizations _) {
+    if (isClosed) {
+      return;
+    }
+    switch (state) {
+      case ProviderSettingsReady():
+        _publishReady();
+      case ProviderSettingsReadOnly():
+        final cause = _readOnlyCause;
+        if (cause != null) {
+          emit(_readOnlyState(cause));
+        }
+      case ProviderSettingsUnreadable():
+        emit(_unreadableState());
+      case ProviderSettingsLoading():
+        break;
+    }
+  }
+
   void _publishReady() {
     if (isClosed || _snapshot == null || _session == null) {
       return;
@@ -997,6 +1016,7 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
 
   @override
   Future<void> close() async {
+    await _languageSubscription.cancel();
     // Токен обрывает запрос и закрывает соединение; поздний итог не меняет
     // страницу (D21).
     for (final MapEntry(:key, :value) in _checks.entries) {
@@ -1018,4 +1038,48 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     await _workspaceSubscription.cancel();
     return super.close();
   }
+}
+
+/// Причина состояния «только чтение»: вход проекции, из которого текст
+/// InfoBar строится на текущем языке (D5, правило 1).
+sealed class _ReadOnlyCause {
+  const _ReadOnlyCause();
+}
+
+/// Агент удалённый: [origin] — `scheme://host:port` без пути и запроса.
+final class _RemoteCause extends _ReadOnlyCause {
+  const _RemoteCause(this.origin);
+
+  final String origin;
+}
+
+/// Агент сторонний: настройками управляет [agentName].
+final class _UnmanagedCause extends _ReadOnlyCause {
+  const _UnmanagedCause(this.agentName);
+
+  final String agentName;
+}
+
+/// Проблема нечитаемой конфигурации. Проблемы приложения переводятся по
+/// типу; [_LoaderProblem] — текст загрузчика ядра агента, как есть (D7).
+sealed class _Problem {
+  const _Problem();
+}
+
+final class _NoHomeProblem extends _Problem {
+  const _NoHomeProblem();
+}
+
+final class _CannotReadSettingsProblem extends _Problem {
+  const _CannotReadSettingsProblem();
+}
+
+final class _UserConfigProblem extends _Problem {
+  const _UserConfigProblem();
+}
+
+final class _LoaderProblem extends _Problem {
+  const _LoaderProblem(this.text);
+
+  final String text;
 }

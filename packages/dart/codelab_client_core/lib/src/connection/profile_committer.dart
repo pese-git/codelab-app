@@ -68,8 +68,21 @@ final class ProfileSaveFailed extends ProfileCommitResult {
   /// отказ не исключение.
   final String? errorType;
 
-  /// ЗАГЛУШКА задачи 4.1c (D6): причина хранилища при `secretReadOnly`;
-  /// заполняется в 4.1d, doc-комментарий — там же.
+  /// Причина, которую назвало само хранилище секретов (`ReadOnly.reason`).
+  ///
+  /// Почему: при `secretReadOnly` [message] равен либо причине хранилища,
+  /// либо запасной английской строке ядра, и по нему не отличить одно от
+  /// другого; хосту с переводом нужно знать, что показывать как есть, а что
+  /// заменить своим текстом (change `add-desktop-localization`, D6; spec
+  /// acp-client-kit «Причина хранилища у отказа записи профиля»).
+  ///
+  /// Для чего: не `null` только при [ProfileSaveFailedReason.secretReadOnly],
+  /// когда хранилище назвало причину; иначе `null` (хранилище без причины,
+  /// `secretWrite`, `profileWrite`).
+  ///
+  /// Как использовать: app показывает значение как есть, а при `null` — свой
+  /// перевод «The secret store is read-only.»; CLI по-прежнему показывает
+  /// [message], которое не изменилось.
   final String? storeReason;
 
   @override
@@ -229,6 +242,7 @@ final class ProfileCommitter {
           return ProfileSaveFailed(
             ProfileSaveFailedReason.secretReadOnly,
             reason ?? 'The secret store is read-only.',
+            storeReason: reason,
           );
         case Failed(:final message):
           return ProfileSaveFailed(

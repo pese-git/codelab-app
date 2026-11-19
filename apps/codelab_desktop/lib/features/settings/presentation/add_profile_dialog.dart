@@ -7,7 +7,9 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../l10n/l10n.dart';
 import '../application/add_profile_cubit.dart';
+import 'message_spans.dart';
 
 /// Открывает диалог «Add connection profile» поверх [context].
 ///
@@ -88,14 +90,14 @@ class _OpeningDialog extends StatelessWidget {
     return ContentDialog(
       key: const ValueKey('add-profile-opening'),
       constraints: const BoxConstraints(maxWidth: _dialogMaxWidth),
-      title: const CodeLabDialogTitle('Add connection profile'),
+      title: CodeLabDialogTitle(context.l10n.addProfileTitle),
       content: const Center(
         child: SizedBox.square(dimension: 24, child: ProgressRing()),
       ),
       actions: [
         CodeLabButton(
           key: const ValueKey('add-profile-cancel'),
-          label: 'Cancel',
+          label: context.l10n.commonCancel,
           onPressed: () => Navigator.of(context).pop(),
         ),
       ],
@@ -111,6 +113,7 @@ class _FormDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<AddProfileCubit>();
+    final l10n = context.l10n;
     final form = state.form;
     final saving = state is Saving;
 
@@ -121,7 +124,7 @@ class _FormDialog extends StatelessWidget {
       canPop: !saving,
       child: ContentDialog(
         constraints: const BoxConstraints(maxWidth: _dialogMaxWidth),
-        title: const CodeLabDialogTitle('Add connection profile'),
+        title: CodeLabDialogTitle(l10n.addProfileTitle),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -130,26 +133,37 @@ class _FormDialog extends StatelessWidget {
               _Subtitle(id: form.draft.id, path: cubit.profilesPathLabel),
               const SizedBox(height: 12),
               _Fields(state: state),
-              if (state case ConfirmingPlaintext(:final message))
+              if (state case ConfirmingPlaintext(
+                :final origin,
+                :final hasToken,
+              ))
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: _CaptionInfoBar(
                     key: const ValueKey('add-profile-unencrypted'),
                     severity: InfoBarSeverity.warning,
-                    title: 'Unencrypted connection',
-                    message: message,
+                    title: l10n.addProfilePlaintextTitle,
+                    titleIsWidget: true,
+                    // Подтверждение `ws://` — всегда, с токеном и без
+                    // (решение пользователя 2026-11-05, D11, D20): по
+                    // `ws://` открытым текстом идут и промпты с файлами.
+                    message: addProfilePlaintextText(
+                      l10n,
+                      origin: origin,
+                      hasToken: hasToken,
+                    ),
                     action: CodeLabButton(
                       key: const ValueKey('add-profile-save-anyway'),
-                      label: 'Save anyway',
+                      label: l10n.addProfileSaveAnyway,
                       onPressed: () => unawaited(cubit.confirmPlaintext()),
                     ),
                   ),
                 ),
-              if (state case SaveFailed(:final message))
+              if (state case SaveFailed(:final failure))
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: InfoBar(
-                    title: Text(message),
+                    title: Text(addProfileFailureText(l10n, failure)),
                     severity: InfoBarSeverity.error,
                     isLong: true,
                   ),
@@ -160,7 +174,7 @@ class _FormDialog extends StatelessWidget {
         actions: [
           CodeLabButton(
             key: const ValueKey('add-profile-save'),
-            label: 'Save',
+            label: l10n.commonSave,
             emphasis: CodeLabButtonEmphasis.primary,
             onPressed: form.canSave && !saving
                 ? () => unawaited(cubit.save())
@@ -168,7 +182,7 @@ class _FormDialog extends StatelessWidget {
           ),
           CodeLabButton(
             key: const ValueKey('add-profile-cancel'),
-            label: 'Cancel',
+            label: l10n.commonCancel,
             onPressed: saving ? null : () => Navigator.of(context).pop(),
           ),
         ],
@@ -194,13 +208,15 @@ class _Subtitle extends StatelessWidget {
     return Text.rich(
       TextSpan(
         style: caption?.copyWith(color: resources.textFillColorSecondary),
-        children: [
-          const TextSpan(text: 'Saved to '),
-          TextSpan(text: path, style: mono),
-          const TextSpan(text: ' and shared with codelab_cli as '),
-          TextSpan(text: 'codelab -a ${id.isEmpty ? '…' : id}', style: mono),
-          const TextSpan(text: '.'),
-        ],
+        // Одно сообщение с двумя моноширинными значениями: порядок слов
+        // принадлежит переводу (D5, правило 7).
+        children: messageSpans(
+          (m) => context.l10n.addProfileSubtitle(m[0], m[1]),
+          [
+            TextSpan(text: path, style: mono),
+            TextSpan(text: 'codelab -a ${id.isEmpty ? '…' : id}', style: mono),
+          ],
+        ),
       ),
     );
   }
@@ -215,6 +231,7 @@ class _Fields extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<AddProfileCubit>();
+    final l10n = context.l10n;
     final form = state.form;
     final draft = form.draft;
     final errors = form.errors;
@@ -230,29 +247,28 @@ class _Fields extends StatelessWidget {
         // нет, диалог сразу на нём.
         if (form.kinds.length > 1)
           CodeLabFormRow(
-            label: 'Type',
+            label: l10n.addProfileFieldType,
             notes: [
               CodeLabFormNote(
                 isStdio
-                    ? 'Starts the agent as a child process per window and '
-                          'talks ACP over stdin/stdout.'
-                    : 'Connects to codelab-agent serve --ws on this or '
-                          'another machine.',
+                    ? l10n.addProfileTypeStdioNote
+                    : l10n.addProfileTypeWebSocketNote,
               ),
             ],
             child: Align(
               alignment: Alignment.centerLeft,
               child: CodeLabSegmentedControl<ProfileKind>(
-                semanticLabel: 'Profile type',
+                semanticLabel: l10n.addProfileTypeSemantics,
                 value: draft.kind,
-                options: const [
+                options: [
                   CodeLabSegment(
                     value: ProfileKind.stdio,
-                    label: 'Local stdio',
-                    key: ValueKey('add-profile-type-stdio'),
+                    label: l10n.addProfileTypeStdio,
+                    key: const ValueKey('add-profile-type-stdio'),
                   ),
-                  CodeLabSegment(
+                  const CodeLabSegment(
                     value: ProfileKind.webSocket,
+                    // Название протокола не переводится (D7).
                     label: 'WebSocket',
                     key: ValueKey('add-profile-type-websocket'),
                   ),
@@ -262,7 +278,7 @@ class _Fields extends StatelessWidget {
             ),
           ),
         CodeLabFormRow(
-          label: 'Name',
+          label: l10n.addProfileFieldName,
           notes: [
             _IdLine(id: draft.id, onChanged: cubit.setId),
             ?error(ProfileDraftField.label),
@@ -272,22 +288,22 @@ class _Fields extends StatelessWidget {
             fieldKey: const ValueKey('add-profile-name'),
             field: ProfileDraftField.label,
             value: draft.label,
-            placeholder: 'devbox 2',
+            placeholder: l10n.addProfileNamePlaceholder,
             onChanged: cubit.setLabel,
           ),
         ),
-        if (isStdio) ..._stdioRows(cubit, form, error),
-        if (!isStdio) ..._webSocketRows(cubit, form, error),
+        if (isStdio) ..._stdioRows(l10n, cubit, form, error),
+        if (!isStdio) ..._webSocketRows(l10n, cubit, form, error),
         CodeLabFormRow(
-          label: 'After saving',
-          notes: const [CodeLabFormNote('Used when the agent starts.')],
+          label: l10n.addProfileFieldAfterSaving,
+          notes: [CodeLabFormNote(l10n.addProfileUsedWhenAgentStarts)],
           child: Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Checkbox(
               key: const ValueKey('add-profile-use-by-default'),
               checked: form.useByDefault,
               onChanged: (value) => cubit.setUseByDefault(value ?? false),
-              content: const Flexible(child: Text('Use by default')),
+              content: Flexible(child: Text(l10n.addProfileUseByDefault)),
             ),
           ),
         ),
@@ -296,6 +312,7 @@ class _Fields extends StatelessWidget {
   }
 
   List<Widget> _stdioRows(
+    AppLocalizations l10n,
     AddProfileCubit cubit,
     AddProfileForm form,
     CodeLabFormNote? Function(ProfileDraftField) error,
@@ -303,7 +320,7 @@ class _Fields extends StatelessWidget {
     final draft = form.draft;
     return [
       CodeLabFormRow(
-        label: 'Command',
+        label: l10n.addProfileFieldCommand,
         notes: [?error(ProfileDraftField.command)],
         child: _FormTextBox(
           fieldKey: const ValueKey('add-profile-command'),
@@ -315,11 +332,9 @@ class _Fields extends StatelessWidget {
         ),
       ),
       CodeLabFormRow(
-        label: 'Arguments',
+        label: l10n.addProfileFieldArguments,
         notes: [
-          const CodeLabFormNote(
-            'Parsed like a shell: quotes and escapes work.',
-          ),
+          CodeLabFormNote(l10n.addProfileArgumentsNote),
           ?error(ProfileDraftField.args),
         ],
         child: _FormTextBox(
@@ -332,7 +347,7 @@ class _Fields extends StatelessWidget {
         ),
       ),
       CodeLabFormRow(
-        label: 'Folder',
+        label: l10n.addProfileFieldFolder,
         child: Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Checkbox(
@@ -340,12 +355,12 @@ class _Fields extends StatelessWidget {
             checked: draft.runInProjectDirectory,
             onChanged: (value) => cubit.setRunInProject(value ?? false),
             // Flexible: в узком диалоге подпись переносится, а не обрезается.
-            content: const Flexible(child: Text('Run in the project folder')),
+            content: Flexible(child: Text(l10n.addProfileRunInProject)),
           ),
         ),
       ),
       CodeLabFormRow(
-        label: 'Environment',
+        label: l10n.addProfileFieldEnvironment,
         notes: [?error(ProfileDraftField.env)],
         child: _FormTextBox(
           fieldKey: const ValueKey('add-profile-env'),
@@ -361,6 +376,7 @@ class _Fields extends StatelessWidget {
   }
 
   List<Widget> _webSocketRows(
+    AppLocalizations l10n,
     AddProfileCubit cubit,
     AddProfileForm form,
     CodeLabFormNote? Function(ProfileDraftField) error,
@@ -384,7 +400,7 @@ class _Fields extends StatelessWidget {
         ),
       ),
       CodeLabFormRow(
-        label: 'Token',
+        label: l10n.addProfileFieldToken,
         child: _TokenChoices(form: form, error: error(ProfileDraftField.token)),
       ),
     ];
@@ -415,6 +431,7 @@ class _TokenChoices extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<AddProfileCubit>();
+    final l10n = context.l10n;
     final kind = form.tokenKind;
     final storedHint = form.storedSecretsHint;
     // Подсказка недоступного «Store a new token» видна всегда (причина, D3),
@@ -443,17 +460,17 @@ class _TokenChoices extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const RadioButton<AddProfileTokenKind>(
-                key: ValueKey('add-profile-token-none'),
+              RadioButton<AddProfileTokenKind>(
+                key: const ValueKey('add-profile-token-none'),
                 value: AddProfileTokenKind.none,
-                content: Text('No token'),
+                content: Text(l10n.addProfileTokenNone),
               ),
               const SizedBox(height: 6),
               RadioButton<AddProfileTokenKind>(
                 key: const ValueKey('add-profile-token-stored'),
                 value: AddProfileTokenKind.stored,
                 enabled: storedHint == null,
-                content: const Text('Use stored secret'),
+                content: Text(l10n.addProfileTokenStored),
               ),
               if (storedHint != null)
                 Padding(
@@ -486,14 +503,14 @@ class _TokenChoices extends StatelessWidget {
                 key: const ValueKey('add-profile-token-new'),
                 value: AddProfileTokenKind.newToken,
                 enabled: form.newTokenAvailable,
-                content: const Text('Store a new token'),
+                content: Text(l10n.addProfileTokenNew),
               ),
               if (kind == AddProfileTokenKind.newToken)
                 Padding(
                   padding: _indent,
                   child: PasswordBox(
                     key: const ValueKey('add-profile-token-new-value'),
-                    placeholder: 'Paste the token',
+                    placeholder: l10n.addProfileTokenPaste,
                     // Значение не показывается ни во время ввода, ни после
                     // (spec app-settings «Диалог «Add connection profile»»).
                     revealMode: PasswordRevealMode.hidden,
@@ -509,10 +526,10 @@ class _TokenChoices extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 6),
-              const RadioButton<AddProfileTokenKind>(
-                key: ValueKey('add-profile-token-env'),
+              RadioButton<AddProfileTokenKind>(
+                key: const ValueKey('add-profile-token-env'),
                 value: AddProfileTokenKind.env,
-                content: Text('From environment variable'),
+                content: Text(l10n.addProfileTokenEnv),
               ),
             ],
           ),
@@ -533,19 +550,13 @@ class _TokenChoices extends StatelessWidget {
           // Подписи варианта видны, только когда он выбран (как «Saved as …»
           // у «Store a new token»): они объясняют, откуда берётся токен и
           // почему приложение из Finder может его не увидеть.
-          const Padding(
+          Padding(
             padding: _indent,
-            child: CodeLabFormNote(
-              'CodeLab reads the token from this environment variable when '
-              'it connects. Token values are not saved in profiles.json.',
-            ),
+            child: CodeLabFormNote(l10n.addProfileTokenEnvNote),
           ),
-          const Padding(
+          Padding(
             padding: _indent,
-            child: CodeLabFormNote(
-              'Apps opened from Finder do not see variables set in your '
-              'shell profile.',
-            ),
+            child: CodeLabFormNote(l10n.addProfileTokenEnvFinderNote),
           ),
           if (form.tokenNotice case final notice?)
             Padding(
@@ -596,7 +607,7 @@ class _IdLine extends StatelessWidget {
         const SizedBox(width: 6),
         Flexible(
           child: CodeLabText(
-            '· cannot change after saving',
+            context.l10n.addProfileIdCannotChange,
             role: CodeLabTextRole.caption,
             color: resources.textFillColorSecondary,
           ),
@@ -615,13 +626,14 @@ class _SavedDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<AddProfileCubit>();
+    final l10n = context.l10n;
     final resources = FluentTheme.of(context).resources;
     final caption = CodeLabText.styleOf(context, CodeLabTextRole.caption);
     final mono = CodeLabText.styleOf(context, CodeLabTextRole.mono);
 
     return ContentDialog(
       constraints: const BoxConstraints(maxWidth: _dialogMaxWidth),
-      title: const CodeLabDialogTitle('Profile saved'),
+      title: CodeLabDialogTitle(l10n.addProfileSavedTitle),
       content: Column(
         key: const ValueKey('add-profile-saved'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -631,17 +643,19 @@ class _SavedDialog extends StatelessWidget {
             key: const ValueKey('add-profile-saved-bar'),
             severity: InfoBarSeverity.success,
             title: saved.label,
-            message: 'Added to profiles.json as ',
-            tail: [
-              TextSpan(text: saved.profileId, style: mono),
+            // Сообщение одно; id внутри него моноширинный (D5, правило 7).
+            message: '',
+            spans: [
+              ...messageSpans((m) => l10n.addProfileSavedMessage(m[0]), [
+                TextSpan(text: saved.profileId, style: mono),
+              ]),
               if (saved.useByDefault)
-                const TextSpan(text: ' · used by default'),
+                TextSpan(text: l10n.addProfileSavedUsedByDefault),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            'The running agent is unchanged. Select it with Use in the profile '
-            'row; Restart agent applies it.',
+            l10n.addProfileSavedNote,
             style: caption?.copyWith(color: resources.textFillColorSecondary),
           ),
         ],
@@ -649,13 +663,13 @@ class _SavedDialog extends StatelessWidget {
       actions: [
         CodeLabButton(
           key: const ValueKey('add-profile-done'),
-          label: 'Done',
+          label: l10n.commonDone,
           emphasis: CodeLabButtonEmphasis.primary,
           onPressed: () => Navigator.of(context).pop(),
         ),
         CodeLabButton(
           key: const ValueKey('add-profile-add-another'),
-          label: 'Add another',
+          label: l10n.addProfileAddAnother,
           onPressed: cubit.addAnother,
         ),
       ],
@@ -763,14 +777,15 @@ class _FormTextBoxState extends State<_FormTextBox> {
 /// вид совпадает с остальными InfoBar приложения.
 ///
 /// Как использовать: [title] — жирное начало, [message] — продолжение,
-/// [tail] — доп. фрагменты после него (например, моно-id); [action] —
+/// [spans] — продолжение готовыми фрагментами (например, с моно-id); [action] —
 /// необязательная кнопка справа.
 class _CaptionInfoBar extends StatelessWidget {
   const _CaptionInfoBar({
     required this.severity,
     required this.title,
     required this.message,
-    this.tail = const [],
+    this.spans = const [],
+    this.titleIsWidget = false,
     this.action,
     super.key,
   });
@@ -778,7 +793,14 @@ class _CaptionInfoBar extends StatelessWidget {
   final InfoBarSeverity severity;
   final String title;
   final String message;
-  final List<InlineSpan> tail;
+
+  /// Продолжение текста готовыми фрагментами (сообщение со стилизованным
+  /// значением внутри, `messageSpans`); [message] тогда может быть пустым.
+  final List<InlineSpan> spans;
+
+  /// Заголовок — отдельный виджет `Text` внутри строки (для предупреждения
+  /// о `ws://`); иначе — жирный фрагмент общего текста.
+  final bool titleIsWidget;
   final Widget? action;
 
   @override
@@ -804,12 +826,27 @@ class _CaptionInfoBar extends StatelessWidget {
             child: Text.rich(
               TextSpan(
                 children: [
-                  TextSpan(
-                    text: '$title ',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  TextSpan(text: message),
-                  ...tail,
+                  if (titleIsWidget) ...[
+                    // Жирное начало — отдельный `Text`, а не `TextSpan`:
+                    // заголовок предупреждения остаётся самостоятельным
+                    // виджетом (его находят по тексту и читает скринридер), а
+                    // продолжение течёт в одной строке с ним, как в макете.
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.baseline,
+                      baseline: TextBaseline.alphabetic,
+                      child: Text(
+                        title,
+                        style: caption?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const TextSpan(text: ' '),
+                  ] else
+                    TextSpan(
+                      text: '$title ',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  if (message.isNotEmpty) TextSpan(text: message),
+                  ...spans,
                 ],
               ),
               style: caption,

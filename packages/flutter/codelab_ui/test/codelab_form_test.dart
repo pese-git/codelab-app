@@ -140,6 +140,45 @@ void main() {
   });
 
   group('CodeLabSegmentedControl', () {
+    testWidgets(
+      'long labels shrink with an ellipsis instead of overflowing the '
+      'pill (D8, add-desktop-localization)',
+      (tester) async {
+        await tester.pumpWidget(
+          FluentApp(
+            home: Center(
+              child: SizedBox(
+                width: 200,
+                child: CodeLabSegmentedControl<String>(
+                  value: 'a',
+                  options: const [
+                    CodeLabSegment(
+                      value: 'a',
+                      label: 'Очень длинная подпись первого варианта',
+                      key: ValueKey('seg-a'),
+                    ),
+                    CodeLabSegment(
+                      value: 'b',
+                      label: 'Очень длинная подпись второго варианта',
+                      key: ValueKey('seg-b'),
+                    ),
+                  ],
+                  onChanged: (_) {},
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(tester.takeException(), isNull);
+        // Полная подпись остаётся в дереве: обрезается только отрисовка.
+        expect(
+          find.text('Очень длинная подпись первого варианта'),
+          findsOneWidget,
+        );
+      },
+    );
+
     testWidgets('shows all options, marks the selected one and reports a '
         'tap on another', (tester) async {
       String? picked;

@@ -41,6 +41,29 @@ void main() {
     expect(ys.toSet().length, 3);
   });
 
+  testWidgets('tail continues the phrase after the mono value as plain text', (
+    tester,
+  ) async {
+    await pumpList(
+      tester,
+      const CodeLabKeyValueList(
+        entries: [
+          CodeLabKeyValueEntry(
+            label: 'Key',
+            value: 'В file как «',
+            monoValue: 'codelab/a',
+            tail: '»',
+          ),
+        ],
+      ),
+    );
+
+    expect(
+      find.text('В file как «codelab/a»', findRichText: true),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('aligns values in one column after a 140 px label column', (
     tester,
   ) async {

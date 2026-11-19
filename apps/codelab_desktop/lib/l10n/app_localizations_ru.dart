@@ -70,321 +70,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsLanguageSaveRetry => 'Повторить';
 
   @override
-  String get agentSettingLabel_budget_max_steps => 'Лимит шагов';
-
-  @override
-  String get agentSettingDescription_budget_max_steps =>
-      'Запросов к модели за ход.';
-
-  @override
-  String get agentSettingLabel_budget_max_tokens => 'Лимит токенов';
-
-  @override
-  String get agentSettingDescription_budget_max_tokens =>
-      'Сумма входных и выходных токенов за ход.';
-
-  @override
-  String get agentSettingLabel_budget_max_cost => 'Лимит стоимости';
-
-  @override
-  String get agentSettingDescription_budget_max_cost =>
-      'USD за ход; работает только при известных ценах.';
-
-  @override
-  String get agentSettingLabel_budget_max_duration => 'Лимит длительности';
-
-  @override
-  String get agentSettingDescription_budget_max_duration =>
-      'Время хода без ожидания одобрений.';
-
-  @override
-  String get agentSettingLabel_subagents_enabled => 'Субагенты';
-
-  @override
-  String get agentSettingDescription_subagents_enabled =>
-      'Разрешить агенту запускать субагентов (только новые сессии).';
-
-  @override
-  String get agentSettingLabel_subagents_max_depth => 'Лимит глубины';
-
-  @override
-  String get agentSettingDescription_subagents_max_depth =>
-      'Насколько глубоко могут вкладываться субагенты (только новые сессии).';
-
-  @override
-  String get agentSettingLabel_subagents_max_concurrent =>
-      'Лимит одновременных';
-
-  @override
-  String get agentSettingDescription_subagents_max_concurrent =>
-      'Субагентов, работающих одновременно в одном дереве сессии.';
-
-  @override
-  String get agentSettingLabel_subagents_max_per_turn => 'Лимит за ход';
-
-  @override
-  String get agentSettingDescription_subagents_max_per_turn =>
-      'Субагентов, запущенных за ход сессии.';
-
-  @override
-  String get agentSettingLabel_subagents_max_steps => 'Лимит шагов';
-
-  @override
-  String get agentSettingDescription_subagents_max_steps =>
-      'Запросов к модели одного субагента.';
-
-  @override
-  String get agentSettingLabel_subagents_max_tokens => 'Лимит токенов';
-
-  @override
-  String get agentSettingDescription_subagents_max_tokens =>
-      'Входных и выходных токенов одного субагента.';
-
-  @override
-  String get agentSettingLabel_subagents_max_cost => 'Лимит стоимости';
-
-  @override
-  String get agentSettingDescription_subagents_max_cost =>
-      'USD одного субагента; работает только при известных ценах.';
-
-  @override
-  String get agentSettingLabel_subagents_max_duration => 'Лимит длительности';
-
-  @override
-  String get agentSettingDescription_subagents_max_duration =>
-      'Время одного субагента без ожидания одобрений.';
-
-  @override
-  String get agentSettingLabel_subagents_report_max_bytes => 'Размер отчёта';
-
-  @override
-  String get agentSettingDescription_subagents_report_max_bytes =>
-      'Наибольший отчёт субагента в байтах.';
-
-  @override
-  String get agentSettingLabel_subagents_progress_interval =>
-      'Интервал прогресса';
-
-  @override
-  String get agentSettingDescription_subagents_progress_interval =>
-      'Наименьшая пауза между строками прогресса вызова субагента.';
-
-  @override
-  String get agentSettingLabel_subagents_heartbeat_interval =>
-      'Интервал сигнала';
-
-  @override
-  String get agentSettingDescription_subagents_heartbeat_interval =>
-      'Пауза, после которой молчащий вызов субагента сообщает, что он жив.';
-
-  @override
-  String get agentSettingLabel_subagents_cancel_grace => 'Время на отмену';
-
-  @override
-  String get agentSettingDescription_subagents_cancel_grace =>
-      'Сколько вызов ждёт остановки субагентов после отмены.';
-
-  @override
-  String get agentSettingLabel_compaction_enabled => 'Автоматическое сжатие';
-
-  @override
-  String get agentSettingDescription_compaction_enabled =>
-      'Автоматически сжимать контекст, когда он разрастается.';
-
-  @override
-  String get agentSettingLabel_logging_level => 'Уровень журнала';
-
-  @override
-  String get agentSettingDescription_logging_level =>
-      'Подробность журнала агента.';
-
-  @override
-  String get settingsGeneralAgentDefaultsTitle => 'Умолчания агента';
-
-  @override
-  String get settingsGeneralAgentDefaultsCaption =>
-      'Изменения сохраняются для всех проектов.';
-
-  @override
-  String settingsGeneralSharedInfo(String home) {
-    return 'Общие с CLI codelab. Строки с тегом «Общая» берутся из реестра настроек агента и сохраняются в $home/config.yaml; их показывает и codelab /settings.';
-  }
-
-  @override
-  String get settingsGeneralTagShared => 'Общая';
-
-  @override
-  String get settingsGeneralNotSet => 'Не задано';
-
-  @override
-  String get settingsGeneralAppliesAfterRestart =>
-      '(применится после перезапуска)';
-
-  @override
-  String settingsGeneralOverriddenBy(String source) {
-    return 'Этот проект переопределяет значение ($source).';
-  }
-
-  @override
-  String get settingsGeneralRefusalSecret =>
-      'Измените командой codelab secret set.';
-
-  @override
-  String get settingsGeneralRefusalMasked =>
-      'Значение содержит секрет; измените его в файле конфигурации.';
-
-  @override
-  String settingsGeneralRefusalExternal(String source) {
-    return 'Задано источником $source; изменить здесь нельзя.';
-  }
-
-  @override
-  String get settingsGeneralRefusalOther =>
-      'Эту настройку здесь изменить нельзя.';
-
-  @override
-  String settingsGeneralHintIntMin(String min) {
-    return 'Введите целое число не меньше $min.';
-  }
-
-  @override
-  String settingsGeneralHintIntRange(String min, String max) {
-    return 'Введите целое число от $min до $max.';
-  }
-
-  @override
-  String get settingsGeneralHintInt => 'Введите целое число.';
-
-  @override
-  String get settingsGeneralHintNumber => 'Введите число.';
-
-  @override
-  String get settingsGeneralHintDuration =>
-      'Введите длительность, например 500ms, 30s, 2m или 1h.';
-
-  @override
-  String get settingsGeneralSaved => 'Сохранено.';
-
-  @override
-  String get settingsGeneralTailAfterRestart =>
-      'Применится после «Перезапустить агента».';
-
-  @override
-  String get settingsGeneralTailWhenStarts => 'Применится при запуске агента.';
-
-  @override
-  String settingsGeneralSavedOverridden(String source, String effective) {
-    return 'Сохранено для всех проектов; $source переопределяет значение: агент использует $effective.';
-  }
-
-  @override
-  String settingsGeneralSavedUnverified(String home) {
-    return 'Сохранено в $home/config.yaml.';
-  }
-
-  @override
-  String get settingsGeneralConflict =>
-      'Файл конфигурации изменился на диске; страница перечитана. Повторите правку.';
-
-  @override
-  String get settingsGeneralRejected => 'Конфигурация не сохранена.';
-
-  @override
-  String settingsGeneralReadOnlyRemote(String origin) {
-    return 'Только чтение: агент работает на $origin. Измените его настройки на том хосте: codelab config set.';
-  }
-
-  @override
-  String settingsGeneralReadOnlyManaged(String agent) {
-    return 'Настройками агента управляет $agent.';
-  }
-
-  @override
-  String get settingsGeneralUnreadable =>
-      'Не удаётся прочитать конфигурацию агента.';
-
-  @override
-  String get settingsGeneralSectionStartup => 'Запуск и файлы';
-
-  @override
-  String get settingsGeneralReopenTitle =>
-      'Открывать последний проект и его вкладки';
-
-  @override
-  String get settingsGeneralReopenDescription =>
-      'Включено: открывать последний проект и его открытые сессии. Выключено: начинать с недавних проектов в боковой панели. Применится при следующем запуске.';
-
-  @override
-  String get settingsGeneralStartupSaveFailed =>
-      'Не удалось сохранить настройку. При следующем запуске применится прежнее значение.';
-
-  @override
-  String get settingsGeneralSectionAbout => 'О программе';
-
-  @override
-  String settingsGeneralAboutSubtitle(String platform, String agentVersion) {
-    return '$platform · встроенный агент $agentVersion';
-  }
-
-  @override
-  String get settingsGeneralAboutLicense => 'Лицензия';
-
-  @override
-  String get settingsGeneralAboutConfigFolder => 'Папка настроек';
-
-  @override
-  String get settingsGeneralAboutCopyDiagnostics => 'Копировать диагностику';
-
-  @override
-  String get settingsGeneralAboutThirdParty => 'Сторонние уведомления';
-
-  @override
-  String get settingsGeneralAboutReleaseNotes => 'Заметки о выпуске';
-
-  @override
-  String get settingsGeneralAboutOpenLogs => 'Открыть папку журналов';
-
-  @override
-  String get settingsGeneralAboutUpdates =>
-      'Обновления приходят из установщика или менеджера пакетов — приложение само не обновляется.';
-
-  @override
-  String get settingsGeneralAboutCopied => 'Диагностика скопирована.';
-
-  @override
-  String get settingsGeneralAboutReleaseNotesFailed =>
-      'Не удалось открыть заметки о выпуске.';
-
-  @override
-  String get settingsGeneralAboutLogsFailed =>
-      'Не удалось открыть папку журналов.';
-
-  @override
-  String get settingsGeneralAboutPackageLicenses => 'Лицензии пакетов';
-
-  @override
-  String get settingsGeneralAboutClose => 'Закрыть';
-
-  @override
-  String get settingsGeneralUnreadableCannotRead =>
-      'Не удаётся прочитать настройки агента.';
-
-  @override
-  String get settingsGeneralUnreadableHome => 'Папка CodeLab недоступна.';
-
-  @override
-  String get settingsGeneralUnreadableUserLayer =>
-      'Пользовательский config.yaml не читается.';
-
-  @override
-  String get settingsGeneralAboutCopyFailed =>
-      'Не удалось скопировать диагностику.';
-
-  @override
-  String get settingsGeneralAboutLoadFailed =>
-      'Не удалось загрузить раздел «О программе».';
-
-  @override
   String get commonCancel => 'Отмена';
 
   @override
@@ -1094,6 +779,1404 @@ class AppLocalizationsRu extends AppLocalizations {
   String workbenchTokenRequired(int status) {
     return 'Агент требует токен (HTTP $status).';
   }
+
+  @override
+  String get commonSave => 'Сохранить';
+
+  @override
+  String get commonRemove => 'Удалить';
+
+  @override
+  String get commonBack => 'Назад';
+
+  @override
+  String get commonNext => 'Далее';
+
+  @override
+  String get commonDone => 'Готово';
+
+  @override
+  String get commonEdit => 'Изменить';
+
+  @override
+  String get commonCheck => 'Проверить';
+
+  @override
+  String get commonDefault => 'По умолчанию';
+
+  @override
+  String get commonContinue => 'Продолжить';
+
+  @override
+  String get connectionAddProfile => 'Добавить профиль';
+
+  @override
+  String get connectionSectionProfiles => 'Профили';
+
+  @override
+  String get connectionSectionBehavior => 'Поведение';
+
+  @override
+  String get connectionProfilesHelp =>
+      'Общие с codelab_cli через profiles.json в \$CODELAB_HOME. Профиль по умолчанию используется при запуске агента, пока вы не выберете другой кнопкой «Использовать».';
+
+  @override
+  String get connectionJoinCliTitle =>
+      'Присоединиться к сессии, запущенной в CLI';
+
+  @override
+  String get connectionJoinCliBody =>
+      'На хосте выполните codelab-agent serve --ws <port>; CLI подключается командой codelab -a <profile>. Выберите здесь тот же профиль WebSocket; его сессии появятся в боковой панели.';
+
+  @override
+  String get connectionBadgeCurrent => 'Текущий';
+
+  @override
+  String get connectionBadgeSelected => 'Выбрано';
+
+  @override
+  String get connectionStatusConnecting => 'Подключение…';
+
+  @override
+  String get connectionStatusConnected => 'Подключено';
+
+  @override
+  String get connectionStatusFailed => 'Сбой';
+
+  @override
+  String get connectionRowUse => 'Использовать';
+
+  @override
+  String get connectionRowRename => 'Переименовать';
+
+  @override
+  String get connectionRowUseAnotherFirst => 'Сначала выберите другой профиль.';
+
+  @override
+  String get connectionRowNotSaved => 'Текущее подключение (не сохранено)';
+
+  @override
+  String get connectionRenameName => 'Имя';
+
+  @override
+  String get connectionEmbeddedAgentTitle => 'Встроенный агент';
+
+  @override
+  String get connectionEmbeddedAgentSummary =>
+      'Работает внутри CodeLab, отдельного процесса нет.';
+
+  @override
+  String get connectionTokenNone => 'Без токена';
+
+  @override
+  String connectionTokenFromEnv(String variable) {
+    return 'Из $variable';
+  }
+
+  @override
+  String tokenEnvNotSet(String name) {
+    return '$name не задана в окружении CodeLab.';
+  }
+
+  @override
+  String connectionTokenSecret(String name) {
+    return 'Секрет токена «$name»';
+  }
+
+  @override
+  String connectionTokenSecretSet(String backend) {
+    return '$backend · задан';
+  }
+
+  @override
+  String connectionTokenSecretMissing(String backend) {
+    return '$backend · отсутствует';
+  }
+
+  @override
+  String get connectionTokenUnsupported =>
+      'нераспознанная ссылка на токен (в этой версии не поддерживается)';
+
+  @override
+  String connectionReadOnlyTitle(String origin) {
+    return 'Только чтение: агент работает на $origin';
+  }
+
+  @override
+  String get settingsRemoteHostHint =>
+      'Изменить провайдеров и MCP можно на том хосте: codelab provider add, codelab mcp add, codelab config set.';
+
+  @override
+  String get connectionIgnoredDefault =>
+      'Профиль «default» в profiles.json игнорируется: default — это встроенный агент. Удалите его командой codelab profiles remove default.';
+
+  @override
+  String get connectionIgnoredDefaultRemoveTitle =>
+      'Удалить игнорируемый профиль «default»?';
+
+  @override
+  String get connectionIgnoredDefaultRemoveDetails =>
+      'Из profiles.json удаляется только запись «default»; остальные профили остаются.';
+
+  @override
+  String connectionUnreadableWithPath(String path, String reason) {
+    return 'Не удаётся прочитать $path: $reason. Исправьте или удалите файл; CodeLab его не перезапишет.';
+  }
+
+  @override
+  String connectionUnreadableWithoutPath(String reason) {
+    return 'Не удаётся использовать профили: $reason.';
+  }
+
+  @override
+  String get connectionUnreadableUnsupported =>
+      'файл имеет неподдерживаемую версию или неверную структуру';
+
+  @override
+  String connectionUnreadableCannotRead(String errorType) {
+    return 'файл не удаётся прочитать ($errorType)';
+  }
+
+  @override
+  String get connectionFailureSaveFailed =>
+      'Не удалось сохранить изменение. Повторите попытку.';
+
+  @override
+  String connectionFailureTokenNotDeleted(String name) {
+    return 'Профиль удалён, но сохранённый токен «$name» не удалён. Удалите его командой codelab secret delete $name.';
+  }
+
+  @override
+  String connectionRemoveTitle(String name) {
+    return 'Удалить профиль $name?';
+  }
+
+  @override
+  String get connectionRemoveDetails =>
+      'Запись удаляется из profiles.json. Переменные окружения и другие настройки не затрагиваются.';
+
+  @override
+  String connectionRemoveDeleteToken(String name) {
+    return 'Также удалить сохранённый токен «$name»';
+  }
+
+  @override
+  String get connectionReconnect => 'Переподключиться';
+
+  @override
+  String get connectionRestartButton => 'Перезапустить';
+
+  @override
+  String get connectionRestartHint => 'Запустится, когда вы откроете проект.';
+
+  @override
+  String connectionRestartDescription(String subject) {
+    return 'Переподключает $subject и перезагружает открытые сессии. Выполняющийся ход прерывается; промпты в очереди сохраняются.';
+  }
+
+  @override
+  String get connectionRestartSubjectWindow => 'профиль этого окна';
+
+  @override
+  String connectionRestartToUse(String subject) {
+    return 'Перезапустите агента, чтобы использовать $subject.';
+  }
+
+  @override
+  String get addProfileTitle => 'Добавить профиль подключения';
+
+  @override
+  String addProfileSubtitle(String path, String command) {
+    return 'Сохраняется в $path и доступен в codelab_cli как $command.';
+  }
+
+  @override
+  String get addProfileFieldType => 'Тип';
+
+  @override
+  String get addProfileFieldName => 'Имя';
+
+  @override
+  String get addProfileFieldCommand => 'Команда';
+
+  @override
+  String get addProfileFieldArguments => 'Аргументы';
+
+  @override
+  String get addProfileFieldFolder => 'Папка';
+
+  @override
+  String get addProfileFieldEnvironment => 'Окружение';
+
+  @override
+  String get addProfileFieldToken => 'Токен';
+
+  @override
+  String get addProfileFieldAfterSaving => 'После сохранения';
+
+  @override
+  String get addProfileTypeSemantics => 'Тип профиля';
+
+  @override
+  String get addProfileTypeStdio => 'Локальный stdio';
+
+  @override
+  String get addProfileTypeStdioNote =>
+      'Запускает агента как дочерний процесс для каждого окна и говорит по ACP через stdin/stdout.';
+
+  @override
+  String get addProfileTypeWebSocketNote =>
+      'Подключается к codelab-agent serve --ws на этой или другой машине.';
+
+  @override
+  String get addProfileIdCannotChange => '· нельзя изменить после сохранения';
+
+  @override
+  String get addProfileNamePlaceholder => 'devbox 2';
+
+  @override
+  String get addProfileArgumentsNote =>
+      'Разбираются как в командной оболочке: кавычки и экранирование работают.';
+
+  @override
+  String get addProfileRunInProject => 'Запускать в папке проекта';
+
+  @override
+  String get addProfileUseByDefault => 'Использовать по умолчанию';
+
+  @override
+  String get addProfileUsedWhenAgentStarts =>
+      'Используется при запуске агента.';
+
+  @override
+  String get addProfileTokenNone => 'Без токена';
+
+  @override
+  String get addProfileTokenStored => 'Использовать сохранённый секрет';
+
+  @override
+  String get addProfileTokenNew => 'Сохранить новый токен';
+
+  @override
+  String get addProfileTokenEnv => 'Из переменной окружения';
+
+  @override
+  String get addProfileTokenPaste => 'Вставьте токен';
+
+  @override
+  String get addProfileTokenEnvNote =>
+      'CodeLab читает токен из этой переменной окружения при подключении. Значения токенов не сохраняются в profiles.json.';
+
+  @override
+  String get addProfileTokenEnvFinderNote =>
+      'Приложения, открытые из Finder, не видят переменных, заданных в профиле вашей оболочки.';
+
+  @override
+  String addProfileStoredSecretsHint(String backend) {
+    return 'В $backend нет сохранённых секретов.';
+  }
+
+  @override
+  String addProfileNewTokenHint(String name, String backend) {
+    return 'Сохраняется как «$name» в $backend. Значение больше не показывается и не записывается в profiles.json.';
+  }
+
+  @override
+  String addProfileSecretStoreReadOnly(String backend) {
+    return 'Хранилище секретов $backend доступно только для чтения.';
+  }
+
+  @override
+  String get addProfileWarningTokenPlaintext =>
+      'ws:// к другой машине: токен передаётся без шифрования.';
+
+  @override
+  String get addProfileWarningTrafficPlaintext =>
+      'ws:// к другой машине: трафик передаётся без шифрования.';
+
+  @override
+  String get addProfilePlaintextTitle => 'Соединение без шифрования';
+
+  @override
+  String addProfilePlaintextWithToken(String origin) {
+    return 'Токен для $origin будет передан открытым текстом. Используйте wss://, если хост это поддерживает.';
+  }
+
+  @override
+  String addProfilePlaintextWithoutToken(String origin) {
+    return 'Промпты и файлы, отправленные на $origin, будут переданы открытым текстом. Используйте wss://, если хост это поддерживает.';
+  }
+
+  @override
+  String get addProfileSaveAnyway => 'Всё равно сохранить';
+
+  @override
+  String get addProfileErrorLabelEmpty => 'Введите имя.';
+
+  @override
+  String get addProfileErrorIdEmpty => 'Укажите id.';
+
+  @override
+  String addProfileErrorIdReserved(String id) {
+    return '«$id» зарезервирован для встроенного агента.';
+  }
+
+  @override
+  String addProfileErrorIdTaken(String id) {
+    return 'Профиль с id «$id» уже существует.';
+  }
+
+  @override
+  String get addProfileErrorIdInvalid =>
+      'Используйте строчные буквы, цифры, «.», «_» и «-» (до 64 символов).';
+
+  @override
+  String get addProfileErrorCommandEmpty =>
+      'Введите команду, которая запускает агента.';
+
+  @override
+  String get addProfileErrorArgsInvalid => 'В аргументах не закрыта кавычка.';
+
+  @override
+  String get addProfileErrorUrlInvalid => 'Укажите ws:// или wss:// и хост.';
+
+  @override
+  String get addProfileErrorUrlUserInfo =>
+      'Уберите имя пользователя и пароль из URL; вместо этого используйте поле «Токен».';
+
+  @override
+  String get addProfileErrorTokenEnvNameInvalid =>
+      'Имя переменной: буквы, цифры и «_», не может начинаться с цифры.';
+
+  @override
+  String get addProfileErrorTokenSecretNameInvalid =>
+      'Имя секрета: строчные буквы, цифры и . _ / -, до 128 символов.';
+
+  @override
+  String get addProfileErrorTokenSecretEmpty => 'Введите токен.';
+
+  @override
+  String get addProfileErrorTokenSecretIdInvalid =>
+      'Этот id не подходит для имени сохранённого токена; избегайте «..».';
+
+  @override
+  String addProfileErrorTokenSecretExists(String name, String backend) {
+    return 'Сохранённый токен «$name» уже есть в $backend. Выберите его в варианте «Использовать сохранённый секрет» или удалите командой codelab secret delete.';
+  }
+
+  @override
+  String get addProfileSavedTitle => 'Профиль сохранён';
+
+  @override
+  String addProfileSavedMessage(String id) {
+    return 'Добавлен в profiles.json как «$id»';
+  }
+
+  @override
+  String get addProfileSavedUsedByDefault => ' · используется по умолчанию';
+
+  @override
+  String get addProfileSavedNote =>
+      'Работающий агент не изменился. Выберите профиль кнопкой «Использовать» в его строке; применит его «Перезапустить агента».';
+
+  @override
+  String get addProfileAddAnother => 'Добавить ещё';
+
+  @override
+  String get addProfileFailureProfile =>
+      'Не удалось сохранить профиль. Повторите попытку.';
+
+  @override
+  String get addProfileFailureSecret =>
+      'Не удалось сохранить токен. Повторите попытку.';
+
+  @override
+  String addProfileFailureOrphanedToken(String backend, String name) {
+    return 'Профиль не сохранён; токен остался в $backend под именем «$name». Удалите его командой codelab secret delete $name.';
+  }
+
+  @override
+  String get secretStoreReadOnly =>
+      'Хранилище секретов доступно только для чтения.';
+
+  @override
+  String addProfileErrorEnvSecretLike(String key, String syntax) {
+    return '$key похоже на секрет. Задайте его в системном окружении или сошлитесь на него в конфигурации агента как $syntax.';
+  }
+
+  @override
+  String get providersAdd => 'Добавить провайдера';
+
+  @override
+  String get providersDefaultModel => 'Модель по умолчанию';
+
+  @override
+  String get providersUsedByNewSessions => 'Используется новыми сессиями.';
+
+  @override
+  String providersActiveInSession(String model) {
+    return 'Активна в этой сессии: $model';
+  }
+
+  @override
+  String get providersChooseModel => 'Выберите модель';
+
+  @override
+  String providersKeyStorage(String backend) {
+    return 'Хранилище ключей: $backend';
+  }
+
+  @override
+  String get providersKeyStorageDescription =>
+      'Читаются только имена и наличие ключей — значения никогда не попадают в приложение';
+
+  @override
+  String get providersStorageWritable => 'запись разрешена';
+
+  @override
+  String get providersStorageReadOnly => 'только чтение';
+
+  @override
+  String providersKeysInOpenFile(String path) {
+    return 'Ключи хранятся в открытом файле $path (режим 0600).';
+  }
+
+  @override
+  String get providersConfigured => 'Настроенные провайдеры';
+
+  @override
+  String get providersEmpty =>
+      'Провайдеров пока нет. Встроенному агенту нужен хотя бы один, чтобы выполнить ход.';
+
+  @override
+  String providersConfigFile(String path) {
+    return 'Файл конфигурации: $path';
+  }
+
+  @override
+  String get providersRemoveHelp =>
+      'При удалении запрашивается подтверждение с флажком «Также удалить сохранённый ключ»; при удалении провайдера по умолчанию запрашивается «Новая модель по умолчанию». Строки, определённые в файле проекта, здесь не редактируются.';
+
+  @override
+  String providersReadOnlyTitle(String origin) {
+    return 'Только чтение: агент работает на $origin.';
+  }
+
+  @override
+  String providersNotManaged(String agent) {
+    return 'Настройками провайдеров управляет $agent.';
+  }
+
+  @override
+  String get providersUnreadable =>
+      'Не удаётся прочитать конфигурацию агента. Исправьте или удалите файл; CodeLab его не перезапишет.';
+
+  @override
+  String get providersProblemNoHome => 'Домашняя папка CodeLab недоступна.';
+
+  @override
+  String get providersProblemCannotReadSettings =>
+      'Не удаётся прочитать настройки агента.';
+
+  @override
+  String get providersProblemUserConfig =>
+      'Пользовательский config.yaml не удаётся прочитать.';
+
+  @override
+  String get providersUnknownKind => 'Неизвестный вид';
+
+  @override
+  String providersModelCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count модели',
+      many: '$count моделей',
+      few: '$count модели',
+      one: '$count модель',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String providersDefinedIn(String path) {
+    return 'определён в $path';
+  }
+
+  @override
+  String get providersDefinedInEnvironment => 'определён в окружении';
+
+  @override
+  String get providersSourceEnvironment => 'Окружение';
+
+  @override
+  String providersKeyLabelInStore(String backend) {
+    return 'Ключ: в хранилище $backend';
+  }
+
+  @override
+  String providersKeyLabelMissing(String backend) {
+    return 'Ключ: нет в хранилище $backend';
+  }
+
+  @override
+  String providersKeyLabelEnvSet(String name) {
+    return 'Ключ: переменная $name (задана)';
+  }
+
+  @override
+  String providersKeyLabelEnvNotSet(String name) {
+    return 'Ключ: переменная $name (не задана)';
+  }
+
+  @override
+  String get providersKeyLabelLiteral =>
+      'Ключ: в файле конфигурации (открытым текстом)';
+
+  @override
+  String get providersKeyLabelNone => 'Без ключа';
+
+  @override
+  String providersKeyInStore(String backend, String name) {
+    return 'В $backend как «$name»';
+  }
+
+  @override
+  String providersKeyNotStored(String backend, String name) {
+    return 'Нет в $backend как «$name»';
+  }
+
+  @override
+  String providersKeyEnvSet(String name) {
+    return 'Переменная окружения $name (задана)';
+  }
+
+  @override
+  String providersKeyEnvNotSet(String name) {
+    return 'Переменная окружения $name (не задана)';
+  }
+
+  @override
+  String get providersKeyLiteral => 'В файле конфигурации (открытым текстом)';
+
+  @override
+  String get providersKeyHintLiteral =>
+      'Ключ записан в config.yaml. Перенесите его в хранилище секретов: codelab secret migrate.';
+
+  @override
+  String settingsKeyUnencryptedToHost(String host) {
+    return 'Ключ отправляется в открытом виде на $host.';
+  }
+
+  @override
+  String providersCheckUnavailable(String kind) {
+    return 'Проверка для провайдеров $kind пока недоступна.';
+  }
+
+  @override
+  String get providersRemoveLast =>
+      'Агенту нужен хотя бы один провайдер. Сначала добавьте другого.';
+
+  @override
+  String get providersRefusalNotEditable =>
+      'Этот провайдер определён в файле только для чтения. Измените его там.';
+
+  @override
+  String get providersRefusalSeveralFiles =>
+      'Этот провайдер определён в нескольких файлах конфигурации. Измените его там.';
+
+  @override
+  String get providersRefusalNewDefault =>
+      'Выберите новую модель по умолчанию.';
+
+  @override
+  String get providersRefusalDefaultOverridden =>
+      'Модель по умолчанию задана в файле, в который CodeLab не пишет. Сначала измените её там.';
+
+  @override
+  String get providersRefusalChanged =>
+      'Настройки провайдеров изменились. Проверьте страницу и повторите попытку.';
+
+  @override
+  String get providersCheckNotChecked => 'не проверялся';
+
+  @override
+  String get providersCheckNotCheckedYet => 'Ещё не проверялся';
+
+  @override
+  String get providersCheckRunning => 'проверка…';
+
+  @override
+  String get providersCheckRunningDetail => 'Проверка…';
+
+  @override
+  String providersCheckOkLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count модели',
+      many: '$count моделей',
+      few: '$count модели',
+      one: '$count модель',
+    );
+    return 'успешно, $_temp0';
+  }
+
+  @override
+  String providersCheckOkDetail(String time, int count, int ms) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count модели',
+      many: '$count моделей',
+      few: '$count модели',
+      one: '$count модель',
+    );
+    return '$time · $_temp0 · $ms мс';
+  }
+
+  @override
+  String providersCheckFailedDetail(String time, String label) {
+    return '$time · $label';
+  }
+
+  @override
+  String providersCheckFailedDetailStatus(
+    String time,
+    String label,
+    int status,
+  ) {
+    return '$time · $label (HTTP $status)';
+  }
+
+  @override
+  String get providersCheckUnauthorized => 'не авторизован';
+
+  @override
+  String get providersCheckNotFound => 'не найдено';
+
+  @override
+  String get providersCheckUnreachable => 'недоступен';
+
+  @override
+  String get providersCheckTimeout => 'тайм-аут';
+
+  @override
+  String get providersCheckTlsError => 'ошибка TLS';
+
+  @override
+  String get providersCheckBadResponse => 'неверный ответ';
+
+  @override
+  String get providersCheckKeyMissing => 'Ключ: нет';
+
+  @override
+  String get providersCheckKeyMissingDetail => 'Не проверялся: ключа нет';
+
+  @override
+  String get providersRowKey => 'Ключ';
+
+  @override
+  String get providersRowLastCheck => 'Последняя проверка';
+
+  @override
+  String get providersRowSource => 'Источник';
+
+  @override
+  String providersRemoveTitle(String id) {
+    return 'Удалить провайдера $id?';
+  }
+
+  @override
+  String get providersRemoveDetails =>
+      'Провайдер удаляется из файла конфигурации. Сессии, использующие его модели, продолжают работать, пока агент не перезагрузится.';
+
+  @override
+  String get providersRemoveDeleteKey => 'Также удалить сохранённый ключ';
+
+  @override
+  String get providersRemoveNewDefault => 'Новая модель по умолчанию';
+
+  @override
+  String get providersBannerDefaultModelSaved =>
+      'Модель по умолчанию сохранена.';
+
+  @override
+  String providersBannerRemoved(String id) {
+    return 'Провайдер $id удалён.';
+  }
+
+  @override
+  String providersBannerRemovedKeyDeleted(String id) {
+    return 'Провайдер $id удалён. Его сохранённый ключ удалён.';
+  }
+
+  @override
+  String providersBannerRemovedKeyKept(String id, String secret) {
+    return 'Провайдер $id удалён. Сохранённый ключ «$secret» оставлен, потому что его используют другие настройки.';
+  }
+
+  @override
+  String providersBannerRemovedKeyFailed(String id, String secret) {
+    return 'Провайдер $id удалён, но его сохранённый ключ удалить не удалось. Удалите его командой: codelab secret delete $secret';
+  }
+
+  @override
+  String get configConflict =>
+      'Конфигурация изменилась на диске, поэтому ничего не сохранено. Страница перезагружена; проверьте её и повторите попытку.';
+
+  @override
+  String configNotSavedRejected(String issues) {
+    return 'Конфигурация не сохранена: $issues';
+  }
+
+  @override
+  String configNotSavedInlineSecret(String key) {
+    return 'Конфигурация не сохранена: $key не должен содержать секрет в открытом виде.';
+  }
+
+  @override
+  String get configNotSavedPlain => 'Конфигурация не сохранена.';
+
+  @override
+  String configNotSavedErrorType(String errorType) {
+    return 'Конфигурация не сохранена ($errorType).';
+  }
+
+  @override
+  String get providersBannerCannotOpenWizard =>
+      'Не удаётся открыть мастер провайдера: конфигурация агента не читается.';
+
+  @override
+  String get providersBannerSavedNextStart =>
+      'Сохранено. Агент использует провайдера при следующем запуске.';
+
+  @override
+  String providersBannerSaved(String id) {
+    return 'Провайдер $id сохранён.';
+  }
+
+  @override
+  String providersBannerSavedKeyRestart(String id) {
+    return 'Провайдер $id сохранён. Новый ключ вступит в силу после «Перезапустить агента» (Настройки › Подключение).';
+  }
+
+  @override
+  String providersBannerSavedModelsRestart(String id) {
+    return 'Провайдер $id сохранён. Его модели станут доступны после «Перезапустить агента» (Настройки › Подключение).';
+  }
+
+  @override
+  String get wizardTitleAdd => 'Добавить провайдера';
+
+  @override
+  String wizardTitleEdit(String id) {
+    return 'Изменить провайдера $id';
+  }
+
+  @override
+  String get wizardStepApiType => 'Тип API';
+
+  @override
+  String get wizardStepBaseUrl => 'Базовый URL';
+
+  @override
+  String get wizardStepKey => 'Ключ';
+
+  @override
+  String get wizardStepCheck => 'Проверка';
+
+  @override
+  String get wizardStepModel => 'Модель';
+
+  @override
+  String get wizardStepReview => 'Обзор';
+
+  @override
+  String get wizardSummaryType => 'Тип';
+
+  @override
+  String get wizardSummaryProvider => 'Провайдер';
+
+  @override
+  String get wizardSummaryFile => 'Файл';
+
+  @override
+  String get wizardPresetOllama => 'Ollama (локально, без ключа)';
+
+  @override
+  String get wizardPresetCustomOpenAi => 'Свой адрес, совместимый с OpenAI';
+
+  @override
+  String get wizardPresetCustomAnthropic =>
+      'Свой адрес, совместимый с Anthropic';
+
+  @override
+  String get wizardTypeCustomOpenAi => 'Свой адрес, совместимый с OpenAI';
+
+  @override
+  String get wizardTypeCustomAnthropic => 'Свой адрес, совместимый с Anthropic';
+
+  @override
+  String wizardSummaryKeyStore(String backend, String name) {
+    return 'Сохранить в $backend как «$name»';
+  }
+
+  @override
+  String wizardSummaryKeyUseStored(String name) {
+    return 'Использовать сохранённый ключ «$name»';
+  }
+
+  @override
+  String get wizardKeepCurrentKey => 'Оставить текущий ключ';
+
+  @override
+  String wizardSummaryKeyEnv(String name) {
+    return 'Читать из переменной окружения ($name)';
+  }
+
+  @override
+  String wizardPlanKeySecret(String name, String backend) {
+    return 'секрет «$name» ($backend)';
+  }
+
+  @override
+  String get wizardPlanKeyKept => 'оставлен как есть';
+
+  @override
+  String wizardPlanKeyEnv(String name) {
+    return 'переменная окружения $name';
+  }
+
+  @override
+  String get wizardPlanKeyNone => 'нет';
+
+  @override
+  String wizardFailKeyRejectedStatus(int status) {
+    return 'Ключ отклонён ($status)';
+  }
+
+  @override
+  String get wizardFailKeyRejected => 'Ключ отклонён';
+
+  @override
+  String wizardFailNotFound(int status) {
+    return 'Список моделей не найден ($status)';
+  }
+
+  @override
+  String get wizardFailUnreachable => 'Сервер недоступен';
+
+  @override
+  String wizardFailTimeout(int seconds) {
+    return 'Время ожидания истекло: $seconds с';
+  }
+
+  @override
+  String get wizardFailTls => 'Ошибка TLS';
+
+  @override
+  String wizardFailUnexpectedStatus(int status) {
+    return 'Неожиданный ответ ($status)';
+  }
+
+  @override
+  String get wizardFailUnexpected => 'Неожиданный ответ';
+
+  @override
+  String get wizardFailNotFoundNote =>
+      'Сервер ответил, но GET /models не существует. Серверы OpenAI-compatible обычно находятся по адресу /v1.';
+
+  @override
+  String get wizardKeyUseStored => 'Использовать сохранённый ключ';
+
+  @override
+  String get wizardKeyReplace => 'Заменить его';
+
+  @override
+  String wizardKeyStore(String backend, String name) {
+    return 'Сохранить в $backend как «$name»';
+  }
+
+  @override
+  String get wizardKeyEnv => 'Читать из переменной окружения';
+
+  @override
+  String wizardKeyEnvNamed(String name) {
+    return 'Читать из переменной окружения ($name)';
+  }
+
+  @override
+  String get wizardKeySourceLabel => 'Источник ключа API';
+
+  @override
+  String get wizardKeyFieldLabel => 'Ключ API';
+
+  @override
+  String get wizardKeyEnvFieldLabel => 'Имя переменной';
+
+  @override
+  String get wizardErrorAddressInvalid => 'Введите адрес http или https.';
+
+  @override
+  String get wizardErrorAddressUserInfo =>
+      'Уберите имя пользователя и пароль из адреса.';
+
+  @override
+  String get wizardErrorKeyEmpty => 'Введите ключ API.';
+
+  @override
+  String wizardErrorKeyAlreadyStored(String name, String backend) {
+    return 'Сохранённый ключ «$name» уже есть в $backend.';
+  }
+
+  @override
+  String get wizardErrorNothingToKeep =>
+      'Нет сохранённого ключа, который можно оставить.';
+
+  @override
+  String get wizardErrorEnvVarEmpty => 'Введите имя переменной окружения.';
+
+  @override
+  String get wizardErrorContextWindow =>
+      'Окно контекста должно быть положительным числом.';
+
+  @override
+  String get wizardErrorMaxOutput =>
+      'Максимум токенов вывода должен быть положительным числом.';
+
+  @override
+  String get wizardErrorProviderId =>
+      'Id провайдера должен быть свободен и соответствовать [a-z0-9_-]+.';
+
+  @override
+  String get wizardErrorTargetUnavailable => 'Эта цель недоступна.';
+
+  @override
+  String get wizardRefusalProviderExists =>
+      'Провайдер с таким id уже существует.';
+
+  @override
+  String get wizardRefusalProviderMissing =>
+      'Провайдера больше нет в конфигурации.';
+
+  @override
+  String get wizardRefusalNotEditable =>
+      'Этот провайдер нельзя изменить здесь.';
+
+  @override
+  String get wizardRefusalSeveralFiles =>
+      'Этот провайдер определён в нескольких файлах конфигурации.';
+
+  @override
+  String get wizardRefusalLayerUnreadable => 'Файл конфигурации не читается.';
+
+  @override
+  String get wizardKeyNoticeLiteral =>
+      'Ключ записан в config.yaml. Выберите, где его хранить вместо этого.';
+
+  @override
+  String wizardNotVerified(String reason) {
+    return 'Не проверено: $reason';
+  }
+
+  @override
+  String get wizardNotVerifiedUnreachable => 'сервер недоступен';
+
+  @override
+  String get wizardNotVerifiedTimeout => 'истекло время ожидания';
+
+  @override
+  String get wizardInsecureConfirm => 'Всё равно использовать http';
+
+  @override
+  String get wizardChecking => 'Проверяем адрес и ключ…';
+
+  @override
+  String get wizardContinueQuestion => 'Как продолжить?';
+
+  @override
+  String wizardUseAddress(String address) {
+    return 'Использовать $address';
+  }
+
+  @override
+  String get wizardEnterModelManually => 'Ввести модель вручную';
+
+  @override
+  String get wizardModelId => 'ID модели';
+
+  @override
+  String get wizardSkipWarning =>
+      'Адрес и ключ не проверены, список моделей недоступен. Модель придётся ввести самостоятельно.';
+
+  @override
+  String get wizardSkipConfirm => 'Продолжить без проверки';
+
+  @override
+  String get wizardSaveWithoutCheck => 'Сохранить без проверки';
+
+  @override
+  String get wizardModelNotChecked =>
+      'Список моделей не проверен: введите ID модели.';
+
+  @override
+  String get wizardModelFilter => 'Модель (введите для фильтра)';
+
+  @override
+  String get wizardModelManual => 'Ввести ID модели вручную';
+
+  @override
+  String wizardLimitsOf(String model) {
+    return 'Ограничения $model';
+  }
+
+  @override
+  String get wizardContextWindow => 'Окно контекста';
+
+  @override
+  String get wizardMaxOutputTokens => 'Максимум токенов вывода (необязательно)';
+
+  @override
+  String get wizardMakeDefault => 'Сделать моделью по умолчанию';
+
+  @override
+  String get wizardProjectOnly => 'Только этот проект';
+
+  @override
+  String get wizardSaving => 'Сохранение…';
+
+  @override
+  String get wizardReviewConflict =>
+      'Конфигурация изменилась на диске — проверьте и сохраните снова';
+
+  @override
+  String wizardSaveKeyReplaced(String name) {
+    return 'Сохранённый ключ «$name» уже заменён.';
+  }
+
+  @override
+  String wizardSaveKeyStillStored(String name) {
+    return 'Новый ключ «$name» остался в хранилище секретов. Удалите его командой: codelab secret delete $name';
+  }
+
+  @override
+  String get wizardKeyNone => 'Без ключа';
+
+  @override
+  String get agentSettingLabel_budget_max_steps => 'Лимит шагов';
+
+  @override
+  String get agentSettingDescription_budget_max_steps =>
+      'Запросов к модели за ход.';
+
+  @override
+  String get agentSettingLabel_budget_max_tokens => 'Лимит токенов';
+
+  @override
+  String get agentSettingDescription_budget_max_tokens =>
+      'Сумма входных и выходных токенов за ход.';
+
+  @override
+  String get agentSettingLabel_budget_max_cost => 'Лимит стоимости';
+
+  @override
+  String get agentSettingDescription_budget_max_cost =>
+      'USD за ход; работает только при известных ценах.';
+
+  @override
+  String get agentSettingLabel_budget_max_duration => 'Лимит длительности';
+
+  @override
+  String get agentSettingDescription_budget_max_duration =>
+      'Время хода без ожидания одобрений.';
+
+  @override
+  String get agentSettingLabel_subagents_enabled => 'Субагенты';
+
+  @override
+  String get agentSettingDescription_subagents_enabled =>
+      'Разрешить агенту запускать субагентов (только новые сессии).';
+
+  @override
+  String get agentSettingLabel_subagents_max_depth => 'Лимит глубины';
+
+  @override
+  String get agentSettingDescription_subagents_max_depth =>
+      'Насколько глубоко могут вкладываться субагенты (только новые сессии).';
+
+  @override
+  String get agentSettingLabel_subagents_max_concurrent =>
+      'Лимит одновременных';
+
+  @override
+  String get agentSettingDescription_subagents_max_concurrent =>
+      'Субагентов, работающих одновременно в одном дереве сессии.';
+
+  @override
+  String get agentSettingLabel_subagents_max_per_turn => 'Лимит за ход';
+
+  @override
+  String get agentSettingDescription_subagents_max_per_turn =>
+      'Субагентов, запущенных за ход сессии.';
+
+  @override
+  String get agentSettingLabel_subagents_max_steps => 'Лимит шагов';
+
+  @override
+  String get agentSettingDescription_subagents_max_steps =>
+      'Запросов к модели одного субагента.';
+
+  @override
+  String get agentSettingLabel_subagents_max_tokens => 'Лимит токенов';
+
+  @override
+  String get agentSettingDescription_subagents_max_tokens =>
+      'Входных и выходных токенов одного субагента.';
+
+  @override
+  String get agentSettingLabel_subagents_max_cost => 'Лимит стоимости';
+
+  @override
+  String get agentSettingDescription_subagents_max_cost =>
+      'USD одного субагента; работает только при известных ценах.';
+
+  @override
+  String get agentSettingLabel_subagents_max_duration => 'Лимит длительности';
+
+  @override
+  String get agentSettingDescription_subagents_max_duration =>
+      'Время одного субагента без ожидания одобрений.';
+
+  @override
+  String get agentSettingLabel_subagents_report_max_bytes => 'Размер отчёта';
+
+  @override
+  String get agentSettingDescription_subagents_report_max_bytes =>
+      'Наибольший отчёт субагента в байтах.';
+
+  @override
+  String get agentSettingLabel_subagents_progress_interval =>
+      'Интервал прогресса';
+
+  @override
+  String get agentSettingDescription_subagents_progress_interval =>
+      'Наименьшая пауза между строками прогресса вызова субагента.';
+
+  @override
+  String get agentSettingLabel_subagents_heartbeat_interval =>
+      'Интервал сигнала';
+
+  @override
+  String get agentSettingDescription_subagents_heartbeat_interval =>
+      'Пауза, после которой молчащий вызов субагента сообщает, что он жив.';
+
+  @override
+  String get agentSettingLabel_subagents_cancel_grace => 'Время на отмену';
+
+  @override
+  String get agentSettingDescription_subagents_cancel_grace =>
+      'Сколько вызов ждёт остановки субагентов после отмены.';
+
+  @override
+  String get agentSettingLabel_compaction_enabled => 'Автоматическое сжатие';
+
+  @override
+  String get agentSettingDescription_compaction_enabled =>
+      'Автоматически сжимать контекст, когда он разрастается.';
+
+  @override
+  String get agentSettingLabel_logging_level => 'Уровень журнала';
+
+  @override
+  String get agentSettingDescription_logging_level =>
+      'Подробность журнала агента.';
+
+  @override
+  String get settingsGeneralAgentDefaultsTitle => 'Умолчания агента';
+
+  @override
+  String get settingsGeneralAgentDefaultsCaption =>
+      'Изменения сохраняются для всех проектов.';
+
+  @override
+  String settingsGeneralSharedInfo(String home) {
+    return 'Общие с CLI codelab. Строки с тегом «Общая» берутся из реестра настроек агента и сохраняются в $home/config.yaml; их показывает и codelab /settings.';
+  }
+
+  @override
+  String get settingsGeneralTagShared => 'Общая';
+
+  @override
+  String get settingsGeneralNotSet => 'Не задано';
+
+  @override
+  String get settingsGeneralAppliesAfterRestart =>
+      '(применится после перезапуска)';
+
+  @override
+  String settingsGeneralOverriddenBy(String source) {
+    return 'Этот проект переопределяет значение ($source).';
+  }
+
+  @override
+  String get settingsGeneralRefusalSecret =>
+      'Измените командой codelab secret set.';
+
+  @override
+  String get settingsGeneralRefusalMasked =>
+      'Значение содержит секрет; измените его в файле конфигурации.';
+
+  @override
+  String settingsGeneralRefusalExternal(String source) {
+    return 'Задано источником $source; изменить здесь нельзя.';
+  }
+
+  @override
+  String get settingsGeneralRefusalOther =>
+      'Эту настройку здесь изменить нельзя.';
+
+  @override
+  String settingsGeneralHintIntMin(String min) {
+    return 'Введите целое число не меньше $min.';
+  }
+
+  @override
+  String settingsGeneralHintIntRange(String min, String max) {
+    return 'Введите целое число от $min до $max.';
+  }
+
+  @override
+  String get settingsGeneralHintInt => 'Введите целое число.';
+
+  @override
+  String get settingsGeneralHintNumber => 'Введите число.';
+
+  @override
+  String get settingsGeneralHintDuration =>
+      'Введите длительность, например 500ms, 30s, 2m или 1h.';
+
+  @override
+  String get settingsGeneralSaved => 'Сохранено.';
+
+  @override
+  String get settingsGeneralTailAfterRestart =>
+      'Применится после «Перезапустить агента».';
+
+  @override
+  String get settingsGeneralTailWhenStarts => 'Применится при запуске агента.';
+
+  @override
+  String settingsGeneralSavedOverridden(String source, String effective) {
+    return 'Сохранено для всех проектов; $source переопределяет значение: агент использует $effective.';
+  }
+
+  @override
+  String settingsGeneralSavedUnverified(String home) {
+    return 'Сохранено в $home/config.yaml.';
+  }
+
+  @override
+  String get settingsGeneralConflict =>
+      'Файл конфигурации изменился на диске; страница перечитана. Повторите правку.';
+
+  @override
+  String get settingsGeneralRejected => 'Конфигурация не сохранена.';
+
+  @override
+  String settingsGeneralReadOnlyRemote(String origin) {
+    return 'Только чтение: агент работает на $origin. Измените его настройки на том хосте: codelab config set.';
+  }
+
+  @override
+  String settingsGeneralReadOnlyManaged(String agent) {
+    return 'Настройками агента управляет $agent.';
+  }
+
+  @override
+  String get settingsGeneralUnreadable =>
+      'Не удаётся прочитать конфигурацию агента.';
+
+  @override
+  String get settingsGeneralSectionStartup => 'Запуск и файлы';
+
+  @override
+  String get settingsGeneralReopenTitle =>
+      'Открывать последний проект и его вкладки';
+
+  @override
+  String get settingsGeneralReopenDescription =>
+      'Включено: открывать последний проект и его открытые сессии. Выключено: начинать с недавних проектов в боковой панели. Применится при следующем запуске.';
+
+  @override
+  String get settingsGeneralStartupSaveFailed =>
+      'Не удалось сохранить настройку. При следующем запуске применится прежнее значение.';
+
+  @override
+  String get settingsGeneralSectionAbout => 'О программе';
+
+  @override
+  String settingsGeneralAboutSubtitle(String platform, String agentVersion) {
+    return '$platform · встроенный агент $agentVersion';
+  }
+
+  @override
+  String get settingsGeneralAboutLicense => 'Лицензия';
+
+  @override
+  String get settingsGeneralAboutConfigFolder => 'Папка настроек';
+
+  @override
+  String get settingsGeneralAboutCopyDiagnostics => 'Копировать диагностику';
+
+  @override
+  String get settingsGeneralAboutThirdParty => 'Сторонние уведомления';
+
+  @override
+  String get settingsGeneralAboutReleaseNotes => 'Заметки о выпуске';
+
+  @override
+  String get settingsGeneralAboutOpenLogs => 'Открыть папку журналов';
+
+  @override
+  String get settingsGeneralAboutUpdates =>
+      'Обновления приходят из установщика или менеджера пакетов — приложение само не обновляется.';
+
+  @override
+  String get settingsGeneralAboutCopied => 'Диагностика скопирована.';
+
+  @override
+  String get settingsGeneralAboutReleaseNotesFailed =>
+      'Не удалось открыть заметки о выпуске.';
+
+  @override
+  String get settingsGeneralAboutLogsFailed =>
+      'Не удалось открыть папку журналов.';
+
+  @override
+  String get settingsGeneralAboutPackageLicenses => 'Лицензии пакетов';
+
+  @override
+  String get settingsGeneralAboutClose => 'Закрыть';
+
+  @override
+  String get settingsGeneralUnreadableCannotRead =>
+      'Не удаётся прочитать настройки агента.';
+
+  @override
+  String get settingsGeneralUnreadableHome => 'Папка CodeLab недоступна.';
+
+  @override
+  String get settingsGeneralUnreadableUserLayer =>
+      'Пользовательский config.yaml не читается.';
+
+  @override
+  String get settingsGeneralAboutCopyFailed =>
+      'Не удалось скопировать диагностику.';
+
+  @override
+  String get settingsGeneralAboutLoadFailed =>
+      'Не удалось загрузить раздел «О программе».';
 
   @override
   String get settingsSearchKeywordsConnection => 'профиль, токен, перезапуск';

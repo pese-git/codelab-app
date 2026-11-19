@@ -25,6 +25,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import '../../../core/platform/connection_preferences.dart';
+import '../../../l10n/app_localizations.dart';
 import 'connection_commands.dart';
 import 'connection_settings_state.dart';
 import 'embedded_profile.dart';
@@ -66,6 +67,13 @@ export 'profile_view.dart'
 /// текстов исключений, имён переменных и секретов. [removeProfile] удаляет
 /// профиль и, по флажку, его собственный секрет токена через
 /// `ProfileCommitter`: сначала профиль, потом секрет (SETUP-24).
+///
+/// Язык (`add-desktop-localization`, D5, D6): [strings] — вход проекции.
+/// Подписи строк (включая встроенного агента) и «Behavior» — функция
+/// «(входы, язык)»: смена языка пересобирает состояние из последних входов,
+/// не перечитывая файл. Сбой действия и причина нечитаемого файла хранятся
+/// типизированными ([ConnectionSettingsFailure], [ProfilesUnreadableReason]),
+/// их текст строит presentation. Подписка одна, отменяется в `close()`.
 class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   ConnectionSettingsCubit({
     required ProfileStore store,
@@ -76,10 +84,9 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     required Map<String, String> environment,
     required String? profilesPath,
     Logger? logger,
-    // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): порт языка
-    // принят, но Cubit на него не подписывается; поведение — задача 4.2.
-    AppStrings? strings,
-  }) : _store = store,
+    required AppStrings strings,
+  }) : _strings = strings,
+       _store = store,
        _openSecrets = openSecrets,
        _preferences = preferences,
        _workspace = workspace,
@@ -88,9 +95,15 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
        _profilesPath = profilesPath,
        _logger = logger,
        super(const ConnectionSettingsLoading()) {
+    // Одна подписка на язык на весь срок жизни Cubit (D5 п. 3, R3):
+    // пересобирает строки и «Behavior» из последних входов, файл и агента не
+    // трогает; отменяется в `close()`.
+    _languageSubscription = strings.changes.listen(_handleLanguage);
     _workspaceSubscription = _workspace.state.listen(_onWorkspace);
     _targetSubscription = _commands.restartTargets.listen(_onTarget);
   }
+
+  final AppStrings _strings;
 
   final ProfileStore _store;
 
@@ -118,6 +131,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   final String? _profilesPath;
   final Logger? _logger;
 
+  late final StreamSubscription<AppLocalizations> _languageSubscription;
   late final StreamSubscription<WorkspaceState> _workspaceSubscription;
   late final StreamSubscription<ConnectionProfile?> _targetSubscription;
 
@@ -129,11 +143,12 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   List<ConnectionProfile> _stored = const [];
   var _defaultId = embeddedProfileId;
   var _ignoredDefault = false;
-  String? _failure;
+  ConnectionSettingsFailure? _failure;
   var _readable = false;
 
-  /// Причина и путь для [ConnectionSettingsUnreadable].
-  String _unreadableReason = '';
+  /// Причина для [ConnectionSettingsUnreadable]; тип, а не текст: фразу
+  /// строит presentation на текущем языке (D5).
+  ProfilesUnreadableReason _unreadableReason = const ProfilesUnsupportedFile();
 
   /// «Игнорируемая запись default» уже записана в журнал: событие один раз за
   /// жизнь страницы, а не при каждом [reload] (D17).
@@ -351,10 +366,9 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
         }
         await reload();
         if (secret == OwnSecretOutcome.deleteFailed && !isClosed) {
-          // После `reload`: он сбрасывает прежнюю ошибку страницы.
-          _failure =
-              'The profile was removed, but the stored token $secretName was '
-              'not deleted. Remove it with codelab secret delete $secretName.';
+          // После `reload`: он сбрасывает прежнюю ошибку страницы. Имя секрета
+          // хранится типизированно: фразу строит presentation (D5).
+          _failure = TokenNotDeleted(secretName ?? '');
           _publish();
         }
         return true;
@@ -432,9 +446,20 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
 
   @override
   Future<void> close() async {
+    await _languageSubscription.cancel();
     await _workspaceSubscription.cancel();
     await _targetSubscription.cancel();
     return super.close();
+  }
+
+  /// Смена языка: пересобирает состояние из последних входов (D5, правило 1).
+  /// До первого чтения файла состояния страницы нет — публиковать нечего, а
+  /// первая публикация возьмёт актуальный язык. После `close` — игнорируется.
+  void _handleLanguage(AppLocalizations _) {
+    if (isClosed || state is! ConnectionSettingsLoaded) {
+      return;
+    }
+    _publish();
   }
 
   /// Страницу интересуют профиль и соединение; смена списка сессий её не
@@ -493,8 +518,11 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
     final connectionStatus = ConnectionRowStatus.of(workspace.connection);
     ConnectionRowStatus? statusOf(String id) =>
         attempt?.id == id ? connectionStatus : null;
+    // Язык — вход проекции: читается только здесь, строка не кэшируется.
+    final l10n = _strings.current;
     final embedded = ConnectionProfileRow.embedded(
       profile: embeddedConnectionProfile,
+      l10n: l10n,
       isDefault: _defaultId == embeddedProfileId,
       isCurrent: current?.id == embeddedProfileId,
       isSelected: selected(embeddedProfileId),
@@ -508,6 +536,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
           currentProfile: current,
           connection: workspace.connection,
           restartAvailable: _commands.restartDirectory != null,
+          l10n: l10n,
           path: _profilesPath,
           reason: _unreadableReason,
           failure: _failure,
@@ -520,6 +549,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
       for (final profile in _stored)
         ConnectionProfileRow.stored(
           profile: profile,
+          l10n: l10n,
           token: profile is WebSocketProfile ? _tokenView(profile) : null,
           isDefault: _defaultId == profile.id,
           isCurrent: current?.id == profile.id,
@@ -533,6 +563,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
       rows.add(
         ConnectionProfileRow.unsaved(
           profile: current,
+          l10n: l10n,
           token: current is WebSocketProfile ? _tokenView(current) : null,
           isSelected: selected(current.id),
           status: statusOf(current.id),
@@ -547,6 +578,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
         currentProfile: current,
         connection: workspace.connection,
         restartAvailable: _commands.restartDirectory != null,
+        l10n: l10n,
         ignoredDefaultEntry: _ignoredDefault,
         failure: _failure,
       ),
@@ -568,7 +600,7 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
         'stage': ?stage,
       },
     );
-    _failure = 'Could not save the change. Try again.';
+    _failure = const ProfileSaveFailure();
     _publish();
   }
 
@@ -623,11 +655,12 @@ class ConnectionSettingsCubit extends Cubit<ConnectionSettingsState> {
   }
 
   /// Причина для экрана без текста исключения: оно может нести содержимое
-  /// файла.
-  static String _reasonOf(Object error) => switch (error) {
-    ProfilesUnavailableException(:final message) => message,
-    FormatException() =>
-      'the file has an unsupported version or an invalid structure',
-    _ => 'the file cannot be read (${error.runtimeType})',
+  /// файла. Тип причины, а не фраза: фразу строит presentation (D5, D6).
+  static ProfilesUnreadableReason _reasonOf(Object error) => switch (error) {
+    ProfilesUnavailableException(:final message) => ProfilesNotAvailable(
+      message,
+    ),
+    FormatException() => const ProfilesUnsupportedFile(),
+    _ => ProfilesCannotRead(error.runtimeType.toString()),
   };
 }

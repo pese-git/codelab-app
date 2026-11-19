@@ -21,6 +21,9 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../support/fake_provider_settings.dart';
 import '../../../support/real_config_session.dart';
 import '../../../support/recording_logger.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
+import '../../../support/app_strings.dart';
+import '../../../support/typed_messages.dart';
 
 const _home = '/home/u/.codelab';
 
@@ -75,6 +78,7 @@ void main() {
     String? home = _home,
   }) {
     final cubit = ProviderSettingsCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       workspace: workspace,
       defaultProfile: () async => defaultProfile,
       open: (access, env) async {
@@ -1207,6 +1211,7 @@ void main() {
       ),
     );
     final page = ProviderSettingsCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       workspace: workspace,
       defaultProfile: () async => embeddedConnectionProfile,
       open: (access, env) async => real,

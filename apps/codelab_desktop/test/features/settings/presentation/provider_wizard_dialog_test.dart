@@ -20,6 +20,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_provider_settings.dart';
 import '../../../support/recording_logger.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
+import '../../../support/app_strings.dart';
+import '../../../support/l10n_app.dart';
 
 Finder _key(String key) => find.byKey(ValueKey(key));
 
@@ -73,6 +76,7 @@ void main() {
       () => session.openWizard(editing: editing, forceDefault: forceDefault),
     ))!;
     cubit = ProviderWizardCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       flow: flow,
       access: session.access,
       backendId: store.backend.id,
@@ -82,8 +86,8 @@ void main() {
     );
     addTearDown(cubit.close);
     await tester.pumpWidget(
-      FluentApp(
-        home: Builder(
+      localizedFluentApp(
+        Builder(
           builder: (context) => Center(
             child: Button(
               key: const ValueKey('open'),

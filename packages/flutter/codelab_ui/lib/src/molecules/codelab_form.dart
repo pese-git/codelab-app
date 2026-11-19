@@ -163,7 +163,11 @@ class CodeLabSegment<T> {
 /// вызывает.
 ///
 /// Как использовать: `CodeLabSegmentedControl(options: …, value: …,
-/// onChanged: …)`; тип значения `T` выводится из вариантов. Для программ
+/// onChanged: …)`; тип значения `T` выводится из вариантов. Родитель
+/// должен давать ограниченную ширину: варианты — `Flexible` с многоточием, и
+/// длинные (например, русские) подписи сжимаются, а не выходят за плашку; в
+/// неограниченной по ширине области (`Row` без `Expanded`) раскладка не
+/// определена. Для программ
 /// чтения с экрана варианты — группа взаимоисключающих кнопок с подписью
 /// [semanticLabel].
 class CodeLabSegmentedControl<T> extends StatelessWidget {
@@ -198,14 +202,19 @@ class CodeLabSegmentedControl<T> extends StatelessWidget {
             children: [
               for (var i = 0; i < options.length; i++) ...[
                 if (i > 0) const SizedBox(width: 4),
-                _Segment<T>(
-                  option: options[i],
-                  selected: options[i].value == value,
-                  onPressed: () {
-                    if (options[i].value != value) {
-                      onChanged(options[i].value);
-                    }
-                  },
+                // Flexible: русские подписи длиннее английских (D8), и в узком
+                // диалоге вариант сжимается с многоточием, а не вылезает за
+                // плашку (`add-desktop-localization`, итерация 4).
+                Flexible(
+                  child: _Segment<T>(
+                    option: options[i],
+                    selected: options[i].value == value,
+                    onPressed: () {
+                      if (options[i].value != value) {
+                        onChanged(options[i].value);
+                      }
+                    },
+                  ),
                 ),
               ],
             ],
@@ -254,6 +263,8 @@ class _Segment<T> extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
             child: CodeLabText(
               option.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               color: selected
                   ? resources.textFillColorPrimary
                   : resources.textFillColorSecondary,

@@ -5,6 +5,7 @@
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/features/settings/application/profile_view.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 
 void main() {
   test('the summary of a WebSocket profile is its origin, IPv6 in '
@@ -17,6 +18,6 @@ void main() {
       ),
     );
 
-    expect(profileSummary(profile), 'ws://[::1]:8765');
+    expect(profileSummary(profile, AppLocalizationsEn()), 'ws://[::1]:8765');
   });
 }

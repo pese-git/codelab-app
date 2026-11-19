@@ -71,7 +71,7 @@ void main() {
   });
 
   AddProfileCubit build(
-    AppStrings? port, {
+    AppStrings port, {
     Map<String, String> environment = const {},
     List<ProfileKind> kinds = _both,
   }) {
@@ -88,7 +88,7 @@ void main() {
   }
 
   Future<AddProfileCubit> started(
-    AppStrings? port, {
+    AppStrings port, {
     Map<String, String> environment = const {},
   }) async {
     final cubit = build(port, environment: environment);

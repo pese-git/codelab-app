@@ -35,6 +35,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import '../../../core/platform/connection_preferences.dart';
 import '../../../core/platform/home_path_label.dart';
+import '../../../l10n/app_localizations.dart';
 import 'add_profile_state.dart';
 import 'profile_view.dart' show profileOrigin;
 
@@ -47,12 +48,6 @@ const defaultTokenEnvName = 'CODELAB_AGENT_TOKEN';
 final _allFields = Set<ProfileDraftField>.unmodifiable(
   ProfileDraftField.values,
 );
-
-/// Текст общего сбоя записи: без `toString()` исключения (D17).
-const _saveFailedMessage = 'Could not save the profile. Try again.';
-
-/// Текст сбоя записи секрета, когда хранилище не назвало причину (D13).
-const _secretFailedMessage = 'Could not store the token. Try again.';
 
 /// Форма «Add connection profile»: черновик и сохранение.
 ///
@@ -89,10 +84,9 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     required Map<String, String> environment,
     String? profilesPath,
     Logger? logger,
-    // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): порт языка
-    // принят, но Cubit на него не подписывается; поведение — задача 4.2.
-    AppStrings? strings,
-  }) : _store = store,
+    required AppStrings strings,
+  }) : _strings = strings,
+       _store = store,
        _openSecrets = openSecrets,
        _profilesPath = profilesPath,
        _preferences = preferences,
@@ -100,7 +94,15 @@ class AddProfileCubit extends Cubit<AddProfileState> {
        _logger = logger,
        _kind = _initialKind(kinds),
        _kinds = List.unmodifiable(kinds),
-       super(const OpeningSecrets());
+       super(const OpeningSecrets()) {
+    // Одна подписка на язык на весь срок жизни Cubit (D5 п. 3, R3): тексты
+    // формы — функция «(черновик, язык)», смена языка пересобирает их, а ввод
+    // пользователя и состояние автомата не трогает. Отменяется в `close()`.
+    _languageSubscription = strings.changes.listen(_handleLanguage);
+  }
+
+  final AppStrings _strings;
+  late final StreamSubscription<AppLocalizations> _languageSubscription;
 
   final ProfileStore _store;
 
@@ -163,9 +165,10 @@ class AddProfileCubit extends Cubit<AddProfileState> {
   /// сбрасывает выбор.
   String? _storedChoice;
 
-  /// Ошибка у поля токена от отказа записи («секрет уже есть»); живёт до
-  /// следующей правки.
-  String? _tokenSubmitError;
+  /// Имя секрета, который уже лежит в хранилище: ошибка у поля токена от
+  /// отказа записи («секрет уже есть»); живёт до следующей правки. Хранится
+  /// имя, а не текст: фразу строит `_composeForm` на текущем языке (D5).
+  String? _tokenSecretExists;
 
   /// Загружает id профилей файла для проверки занятости.
   ///
@@ -421,7 +424,11 @@ class AddProfileCubit extends Cubit<AddProfileState> {
               (issue) => issue.code == ProfileDraftIssueCode.plaintextToRemote,
             )) {
           emit(
-            ConfirmingPlaintext(form, message: _plaintextMessage(form.draft)),
+            ConfirmingPlaintext(
+              form,
+              origin: profileOrigin(Uri.parse(form.draft.url.trim())),
+              hasToken: _hasToken(form.draft),
+            ),
           );
           return;
         }
@@ -468,7 +475,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     _existingIds = [..._existingIds, current.profileId];
     // Новый профиль — новое подтверждение, даже при том же URL и токене.
     _plaintextConfirmed = null;
-    _tokenSubmitError = null;
+    _tokenSecretExists = null;
     emit(
       Editing(
         _compose(
@@ -481,8 +488,41 @@ class AddProfileCubit extends Cubit<AddProfileState> {
 
   @override
   Future<void> close() {
+    // Отмена подписки отсоединяет слушателя синхронно; будущее `cancel`
+    // ждать не нужно, а лишние такты ожидания сдвигают порядок закрытия
+    // диалога и перечитывания страницы «Connection».
+    unawaited(_languageSubscription.cancel());
     _forgetNewToken();
     return super.close();
+  }
+
+  /// Смена языка: пересобирает тексты формы из последнего черновика. Черновик,
+  /// выбранное, подтверждение `ws://` и ход записи не меняются (D5 п. 9);
+  /// `Saved` и `OpeningSecrets` текста формы не имеют. После `close` и до
+  /// первой формы — игнорируется (первая форма берёт актуальный язык).
+  void _handleLanguage(AppLocalizations _) {
+    if (isClosed) {
+      return;
+    }
+    final current = state;
+    switch (current) {
+      case Editing(:final form):
+        emit(Editing(_recompute(form)));
+      case ConfirmingPlaintext(:final form, :final origin, :final hasToken):
+        emit(
+          ConfirmingPlaintext(
+            _recompute(form),
+            origin: origin,
+            hasToken: hasToken,
+          ),
+        );
+      case Saving(:final form):
+        emit(Saving(_recompute(form)));
+      case SaveFailed(:final form, :final failure):
+        emit(SaveFailed(_recompute(form), failure: failure));
+      case OpeningSecrets() || Saved():
+        break;
+    }
   }
 
   /// Черновик забывает значение нового токена при закрытии диалога (D13):
@@ -524,7 +564,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
       return;
     }
     // Любая правка снимает ошибку отказа записи у поля токена.
-    _tokenSubmitError = null;
+    _tokenSecretExists = null;
     emit(
       Editing(
         _compose(
@@ -579,10 +619,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
           (issue) => issue.code == ProfileDraftIssueCode.tokenSecretExists,
         );
         if (exists) {
-          _tokenSubmitError =
-              'A stored token ${ownTokenSecretName(draftId)} already exists '
-              'in ${_secrets.backend.id}. Choose it with "Use stored secret" '
-              'or remove it with codelab secret delete.';
+          _tokenSecretExists = ownTokenSecretName(draftId);
         }
         emit(Editing(_recompute(form, touchAll: true)));
       case ProfileSaveFailed():
@@ -664,21 +701,25 @@ class AddProfileCubit extends Cubit<AddProfileState> {
   }) {
     final orphan = failure.orphanedSecret;
     final String errorType;
-    final String message;
+    final AddProfileFailure outcome;
     switch (failure.reason) {
       case ProfileSaveFailedReason.secretReadOnly:
         errorType = 'SecretReadOnly';
-        message = failure.message;
+        // Причина — текст бэкенда, его показываем как есть; без неё текст
+        // даёт app (`ProfileSaveFailed.storeReason`, D6). Сравнивать
+        // `message` с запасной строкой ядра нельзя (D5, п. 5).
+        outcome = SecretStoreReadOnlyFailure(failure.storeReason);
       case ProfileSaveFailedReason.secretWrite:
         errorType = failure.errorType ?? 'SecretWriteFailed';
-        message = _secretFailedMessage;
+        outcome = const SecretWriteFailed();
       case ProfileSaveFailedReason.profileWrite:
         errorType = failure.errorType ?? 'ProfileSaveFailed';
-        message = orphan == null
-            ? _saveFailedMessage
-            : 'The profile was not saved; the token stays in '
-                  '${_secrets.backend.id} as $orphan. Remove it with codelab '
-                  'secret delete $orphan.';
+        outcome = orphan == null
+            ? const ProfileWriteFailed()
+            : OrphanedTokenFailure(
+                backendId: _secrets.backend.id,
+                secretName: orphan,
+              );
         if (newToken) {
           if (orphan == null) {
             _logger?.warning(
@@ -709,7 +750,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
         'stage': 'profile',
       },
     );
-    emit(SaveFailed(form, message: message));
+    emit(SaveFailed(form, failure: outcome));
   }
 
   void _failSave(AddProfileForm form, String profileId, Object error) {
@@ -722,7 +763,7 @@ class AddProfileCubit extends Cubit<AddProfileState> {
         'stage': 'profile',
       },
     );
-    emit(SaveFailed(form, message: _saveFailedMessage));
+    emit(SaveFailed(form, failure: const ProfileWriteFailed()));
   }
 
   /// Имена хранилища для «Use stored secret»; нечитаемое хранилище — пусто
@@ -767,26 +808,14 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     kinds: _kinds,
     secretNames: _secretNames,
     backend: _secrets.backend,
-    tokenSubmitError: _tokenSubmitError,
+    l10n: _strings.current,
+    tokenSecretExists: _tokenSecretExists,
     draft: draft,
     useByDefault: useByDefault,
     idEdited: idEdited,
     tokenEnvName: tokenEnvName,
     touched: touched,
   );
-
-  /// Подтверждение `ws://` к нелокальному хосту — всегда, с токеном и без
-  /// (решение пользователя 2026-11-05, D11, D20): по `ws://` открытым
-  /// текстом идут и промпты с файлами. Адрес показан без `userinfo`, пути и
-  /// query (D17).
-  String _plaintextMessage(ProfileDraft draft) {
-    final origin = profileOrigin(Uri.parse(draft.url.trim()));
-    return _hasToken(draft)
-        ? 'The token for $origin will travel in clear text. Use wss:// if the '
-              'host supports it.'
-        : 'Prompts and files sent to $origin will travel in clear text. Use '
-              'wss:// if the host supports it.';
-  }
 
   /// Ключ комбинации URL и токена. Значение нового токена в него не входит:
   /// его правка сбрасывает подтверждение явно (`setNewToken`), а имя секрета и
@@ -835,13 +864,19 @@ class AddProfileCubit extends Cubit<AddProfileState> {
 ///
 /// Почему функция, а не метод: начальное состояние Cubit-а нужно в
 /// `super(...)`, где экземпляра ещё нет.
+///
+/// Все тексты формы — функция «(черновик, язык)»: [l10n] — каталог текущего
+/// языка, строка не кэшируется и пересобирается при смене языка (D5).
+/// [tokenSecretExists] — имя секрета, на который отказала запись (тип, а не
+/// текст).
 AddProfileForm _composeForm({
   required List<String> existingIds,
   required Map<String, String> environment,
   required List<ProfileKind> kinds,
   required List<String> secretNames,
   required ProfileSecretBackend backend,
-  String? tokenSubmitError,
+  required AppLocalizations l10n,
+  String? tokenSecretExists,
   required ProfileDraft draft,
   bool useByDefault = false,
   bool idEdited = false,
@@ -859,7 +894,7 @@ AddProfileForm _composeForm({
       : null;
   final unset = tokenName != null && (environment[tokenName] ?? '').isEmpty;
   final errorTexts = {
-    for (final entry in _errorTexts(draft, blocking).entries)
+    for (final entry in _errorTexts(draft, blocking, l10n).entries)
       // Ошибка поля видна, только когда пользователь его трогал: ввод,
       // потеря фокуса или «Save» (UX по ручному прогону).
       if (touched.contains(entry.key)) entry.key: entry.value,
@@ -875,30 +910,33 @@ AddProfileForm _composeForm({
     tokenEnvName: tokenEnvName,
     secretNames: secretNames,
     storedSecretsHint: secretNames.isEmpty
-        ? 'No stored secrets in ${backend.id}.'
+        ? l10n.addProfileStoredSecretsHint(backend.id)
         : null,
     newTokenAvailable: backend.writable,
+    // Причина бэкенда (`unavailableReason`) — текст хранилища без типа, как
+    // есть (D6, D7); запасной текст приложения переводится.
     newTokenHint: backend.writable
-        ? 'Saved as $ownName in ${backend.id}. The value is never shown '
-              'again or written to profiles.json.'
+        ? l10n.addProfileNewTokenHint(ownName, backend.id)
         : (backend.unavailableReason ??
-              'Secret store ${backend.id} is read-only.'),
+              l10n.addProfileSecretStoreReadOnly(backend.id)),
     touched: touched,
     errors: {
       ...errorTexts,
       // Отказ записи («секрет уже есть») важнее общей ошибки поля токена.
-      ProfileDraftField.token: ?tokenSubmitError,
+      if (tokenSecretExists != null)
+        ProfileDraftField.token: l10n.addProfileErrorTokenSecretExists(
+          tokenSecretExists,
+          backend.id,
+        ),
     },
     warning: issues.any((i) => i.isWarning)
         ? (token is EnvToken ||
                   token is StoredSecretToken ||
                   token is NewSecretToken
-              ? 'ws:// to another machine: the token is sent unencrypted.'
-              : 'ws:// to another machine: traffic is sent unencrypted.')
+              ? l10n.addProfileWarningTokenPlaintext
+              : l10n.addProfileWarningTrafficPlaintext)
         : null,
-    tokenNotice: unset
-        ? "$tokenName is not set in CodeLab's environment."
-        : null,
+    tokenNotice: unset ? l10n.tokenEnvNotSet(tokenName) : null,
     canSave: blocking.isEmpty,
   );
 }
@@ -906,6 +944,7 @@ AddProfileForm _composeForm({
 Map<ProfileDraftField, String> _errorTexts(
   ProfileDraft draft,
   List<ProfileDraftIssue> blocking,
+  AppLocalizations l10n,
 ) {
   final labelEmpty = blocking.any(
     (i) => i.code == ProfileDraftIssueCode.labelEmpty,
@@ -917,23 +956,55 @@ Map<ProfileDraftField, String> _errorTexts(
     if (issue.code == ProfileDraftIssueCode.idEmpty && labelEmpty) {
       continue;
     }
-    out.putIfAbsent(issue.field, () => _textOf(issue, draft));
+    out.putIfAbsent(issue.field, () => _textOf(issue, draft, l10n));
   }
   return out;
 }
 
-/// Тексты полей: макет `AddProfile` и spec app-settings; `message` kit —
-/// запасной английский текст. Значения `env` и токена в них нет (SETUP-19).
-String _textOf(ProfileDraftIssue issue, ProfileDraft draft) =>
-    switch (issue.code) {
-      ProfileDraftIssueCode.labelEmpty => 'Enter a name.',
-      ProfileDraftIssueCode.idTaken =>
-        'A profile with id "${draft.id.toLowerCase()}" already exists.',
-      ProfileDraftIssueCode.commandEmpty =>
-        'Enter the command that starts the agent.',
-      ProfileDraftIssueCode.urlInvalid => 'Use ws:// or wss:// with a host.',
-      _ => issue.message,
-    };
+/// Тексты полей по [ProfileDraftIssueCode]: макет `AddProfile` и spec
+/// app-settings; `message` ядра — английский текст по умолчанию для CLI, app
+/// его не разбирает и не показывает (D5, п. 5; D6). Значения `env` и токена в
+/// них нет (SETUP-19). У `tokenSecretNameInvalid` два места: id профиля
+/// (поле `id`) и имя выбранного секрета (поле `token`).
+String _textOf(
+  ProfileDraftIssue issue,
+  ProfileDraft draft,
+  AppLocalizations l10n,
+) => switch (issue.code) {
+  ProfileDraftIssueCode.labelEmpty => l10n.addProfileErrorLabelEmpty,
+  ProfileDraftIssueCode.idEmpty => l10n.addProfileErrorIdEmpty,
+  ProfileDraftIssueCode.idReserved => l10n.addProfileErrorIdReserved(
+    draft.id.toLowerCase(),
+  ),
+  ProfileDraftIssueCode.idTaken => l10n.addProfileErrorIdTaken(
+    draft.id.toLowerCase(),
+  ),
+  ProfileDraftIssueCode.idInvalid => l10n.addProfileErrorIdInvalid,
+  ProfileDraftIssueCode.commandEmpty => l10n.addProfileErrorCommandEmpty,
+  ProfileDraftIssueCode.argsInvalid => l10n.addProfileErrorArgsInvalid,
+  ProfileDraftIssueCode.envSecretLike => l10n.addProfileErrorEnvSecretLike(
+    issue.subject ?? '',
+    r'${secret:…}',
+  ),
+  ProfileDraftIssueCode.urlInvalid => l10n.addProfileErrorUrlInvalid,
+  ProfileDraftIssueCode.urlUserInfo => l10n.addProfileErrorUrlUserInfo,
+  ProfileDraftIssueCode.tokenEnvNameInvalid =>
+    l10n.addProfileErrorTokenEnvNameInvalid,
+  ProfileDraftIssueCode.tokenSecretNameInvalid =>
+    issue.field == ProfileDraftField.id
+        ? l10n.addProfileErrorTokenSecretIdInvalid
+        : l10n.addProfileErrorTokenSecretNameInvalid,
+  ProfileDraftIssueCode.tokenSecretEmpty =>
+    l10n.addProfileErrorTokenSecretEmpty,
+  // Эти два кода не блокируют `validate`: `tokenSecretExists` выдаёт
+  // `ProfileCommitter` (его текст строит `_composeForm` из имени секрета),
+  // `plaintextToRemote` — предупреждение под URL (`warning`). Сюда они не
+  // попадают: `_errorTexts` получает только блокирующие проблемы.
+  ProfileDraftIssueCode.tokenSecretExists ||
+  ProfileDraftIssueCode.plaintextToRemote => throw StateError(
+    'Код ${issue.code.name} не блокирует форму и не имеет текста поля',
+  ),
+};
 
 bool _isVariableName(String name) =>
     RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(name);

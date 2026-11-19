@@ -11,11 +11,15 @@ import '../atomics/codelab_text.dart';
 /// Как использовать: [value] — обычный текст, [monoValue] — моноширинный
 /// хвост сразу после него; нужен хотя бы один из двух.
 class CodeLabKeyValueEntry {
-  const CodeLabKeyValueEntry({required this.label, this.value, this.monoValue})
-    : assert(
-        value != null || monoValue != null,
-        'нужно значение: value или monoValue',
-      );
+  const CodeLabKeyValueEntry({
+    required this.label,
+    this.value,
+    this.monoValue,
+    this.tail,
+  }) : assert(
+         value != null || monoValue != null,
+         'нужно значение: value или monoValue',
+       );
 
   /// Подпись слева, вторичным цветом.
   final String label;
@@ -25,6 +29,10 @@ class CodeLabKeyValueEntry {
 
   /// Моноширинная часть значения (путь, идентификатор) после [value].
   final String? monoValue;
+
+  /// Обычный текст после [monoValue] в той же фразе (например, закрывающая
+  /// кавычка переведённого сообщения).
+  final String? tail;
 }
 
 /// Таблица «подпись — значение» в раскрытом Expander.
@@ -79,6 +87,8 @@ class CodeLabKeyValueList extends StatelessWidget {
                         TextSpan(text: value),
                       if (entries[i].monoValue case final value?)
                         TextSpan(text: value, style: mono),
+                      if (entries[i].tail case final value?)
+                        TextSpan(text: value),
                     ],
                   ),
                 ),

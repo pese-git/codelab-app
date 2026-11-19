@@ -33,7 +33,7 @@ import '../../settings/application/connection_commands.dart';
 import '../../settings/application/default_profile_resolver.dart';
 import '../../settings/application/embedded_profile.dart';
 import '../../settings/application/profile_view.dart'
-    show profileOrigin, profileTitle;
+    show localizedProfileTitle, profileOrigin;
 import 'active_session_cubit.dart';
 import 'project_paths.dart';
 import 'settings_cubit.dart';
@@ -205,7 +205,10 @@ final class WindowConnectionState {
     EmbeddedProfile() => l10n.workbenchTransportEmbedded,
   };
 
-  String get selectedProfileLabel => profileTitle(shownProfile);
+  /// Подпись выбранного профиля на языке интерфейса: профиль встроенного агента
+  /// переводится по [l10n], профиль пользователя — никогда (D6, D7). Сам
+  /// [profile] и его `id` не меняются.
+  String get selectedProfileLabel => localizedProfileTitle(shownProfile, l10n);
 
   /// Деталь для подписи и диагностики: команда stdio без аргументов или
   /// `scheme://host:port` WebSocket без userinfo, пути и query — аргументы и
@@ -559,7 +562,7 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
       emit(
         state._copyWith(
           pendingRestart: RestartConfirmation(
-            title: profileTitle(state.profile),
+            title: localizedProfileTitle(state.profile, _strings.current),
             sessions: working,
           ),
         ),
@@ -879,10 +882,21 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
     } else {
       rebuilt = null;
     }
+    // Диалог перезапуска называет профиль: подпись встроенного агента —
+    // текст app и пересобирается на новом языке (D6).
+    final pending = state.pendingRestart;
+    final restart = pending == null
+        ? null
+        : RestartConfirmation(
+            title: localizedProfileTitle(state.profile, l10n),
+            sessions: pending.sessions,
+          );
     emit(
-      rebuilt == null
-          ? state._copyWith(l10n: l10n)
-          : state._copyWith(l10n: l10n, connectionMessage: rebuilt),
+      state._copyWith(
+        l10n: l10n,
+        connectionMessage: rebuilt ?? state.connectionMessage,
+        pendingRestart: restart ?? state.pendingRestart,
+      ),
     );
   }
 

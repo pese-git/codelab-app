@@ -80,405 +80,6 @@
   "@settingsLanguageSaveRetry": {
     "description": "Кнопка в предупреждении о сбое записи языка на странице General: повторить запись выбранного языка."
   },
-  "agentSettingLabel_budget_max_steps": "Max steps",
-  "@agentSettingLabel_budget_max_steps": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_budget_max_steps": "Model requests per turn.",
-  "@agentSettingDescription_budget_max_steps": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_budget_max_tokens": "Max tokens",
-  "@agentSettingLabel_budget_max_tokens": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_budget_max_tokens": "Sum of input and output tokens per turn.",
-  "@agentSettingDescription_budget_max_tokens": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_budget_max_cost": "Max cost",
-  "@agentSettingLabel_budget_max_cost": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_budget_max_cost": "USD per turn; works only with known prices.",
-  "@agentSettingDescription_budget_max_cost": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_budget_max_duration": "Max duration",
-  "@agentSettingLabel_budget_max_duration": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_budget_max_duration": "Turn time without waiting for approvals.",
-  "@agentSettingDescription_budget_max_duration": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_enabled": "Subagents",
-  "@agentSettingLabel_subagents_enabled": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_enabled": "Let the agent start subagents (new sessions only).",
-  "@agentSettingDescription_subagents_enabled": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_max_depth": "Max depth",
-  "@agentSettingLabel_subagents_max_depth": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_depth`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_max_depth": "How deep subagents may nest (new sessions only).",
-  "@agentSettingDescription_subagents_max_depth": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_depth`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_max_concurrent": "Max concurrent",
-  "@agentSettingLabel_subagents_max_concurrent": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_concurrent`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_max_concurrent": "Subagents working at the same time in one session tree.",
-  "@agentSettingDescription_subagents_max_concurrent": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_concurrent`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_max_per_turn": "Max per turn",
-  "@agentSettingLabel_subagents_max_per_turn": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_per_turn`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_max_per_turn": "Subagents started per turn of the session.",
-  "@agentSettingDescription_subagents_max_per_turn": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_per_turn`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_max_steps": "Max steps",
-  "@agentSettingLabel_subagents_max_steps": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_max_steps": "Model requests of one subagent.",
-  "@agentSettingDescription_subagents_max_steps": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_max_tokens": "Max tokens",
-  "@agentSettingLabel_subagents_max_tokens": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_max_tokens": "Input and output tokens of one subagent.",
-  "@agentSettingDescription_subagents_max_tokens": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_max_cost": "Max cost",
-  "@agentSettingLabel_subagents_max_cost": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_max_cost": "USD of one subagent; works only with known prices.",
-  "@agentSettingDescription_subagents_max_cost": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_max_duration": "Max duration",
-  "@agentSettingLabel_subagents_max_duration": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_max_duration": "Time of one subagent without waiting for approvals.",
-  "@agentSettingDescription_subagents_max_duration": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_report_max_bytes": "Report size",
-  "@agentSettingLabel_subagents_report_max_bytes": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.report_max_bytes`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_report_max_bytes": "Largest report a subagent returns, in bytes.",
-  "@agentSettingDescription_subagents_report_max_bytes": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.report_max_bytes`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_progress_interval": "Progress interval",
-  "@agentSettingLabel_subagents_progress_interval": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.progress_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_progress_interval": "Shortest pause between progress lines of a subagent call.",
-  "@agentSettingDescription_subagents_progress_interval": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.progress_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_heartbeat_interval": "Heartbeat interval",
-  "@agentSettingLabel_subagents_heartbeat_interval": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.heartbeat_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_heartbeat_interval": "Pause after which a silent subagent call reports that it is alive.",
-  "@agentSettingDescription_subagents_heartbeat_interval": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.heartbeat_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_subagents_cancel_grace": "Cancel grace",
-  "@agentSettingLabel_subagents_cancel_grace": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.cancel_grace`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_subagents_cancel_grace": "How long a call waits for subagents to stop after a cancel.",
-  "@agentSettingDescription_subagents_cancel_grace": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.cancel_grace`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_compaction_enabled": "Automatic compaction",
-  "@agentSettingLabel_compaction_enabled": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `compaction.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_compaction_enabled": "Compact the context automatically when it grows.",
-  "@agentSettingDescription_compaction_enabled": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `compaction.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingLabel_logging_level": "Log level",
-  "@agentSettingLabel_logging_level": {
-    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `logging.level`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "agentSettingDescription_logging_level": "Verbosity of the agent log.",
-  "@agentSettingDescription_logging_level": {
-    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `logging.level`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
-  },
-  "settingsGeneralAgentDefaultsTitle": "Agent defaults",
-  "@settingsGeneralAgentDefaultsTitle": {
-    "description": "Заголовок блока страницы General со строками конфигурации агента, общими с CLI."
-  },
-  "settingsGeneralAgentDefaultsCaption": "Changes are saved for all projects.",
-  "@settingsGeneralAgentDefaultsCaption": {
-    "description": "Подпись под заголовком блока Agent defaults: запись идёт в пользовательский config.yaml, а не в проект."
-  },
-  "settingsGeneralSharedInfo": "Shared with the codelab CLI. Rows marked shared come from the agent's settings registry and are saved to {home}/config.yaml; codelab /settings shows them too.",
-  "@settingsGeneralSharedInfo": {
-    "description": "InfoBar над блоком Agent defaults. {home} — папка CODELAB_HOME с ~ вместо домашнего каталога (путь, не переводить). codelab и codelab /settings — имя и команда CLI, не переводить.",
-    "placeholders": {
-      "home": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsGeneralTagShared": "shared",
-  "@settingsGeneralTagShared": {
-    "description": "Тег строки реестра настроек агента, которую видит и CLI."
-  },
-  "settingsGeneralNotSet": "Not set",
-  "@settingsGeneralNotSet": {
-    "description": "Значение ключа, который нигде не задан и не имеет умолчания."
-  },
-  "settingsGeneralAppliesAfterRestart": "(applies after restart)",
-  "@settingsGeneralAppliesAfterRestart": {
-    "description": "Пометка у ключа, изменение которого вступает в силу после перезапуска агента."
-  },
-  "settingsGeneralOverriddenBy": "This project overrides it ({source}).",
-  "@settingsGeneralOverriddenBy": {
-    "description": "Подпись строки, значение которой задаёт проектный файл. {source} — слой конфигурации (project, local), не переводить.",
-    "placeholders": {
-      "source": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsGeneralRefusalSecret": "Change it with codelab secret set.",
-  "@settingsGeneralRefusalSecret": {
-    "description": "Причина, по которой строку нельзя править здесь: ключ хранит имя секрета. codelab secret set — команда CLI, не переводить."
-  },
-  "settingsGeneralRefusalMasked": "This value contains a secret; change it in the config file.",
-  "@settingsGeneralRefusalMasked": {
-    "description": "Причина, по которой строку нельзя править здесь: значение замаскировано."
-  },
-  "settingsGeneralRefusalExternal": "Set by {source}; it cannot be changed here.",
-  "@settingsGeneralRefusalExternal": {
-    "description": "Причина, по которой строку нельзя править здесь: значение пришло из окружения или файла --config. {source} — env или config, не переводить.",
-    "placeholders": {
-      "source": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsGeneralRefusalOther": "This setting cannot be changed here.",
-  "@settingsGeneralRefusalOther": {
-    "description": "Причина отказа в правке для ключа, которого нет на странице (запасной текст)."
-  },
-  "settingsGeneralHintIntMin": "Enter a whole number of {min} or greater.",
-  "@settingsGeneralHintIntMin": {
-    "description": "Подсказка формата под полем: целое число с нижней границей.",
-    "placeholders": {
-      "min": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsGeneralHintIntRange": "Enter a whole number from {min} to {max}.",
-  "@settingsGeneralHintIntRange": {
-    "description": "Подсказка формата под полем: целое число в диапазоне.",
-    "placeholders": {
-      "min": {
-        "type": "String"
-      },
-      "max": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsGeneralHintInt": "Enter a whole number.",
-  "@settingsGeneralHintInt": {
-    "description": "Подсказка формата под полем: целое число без границ."
-  },
-  "settingsGeneralHintNumber": "Enter a number.",
-  "@settingsGeneralHintNumber": {
-    "description": "Подсказка формата под полем: число."
-  },
-  "settingsGeneralHintDuration": "Enter a duration like 500ms, 30s, 2m or 1h.",
-  "@settingsGeneralHintDuration": {
-    "description": "Подсказка формата под полем: длительность. Примеры 500ms, 30s, 2m, 1h не переводить."
-  },
-  "settingsGeneralSaved": "Saved.",
-  "@settingsGeneralSaved": {
-    "description": "Баннер после записи ключа на странице General."
-  },
-  "settingsGeneralTailAfterRestart": "Applies after Restart agent.",
-  "@settingsGeneralTailAfterRestart": {
-    "description": "Хвост баннера записи: ключ вступит в силу после действия Restart agent."
-  },
-  "settingsGeneralTailWhenStarts": "Applies when the agent starts.",
-  "@settingsGeneralTailWhenStarts": {
-    "description": "Хвост баннера записи: агент не подключён, ключ вступит в силу при его запуске."
-  },
-  "settingsGeneralSavedOverridden": "Saved to all projects; {source} overrides it: the agent uses {effective}.",
-  "@settingsGeneralSavedOverridden": {
-    "description": "Баннер записи, значение которой перекрыто другим слоем. {source} — слой (local, project, env, config), {effective} — действующее значение; оба не переводить.",
-    "placeholders": {
-      "source": {
-        "type": "String"
-      },
-      "effective": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsGeneralSavedUnverified": "Saved to {home}/config.yaml.",
-  "@settingsGeneralSavedUnverified": {
-    "description": "Баннер записи, после которой конфигурацию не удалось перечитать. {home} — папка CODELAB_HOME с ~, путь не переводить.",
-    "placeholders": {
-      "home": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsGeneralConflict": "The config file changed on disk; the page was reloaded. Try again.",
-  "@settingsGeneralConflict": {
-    "description": "Баннер конфликта записи: файл изменили вне app."
-  },
-  "settingsGeneralRejected": "The config was not saved.",
-  "@settingsGeneralRejected": {
-    "description": "Баннер ошибки записи, когда писатель не назвал проблему."
-  },
-  "settingsGeneralReadOnlyRemote": "Read-only: this agent runs on {origin}. Change its settings on that host: codelab config set.",
-  "@settingsGeneralReadOnlyRemote": {
-    "description": "Предупреждение блока Agent defaults для удалённого агента. {origin} — адрес вида wss://host:port, codelab config set — команда CLI; оба не переводить.",
-    "placeholders": {
-      "origin": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsGeneralReadOnlyManaged": "Agent settings are managed by {agent}.",
-  "@settingsGeneralReadOnlyManaged": {
-    "description": "Предупреждение блока Agent defaults для стороннего агента. {agent} — имя агента, не переводить.",
-    "placeholders": {
-      "agent": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsGeneralUnreadable": "The agent config cannot be read.",
-  "@settingsGeneralUnreadable": {
-    "description": "Заголовок InfoBar блока Agent defaults, когда config.yaml не разбирается; ниже проблемы загрузчика."
-  },
-  "settingsGeneralSectionStartup": "Startup and files",
-  "@settingsGeneralSectionStartup": {
-    "description": "Заголовок секции страницы General со строками запуска и файлов."
-  },
-  "settingsGeneralReopenTitle": "Reopen the last project and its tabs",
-  "@settingsGeneralReopenTitle": {
-    "description": "Подпись строки-переключателя: открывать ли при запуске проект прошлого запуска и его открытые сессии."
-  },
-  "settingsGeneralReopenDescription": "On: open the last project and its open sessions. Off: start with recent projects in the sidebar. Applies at the next start.",
-  "@settingsGeneralReopenDescription": {
-    "description": "Пояснение строки «Reopen the last project and its tabs»."
-  },
-  "settingsGeneralStartupSaveFailed": "Couldn't save this setting. The previous value applies at the next start.",
-  "@settingsGeneralStartupSaveFailed": {
-    "description": "Предупреждение на странице General, когда значение настройки запуска не удалось записать; кнопка Retry повторяет запись."
-  },
-  "settingsGeneralSectionAbout": "About",
-  "@settingsGeneralSectionAbout": {
-    "description": "Заголовок секции страницы General с версией сборки, лицензией и диагностикой."
-  },
-  "settingsGeneralAboutSubtitle": "{platform} · embedded agent {agentVersion}",
-  "@settingsGeneralAboutSubtitle": {
-    "description": "Вторая строка заголовка раздела About: платформа и версия встроенного агента. {platform} — например macOS arm64, {agentVersion} — номер версии; не переводить.",
-    "placeholders": {
-      "platform": {
-        "type": "String"
-      },
-      "agentVersion": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsGeneralAboutLicense": "License",
-  "@settingsGeneralAboutLicense": {
-    "description": "Подпись строки раздела About с названием лицензии. Значение MIT и строка авторского права не переводятся."
-  },
-  "settingsGeneralAboutConfigFolder": "Config folder",
-  "@settingsGeneralAboutConfigFolder": {
-    "description": "Подпись строки раздела About с папкой CODELAB_HOME; путь не переводится."
-  },
-  "settingsGeneralAboutCopyDiagnostics": "Copy diagnostics",
-  "@settingsGeneralAboutCopyDiagnostics": {
-    "description": "Кнопка раздела About: копирует в буфер обмена диагностику без секретов и путей. Сам текст диагностики не переводится."
-  },
-  "settingsGeneralAboutThirdParty": "Third-party notices",
-  "@settingsGeneralAboutThirdParty": {
-    "description": "Кнопка раздела About и заголовок диалога со сторонними уведомлениями и лицензиями пакетов."
-  },
-  "settingsGeneralAboutReleaseNotes": "Release notes",
-  "@settingsGeneralAboutReleaseNotes": {
-    "description": "Кнопка раздела About: открывает журнал изменений в браузере."
-  },
-  "settingsGeneralAboutOpenLogs": "Open log folder",
-  "@settingsGeneralAboutOpenLogs": {
-    "description": "Кнопка раздела About: открывает папку журналов app в файловом менеджере."
-  },
-  "settingsGeneralAboutUpdates": "Updates come from the installer or your package manager — the app does not update itself.",
-  "@settingsGeneralAboutUpdates": {
-    "description": "InfoBar раздела About об источнике обновлений."
-  },
-  "settingsGeneralAboutCopied": "Diagnostics copied.",
-  "@settingsGeneralAboutCopied": {
-    "description": "Подтверждение после копирования диагностики в буфер обмена."
-  },
-  "settingsGeneralAboutReleaseNotesFailed": "Couldn't open the release notes.",
-  "@settingsGeneralAboutReleaseNotesFailed": {
-    "description": "Предупреждение раздела About, когда адрес журнала изменений не открылся."
-  },
-  "settingsGeneralAboutLogsFailed": "Couldn't open the log folder.",
-  "@settingsGeneralAboutLogsFailed": {
-    "description": "Предупреждение раздела About, когда папка журналов не открылась."
-  },
-  "settingsGeneralAboutPackageLicenses": "Package licenses",
-  "@settingsGeneralAboutPackageLicenses": {
-    "description": "Заголовок списка лицензий пакетов в диалоге сторонних уведомлений."
-  },
-  "settingsGeneralAboutClose": "Close",
-  "@settingsGeneralAboutClose": {
-    "description": "Кнопка закрытия диалога сторонних уведомлений."
-  },
-  "settingsGeneralUnreadableCannotRead": "Cannot read the agent settings.",
-  "@settingsGeneralUnreadableCannotRead": {
-    "description": "Причина в InfoBar блока Agent defaults: сессия настроек или снимок конфигурации агента не открылись."
-  },
-  "settingsGeneralUnreadableHome": "The CodeLab home folder is not available.",
-  "@settingsGeneralUnreadableHome": {
-    "description": "Причина в InfoBar блока Agent defaults: не удалось определить папку CODELAB_HOME. CodeLab — название продукта, не переводить."
-  },
-  "settingsGeneralUnreadableUserLayer": "The user config.yaml cannot be read.",
-  "@settingsGeneralUnreadableUserLayer": {
-    "description": "Причина в InfoBar блока Agent defaults: пользовательский файл конфигурации не читается. config.yaml — имя файла, не переводить."
-  },
-  "settingsGeneralAboutCopyFailed": "Couldn't copy the diagnostics.",
-  "@settingsGeneralAboutCopyFailed": {
-    "description": "Предупреждение раздела About, когда диагностику не удалось скопировать в буфер обмена."
-  },
-  "settingsGeneralAboutLoadFailed": "Couldn't load the About section.",
-  "@settingsGeneralAboutLoadFailed": {
-    "description": "Предупреждение вместо раздела About, когда его данные (ресурсы лицензий) не прочитались."
-  },
   "commonCancel": "Cancel",
   "@commonCancel": {
     "description": "Кнопка отмены в диалогах рабочего места."
@@ -1453,6 +1054,1963 @@
         "type": "int"
       }
     }
+  },
+  "commonSave": "Save",
+  "@commonSave": {
+    "description": "Кнопка «Сохранить» в формах и редакторах настроек."
+  },
+  "commonRemove": "Remove",
+  "@commonRemove": {
+    "description": "Кнопка удаления записи (профиль, провайдер) в строке и в диалоге подтверждения."
+  },
+  "commonBack": "Back",
+  "@commonBack": {
+    "description": "Кнопка возврата на предыдущий шаг мастера."
+  },
+  "commonNext": "Next",
+  "@commonNext": {
+    "description": "Кнопка перехода на следующий шаг мастера."
+  },
+  "commonDone": "Done",
+  "@commonDone": {
+    "description": "Кнопка завершения диалога после успешной записи."
+  },
+  "commonEdit": "Edit",
+  "@commonEdit": {
+    "description": "Кнопка правки записи в строке списка."
+  },
+  "commonCheck": "Check",
+  "@commonCheck": {
+    "description": "Кнопка проверки провайдера в строке списка."
+  },
+  "commonDefault": "Default",
+  "@commonDefault": {
+    "description": "Метка записи, которая используется по умолчанию (профиль, провайдер)."
+  },
+  "commonContinue": "Continue",
+  "@commonContinue": {
+    "description": "Кнопка продолжения шага мастера."
+  },
+  "connectionAddProfile": "Add profile",
+  "@connectionAddProfile": {
+    "description": "Кнопка страницы Connection: открыть диалог добавления профиля подключения."
+  },
+  "connectionSectionProfiles": "Profiles",
+  "@connectionSectionProfiles": {
+    "description": "Заголовок секции списка профилей на странице Connection."
+  },
+  "connectionSectionBehavior": "Behavior",
+  "@connectionSectionBehavior": {
+    "description": "Заголовок секции Behavior на странице Connection (перезапуск агента)."
+  },
+  "connectionProfilesHelp": "Shared with codelab_cli through profiles.json in $CODELAB_HOME. The default profile is used when the agent starts, until you choose another with Use.",
+  "@connectionProfilesHelp": {
+    "description": "Пояснение под заголовком секции профилей. codelab_cli, profiles.json и $CODELAB_HOME — имена программы, файла и переменной окружения, не переводить. «Use» — подпись кнопки строки (connectionRowUse)."
+  },
+  "connectionJoinCliTitle": "Join a session started in the CLI",
+  "@connectionJoinCliTitle": {
+    "description": "Заголовок раскрывающейся справки о подключении к сессии, запущенной в CLI."
+  },
+  "connectionJoinCliBody": "On the host run codelab-agent serve --ws <port>; the CLI connects with codelab -a <profile>. Choose the same WebSocket profile here; its sessions appear in the sidebar.",
+  "@connectionJoinCliBody": {
+    "description": "Справка о подключении к агенту из CLI. Команды (codelab-agent serve --ws <port>, codelab -a <profile>) и WebSocket не переводить."
+  },
+  "connectionBadgeCurrent": "Current",
+  "@connectionBadgeCurrent": {
+    "description": "Метка профиля, к которому подключено окно."
+  },
+  "connectionBadgeSelected": "Selected",
+  "@connectionBadgeSelected": {
+    "description": "Метка профиля, выбранного для следующего старта агента."
+  },
+  "connectionStatusConnecting": "Connecting…",
+  "@connectionStatusConnecting": {
+    "description": "Бейдж попытки подключения профиля: идёт попытка."
+  },
+  "connectionStatusConnected": "Connected",
+  "@connectionStatusConnected": {
+    "description": "Бейдж попытки подключения профиля: подключено."
+  },
+  "connectionStatusFailed": "Failed",
+  "@connectionStatusFailed": {
+    "description": "Бейдж попытки подключения профиля: сбой."
+  },
+  "connectionRowUse": "Use",
+  "@connectionRowUse": {
+    "description": "Кнопка строки профиля: выбрать профиль для следующего старта агента."
+  },
+  "connectionRowRename": "Rename",
+  "@connectionRowRename": {
+    "description": "Кнопка строки профиля: переименовать."
+  },
+  "connectionRowUseAnotherFirst": "Use another profile first.",
+  "@connectionRowUseAnotherFirst": {
+    "description": "Подсказка неактивной кнопки удаления текущего или выбранного профиля."
+  },
+  "connectionRowNotSaved": "Current connection (not saved)",
+  "@connectionRowNotSaved": {
+    "description": "Подпись строки профиля окна, которого нет в profiles.json."
+  },
+  "connectionRenameName": "Name",
+  "@connectionRenameName": {
+    "description": "Подсказка поля имени в редакторе переименования профиля."
+  },
+  "connectionEmbeddedAgentTitle": "Embedded agent",
+  "@connectionEmbeddedAgentTitle": {
+    "description": "Подпись профиля встроенного агента (в списке профилей, в шапке рабочего места, в подсказке соединения)."
+  },
+  "connectionEmbeddedAgentSummary": "Runs inside CodeLab; no separate process.",
+  "@connectionEmbeddedAgentSummary": {
+    "description": "Сводка строки профиля встроенного агента. CodeLab — название продукта, не переводить."
+  },
+  "connectionTokenNone": "No token",
+  "@connectionTokenNone": {
+    "description": "Источник токена профиля WebSocket: токена нет."
+  },
+  "connectionTokenFromEnv": "From {variable}",
+  "@connectionTokenFromEnv": {
+    "description": "Источник токена: переменная окружения. Плейсхолдер variable — имя переменной со знаком доллара, не переводить. Значения токена в тексте нет.",
+    "placeholders": {
+      "variable": {
+        "type": "String"
+      }
+    }
+  },
+  "tokenEnvNotSet": "{name} is not set in CodeLab's environment.",
+  "@tokenEnvNotSet": {
+    "description": "Заметка: переменная окружения токена не задана. Плейсхолдер name — имя переменной, не переводить. CodeLab — название продукта.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionTokenSecret": "Token secret {name}",
+  "@connectionTokenSecret": {
+    "description": "Источник токена: секрет хранилища. Плейсхолдер name — имя секрета, не переводить. Значения секрета в тексте нет.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionTokenSecretSet": "{backend} · set",
+  "@connectionTokenSecretSet": {
+    "description": "Тег секрета токена: секрет есть в хранилище. Плейсхолдер backend — id бэкенда хранилища (file, env), не переводить.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionTokenSecretMissing": "{backend} · missing",
+  "@connectionTokenSecretMissing": {
+    "description": "Тег секрета токена: секрета нет в хранилище. Плейсхолдер backend — id бэкенда хранилища, не переводить.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionTokenUnsupported": "unrecognized token reference (not supported in this version)",
+  "@connectionTokenUnsupported": {
+    "description": "Источник токена: ссылка, которую эта версия не разбирает. Саму ссылку не показываем: в ней мог оказаться токен."
+  },
+  "connectionReadOnlyTitle": "Read-only: this agent runs on {origin}",
+  "@connectionReadOnlyTitle": {
+    "description": "Заголовок InfoBar страницы Connection при подключении к удалённому агенту. Плейсхолдер origin — адрес scheme://host:port, не переводить.",
+    "placeholders": {
+      "origin": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsRemoteHostHint": "Change providers and MCP on that host: codelab provider add, codelab mcp add, codelab config set.",
+  "@settingsRemoteHostHint": {
+    "description": "Подсказка InfoBar «только чтение» для удалённого агента. Команды codelab … и MCP не переводить."
+  },
+  "connectionIgnoredDefault": "Profile \"default\" in profiles.json is ignored: default is the built-in agent. Remove it with codelab profiles remove default.",
+  "@connectionIgnoredDefault": {
+    "description": "InfoBar: в profiles.json осталась прежняя запись default. default, profiles.json и команда codelab profiles remove default — не переводить."
+  },
+  "connectionIgnoredDefaultRemoveTitle": "Remove the ignored \"default\" profile?",
+  "@connectionIgnoredDefaultRemoveTitle": {
+    "description": "Заголовок диалога подтверждения удаления игнорируемой записи default."
+  },
+  "connectionIgnoredDefaultRemoveDetails": "Only the \"default\" entry is deleted from profiles.json; other profiles stay.",
+  "@connectionIgnoredDefaultRemoveDetails": {
+    "description": "Пояснение диалога удаления игнорируемой записи default. profiles.json и default не переводить."
+  },
+  "connectionUnreadableWithPath": "Cannot read {path}: {reason}. Fix or remove the file; CodeLab will not overwrite it.",
+  "@connectionUnreadableWithPath": {
+    "description": "Ошибка чтения profiles.json. Плейсхолдер path — путь файла, reason — причина (connectionUnreadableUnsupported / connectionUnreadableCannotRead), не переводить.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionUnreadableWithoutPath": "Cannot use the profiles: {reason}.",
+  "@connectionUnreadableWithoutPath": {
+    "description": "Ошибка недоступности профилей (недопустимый CODELAB_HOME). Плейсхолдер reason — текст причины из composition root (английский, как есть).",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionUnreadableUnsupported": "the file has an unsupported version or an invalid structure",
+  "@connectionUnreadableUnsupported": {
+    "description": "Причина: profiles.json неподдерживаемой версии или с неверной структурой. Вставляется в connectionUnreadableWithPath."
+  },
+  "connectionUnreadableCannotRead": "the file cannot be read ({errorType})",
+  "@connectionUnreadableCannotRead": {
+    "description": "Причина: файл не читается. Плейсхолдер errorType — имя типа исключения, не переводить. Текста исключения нет.",
+    "placeholders": {
+      "errorType": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionFailureSaveFailed": "Could not save the change. Try again.",
+  "@connectionFailureSaveFailed": {
+    "description": "Разовое сообщение: запись изменения (переименование, удаление, выбор профиля) не удалась. Текста исключения нет."
+  },
+  "connectionFailureTokenNotDeleted": "The profile was removed, but the stored token {name} was not deleted. Remove it with codelab secret delete {name}.",
+  "@connectionFailureTokenNotDeleted": {
+    "description": "Разовое сообщение: профиль удалён, секрет токена остался. Плейсхолдер name — имя секрета; команда codelab secret delete не переводится. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionRemoveTitle": "Remove profile {name}?",
+  "@connectionRemoveTitle": {
+    "description": "Заголовок диалога подтверждения удаления профиля. Плейсхолдер name — имя профиля пользователя, не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionRemoveDetails": "The entry is deleted from profiles.json. Environment variables and other settings are not touched.",
+  "@connectionRemoveDetails": {
+    "description": "Пояснение диалога удаления профиля. profiles.json не переводить."
+  },
+  "connectionRemoveDeleteToken": "Also delete the stored token {name}",
+  "@connectionRemoveDeleteToken": {
+    "description": "Флажок диалога удаления профиля. Плейсхолдер name — имя секрета, не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionReconnect": "Reconnect",
+  "@connectionReconnect": {
+    "description": "Заголовок и кнопка блока Behavior для удалённого (WebSocket) агента."
+  },
+  "connectionRestartButton": "Restart",
+  "@connectionRestartButton": {
+    "description": "Кнопка блока Behavior для локального агента."
+  },
+  "connectionRestartHint": "Starts when you open a project.",
+  "@connectionRestartHint": {
+    "description": "Подсказка недоступной кнопки перезапуска: агент запускается при открытии проекта."
+  },
+  "connectionRestartDescription": "Reconnects {subject} and reloads open sessions. A running turn is interrupted; queued prompts stay.",
+  "@connectionRestartDescription": {
+    "description": "Описание блока Behavior. Плейсхолдер subject — имя профиля (либо connectionRestartSubjectWindow), не переводить.",
+    "placeholders": {
+      "subject": {
+        "type": "String"
+      }
+    }
+  },
+  "connectionRestartSubjectWindow": "the profile of this window",
+  "@connectionRestartSubjectWindow": {
+    "description": "Подлежащее описания перезапуска, пока цели перезапуска ещё нет. Вставляется в connectionRestartDescription."
+  },
+  "connectionRestartToUse": "Restart {subject} to use it.",
+  "@connectionRestartToUse": {
+    "description": "Описание блока Behavior, когда выбран не тот профиль, что работает. Плейсхолдер subject — имя выбранного профиля, не переводить.",
+    "placeholders": {
+      "subject": {
+        "type": "String"
+      }
+    }
+  },
+  "addProfileTitle": "Add connection profile",
+  "@addProfileTitle": {
+    "description": "Заголовок диалога добавления профиля подключения."
+  },
+  "addProfileSubtitle": "Saved to {path} and shared with codelab_cli as {command}.",
+  "@addProfileSubtitle": {
+    "description": "Подзаголовок диалога. Плейсхолдеры path (путь profiles.json) и command (команда codelab -a <id>) — не переводить; codelab_cli — имя программы.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      },
+      "command": {
+        "type": "String"
+      }
+    }
+  },
+  "addProfileFieldType": "Type",
+  "@addProfileFieldType": {
+    "description": "Подпись поля выбора типа профиля (stdio или WebSocket)."
+  },
+  "addProfileFieldName": "Name",
+  "@addProfileFieldName": {
+    "description": "Подпись поля имени профиля."
+  },
+  "addProfileFieldCommand": "Command",
+  "@addProfileFieldCommand": {
+    "description": "Подпись поля команды запуска агента (профиль stdio)."
+  },
+  "addProfileFieldArguments": "Arguments",
+  "@addProfileFieldArguments": {
+    "description": "Подпись поля аргументов команды."
+  },
+  "addProfileFieldFolder": "Folder",
+  "@addProfileFieldFolder": {
+    "description": "Подпись строки выбора рабочей папки процесса агента."
+  },
+  "addProfileFieldEnvironment": "Environment",
+  "@addProfileFieldEnvironment": {
+    "description": "Подпись поля переменных окружения процесса агента."
+  },
+  "addProfileFieldToken": "Token",
+  "@addProfileFieldToken": {
+    "description": "Подпись строки выбора источника токена WebSocket-профиля."
+  },
+  "addProfileFieldAfterSaving": "After saving",
+  "@addProfileFieldAfterSaving": {
+    "description": "Подпись строки с флажком «Использовать по умолчанию»."
+  },
+  "addProfileTypeSemantics": "Profile type",
+  "@addProfileTypeSemantics": {
+    "description": "Подпись переключателя типа профиля для скринридера."
+  },
+  "addProfileTypeStdio": "Local stdio",
+  "@addProfileTypeStdio": {
+    "description": "Сегмент типа профиля: локальный процесс по stdio. stdio не переводить."
+  },
+  "addProfileTypeStdioNote": "Starts the agent as a child process per window and talks ACP over stdin/stdout.",
+  "@addProfileTypeStdioNote": {
+    "description": "Пояснение под переключателем типа: stdio-профиль. ACP, stdin и stdout не переводить."
+  },
+  "addProfileTypeWebSocketNote": "Connects to codelab-agent serve --ws on this or another machine.",
+  "@addProfileTypeWebSocketNote": {
+    "description": "Пояснение под переключателем типа: WebSocket-профиль. Команда codelab-agent serve --ws не переводится."
+  },
+  "addProfileIdCannotChange": "· cannot change after saving",
+  "@addProfileIdCannotChange": {
+    "description": "Подпись рядом с полем id: после сохранения id не меняется."
+  },
+  "addProfileNamePlaceholder": "devbox 2",
+  "@addProfileNamePlaceholder": {
+    "description": "Пример имени профиля в подсказке поля. Не переводить."
+  },
+  "addProfileArgumentsNote": "Parsed like a shell: quotes and escapes work.",
+  "@addProfileArgumentsNote": {
+    "description": "Пояснение под полем аргументов."
+  },
+  "addProfileRunInProject": "Run in the project folder",
+  "@addProfileRunInProject": {
+    "description": "Флажок: процесс агента запускается в папке проекта."
+  },
+  "addProfileUseByDefault": "Use by default",
+  "@addProfileUseByDefault": {
+    "description": "Флажок: сделать профиль профилем по умолчанию."
+  },
+  "addProfileUsedWhenAgentStarts": "Used when the agent starts.",
+  "@addProfileUsedWhenAgentStarts": {
+    "description": "Пояснение под флажком «Использовать по умолчанию»."
+  },
+  "addProfileTokenNone": "No token",
+  "@addProfileTokenNone": {
+    "description": "Вариант токена: без токена."
+  },
+  "addProfileTokenStored": "Use stored secret",
+  "@addProfileTokenStored": {
+    "description": "Вариант токена: взять секрет из хранилища секретов."
+  },
+  "addProfileTokenNew": "Store a new token",
+  "@addProfileTokenNew": {
+    "description": "Вариант токена: ввести значение и сохранить его в хранилище секретов."
+  },
+  "addProfileTokenEnv": "From environment variable",
+  "@addProfileTokenEnv": {
+    "description": "Вариант токена: брать значение из переменной окружения."
+  },
+  "addProfileTokenPaste": "Paste the token",
+  "@addProfileTokenPaste": {
+    "description": "Подсказка скрытого поля ввода нового токена. Значение не показывается."
+  },
+  "addProfileTokenEnvNote": "CodeLab reads the token from this environment variable when it connects. Token values are not saved in profiles.json.",
+  "@addProfileTokenEnvNote": {
+    "description": "Пояснение варианта «Из переменной окружения». CodeLab и profiles.json не переводить. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "addProfileTokenEnvFinderNote": "Apps opened from Finder do not see variables set in your shell profile.",
+  "@addProfileTokenEnvFinderNote": {
+    "description": "Пояснение варианта «Из переменной окружения»: macOS Finder не передаёт переменные оболочки. Finder — название программы, не переводить."
+  },
+  "addProfileStoredSecretsHint": "No stored secrets in {backend}.",
+  "@addProfileStoredSecretsHint": {
+    "description": "Подсказка недоступного варианта «Использовать сохранённый секрет». Плейсхолдер backend — id бэкенда хранилища, не переводить.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "addProfileNewTokenHint": "Saved as {name} in {backend}. The value is never shown again or written to profiles.json.",
+  "@addProfileNewTokenHint": {
+    "description": "Подсказка варианта «Сохранить новый токен». Плейсхолдеры: name — имя секрета (или codelab/profiles/<id>/token), backend — id бэкенда; не переводить. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "addProfileSecretStoreReadOnly": "Secret store {backend} is read-only.",
+  "@addProfileSecretStoreReadOnly": {
+    "description": "Причина недоступности варианта «Сохранить новый токен», когда у хранилища нет собственной причины. Плейсхолдер backend — id бэкенда, не переводить.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "addProfileWarningTokenPlaintext": "ws:// to another machine: the token is sent unencrypted.",
+  "@addProfileWarningTokenPlaintext": {
+    "description": "Предупреждение под URL: токен по ws:// уходит без шифрования. ws:// не переводить. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "addProfileWarningTrafficPlaintext": "ws:// to another machine: traffic is sent unencrypted.",
+  "@addProfileWarningTrafficPlaintext": {
+    "description": "Предупреждение под URL: трафик по ws:// уходит без шифрования. ws:// не переводить. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "addProfilePlaintextTitle": "Unencrypted connection",
+  "@addProfilePlaintextTitle": {
+    "description": "Заголовок подтверждения ws:// перед записью профиля. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "addProfilePlaintextWithToken": "The token for {origin} will travel in clear text. Use wss:// if the host supports it.",
+  "@addProfilePlaintextWithToken": {
+    "description": "Подтверждение ws:// с токеном. Плейсхолдер origin — scheme://host:port без пути и учётных данных, не переводить. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "origin": {
+        "type": "String"
+      }
+    }
+  },
+  "addProfilePlaintextWithoutToken": "Prompts and files sent to {origin} will travel in clear text. Use wss:// if the host supports it.",
+  "@addProfilePlaintextWithoutToken": {
+    "description": "Подтверждение ws:// без токена. Плейсхолдер origin — scheme://host:port, не переводить. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "origin": {
+        "type": "String"
+      }
+    }
+  },
+  "addProfileSaveAnyway": "Save anyway",
+  "@addProfileSaveAnyway": {
+    "description": "Кнопка подтверждения записи профиля с ws:// без шифрования. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "addProfileErrorLabelEmpty": "Enter a name.",
+  "@addProfileErrorLabelEmpty": {
+    "description": "Ошибка поля имени: пусто."
+  },
+  "addProfileErrorIdEmpty": "Id is required.",
+  "@addProfileErrorIdEmpty": {
+    "description": "Ошибка поля id: пусто."
+  },
+  "addProfileErrorIdReserved": "\"{id}\" is reserved for the built-in agent.",
+  "@addProfileErrorIdReserved": {
+    "description": "Ошибка поля id: зарезервированный id. Плейсхолдер id — идентификатор профиля, не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "addProfileErrorIdTaken": "A profile with id \"{id}\" already exists.",
+  "@addProfileErrorIdTaken": {
+    "description": "Ошибка поля id: id занят. Плейсхолдер id — идентификатор профиля, не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "addProfileErrorIdInvalid": "Use lowercase letters, digits, \".\", \"_\" and \"-\" (up to 64 characters).",
+  "@addProfileErrorIdInvalid": {
+    "description": "Ошибка поля id: недопустимые символы."
+  },
+  "addProfileErrorCommandEmpty": "Enter the command that starts the agent.",
+  "@addProfileErrorCommandEmpty": {
+    "description": "Ошибка поля команды: пусто."
+  },
+  "addProfileErrorArgsInvalid": "Arguments have an unclosed quote.",
+  "@addProfileErrorArgsInvalid": {
+    "description": "Ошибка поля аргументов: не закрыта кавычка."
+  },
+  "addProfileErrorUrlInvalid": "Use ws:// or wss:// with a host.",
+  "@addProfileErrorUrlInvalid": {
+    "description": "Ошибка поля URL: нужна схема ws:// или wss:// и хост. ws:// и wss:// не переводить."
+  },
+  "addProfileErrorUrlUserInfo": "Remove the user name and password from the URL; use the Token setting instead.",
+  "@addProfileErrorUrlUserInfo": {
+    "description": "Ошибка поля URL: в адресе учётные данные. «Токен» — подпись поля addProfileFieldToken. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "addProfileErrorTokenEnvNameInvalid": "Variable name: letters, digits and \"_\", not starting with a digit.",
+  "@addProfileErrorTokenEnvNameInvalid": {
+    "description": "Ошибка имени переменной токена."
+  },
+  "addProfileErrorTokenSecretNameInvalid": "Secret name: lowercase letters, digits and . _ / -, up to 128 characters.",
+  "@addProfileErrorTokenSecretNameInvalid": {
+    "description": "Ошибка имени выбранного секрета хранилища."
+  },
+  "addProfileErrorTokenSecretEmpty": "Enter the token.",
+  "@addProfileErrorTokenSecretEmpty": {
+    "description": "Ошибка поля токена: значение не введено."
+  },
+  "addProfileErrorTokenSecretIdInvalid": "This id cannot name a stored token; avoid \"..\".",
+  "@addProfileErrorTokenSecretIdInvalid": {
+    "description": "Ошибка поля id: из него нельзя построить имя секрета токена."
+  },
+  "addProfileErrorTokenSecretExists": "A stored token {name} already exists in {backend}. Choose it with \"Use stored secret\" or remove it with codelab secret delete.",
+  "@addProfileErrorTokenSecretExists": {
+    "description": "Ошибка поля токена: секрет с таким именем уже есть. Плейсхолдеры name (имя секрета) и backend (id бэкенда) не переводить; команда codelab secret delete не переводится; «Использовать сохранённый секрет» — addProfileTokenStored. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "addProfileSavedTitle": "Profile saved",
+  "@addProfileSavedTitle": {
+    "description": "Заголовок экрана после успешной записи профиля."
+  },
+  "addProfileSavedMessage": "Added to profiles.json as {id}",
+  "@addProfileSavedMessage": {
+    "description": "Строка экрана «Профиль сохранён». Плейсхолдер id — идентификатор профиля, не переводить; profiles.json не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "addProfileSavedUsedByDefault": " · used by default",
+  "@addProfileSavedUsedByDefault": {
+    "description": "Продолжение строки экрана «Профиль сохранён»: профиль стал профилем по умолчанию. Ведущий пробел и точку-разделитель сохранить."
+  },
+  "addProfileSavedNote": "The running agent is unchanged. Select it with Use in the profile row; Restart agent applies it.",
+  "@addProfileSavedNote": {
+    "description": "Пояснение экрана «Профиль сохранён». «Использовать» — connectionRowUse, «Перезапустить агента» — commonRestartAgent."
+  },
+  "addProfileAddAnother": "Add another",
+  "@addProfileAddAnother": {
+    "description": "Кнопка экрана «Профиль сохранён»: добавить ещё один профиль."
+  },
+  "addProfileFailureProfile": "Could not save the profile. Try again.",
+  "@addProfileFailureProfile": {
+    "description": "Разовое сообщение: запись профиля не удалась. Текста исключения нет."
+  },
+  "addProfileFailureSecret": "Could not store the token. Try again.",
+  "@addProfileFailureSecret": {
+    "description": "Разовое сообщение: запись секрета токена не удалась. Значения токена и текста исключения нет. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "addProfileFailureOrphanedToken": "The profile was not saved; the token stays in {backend} as {name}. Remove it with codelab secret delete {name}.",
+  "@addProfileFailureOrphanedToken": {
+    "description": "Разовое сообщение: профиль не записан, а секрет токена остался. Плейсхолдеры backend (id бэкенда) и name (имя секрета) не переводить; команда codelab secret delete не переводится. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "secretStoreReadOnly": "The secret store is read-only.",
+  "@secretStoreReadOnly": {
+    "description": "Отказ записи секрета: хранилище только для чтения, а само хранилище причину не назвало. Причину, названную хранилищем, показываем как есть."
+  },
+  "addProfileErrorEnvSecretLike": "{key} looks like a secret. Set it in the system environment or reference it from the agent config as {syntax}.",
+  "@addProfileErrorEnvSecretLike": {
+    "description": "Ошибка поля окружения: имя переменной похоже на секрет. Плейсхолдеры key (имя переменной) и syntax (синтаксис конфигурации агента) не переводить. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      },
+      "syntax": {
+        "type": "String"
+      }
+    }
+  },
+  "providersAdd": "Add provider",
+  "@providersAdd": {
+    "description": "Кнопка добавления провайдера (страница Providers, пустое состояние) и заголовок мастера."
+  },
+  "providersDefaultModel": "Default model",
+  "@providersDefaultModel": {
+    "description": "Подпись строки выбора модели по умолчанию на странице Providers."
+  },
+  "providersUsedByNewSessions": "Used by new sessions.",
+  "@providersUsedByNewSessions": {
+    "description": "Описание строки «Модель по умолчанию»."
+  },
+  "providersActiveInSession": "Active in this session: {model}",
+  "@providersActiveInSession": {
+    "description": "Описание: модель активной сессии. Плейсхолдер model — id модели, не переводить.",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "providersChooseModel": "Choose a model",
+  "@providersChooseModel": {
+    "description": "Подсказка выпадающего списка моделей, когда выбора ещё нет."
+  },
+  "providersKeyStorage": "Key storage: {backend}",
+  "@providersKeyStorage": {
+    "description": "Заголовок строки хранилища ключей. Плейсхолдер backend — id бэкенда (file, env), не переводить.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "providersKeyStorageDescription": "Only key names and presence are read — values never enter the app",
+  "@providersKeyStorageDescription": {
+    "description": "Описание строки хранилища ключей."
+  },
+  "providersStorageWritable": "writable",
+  "@providersStorageWritable": {
+    "description": "Тег хранилища ключей: запись разрешена."
+  },
+  "providersStorageReadOnly": "read-only",
+  "@providersStorageReadOnly": {
+    "description": "Тег хранилища ключей: только чтение."
+  },
+  "providersKeysInOpenFile": "Keys are stored in an open file {path} (mode 0600).",
+  "@providersKeysInOpenFile": {
+    "description": "Предупреждение: ключи лежат в открытом файле. Плейсхолдер path — путь файла, не переводить; 0600 — режим файла, не переводить. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "providersConfigured": "Configured providers",
+  "@providersConfigured": {
+    "description": "Заголовок списка провайдеров."
+  },
+  "providersEmpty": "No providers yet. The embedded agent needs one to run a turn.",
+  "@providersEmpty": {
+    "description": "Пустое состояние страницы Providers."
+  },
+  "providersConfigFile": "Config file: {path}",
+  "@providersConfigFile": {
+    "description": "Подвал страницы Providers. Плейсхолдер path — путь config.yaml, не переводить.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "providersRemoveHelp": "Remove asks to confirm with “Also delete the stored key”; removing the default provider asks for a “New default model”. Rows defined in the project file are not editable here.",
+  "@providersRemoveHelp": {
+    "description": "Пояснение в подвале страницы Providers. Названия флажка и выбора совпадают с providersRemoveDeleteKey и providersRemoveNewDefault."
+  },
+  "providersReadOnlyTitle": "Read-only: this agent runs on {origin}.",
+  "@providersReadOnlyTitle": {
+    "description": "InfoBar страницы Providers для удалённого агента. Плейсхолдер origin — scheme://host:port, не переводить.",
+    "placeholders": {
+      "origin": {
+        "type": "String"
+      }
+    }
+  },
+  "providersNotManaged": "Provider settings are managed by {agent}.",
+  "@providersNotManaged": {
+    "description": "InfoBar страницы Providers для стороннего агента. Плейсхолдер agent — имя агента, не переводить.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "providersUnreadable": "Cannot read the agent config. Fix or remove the file; CodeLab will not overwrite it.",
+  "@providersUnreadable": {
+    "description": "Заголовок InfoBar нечитаемого config.yaml; проблемы загрузчика идут отдельными строками как есть."
+  },
+  "providersProblemNoHome": "The CodeLab home folder is not available.",
+  "@providersProblemNoHome": {
+    "description": "Проблема нечитаемой конфигурации: нет домашней папки CodeLab."
+  },
+  "providersProblemCannotReadSettings": "Cannot read the agent settings.",
+  "@providersProblemCannotReadSettings": {
+    "description": "Проблема нечитаемой конфигурации: сессию настроек не удалось открыть."
+  },
+  "providersProblemUserConfig": "The user config.yaml cannot be read.",
+  "@providersProblemUserConfig": {
+    "description": "Проблема нечитаемой конфигурации: пользовательский слой config.yaml не читается. config.yaml не переводить."
+  },
+  "providersUnknownKind": "Unknown kind",
+  "@providersUnknownKind": {
+    "description": "Подпись строки провайдера с неизвестным видом (kind в конфигурации не задан)."
+  },
+  "providersModelCount": "{count, plural, one{{count} model} other{{count} models}}",
+  "@providersModelCount": {
+    "description": "Число моделей провайдера в подписи строки.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "providersDefinedIn": "defined in {path}",
+  "@providersDefinedIn": {
+    "description": "Подпись провайдера из нередактируемого файла. Плейсхолдер path — путь файла, не переводить.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "providersDefinedInEnvironment": "defined in the environment",
+  "@providersDefinedInEnvironment": {
+    "description": "Подпись провайдера, заданного переменными окружения."
+  },
+  "providersSourceEnvironment": "Environment",
+  "@providersSourceEnvironment": {
+    "description": "Строка «Источник» раскрытой карточки: провайдер из окружения."
+  },
+  "providersKeyLabelInStore": "Key: in {backend}",
+  "@providersKeyLabelInStore": {
+    "description": "Статус ключа: секрет есть в хранилище. Плейсхолдер backend — id бэкенда, не переводить.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "providersKeyLabelMissing": "Key: missing in {backend}",
+  "@providersKeyLabelMissing": {
+    "description": "Статус ключа: секрета нет в хранилище. Плейсхолдер backend — id бэкенда, не переводить.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "providersKeyLabelEnvSet": "Key: env {name} (set)",
+  "@providersKeyLabelEnvSet": {
+    "description": "Статус ключа: переменная окружения задана. Плейсхолдер name — имя переменной, не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "providersKeyLabelEnvNotSet": "Key: env {name} (not set)",
+  "@providersKeyLabelEnvNotSet": {
+    "description": "Статус ключа: переменная окружения не задана. Плейсхолдер name — имя переменной, не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "providersKeyLabelLiteral": "Key: in config file (plain text)",
+  "@providersKeyLabelLiteral": {
+    "description": "Статус ключа: значение записано в config.yaml открытым текстом. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "providersKeyLabelNone": "No key",
+  "@providersKeyLabelNone": {
+    "description": "Статус ключа: ключа нет. Также подпись шага «без ключа» в мастере."
+  },
+  "providersKeyInStore": "In {backend} as {name}",
+  "@providersKeyInStore": {
+    "description": "Строка «Ключ» раскрытой карточки: секрет в хранилище. Плейсхолдеры backend (id бэкенда) и name (имя секрета) — не переводить. Имя секрета выводится моноширинным шрифтом.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "providersKeyNotStored": "Not stored in {backend} as {name}",
+  "@providersKeyNotStored": {
+    "description": "Строка «Ключ» раскрытой карточки: секрета нет в хранилище. Плейсхолдеры backend и name не переводить.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "providersKeyEnvSet": "Environment variable {name} (set)",
+  "@providersKeyEnvSet": {
+    "description": "Строка «Ключ» раскрытой карточки: переменная задана. Плейсхолдер name не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "providersKeyEnvNotSet": "Environment variable {name} (not set)",
+  "@providersKeyEnvNotSet": {
+    "description": "Строка «Ключ» раскрытой карточки: переменная не задана. Плейсхолдер name не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "providersKeyLiteral": "In the config file (plain text)",
+  "@providersKeyLiteral": {
+    "description": "Строка «Ключ» раскрытой карточки: значение в config.yaml открытым текстом. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "providersKeyHintLiteral": "The key is written in config.yaml. Move it to the secret store: codelab secret migrate.",
+  "@providersKeyHintLiteral": {
+    "description": "Подсказка под строкой: ключ открытым текстом. config.yaml и команда codelab secret migrate не переводятся. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "settingsKeyUnencryptedToHost": "The key is sent unencrypted to {host}.",
+  "@settingsKeyUnencryptedToHost": {
+    "description": "Предупреждение: ключ уходит по http:// без шифрования. Плейсхолдер host — имя хоста, не переводить. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "providersCheckUnavailable": "Check is not available for {kind} providers yet.",
+  "@providersCheckUnavailable": {
+    "description": "Подсказка неактивной кнопки проверки. Плейсхолдер kind — вид провайдера из конфигурации (gemini), не переводить.",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "providersRemoveLast": "The agent needs at least one provider. Add another provider first.",
+  "@providersRemoveLast": {
+    "description": "Подсказка неактивной кнопки удаления последнего провайдера."
+  },
+  "providersRefusalNotEditable": "This provider is defined in a read-only file. Change it there.",
+  "@providersRefusalNotEditable": {
+    "description": "Отказ правки или удаления: провайдер в файле, в который CodeLab не пишет."
+  },
+  "providersRefusalSeveralFiles": "This provider is defined in several config files. Change it there.",
+  "@providersRefusalSeveralFiles": {
+    "description": "Отказ правки или удаления: провайдер определён в нескольких файлах."
+  },
+  "providersRefusalNewDefault": "Choose a new default model.",
+  "@providersRefusalNewDefault": {
+    "description": "Отказ удаления: нужна новая модель по умолчанию."
+  },
+  "providersRefusalDefaultOverridden": "The default model is set in a file CodeLab does not write. Change it there first.",
+  "@providersRefusalDefaultOverridden": {
+    "description": "Отказ удаления: модель по умолчанию задана в нередактируемом файле."
+  },
+  "providersRefusalChanged": "The provider settings changed. Review the page and try again.",
+  "@providersRefusalChanged": {
+    "description": "Отказ удаления: настройки изменились на диске."
+  },
+  "providersCheckNotChecked": "not checked",
+  "@providersCheckNotChecked": {
+    "description": "Тег проверки: проверок за жизнь страницы не было."
+  },
+  "providersCheckNotCheckedYet": "Not checked yet",
+  "@providersCheckNotCheckedYet": {
+    "description": "Строка «Последняя проверка»: проверок не было."
+  },
+  "providersCheckRunning": "checking…",
+  "@providersCheckRunning": {
+    "description": "Тег проверки: запрос идёт."
+  },
+  "providersCheckRunningDetail": "Checking…",
+  "@providersCheckRunningDetail": {
+    "description": "Строка «Последняя проверка»: запрос идёт."
+  },
+  "providersCheckOkLabel": "ok, {count, plural, one{{count} model} other{{count} models}}",
+  "@providersCheckOkLabel": {
+    "description": "Тег проверки: успех и число моделей.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "providersCheckOkDetail": "{time} · {count, plural, one{{count} model} other{{count} models}} · {ms} ms",
+  "@providersCheckOkDetail": {
+    "description": "Строка «Последняя проверка»: время, число моделей и длительность. Плейсхолдер time (чч:мм) не переводить; ms — миллисекунды.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      },
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "providersCheckFailedDetail": "{time} · {label}",
+  "@providersCheckFailedDetail": {
+    "description": "Строка «Последняя проверка»: отказ без кода HTTP. Плейсхолдеры time и label (тег отказа) не переводить.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "providersCheckFailedDetailStatus": "{time} · {label} (HTTP {status})",
+  "@providersCheckFailedDetailStatus": {
+    "description": "Строка «Последняя проверка»: отказ с кодом HTTP. Плейсхолдеры time, label и status не переводить.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "label": {
+        "type": "String"
+      },
+      "status": {
+        "type": "int"
+      }
+    }
+  },
+  "providersCheckUnauthorized": "unauthorized",
+  "@providersCheckUnauthorized": {
+    "description": "Тег отказа проверки: сервер отклонил ключ."
+  },
+  "providersCheckNotFound": "not found",
+  "@providersCheckNotFound": {
+    "description": "Тег отказа проверки: список моделей не найден."
+  },
+  "providersCheckUnreachable": "unreachable",
+  "@providersCheckUnreachable": {
+    "description": "Тег отказа проверки: сервер недоступен."
+  },
+  "providersCheckTimeout": "timeout",
+  "@providersCheckTimeout": {
+    "description": "Тег отказа проверки: время ожидания истекло."
+  },
+  "providersCheckTlsError": "TLS error",
+  "@providersCheckTlsError": {
+    "description": "Тег отказа проверки: ошибка TLS."
+  },
+  "providersCheckBadResponse": "bad response",
+  "@providersCheckBadResponse": {
+    "description": "Тег отказа проверки: неожиданный ответ."
+  },
+  "providersCheckKeyMissing": "Key: missing",
+  "@providersCheckKeyMissing": {
+    "description": "Тег проверки: ключа нет, запрос не отправлялся."
+  },
+  "providersCheckKeyMissingDetail": "Not checked: the key is missing",
+  "@providersCheckKeyMissingDetail": {
+    "description": "Строка «Последняя проверка»: ключа нет, запрос не отправлялся."
+  },
+  "providersRowKey": "Key",
+  "@providersRowKey": {
+    "description": "Подпись строки «Ключ» раскрытой карточки провайдера."
+  },
+  "providersRowLastCheck": "Last check",
+  "@providersRowLastCheck": {
+    "description": "Подпись строки «Последняя проверка» раскрытой карточки провайдера."
+  },
+  "providersRowSource": "Source",
+  "@providersRowSource": {
+    "description": "Подпись строки «Источник» раскрытой карточки провайдера."
+  },
+  "providersRemoveTitle": "Remove provider {id}?",
+  "@providersRemoveTitle": {
+    "description": "Заголовок диалога удаления провайдера. Плейсхолдер id — id провайдера, не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "providersRemoveDetails": "The provider is removed from the config file. Sessions that use its models keep running until the agent reloads.",
+  "@providersRemoveDetails": {
+    "description": "Пояснение диалога удаления провайдера."
+  },
+  "providersRemoveDeleteKey": "Also delete the stored key",
+  "@providersRemoveDeleteKey": {
+    "description": "Флажок диалога удаления провайдера."
+  },
+  "providersRemoveNewDefault": "New default model",
+  "@providersRemoveNewDefault": {
+    "description": "Подпись выбора новой модели по умолчанию в диалоге удаления провайдера."
+  },
+  "providersBannerDefaultModelSaved": "Default model saved.",
+  "@providersBannerDefaultModelSaved": {
+    "description": "Баннер страницы Providers: модель по умолчанию записана."
+  },
+  "providersBannerRemoved": "Provider {id} removed.",
+  "@providersBannerRemoved": {
+    "description": "Баннер: провайдер удалён. Плейсхолдер id не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "providersBannerRemovedKeyDeleted": "Provider {id} removed. Its stored key was deleted.",
+  "@providersBannerRemovedKeyDeleted": {
+    "description": "Баннер: провайдер удалён вместе с ключом. Плейсхолдер id не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "providersBannerRemovedKeyKept": "Provider {id} removed. The stored key {secret} is kept because other settings still use it.",
+  "@providersBannerRemovedKeyKept": {
+    "description": "Баннер: провайдер удалён, ключ нужен другим настройкам. Плейсхолдеры id и secret (имя секрета) не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "secret": {
+        "type": "String"
+      }
+    }
+  },
+  "providersBannerRemovedKeyFailed": "Provider {id} removed, but its stored key could not be deleted. Delete it with: codelab secret delete {secret}",
+  "@providersBannerRemovedKeyFailed": {
+    "description": "Баннер: провайдер удалён, секрет остался. Плейсхолдеры id и secret не переводить; команда codelab secret delete не переводится. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "secret": {
+        "type": "String"
+      }
+    }
+  },
+  "configConflict": "The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.",
+  "@configConflict": {
+    "description": "Баннер: конфликт записи конфигурации, ничего не записано."
+  },
+  "configNotSavedRejected": "The config was not saved: {issues}",
+  "@configNotSavedRejected": {
+    "description": "Конфигурация отклонена проверкой. Плейсхолдер issues — тексты проверки ядра агента (английские, как есть), не переводить.",
+    "placeholders": {
+      "issues": {
+        "type": "String"
+      }
+    }
+  },
+  "configNotSavedInlineSecret": "The config was not saved: {key} must not hold a literal secret.",
+  "@configNotSavedInlineSecret": {
+    "description": "Конфигурация отклонена: секрет значением. Плейсхолдер key — путь ключа конфигурации, не переводить. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "configNotSavedPlain": "The config was not saved.",
+  "@configNotSavedPlain": {
+    "description": "Запись конфигурации не удалась, тип ошибки неизвестен."
+  },
+  "configNotSavedErrorType": "The config was not saved ({errorType}).",
+  "@configNotSavedErrorType": {
+    "description": "Запись конфигурации не удалась. Плейсхолдер errorType — имя типа исключения, не переводить; текста исключения нет.",
+    "placeholders": {
+      "errorType": {
+        "type": "String"
+      }
+    }
+  },
+  "providersBannerCannotOpenWizard": "Cannot open the provider wizard: the agent config cannot be read.",
+  "@providersBannerCannotOpenWizard": {
+    "description": "Баннер: мастер провайдера не открылся, конфигурация не читается."
+  },
+  "providersBannerSavedNextStart": "Saved. The agent uses it the next time it starts.",
+  "@providersBannerSavedNextStart": {
+    "description": "Баннер после мастера: агент не запущен."
+  },
+  "providersBannerSaved": "Provider {id} saved.",
+  "@providersBannerSaved": {
+    "description": "Баннер после мастера: провайдер записан. Плейсхолдер id не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "providersBannerSavedKeyRestart": "Provider {id} saved. The new key is used after Restart agent (Settings › Connection).",
+  "@providersBannerSavedKeyRestart": {
+    "description": "Баннер после мастера: ключ заменён. Плейсхолдер id не переводить; названия кнопки и страницы совпадают с commonRestartAgent и settingsPageConnectionTitle.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "providersBannerSavedModelsRestart": "Provider {id} saved. Its models are available after Restart agent (Settings › Connection).",
+  "@providersBannerSavedModelsRestart": {
+    "description": "Баннер после мастера: модели появятся после перезапуска. Плейсхолдер id не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardTitleAdd": "Add provider",
+  "@wizardTitleAdd": {
+    "description": "Заголовок мастера: добавление провайдера."
+  },
+  "wizardTitleEdit": "Edit provider {id}",
+  "@wizardTitleEdit": {
+    "description": "Заголовок мастера: правка провайдера. Плейсхолдер id — id провайдера, не переводить.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardStepApiType": "API type",
+  "@wizardStepApiType": {
+    "description": "Шаг мастера и заголовок шага: тип API провайдера."
+  },
+  "wizardStepBaseUrl": "Base URL",
+  "@wizardStepBaseUrl": {
+    "description": "Шаг мастера и заголовок шага: базовый URL."
+  },
+  "wizardStepKey": "Key",
+  "@wizardStepKey": {
+    "description": "Шаг мастера: ключ. Также подпись строки сводки."
+  },
+  "wizardStepCheck": "Check",
+  "@wizardStepCheck": {
+    "description": "Шаг мастера: проверка адреса и ключа."
+  },
+  "wizardStepModel": "Model",
+  "@wizardStepModel": {
+    "description": "Шаг мастера: модель. Также подпись строки сводки."
+  },
+  "wizardStepReview": "Review",
+  "@wizardStepReview": {
+    "description": "Шаг мастера: обзор перед записью."
+  },
+  "wizardSummaryType": "Type",
+  "@wizardSummaryType": {
+    "description": "Подпись строки сводки: тип провайдера."
+  },
+  "wizardSummaryProvider": "Provider",
+  "@wizardSummaryProvider": {
+    "description": "Подпись строки сводки обзора: провайдер."
+  },
+  "wizardSummaryFile": "File",
+  "@wizardSummaryFile": {
+    "description": "Подпись строки сводки обзора: файл конфигурации."
+  },
+  "wizardPresetOllama": "Ollama (local, no key)",
+  "@wizardPresetOllama": {
+    "description": "Подпись пресета ollama в списке типов API. Ollama — название продукта, не переводить."
+  },
+  "wizardPresetCustomOpenAi": "Custom OpenAI-compatible endpoint",
+  "@wizardPresetCustomOpenAi": {
+    "description": "Подпись пресета custom-openai в списке типов API. OpenAI — название продукта, не переводить."
+  },
+  "wizardPresetCustomAnthropic": "Custom Anthropic-compatible endpoint",
+  "@wizardPresetCustomAnthropic": {
+    "description": "Подпись пресета custom-anthropic в списке типов API. Anthropic — название продукта, не переводить."
+  },
+  "wizardTypeCustomOpenAi": "Custom OpenAI-compatible",
+  "@wizardTypeCustomOpenAi": {
+    "description": "Значение строки «Тип» сводки для пресета custom-openai."
+  },
+  "wizardTypeCustomAnthropic": "Custom Anthropic-compatible",
+  "@wizardTypeCustomAnthropic": {
+    "description": "Значение строки «Тип» сводки для пресета custom-anthropic."
+  },
+  "wizardSummaryKeyStore": "Store in {backend} as {name}",
+  "@wizardSummaryKeyStore": {
+    "description": "Строка «Ключ» сводки: будет записан в хранилище. Плейсхолдеры backend и name (id бэкенда и имя секрета) не переводить.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardSummaryKeyUseStored": "Use the stored key {name}",
+  "@wizardSummaryKeyUseStored": {
+    "description": "Строка «Ключ» сводки: взять уже сохранённый ключ. Плейсхолдер name — имя секрета, не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardKeepCurrentKey": "Keep the current key",
+  "@wizardKeepCurrentKey": {
+    "description": "Вариант шага ключа и значение строки «Ключ» сводки при правке: ключ не меняется."
+  },
+  "wizardSummaryKeyEnv": "Read from environment variable ({name})",
+  "@wizardSummaryKeyEnv": {
+    "description": "Строка «Ключ» сводки: ключ из переменной окружения. Плейсхолдер name — имя переменной, не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardPlanKeySecret": "secret \"{name}\" ({backend})",
+  "@wizardPlanKeySecret": {
+    "description": "Строка «Ключ» обзора: секрет в хранилище. Плейсхолдеры name и backend не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardPlanKeyKept": "kept as is",
+  "@wizardPlanKeyKept": {
+    "description": "Строка «Ключ» обзора: ключ не меняется."
+  },
+  "wizardPlanKeyEnv": "environment variable {name}",
+  "@wizardPlanKeyEnv": {
+    "description": "Строка «Ключ» обзора: ключ из переменной окружения. Плейсхолдер name не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardPlanKeyNone": "none",
+  "@wizardPlanKeyNone": {
+    "description": "Строка «Ключ» обзора: ключа нет."
+  },
+  "wizardFailKeyRejectedStatus": "Key rejected ({status})",
+  "@wizardFailKeyRejectedStatus": {
+    "description": "Заголовок отказа проверки: сервер отклонил ключ. Плейсхолдер status — код HTTP, не переводить.",
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
+  },
+  "wizardFailKeyRejected": "Key rejected",
+  "@wizardFailKeyRejected": {
+    "description": "Заголовок отказа проверки: сервер отклонил ключ, кода нет."
+  },
+  "wizardFailNotFound": "Model list not found ({status})",
+  "@wizardFailNotFound": {
+    "description": "Заголовок отказа проверки: список моделей не найден. Плейсхолдер status — код HTTP, не переводить.",
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
+  },
+  "wizardFailUnreachable": "Server unreachable",
+  "@wizardFailUnreachable": {
+    "description": "Заголовок отказа проверки: сервер недоступен."
+  },
+  "wizardFailTimeout": "Timed out after {seconds} s",
+  "@wizardFailTimeout": {
+    "description": "Заголовок отказа проверки: время ожидания. Плейсхолдер seconds — секунды, не переводить.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "wizardFailTls": "TLS error",
+  "@wizardFailTls": {
+    "description": "Заголовок отказа проверки: ошибка TLS."
+  },
+  "wizardFailUnexpectedStatus": "Unexpected response ({status})",
+  "@wizardFailUnexpectedStatus": {
+    "description": "Заголовок отказа проверки: неожиданный ответ. Плейсхолдер status — код HTTP, не переводить.",
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
+  },
+  "wizardFailUnexpected": "Unexpected response",
+  "@wizardFailUnexpected": {
+    "description": "Заголовок отказа проверки: неожиданный ответ, кода нет."
+  },
+  "wizardFailNotFoundNote": "The server answered, but GET /models does not exist. OpenAI-compatible servers usually live under /v1.",
+  "@wizardFailNotFoundNote": {
+    "description": "Пояснение к отказу «Список моделей не найден». GET /models, OpenAI-compatible и /v1 не переводить."
+  },
+  "wizardKeyUseStored": "Use the stored key",
+  "@wizardKeyUseStored": {
+    "description": "Вариант шага ключа: использовать уже сохранённый ключ."
+  },
+  "wizardKeyReplace": "Replace it",
+  "@wizardKeyReplace": {
+    "description": "Вариант шага ключа: заменить сохранённый ключ новым."
+  },
+  "wizardKeyStore": "Store in {backend} as \"{name}\"",
+  "@wizardKeyStore": {
+    "description": "Вариант шага ключа: записать в хранилище секретов. Плейсхолдеры backend и name не переводить. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardKeyEnv": "Read from environment variable",
+  "@wizardKeyEnv": {
+    "description": "Вариант шага ключа: читать из переменной окружения."
+  },
+  "wizardKeyEnvNamed": "Read from environment variable ({name})",
+  "@wizardKeyEnvNamed": {
+    "description": "Вариант шага ключа: переменная окружения с подсказанным именем. Плейсхолдер name не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardKeySourceLabel": "API key source",
+  "@wizardKeySourceLabel": {
+    "description": "Подпись шага ключа."
+  },
+  "wizardKeyFieldLabel": "API key",
+  "@wizardKeyFieldLabel": {
+    "description": "Подпись скрытого поля ввода ключа API. Значение не показывается."
+  },
+  "wizardKeyEnvFieldLabel": "Variable name",
+  "@wizardKeyEnvFieldLabel": {
+    "description": "Подпись поля имени переменной окружения."
+  },
+  "wizardErrorAddressInvalid": "Enter an http or https address.",
+  "@wizardErrorAddressInvalid": {
+    "description": "Ошибка шага адреса: схема не http и не https."
+  },
+  "wizardErrorAddressUserInfo": "Remove the user name and password from the address.",
+  "@wizardErrorAddressUserInfo": {
+    "description": "Ошибка шага адреса: в адресе учётные данные. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "wizardErrorKeyEmpty": "Enter the API key.",
+  "@wizardErrorKeyEmpty": {
+    "description": "Ошибка шага ключа: ключ не введён."
+  },
+  "wizardErrorKeyAlreadyStored": "A stored key {name} already exists in {backend}.",
+  "@wizardErrorKeyAlreadyStored": {
+    "description": "Замечание шага ключа: сохранённый ключ уже есть. Плейсхолдеры name (имя секрета) и backend (id бэкенда) не переводить. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardErrorNothingToKeep": "There is no stored key to keep.",
+  "@wizardErrorNothingToKeep": {
+    "description": "Ошибка шага ключа: оставлять нечего."
+  },
+  "wizardErrorEnvVarEmpty": "Enter the environment variable name.",
+  "@wizardErrorEnvVarEmpty": {
+    "description": "Ошибка шага ключа: имя переменной не введено."
+  },
+  "wizardErrorContextWindow": "Context window must be a positive number.",
+  "@wizardErrorContextWindow": {
+    "description": "Ошибка шага ограничений модели."
+  },
+  "wizardErrorMaxOutput": "Max output tokens must be a positive number.",
+  "@wizardErrorMaxOutput": {
+    "description": "Ошибка шага ограничений модели."
+  },
+  "wizardErrorProviderId": "Provider id must be unused and match [a-z0-9_-]+.",
+  "@wizardErrorProviderId": {
+    "description": "Ошибка правки id провайдера на обзоре. Шаблон [a-z0-9_-]+ не переводить."
+  },
+  "wizardErrorTargetUnavailable": "This target is not available.",
+  "@wizardErrorTargetUnavailable": {
+    "description": "Ошибка обзора: файл для записи недоступен."
+  },
+  "wizardRefusalProviderExists": "A provider with this id already exists.",
+  "@wizardRefusalProviderExists": {
+    "description": "Отказ записи плана: id провайдера занят."
+  },
+  "wizardRefusalProviderMissing": "The provider is no longer in the config.",
+  "@wizardRefusalProviderMissing": {
+    "description": "Отказ записи плана: провайдера нет в свежем снимке."
+  },
+  "wizardRefusalNotEditable": "This provider cannot be edited here.",
+  "@wizardRefusalNotEditable": {
+    "description": "Отказ записи плана: провайдер в нередактируемом слое."
+  },
+  "wizardRefusalSeveralFiles": "This provider is defined in several config files.",
+  "@wizardRefusalSeveralFiles": {
+    "description": "Отказ записи плана: провайдер в нескольких файлах."
+  },
+  "wizardRefusalLayerUnreadable": "The config file cannot be read.",
+  "@wizardRefusalLayerUnreadable": {
+    "description": "Отказ записи плана: файл слоя записи не читается."
+  },
+  "wizardKeyNoticeLiteral": "The key is written in config.yaml. Choose where to keep it instead.",
+  "@wizardKeyNoticeLiteral": {
+    "description": "Пояснение шага ключа при правке провайдера с ключом открытым текстом. config.yaml не переводить. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "wizardNotVerified": "Not verified: {reason}",
+  "@wizardNotVerified": {
+    "description": "Предупреждение обзора: проверка пропущена. Плейсхолдер reason — вид пропуска (wizardNotVerifiedUnreachable, wizardNotVerifiedTimeout) или значение провода как есть.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardNotVerifiedUnreachable": "unreachable",
+  "@wizardNotVerifiedUnreachable": {
+    "description": "Вид пропущенной проверки: сервер недоступен. На en — значение провода."
+  },
+  "wizardNotVerifiedTimeout": "timeout",
+  "@wizardNotVerifiedTimeout": {
+    "description": "Вид пропущенной проверки: время ожидания истекло. На en — значение провода."
+  },
+  "wizardInsecureConfirm": "Use http anyway",
+  "@wizardInsecureConfirm": {
+    "description": "Кнопка подтверждения адреса http:// к другой машине. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "wizardChecking": "Checking the address and the key…",
+  "@wizardChecking": {
+    "description": "Подпись шага проверки: запрос идёт."
+  },
+  "wizardContinueQuestion": "How do you want to continue?",
+  "@wizardContinueQuestion": {
+    "description": "Заголовок выбора после отказа «Список моделей не найден»."
+  },
+  "wizardUseAddress": "Use {address}",
+  "@wizardUseAddress": {
+    "description": "Вариант после отказа: добавить /v1 к адресу. Плейсхолдер address — адрес, не переводить.",
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardEnterModelManually": "Enter the model manually",
+  "@wizardEnterModelManually": {
+    "description": "Вариант после отказа: ввести модель вручную."
+  },
+  "wizardModelId": "Model id",
+  "@wizardModelId": {
+    "description": "Подпись и подсказка поля идентификатора модели."
+  },
+  "wizardSkipWarning": "The address and the key are not verified, and the model list is not available. You will enter the model yourself.",
+  "@wizardSkipWarning": {
+    "description": "Предупреждение перед записью без проверки. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "wizardSkipConfirm": "Continue without check",
+  "@wizardSkipConfirm": {
+    "description": "Кнопка подтверждения записи без проверки. Метка security (D14): перевод не смягчает смысл предупреждения."
+  },
+  "wizardSaveWithoutCheck": "Save without check",
+  "@wizardSaveWithoutCheck": {
+    "description": "Кнопка: пропустить проверку и сохранить."
+  },
+  "wizardModelNotChecked": "The model list was not checked: enter the model id.",
+  "@wizardModelNotChecked": {
+    "description": "Пояснение шага модели после пропущенной проверки."
+  },
+  "wizardModelFilter": "Model (type to filter)",
+  "@wizardModelFilter": {
+    "description": "Подпись поля фильтра списка моделей."
+  },
+  "wizardModelManual": "Enter model id manually",
+  "@wizardModelManual": {
+    "description": "Пункт списка моделей: ввести идентификатор вручную."
+  },
+  "wizardLimitsOf": "Limits of {model}",
+  "@wizardLimitsOf": {
+    "description": "Заголовок шага ограничений модели. Плейсхолдер model — id модели, не переводить.",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardContextWindow": "Context window",
+  "@wizardContextWindow": {
+    "description": "Подпись поля окна контекста модели."
+  },
+  "wizardMaxOutputTokens": "Max output tokens (optional)",
+  "@wizardMaxOutputTokens": {
+    "description": "Подпись поля лимита вывода модели."
+  },
+  "wizardMakeDefault": "Make default model",
+  "@wizardMakeDefault": {
+    "description": "Флажок обзора: сделать модель моделью по умолчанию."
+  },
+  "wizardProjectOnly": "This project only",
+  "@wizardProjectOnly": {
+    "description": "Флажок обзора: записать только в файл проекта."
+  },
+  "wizardSaving": "Saving…",
+  "@wizardSaving": {
+    "description": "Подпись индикатора записи."
+  },
+  "wizardReviewConflict": "Config changed on disk — review and save again",
+  "@wizardReviewConflict": {
+    "description": "Уведомление обзора после конфликта записи."
+  },
+  "wizardSaveKeyReplaced": "The stored key {name} was already replaced.",
+  "@wizardSaveKeyReplaced": {
+    "description": "Продолжение отказа записи: прежний ключ уже заменён новым. Плейсхолдер name — имя секрета, не переводить. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardSaveKeyStillStored": "The new key {name} is still in the secret store. Delete it with: codelab secret delete {name}",
+  "@wizardSaveKeyStillStored": {
+    "description": "Продолжение отказа записи: откат ключа не удался. Плейсхолдер name — имя секрета; команда codelab secret delete не переводится. Метка security (D14): перевод не смягчает смысл предупреждения.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "wizardKeyNone": "No key",
+  "@wizardKeyNone": {
+    "description": "Вариант шага ключа и значение строки «Ключ» сводки: без ключа."
+  },
+  "agentSettingLabel_budget_max_steps": "Max steps",
+  "@agentSettingLabel_budget_max_steps": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_budget_max_steps": "Model requests per turn.",
+  "@agentSettingDescription_budget_max_steps": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_budget_max_tokens": "Max tokens",
+  "@agentSettingLabel_budget_max_tokens": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_budget_max_tokens": "Sum of input and output tokens per turn.",
+  "@agentSettingDescription_budget_max_tokens": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_budget_max_cost": "Max cost",
+  "@agentSettingLabel_budget_max_cost": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_budget_max_cost": "USD per turn; works only with known prices.",
+  "@agentSettingDescription_budget_max_cost": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_budget_max_duration": "Max duration",
+  "@agentSettingLabel_budget_max_duration": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `budget.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_budget_max_duration": "Turn time without waiting for approvals.",
+  "@agentSettingDescription_budget_max_duration": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `budget.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_enabled": "Subagents",
+  "@agentSettingLabel_subagents_enabled": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_enabled": "Let the agent start subagents (new sessions only).",
+  "@agentSettingDescription_subagents_enabled": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_depth": "Max depth",
+  "@agentSettingLabel_subagents_max_depth": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_depth`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_depth": "How deep subagents may nest (new sessions only).",
+  "@agentSettingDescription_subagents_max_depth": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_depth`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_concurrent": "Max concurrent",
+  "@agentSettingLabel_subagents_max_concurrent": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_concurrent`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_concurrent": "Subagents working at the same time in one session tree.",
+  "@agentSettingDescription_subagents_max_concurrent": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_concurrent`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_per_turn": "Max per turn",
+  "@agentSettingLabel_subagents_max_per_turn": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_per_turn`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_per_turn": "Subagents started per turn of the session.",
+  "@agentSettingDescription_subagents_max_per_turn": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_per_turn`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_steps": "Max steps",
+  "@agentSettingLabel_subagents_max_steps": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_steps": "Model requests of one subagent.",
+  "@agentSettingDescription_subagents_max_steps": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_steps`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_tokens": "Max tokens",
+  "@agentSettingLabel_subagents_max_tokens": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_tokens": "Input and output tokens of one subagent.",
+  "@agentSettingDescription_subagents_max_tokens": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_tokens`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_cost": "Max cost",
+  "@agentSettingLabel_subagents_max_cost": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_cost": "USD of one subagent; works only with known prices.",
+  "@agentSettingDescription_subagents_max_cost": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_cost`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_max_duration": "Max duration",
+  "@agentSettingLabel_subagents_max_duration": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_max_duration": "Time of one subagent without waiting for approvals.",
+  "@agentSettingDescription_subagents_max_duration": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.max_duration`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_report_max_bytes": "Report size",
+  "@agentSettingLabel_subagents_report_max_bytes": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.report_max_bytes`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_report_max_bytes": "Largest report a subagent returns, in bytes.",
+  "@agentSettingDescription_subagents_report_max_bytes": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.report_max_bytes`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_progress_interval": "Progress interval",
+  "@agentSettingLabel_subagents_progress_interval": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.progress_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_progress_interval": "Shortest pause between progress lines of a subagent call.",
+  "@agentSettingDescription_subagents_progress_interval": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.progress_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_heartbeat_interval": "Heartbeat interval",
+  "@agentSettingLabel_subagents_heartbeat_interval": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.heartbeat_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_heartbeat_interval": "Pause after which a silent subagent call reports that it is alive.",
+  "@agentSettingDescription_subagents_heartbeat_interval": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.heartbeat_interval`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_subagents_cancel_grace": "Cancel grace",
+  "@agentSettingLabel_subagents_cancel_grace": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `subagents.cancel_grace`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_subagents_cancel_grace": "How long a call waits for subagents to stop after a cancel.",
+  "@agentSettingDescription_subagents_cancel_grace": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `subagents.cancel_grace`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_compaction_enabled": "Automatic compaction",
+  "@agentSettingLabel_compaction_enabled": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `compaction.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_compaction_enabled": "Compact the context automatically when it grows.",
+  "@agentSettingDescription_compaction_enabled": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `compaction.enabled`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingLabel_logging_level": "Log level",
+  "@agentSettingLabel_logging_level": {
+    "description": "Строка блока Agent defaults страницы General: подпись ключа конфигурации агента `logging.level`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "agentSettingDescription_logging_level": "Verbosity of the agent log.",
+  "@agentSettingDescription_logging_level": {
+    "description": "Строка блока Agent defaults страницы General: описание ключа конфигурации агента `logging.level`. Текст совпадает с реестром настроек агента; ключ конфигурации не переводится."
+  },
+  "settingsGeneralAgentDefaultsTitle": "Agent defaults",
+  "@settingsGeneralAgentDefaultsTitle": {
+    "description": "Заголовок блока страницы General со строками конфигурации агента, общими с CLI."
+  },
+  "settingsGeneralAgentDefaultsCaption": "Changes are saved for all projects.",
+  "@settingsGeneralAgentDefaultsCaption": {
+    "description": "Подпись под заголовком блока Agent defaults: запись идёт в пользовательский config.yaml, а не в проект."
+  },
+  "settingsGeneralSharedInfo": "Shared with the codelab CLI. Rows marked shared come from the agent's settings registry and are saved to {home}/config.yaml; codelab /settings shows them too.",
+  "@settingsGeneralSharedInfo": {
+    "description": "InfoBar над блоком Agent defaults. {home} — папка CODELAB_HOME с ~ вместо домашнего каталога (путь, не переводить). codelab и codelab /settings — имя и команда CLI, не переводить.",
+    "placeholders": {
+      "home": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralTagShared": "shared",
+  "@settingsGeneralTagShared": {
+    "description": "Тег строки реестра настроек агента, которую видит и CLI."
+  },
+  "settingsGeneralNotSet": "Not set",
+  "@settingsGeneralNotSet": {
+    "description": "Значение ключа, который нигде не задан и не имеет умолчания."
+  },
+  "settingsGeneralAppliesAfterRestart": "(applies after restart)",
+  "@settingsGeneralAppliesAfterRestart": {
+    "description": "Пометка у ключа, изменение которого вступает в силу после перезапуска агента."
+  },
+  "settingsGeneralOverriddenBy": "This project overrides it ({source}).",
+  "@settingsGeneralOverriddenBy": {
+    "description": "Подпись строки, значение которой задаёт проектный файл. {source} — слой конфигурации (project, local), не переводить.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralRefusalSecret": "Change it with codelab secret set.",
+  "@settingsGeneralRefusalSecret": {
+    "description": "Причина, по которой строку нельзя править здесь: ключ хранит имя секрета. codelab secret set — команда CLI, не переводить."
+  },
+  "settingsGeneralRefusalMasked": "This value contains a secret; change it in the config file.",
+  "@settingsGeneralRefusalMasked": {
+    "description": "Причина, по которой строку нельзя править здесь: значение замаскировано."
+  },
+  "settingsGeneralRefusalExternal": "Set by {source}; it cannot be changed here.",
+  "@settingsGeneralRefusalExternal": {
+    "description": "Причина, по которой строку нельзя править здесь: значение пришло из окружения или файла --config. {source} — env или config, не переводить.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralRefusalOther": "This setting cannot be changed here.",
+  "@settingsGeneralRefusalOther": {
+    "description": "Причина отказа в правке для ключа, которого нет на странице (запасной текст)."
+  },
+  "settingsGeneralHintIntMin": "Enter a whole number of {min} or greater.",
+  "@settingsGeneralHintIntMin": {
+    "description": "Подсказка формата под полем: целое число с нижней границей.",
+    "placeholders": {
+      "min": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralHintIntRange": "Enter a whole number from {min} to {max}.",
+  "@settingsGeneralHintIntRange": {
+    "description": "Подсказка формата под полем: целое число в диапазоне.",
+    "placeholders": {
+      "min": {
+        "type": "String"
+      },
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralHintInt": "Enter a whole number.",
+  "@settingsGeneralHintInt": {
+    "description": "Подсказка формата под полем: целое число без границ."
+  },
+  "settingsGeneralHintNumber": "Enter a number.",
+  "@settingsGeneralHintNumber": {
+    "description": "Подсказка формата под полем: число."
+  },
+  "settingsGeneralHintDuration": "Enter a duration like 500ms, 30s, 2m or 1h.",
+  "@settingsGeneralHintDuration": {
+    "description": "Подсказка формата под полем: длительность. Примеры 500ms, 30s, 2m, 1h не переводить."
+  },
+  "settingsGeneralSaved": "Saved.",
+  "@settingsGeneralSaved": {
+    "description": "Баннер после записи ключа на странице General."
+  },
+  "settingsGeneralTailAfterRestart": "Applies after Restart agent.",
+  "@settingsGeneralTailAfterRestart": {
+    "description": "Хвост баннера записи: ключ вступит в силу после действия Restart agent."
+  },
+  "settingsGeneralTailWhenStarts": "Applies when the agent starts.",
+  "@settingsGeneralTailWhenStarts": {
+    "description": "Хвост баннера записи: агент не подключён, ключ вступит в силу при его запуске."
+  },
+  "settingsGeneralSavedOverridden": "Saved to all projects; {source} overrides it: the agent uses {effective}.",
+  "@settingsGeneralSavedOverridden": {
+    "description": "Баннер записи, значение которой перекрыто другим слоем. {source} — слой (local, project, env, config), {effective} — действующее значение; оба не переводить.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      },
+      "effective": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralSavedUnverified": "Saved to {home}/config.yaml.",
+  "@settingsGeneralSavedUnverified": {
+    "description": "Баннер записи, после которой конфигурацию не удалось перечитать. {home} — папка CODELAB_HOME с ~, путь не переводить.",
+    "placeholders": {
+      "home": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralConflict": "The config file changed on disk; the page was reloaded. Try again.",
+  "@settingsGeneralConflict": {
+    "description": "Баннер конфликта записи: файл изменили вне app."
+  },
+  "settingsGeneralRejected": "The config was not saved.",
+  "@settingsGeneralRejected": {
+    "description": "Баннер ошибки записи, когда писатель не назвал проблему."
+  },
+  "settingsGeneralReadOnlyRemote": "Read-only: this agent runs on {origin}. Change its settings on that host: codelab config set.",
+  "@settingsGeneralReadOnlyRemote": {
+    "description": "Предупреждение блока Agent defaults для удалённого агента. {origin} — адрес вида wss://host:port, codelab config set — команда CLI; оба не переводить.",
+    "placeholders": {
+      "origin": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralReadOnlyManaged": "Agent settings are managed by {agent}.",
+  "@settingsGeneralReadOnlyManaged": {
+    "description": "Предупреждение блока Agent defaults для стороннего агента. {agent} — имя агента, не переводить.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralUnreadable": "The agent config cannot be read.",
+  "@settingsGeneralUnreadable": {
+    "description": "Заголовок InfoBar блока Agent defaults, когда config.yaml не разбирается; ниже проблемы загрузчика."
+  },
+  "settingsGeneralSectionStartup": "Startup and files",
+  "@settingsGeneralSectionStartup": {
+    "description": "Заголовок секции страницы General со строками запуска и файлов."
+  },
+  "settingsGeneralReopenTitle": "Reopen the last project and its tabs",
+  "@settingsGeneralReopenTitle": {
+    "description": "Подпись строки-переключателя: открывать ли при запуске проект прошлого запуска и его открытые сессии."
+  },
+  "settingsGeneralReopenDescription": "On: open the last project and its open sessions. Off: start with recent projects in the sidebar. Applies at the next start.",
+  "@settingsGeneralReopenDescription": {
+    "description": "Пояснение строки «Reopen the last project and its tabs»."
+  },
+  "settingsGeneralStartupSaveFailed": "Couldn't save this setting. The previous value applies at the next start.",
+  "@settingsGeneralStartupSaveFailed": {
+    "description": "Предупреждение на странице General, когда значение настройки запуска не удалось записать; кнопка Retry повторяет запись."
+  },
+  "settingsGeneralSectionAbout": "About",
+  "@settingsGeneralSectionAbout": {
+    "description": "Заголовок секции страницы General с версией сборки, лицензией и диагностикой."
+  },
+  "settingsGeneralAboutSubtitle": "{platform} · embedded agent {agentVersion}",
+  "@settingsGeneralAboutSubtitle": {
+    "description": "Вторая строка заголовка раздела About: платформа и версия встроенного агента. {platform} — например macOS arm64, {agentVersion} — номер версии; не переводить.",
+    "placeholders": {
+      "platform": {
+        "type": "String"
+      },
+      "agentVersion": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGeneralAboutLicense": "License",
+  "@settingsGeneralAboutLicense": {
+    "description": "Подпись строки раздела About с названием лицензии. Значение MIT и строка авторского права не переводятся."
+  },
+  "settingsGeneralAboutConfigFolder": "Config folder",
+  "@settingsGeneralAboutConfigFolder": {
+    "description": "Подпись строки раздела About с папкой CODELAB_HOME; путь не переводится."
+  },
+  "settingsGeneralAboutCopyDiagnostics": "Copy diagnostics",
+  "@settingsGeneralAboutCopyDiagnostics": {
+    "description": "Кнопка раздела About: копирует в буфер обмена диагностику без секретов и путей. Сам текст диагностики не переводится."
+  },
+  "settingsGeneralAboutThirdParty": "Third-party notices",
+  "@settingsGeneralAboutThirdParty": {
+    "description": "Кнопка раздела About и заголовок диалога со сторонними уведомлениями и лицензиями пакетов."
+  },
+  "settingsGeneralAboutReleaseNotes": "Release notes",
+  "@settingsGeneralAboutReleaseNotes": {
+    "description": "Кнопка раздела About: открывает журнал изменений в браузере."
+  },
+  "settingsGeneralAboutOpenLogs": "Open log folder",
+  "@settingsGeneralAboutOpenLogs": {
+    "description": "Кнопка раздела About: открывает папку журналов app в файловом менеджере."
+  },
+  "settingsGeneralAboutUpdates": "Updates come from the installer or your package manager — the app does not update itself.",
+  "@settingsGeneralAboutUpdates": {
+    "description": "InfoBar раздела About об источнике обновлений."
+  },
+  "settingsGeneralAboutCopied": "Diagnostics copied.",
+  "@settingsGeneralAboutCopied": {
+    "description": "Подтверждение после копирования диагностики в буфер обмена."
+  },
+  "settingsGeneralAboutReleaseNotesFailed": "Couldn't open the release notes.",
+  "@settingsGeneralAboutReleaseNotesFailed": {
+    "description": "Предупреждение раздела About, когда адрес журнала изменений не открылся."
+  },
+  "settingsGeneralAboutLogsFailed": "Couldn't open the log folder.",
+  "@settingsGeneralAboutLogsFailed": {
+    "description": "Предупреждение раздела About, когда папка журналов не открылась."
+  },
+  "settingsGeneralAboutPackageLicenses": "Package licenses",
+  "@settingsGeneralAboutPackageLicenses": {
+    "description": "Заголовок списка лицензий пакетов в диалоге сторонних уведомлений."
+  },
+  "settingsGeneralAboutClose": "Close",
+  "@settingsGeneralAboutClose": {
+    "description": "Кнопка закрытия диалога сторонних уведомлений."
+  },
+  "settingsGeneralUnreadableCannotRead": "Cannot read the agent settings.",
+  "@settingsGeneralUnreadableCannotRead": {
+    "description": "Причина в InfoBar блока Agent defaults: сессия настроек или снимок конфигурации агента не открылись."
+  },
+  "settingsGeneralUnreadableHome": "The CodeLab home folder is not available.",
+  "@settingsGeneralUnreadableHome": {
+    "description": "Причина в InfoBar блока Agent defaults: не удалось определить папку CODELAB_HOME. CodeLab — название продукта, не переводить."
+  },
+  "settingsGeneralUnreadableUserLayer": "The user config.yaml cannot be read.",
+  "@settingsGeneralUnreadableUserLayer": {
+    "description": "Причина в InfoBar блока Agent defaults: пользовательский файл конфигурации не читается. config.yaml — имя файла, не переводить."
+  },
+  "settingsGeneralAboutCopyFailed": "Couldn't copy the diagnostics.",
+  "@settingsGeneralAboutCopyFailed": {
+    "description": "Предупреждение раздела About, когда диагностику не удалось скопировать в буфер обмена."
+  },
+  "settingsGeneralAboutLoadFailed": "Couldn't load the About section.",
+  "@settingsGeneralAboutLoadFailed": {
+    "description": "Предупреждение вместо раздела About, когда его данные (ресурсы лицензий) не прочитались."
   },
   "settingsSearchKeywordsConnection": "profile, stdio, websocket, token, restart",
   "@settingsSearchKeywordsConnection": {

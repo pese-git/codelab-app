@@ -69,9 +69,10 @@ Map<String, Object?> _two() => {
   },
 };
 
-/// Текст «Key» раскрытой карточки: часть без шрифта и моноширинная часть
-/// вместе, как их показывает страница (один случай — одно сообщение).
-String _keyShown(ProviderRow row) => '${row.keyText}${row.keyMono ?? ''}';
+/// Текст «Key» раскрытой карточки: часть до значения, моноширинное значение
+/// и хвост вместе, как их показывает страница (один случай — одно сообщение).
+String _keyShown(ProviderRow row) =>
+    '${row.keyText}${row.keyMono ?? ''}${row.keyTail}';
 
 void main() {
   late FakeAgentConfigStore store;
@@ -93,7 +94,7 @@ void main() {
   });
 
   ProviderSettingsCubit make(
-    AppStrings? port, {
+    AppStrings port, {
     Map<String, String> environment = const {'HOME': '/home/u'},
     String? home = _home,
     Future<ProviderSettingsSession> Function()? open,

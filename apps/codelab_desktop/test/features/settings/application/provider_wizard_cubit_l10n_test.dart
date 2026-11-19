@@ -97,7 +97,7 @@ void main() {
   }
 
   Future<ProviderWizardCubit> open(
-    AppStrings? port, {
+    AppStrings port, {
     ProviderEntryView? editing,
   }) async {
     final flow = await session.openWizard(editing: editing);
@@ -350,6 +350,21 @@ void main() {
     });
 
     test('правка: «Keep the current key»', () async {
+      // Исправлено в задаче 4.2: у провайдера `local` из `_existing()` ключа
+      // нет, а автомат предлагает «оставить текущий ключ» только у провайдера
+      // с ключом, которого нет в хранилище (`_keyState`: `editing.key is!
+      // KeyNone`, `existing == null`). Фикстура теста — провайдер с
+      // переменной окружения; утверждение о подписи не менялось.
+      store.user = {
+        'agent': {'default_model': 'local/qwen'},
+        'providers': {
+          'local': providerMap(
+            baseUrl: 'http://localhost:11434/v1',
+            models: ['qwen'],
+            env: 'LOCAL_API_KEY',
+          ),
+        },
+      };
       final cubit = await open(strings, editing: await entryOf('local'));
       cubit.dispatch(const BaseUrlSubmitted('http://localhost:11434/v1'));
       await pumpEventQueue();

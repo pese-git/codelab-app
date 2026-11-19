@@ -17,6 +17,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/fake_provider_settings.dart';
 import '../support/real_config_session.dart' show realHomeConfig;
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
+import '../support/app_strings.dart';
+import '../support/typed_messages.dart';
 
 final class _CapturingCheck implements ProviderCheck {
   final seen = <SecretValue?>[];
@@ -200,6 +203,7 @@ providers:
       final before = await session.config.snapshot(cwd: home.path);
       final flow = await session.openWizard(editing: editing);
       return ProviderWizardCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         flow: flow,
         access: access,
         backendId: session.backend.id,
