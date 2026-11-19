@@ -29,6 +29,46 @@ String _snapshot({int version = 1}) => jsonEncode({
   },
 });
 
+/// Хранилище, чтение которого завершает тест ([releaseRead]): окно «снимок
+/// читается» становится детерминированным. Записи видны в [writes], а
+/// [value] — содержимое «диска» после них.
+final class _GatedReadStore implements WorkspaceSnapshotStore {
+  _GatedReadStore(this.value, {this.failRead = false});
+
+  String? value;
+
+  /// Чтение бросает: имитирует сбой IO хранилища.
+  final bool failRead;
+  final writes = <String>[];
+  final _read = Completer<void>();
+
+  /// Завершает начатое чтение: оно вернёт [value] на этот момент.
+  void releaseRead() => _read.complete();
+
+  @override
+  Future<String?> read() async {
+    await _read.future;
+    if (failRead) {
+      throw StateError('read failed');
+    }
+    return value;
+  }
+
+  @override
+  Future<void> write(String snapshot) async {
+    writes.add(snapshot);
+    value = snapshot;
+  }
+
+  @override
+  Future<void> clear() async => value = null;
+}
+
+Map<String, Object?> _window(String json) {
+  final saved = jsonDecode(json) as Map<String, Object?>;
+  return ((saved['windows']! as Map)['main'] as Map).cast<String, Object?>();
+}
+
 void main() {
   late KitAgent agent;
   late InMemoryWorkspaceSnapshotStore store;
@@ -229,14 +269,13 @@ void main() {
   // действия пользователя (AGENTS.md §9, §10).
   test('подключение до завершения readProject: после reconnect нет '
       'session/load', () async {
-    final gate = Completer<void>();
-    final slow = _GatedStore(_snapshot(), gate.future);
+    final slow = _GatedReadStore(_snapshot());
     agent = KitAgent(capabilities: _withLoad, snapshots: slow);
 
     final reading = agent.workspace.restoreProject();
     agent.workspace.selectProject('/work');
     await agent.start();
-    gate.complete();
+    slow.releaseRead();
     // Проект возвращается хосту, даже если читался позже подключения.
     expect(await reading, '/work');
 
@@ -251,8 +290,8 @@ void main() {
     expect(sentMethods(), [initializeMethod]);
     expect(agent.workspace.current.sessions, isEmpty);
     // Сессии позднего снимка не попали и в запись: ни открытые, ни активная.
-    expect(slow.written, isNotNull);
-    final window = (jsonDecode(slow.written!)['windows'] as Map)['main'] as Map;
+    expect(slow.writes, isNotEmpty);
+    final window = _window(slow.value!);
     expect(window['projectDirectory'], '/work');
     final ids = [
       for (final s in window['openSessions'] as List) (s as Map)['id'],
@@ -353,9 +392,9 @@ void main() {
       await agent.workspace.flushSnapshot();
 
       expect(sentMethods(), [initializeMethod]);
-      expect(_savedWindow(store)['projectDirectory'], '/work/other');
-      expect(_savedWindow(store)['openSessions'], isEmpty);
-      expect(_savedWindow(store)['activeSessionId'], isNull);
+      expect(_window(store.value!)['projectDirectory'], '/work/other');
+      expect(_window(store.value!)['openSessions'], isEmpty);
+      expect(_window(store.value!)['activeSessionId'], isNull);
     });
 
     test('тот же проект, что в снимке: сессии снимка не сохраняются как '
@@ -373,37 +412,117 @@ void main() {
       await agent.workspace.flushSnapshot();
 
       expect(sentMethods(), [initializeMethod]);
-      expect(_savedWindow(store)['projectDirectory'], '/work');
-      expect(_savedWindow(store)['openSessions'], isEmpty);
-      expect(_savedWindow(store)['activeSessionId'], isNull);
+      expect(_window(store.value!)['projectDirectory'], '/work');
+      expect(_window(store.value!)['openSessions'], isEmpty);
+      expect(_window(store.value!)['activeSessionId'], isNull);
     });
   });
-}
 
-Map<Object?, Object?> _savedWindow(InMemoryWorkspaceSnapshotStore store) {
-  final saved = jsonDecode(store.value!) as Map<String, Object?>;
-  return (saved['windows']! as Map)['main'] as Map;
-}
+  // Spec acp-client-kit «Восстановление после перезапуска»: до чтения снимка
+  // при старте хоста kit не пишет снимок. Запись во время чтения затирала
+  // снимок прошлого запуска, а дочитанный снимок откатывал учёт записанного,
+  // и следующая запись того же состояния пропускалась.
+  test('nothing is written while the snapshot is being read, and the saved '
+      'sessions survive the restored start', () async {
+    final gated = _GatedReadStore(_snapshot());
+    agent = KitAgent(capabilities: _withLoad, snapshots: gated);
 
-/// Хранилище, чьё чтение ждёт [gate]: моделирует долгое чтение снимка.
-final class _GatedStore implements WorkspaceSnapshotStore {
-  _GatedStore(this.value, this.gate);
+    final project = agent.workspace.restoreProject();
+    agent.workspace.selectProject('/work');
+    await pumpEventQueue();
+    expect(gated.writes, isEmpty);
 
-  final String? value;
-  final Future<void> gate;
+    gated.releaseRead();
+    expect(await project, '/work');
+    await agent.workspace.flushSnapshot();
 
-  @override
-  Future<String?> read() async {
-    await gate;
-    return value;
-  }
+    final window = _window(gated.value!);
+    expect(window['projectDirectory'], '/work');
+    expect(window['activeSessionId'], 's-42');
+    expect(window['openSessions'], [
+      {'id': 's-42', 'cwd': '/work'},
+      {'id': 's-17', 'cwd': '/work'},
+    ]);
+  });
 
-  @override
-  Future<void> write(String snapshot) async => written = snapshot;
+  test('another project chosen while the snapshot is being read: the next '
+      'write records it without the sessions of the last run', () async {
+    final gated = _GatedReadStore(_snapshot());
+    agent = KitAgent(capabilities: _withLoad, snapshots: gated);
 
-  /// Последняя записанная строка снимка; `null` — записи не было.
-  String? written;
+    final project = agent.workspace.restoreProject();
+    agent.workspace.selectProject('/other');
+    await pumpEventQueue();
+    expect(gated.writes, isEmpty);
 
-  @override
-  Future<void> clear() async {}
+    gated.releaseRead();
+    expect(await project, '/work');
+    await agent.workspace.flushSnapshot();
+
+    final window = _window(gated.value!);
+    expect(window['projectDirectory'], '/other');
+    expect(window['activeSessionId'], isNull);
+    expect(window['openSessions'], isEmpty);
+  });
+
+  // Сверка после чтения только при изменениях во время чтения: иначе сбой
+  // чтения, битый снимок или первый запуск сразу записали бы пустой снимок.
+  test('a failed read with no changes meanwhile writes nothing and keeps the '
+      'snapshot of the last run', () async {
+    final gated = _GatedReadStore(_snapshot(), failRead: true);
+    agent = KitAgent(capabilities: _withLoad, snapshots: gated);
+
+    final project = agent.workspace.restoreProject();
+    gated.releaseRead();
+    expect(await project, isNull);
+    await agent.workspace.flushSnapshot();
+
+    expect(gated.writes, isEmpty);
+    expect(gated.value, _snapshot());
+  });
+
+  test('a broken snapshot stays removed after the read', () async {
+    final gated = _GatedReadStore('{not json');
+    agent = KitAgent(capabilities: _withLoad, snapshots: gated);
+
+    final project = agent.workspace.restoreProject();
+    gated.releaseRead();
+    expect(await project, isNull);
+    await agent.workspace.flushSnapshot();
+
+    expect(gated.writes, isEmpty);
+    expect(gated.value, isNull);
+  });
+
+  test('closing the workspace while the snapshot is being read waits for the '
+      'write of a change made meanwhile', () async {
+    final gated = _GatedReadStore(_snapshot());
+    agent = KitAgent(capabilities: _withLoad, snapshots: gated);
+
+    unawaited(agent.workspace.restoreProject());
+    agent.workspace.selectProject('/other');
+    final closing = agent.workspace.dispose();
+    await pumpEventQueue();
+    expect(gated.writes, isEmpty);
+
+    gated.releaseRead();
+    await closing;
+
+    expect(gated.writes, hasLength(1));
+    expect(_window(gated.value!)['projectDirectory'], '/other');
+  });
+
+  test('closing the workspace does not hang on a snapshot read that never '
+      'ends', () async {
+    final gated = _GatedReadStore(_snapshot());
+    agent = KitAgent(capabilities: _withLoad, snapshots: gated);
+
+    unawaited(agent.workspace.restoreProject());
+    agent.workspace.selectProject('/other');
+    final watch = Stopwatch()..start();
+    await agent.workspace.dispose();
+
+    expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+    expect(gated.writes, isEmpty);
+  });
 }
