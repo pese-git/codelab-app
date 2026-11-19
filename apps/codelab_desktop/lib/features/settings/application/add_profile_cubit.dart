@@ -32,6 +32,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         suggestProfileId;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import '../../../core/platform/connection_preferences.dart';
 import '../../../core/platform/home_path_label.dart';
 import 'add_profile_state.dart';
@@ -88,6 +89,9 @@ class AddProfileCubit extends Cubit<AddProfileState> {
     required Map<String, String> environment,
     String? profilesPath,
     Logger? logger,
+    // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): порт языка
+    // принят, но Cubit на него не подписывается; поведение — задача 4.2.
+    AppStrings? strings,
   }) : _store = store,
        _openSecrets = openSecrets,
        _profilesPath = profilesPath,

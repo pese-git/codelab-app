@@ -4,6 +4,7 @@ import 'package:codelab_client_acp/codelab_client_acp.dart' show Logger;
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import 'provider_settings_state.dart'
     show ProviderBanner, ProviderBannerAction, ProviderBannerKind;
 import 'provider_wizard_view.dart';
@@ -88,6 +89,9 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
     this.logger,
     this.editingId,
     this.forceDefault = false,
+    // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): порт языка
+    // принят, но Cubit на него не подписывается; поведение — задача 4.2.
+    AppStrings? strings,
   }) : _flow = flow,
        _access = access,
        _backendId = backendId,

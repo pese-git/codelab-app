@@ -20,6 +20,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../app/language/app_language_cubit.dart' show AppStrings;
 import '../../../core/platform/home_path_label.dart';
 import 'provider_settings_session.dart';
 import 'provider_settings_state.dart';
@@ -70,6 +71,9 @@ class ProviderSettingsCubit extends Cubit<ProviderSettingsState> {
     Logger? logger,
     DateTime Function()? now,
     Future<void> Function()? retryStart,
+    // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): порт языка
+    // принят, но Cubit на него не подписывается; поведение — задача 4.2.
+    AppStrings? strings,
   }) : _workspace = workspace,
        _retryStart = retryStart,
        _defaultProfile = defaultProfile,

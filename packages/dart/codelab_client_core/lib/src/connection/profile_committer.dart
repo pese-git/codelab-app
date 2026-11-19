@@ -56,6 +56,7 @@ final class ProfileSaveFailed extends ProfileCommitResult {
     this.message, {
     this.orphanedSecret,
     this.errorType,
+    this.storeReason,
   });
 
   final ProfileSaveFailedReason reason;
@@ -66,6 +67,10 @@ final class ProfileSaveFailed extends ProfileCommitResult {
   /// (для журнала хоста: текст мог бы процитировать значение); `null`, если
   /// отказ не исключение.
   final String? errorType;
+
+  /// ЗАГЛУШКА задачи 4.1c (D6): причина хранилища при `secretReadOnly`;
+  /// заполняется в 4.1d, doc-комментарий — там же.
+  final String? storeReason;
 
   @override
   String toString() => 'ProfileSaveFailed(${reason.name})';
