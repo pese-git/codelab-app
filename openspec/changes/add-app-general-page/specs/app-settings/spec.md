@@ -30,7 +30,7 @@
 
 Блок SHALL показывать строки ключей реестра со `scope: shared` из разделов реестра Budget, Agent, Subagents и Logging, кроме ключей, у которых есть своя страница: `budget.max_steps`, `budget.max_tokens`, `budget.max_cost`, `budget.max_duration`, `compaction.enabled`, ключи `subagents.*` и `logging.level`. Ключи `agent.default_model`, `providers.*` («Providers»), `permissions.mode`, `agent.effort` («Agents & modes»), `mcp.servers` («MCP servers»), `permissions.deny`, `permissions.tools` (будущая «Permissions & tools») и `trusted_projects` (граница доверия) НЕ SHALL показываться на «General» (design.md, D2). Ключ реестра `scope: shared`, который не отнесён ни к «General», ни к странице-владельцу, SHALL ронять тест классификации, а не появляться на странице сам.
 
-Строки SHALL группироваться по разделу реестра в порядке Budget, Agent, Subagents, Logging; внутри раздела — в порядке реестра. Строка SHALL показывать подпись ключа на языке интерфейса, ключ (`budget.max_steps`), итоговое значение (`SettingFieldView.displayValue`; для незаданного ключа без умолчания — `Not set`), источник `default`, `user`, `project`, `local`, `config` или `env` и тег `shared`. Ключ с `restartRequired` SHALL нести пометку `(applies after restart)`. Ключ строки — `settings-general-agent-row-<key>`.
+Строки SHALL группироваться по разделу реестра в порядке Budget, Agent, Subagents, Logging; внутри раздела — в порядке реестра. Над каждой непустой группой SHALL быть подзаголовок раздела на языке интерфейса (`Budget`, `Agent`, `Subagents`, `Logging`) с ключом `settings-general-agent-group-<section>` (`budget`, `agent`, `subagents`, `logging`). Строка SHALL показывать подпись ключа на языке интерфейса, ключ (`budget.max_steps`), итоговое значение (`SettingFieldView.displayValue`; для незаданного ключа без умолчания — `Not set`), источник `default`, `user`, `project`, `local`, `config` или `env` и тег `shared`. Ключ с `restartRequired` SHALL нести пометку `(applies after restart)`. Ключ строки — `settings-general-agent-row-<key>`. Описание строки НЕ SHALL обрезаться: при нехватке ширины оно переносится. Ключ SHALL переноситься только после `.` или `_` и SHALL быть доступен скринридеру целиком одной меткой.
 
 Над блоком SHALL быть InfoBar уровня `info` `settings-general-shared-info`: `Shared with the codelab CLI. Rows marked shared come from the agent's settings registry and are saved to <home>/config.yaml; codelab /settings shows them too.`, где `<home>` — `$CODELAB_HOME` с `~` вместо домашнего каталога.
 
@@ -45,6 +45,14 @@
 #### Scenario: Новый ключ реестра без решения
 - **WHEN** в реестр добавлен ключ `scope: shared`, который не отнесён ни к «General», ни к странице-владельцу
 - **THEN** тест классификации ключей страницы падает и называет ключ
+
+#### Scenario: Одинаковые подписи в разных группах
+- **WHEN** встроенный агент подключён, и пользователь открывает «General»
+- **THEN** строка `settings-general-agent-row-budget.max_steps` стоит под подзаголовком `settings-general-agent-group-budget` (`Budget`), а строка `settings-general-agent-row-subagents.max_steps` — под `settings-general-agent-group-subagents` (`Subagents`); на русском подзаголовки — «Бюджет» и «Субагенты»
+
+#### Scenario: Узкое окно не обрезает описания и ключи
+- **WHEN** app работает на русском, ширина области страницы соответствует окну 760 px, и пользователь открывает «General»
+- **THEN** описание строки `settings-general-reopen-last-project` показано целиком, включая «Применится при следующем запуске», описания строк ключей не обрезаны многоточием, ключ `subagents.heartbeat_interval` разорван только после `.` или `_`, переполнения нет
 
 #### Scenario: Пометка перезапуска
 - **WHEN** блок показывает `logging.level`
@@ -76,7 +84,7 @@
 - значение перекрыто другим слоем — баннер уровня `warning` `Saved to all projects; <source> overrides it: the agent uses <effective>.` с тем же хвостом о перезапуске;
 - перечитать не удалось — `Saved to <home>/config.yaml.`.
 
-`ConfigConflict` SHALL давать баннер `The config file changed on disk; the page was reloaded. Try again.` и перечитывание снимка без автоповтора (SETUP-6). `ConfigRejected` SHALL давать баннер уровня `error` с путём ключа и текстом проблемы писателя как есть. `ConfigInlineSecret` SHALL давать баннер `Change it with codelab secret set.`. Пока идёт запись, повторные правки блока SHALL игнорироваться.
+`ConfigConflict` SHALL давать баннер `The config file changed on disk; the page was reloaded. Try again.` и перечитывание снимка без автоповтора (SETUP-6). `ConfigRejected` SHALL давать баннер уровня `error` с путём ключа и текстом проблемы писателя как есть. `ConfigInlineSecret` SHALL давать баннер `Change it with codelab secret set.`. Пока идёт запись, повторные правки блока SHALL игнорироваться. Новая правка строки — в том числе неверный ввод и пустое поле без записи — SHALL снимать баннер прошлой записи.
 
 Результат загрузки или записи, начатой до смены подключения, папки или до закрытия страницы, НЕ SHALL менять состояние блока. Правка, начатая до новой загрузки, НЕ SHALL записываться.
 
@@ -109,6 +117,10 @@
 #### Scenario: Конфликт записи
 - **WHEN** файл конфига изменён на диске после загрузки снимка, и пользователь меняет `compaction.enabled`
 - **THEN** файл не перезаписан, баннер содержит `The config file changed on disk`, снимок перечитан, повторной записи нет
+
+#### Scenario: Неверный ввод после успешной записи
+- **WHEN** запись `budget.max_steps: 80` дала баннер `Saved.`, и затем пользователь вводит `0` в поле `budget.max_steps`
+- **THEN** баннера `settings-general-agent-banner` нет, под полем показано `Enter a whole number of 1 or greater.`, файл конфига не изменён
 
 #### Scenario: Смена подключения во время записи
 - **WHEN** запись `budget.max_steps` идёт, и подключение переходит на профиль `wss://devbox:7420/acp`
@@ -163,7 +175,7 @@
 
 Строки «Channel» и «Signed by» НЕ SHALL показываться: в сборке нет источника этих значений (design.md, D11).
 
-«Third-party notices» SHALL открывать диалог `settings-general-third-party-dialog` с текстом `THIRD_PARTY_NOTICES.md` из ресурсов сборки и списком лицензий пакетов из реестра лицензий Flutter. Диалог SHALL работать без сети (spec licensing-and-attribution «Лицензия и сторонние уведомления в сборке app»).
+«Third-party notices» SHALL открывать диалог `settings-general-third-party-dialog` с записями раздела `## Записи` файла `THIRD_PARTY_NOTICES.md` из ресурсов сборки и списком лицензий пакетов из реестра лицензий Flutter. Заголовок первого уровня файла, вводная и раздел `## Формат записи` НЕ SHALL показываться. Записи SHALL показываться как есть, без перевода, на любом языке интерфейса. Перед ними SHALL быть подпись `Entries of the CodeLab third-party notices register, as kept in the repository.` на языке интерфейса. Если раздела `## Записи` нет, SHALL показываться весь файл без заголовка первого уровня. Диалог SHALL работать без сети (spec licensing-and-attribution «Лицензия и сторонние уведомления в сборке app»).
 
 «Release notes» SHALL открывать `CHANGELOG.md` репозитория CodeLab в браузере через порт `ExternalLinkOpener`. Адрес SHALL быть константой app, а не вводом пользователя.
 
@@ -184,6 +196,10 @@
 #### Scenario: Сторонние уведомления офлайн
 - **WHEN** сети нет, и пользователь нажимает «Third-party notices»
 - **THEN** диалог `settings-general-third-party-dialog` показывает запись `JetBrains Mono (шрифт в пакете gpt_markdown)` из `THIRD_PARTY_NOTICES.md` и список лицензий пакетов
+
+#### Scenario: Только записи реестра
+- **WHEN** app работает на английском, и пользователь нажимает «Third-party notices»
+- **THEN** диалог содержит запись `JetBrains Mono (шрифт в пакете gpt_markdown)` и подпись `Entries of the CodeLab third-party notices register, as kept in the repository.`; заголовка `Third-party notices` из файла, раздела `Формат записи` и строки шаблона `<Название источника>` в диалоге нет, заголовок диалога `Third-party notices` показан один раз
 
 #### Scenario: Release notes через порт
 - **WHEN** пользователь нажимает «Release notes»

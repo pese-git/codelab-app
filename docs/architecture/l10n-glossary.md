@@ -42,6 +42,7 @@
 | Числа usage | `94.0k`, `1.2M`, `$1.20`, `79%`, `m:ss` — формат ядра клиента, общий с CLI и CSV: точка, без пробелов между разрядами, `k` и `M` не переводятся (D8, Q2) |
 | Даты списка сессий | `yyyy-MM-dd HH:mm` (D8) |
 | Диагностика | содержимое «Debug log» и «Inspector», события журнала и их поля, `WorkspaceDiagnostic.message`, текст исключений. Заголовки вкладок «Debug log» и «Inspector» переводятся (Q3) |
+| Юридические тексты | `LICENSE`, записи `THIRD_PARTY_NOTICES.md` в диалоге «Third-party notices», лицензии пакетов (`LicenseRegistry`) — как есть, на языке источника (change `add-app-general-page`, D13) |
 | Ключи тестов | `ValueKey` (`settings-nav-general`, `settings-language-ru`) |
 
 Подпись `Unknown kind` и другие подписи «неизвестного значения» переводятся: это текст app, а не значение провода.
@@ -296,6 +297,11 @@
 | Package licenses | Лицензии пакетов | заголовок списка в диалоге «Third-party notices» |
 | Close | Закрыть | кнопка диалога |
 | Diagnostics copied | Диагностика скопирована | подтверждение «Copy diagnostics» |
+| Budget (подзаголовок группы) | Бюджет | раздел реестра `Budget`: ключи `budget.*` (решение пользователя 2026-11-19, D2) |
+| Agent (подзаголовок группы) | Агент | раздел реестра `Agent` (`compaction.enabled`) |
+| Subagents (подзаголовок группы) | Субагенты | раздел реестра `Subagents` |
+| Logging (подзаголовок группы) | Журнал агента | раздел реестра `Logging` (`logging.level`); значение «журнала» — «журнал агента» (§4, «Журнал: значения слова») |
+| Entries of the CodeLab third-party notices register, as kept in the repository. | Записи реестра сторонних уведомлений CodeLab в том виде, в каком они хранятся в репозитории. | подпись диалога «Third-party notices»; сами записи не переводятся (§2) |
 
 Подписи ключей реестра в блоке «Agent defaults» (английский текст — `label` и `description` реестра, D2):
 

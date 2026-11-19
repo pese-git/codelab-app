@@ -131,3 +131,32 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - у каждой видимой страницы есть `settingsSearchKeywords<Page>` в `app_en.arb` и `app_ru.arb`, ни одно слово после разбиения по запятой не пусто;
   - прежние английские ключевые слова всех страниц находят свою страницу на обоих языках, слова одной страницы не находят другую (`restart`, `token`, `profile`).
 - [x] 6.5 `[desktop]` Реализация 6.4: сообщения `settingsSearchKeywords<Page>` для всех страниц, `SettingsSearchIndex.search(visible, query, titlesOf:, localizedKeywordsOf:)` без статического `keywords`, `SettingsShell` передаёт слова языка интерфейса и английские (`AppLocalizationsEn`). 6.4 зелёный, `l10n:check` зелёный.
+
+## 7. Исправления по ручной проверке app (решения пользователя 2026-11-19)
+
+- [x] 7.1 `[desktop]` Красный: подзаголовки групп «Agent defaults» (D2):
+  - `general_page_test.dart`: сценарий app-settings «Одинаковые подписи в разных группах» на `en` и `ru`. Порядок сверху вниз: `settings-general-agent-group-budget`, строки `budget.*`, `…-group-agent`, `compaction.enabled`, `…-group-subagents`, строки `subagents.*`, `…-group-logging`, `logging.level`. Пустая группа подзаголовка не даёт;
+  - `agent_defaults_rows_test.dart`: раздел каждого ключа `general` — один из `Budget`, `Agent`, `Subagents`, `Logging`; английские `settingsGeneralGroup*` равны имени раздела реестра;
+  - `expectNoStaleLanguage` для страницы с подзаголовками.
+- [ ] 7.2 `[desktop]` Реализация 7.1: подзаголовки в `general_page.dart`, сообщения `settingsGeneralGroupBudget|Agent|Subagents|Logging` в `app_en.arb` и `app_ru.arb` по глоссарию. 7.1 зелёный, `l10n:check` зелёный.
+- [x] 7.3 `[desktop]` Красный: баннер снимается новой правкой (D7). `agent_defaults_cubit_test.dart`:
+  - сценарий «Неверный ввод после успешной записи»: после `Saved.` `submit('budget.max_steps', '0')` даёт `Ready` с `banner == null` и `fieldErrors == {budget.max_steps}`, файл не изменён;
+  - пустое поле без записи после `Saved.` снимает баннер;
+  - правка во время `saving` баннер не трогает и игнорируется (прежнее правило);
+  - `general_page_test.dart`: в том же сценарии нет `settings-general-agent-banner`, а подсказка видна.
+- [ ] 7.4 `[desktop]` Реализация 7.3: `AgentDefaultsCubit.submit` сбрасывает `_banner` до разбора. 7.3 зелёный.
+- [x] 7.5 `[desktop]` Красный: перенос на узком окне (D17):
+  - тест кита `codelab_ui`: `CodeLabSettingsRow(descriptionMaxLines: null)` показывает длинное описание без многоточия; без параметра — прежние 2 строки (регрессия других страниц);
+  - `general_page_test.dart`, сценарий «Узкое окно не обрезает описания и ключи» на `ru` при 760 px:
+    - текст описания `settings-general-reopen-last-project` полностью виден, его `maxLines` не задан, `overflow` не `ellipsis`;
+    - у строк ключей описание без `maxLines`;
+    - ключ `subagents.heartbeat_interval` состоит из сегментов `subagents.`, `heartbeat_`, `interval`, и каждый сегмент — одна строка (высота сегмента равна высоте строки шрифта);
+    - `find.bySemanticsLabel('subagents.heartbeat_interval')` находит одну метку;
+    - исключений переполнения нет.
+- [ ] 7.6 `[desktop]` Реализация 7.5: `CodeLabSettingsRow.descriptionMaxLines` в `codelab_ui` (README кита — раздел о строке настроек, через `docs-writer`), описания без ограничения в `general_page.dart`, ключ как `Wrap` сегментов с `Semantics(label: key)`. 7.5 зелёный.
+- [x] 7.7 `[desktop]` Красный: диалог «Third-party notices» (D13):
+  - `test/features/settings/application/third_party_notices_test.dart`: `thirdPartyRecordsOf` на настоящем `assets/legal/THIRD_PARTY_NOTICES.md` возвращает текст от первой записи `### JetBrains Mono` до конца раздела, без `# Third-party notices`, вводной, `## Формат записи`, шаблона `<Название источника>` и самой строки `## Записи`; на тексте без `## Записи` — весь текст без заголовка первого уровня; раздел до следующего `## ` обрывается на нём;
+  - `legal_assets_test.dart`: сценарий licensing-and-attribution «Реестр без раздела записей» — в ресурсе ровно один `## Записи`;
+  - `general_page_test.dart`: сценарий app-settings «Только записи реестра» на `en` (записи на русском, подпись на английском), на `ru` — подпись на русском; прежний сценарий «Сторонние уведомления офлайн» зелёный.
+- [ ] 7.8 `[desktop]` Реализация 7.7: `features/settings/application/third_party_notices.dart`, диалог показывает подпись `settingsGeneralAboutThirdPartyCaption` и `thirdPartyRecordsOf(notices)`, ARB. В `apps/codelab_desktop/AGENTS.md` — известное ограничение списка лицензий пакетов (dev-пакеты pub workspace, D13). 7.7 зелёный, `l10n:check` зелёный.
+- [ ] 7.9 `[desktop]` `docs-writer`: `apps/codelab_desktop/doc/user-guide.md` — подзаголовки групп «Agent defaults», что показывает «Third-party notices» и почему список лицензий пакетов шире состава сборки.

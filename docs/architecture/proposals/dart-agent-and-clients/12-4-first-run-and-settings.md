@@ -1040,8 +1040,8 @@ sequenceDiagram
 не границу доверия: `budget.*`, `compaction.enabled`, `subagents.*` (все 12), `logging.level`
 (блок «Agent defaults»; таблица классификации ключей по страницам с тестом полноты — change
 [`add-app-general-page`](../../../../openspec/changes/add-app-general-page/design.md), D2).
-Строки идут одним списком в порядке разделов реестра Budget, Agent, Subagents, Logging, без
-подписей разделов, как на артборде (D17).
+Строки идут группами в порядке разделов реестра Budget, Agent, Subagents, Logging; над каждой
+группой — подзаголовок раздела, иначе одинаковые подписи `budget.*` и `subagents.*` не различить (D2, D17).
 Режим, effort, модель, провайдеры, MCP, `permissions.deny`, `permissions.tools` и
 `trusted_projects` правятся только на своих страницах (или нигде), чтобы строчный редактор не
 обходил подтверждения и мастера. Запись блока — только в слой `user`; перекрытие проектным слоем
