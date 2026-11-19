@@ -317,7 +317,7 @@ void main() {
 
       for (final row in [fromUser, byDefault]) {
         expect(row.refusal, isNull);
-        expect(row.overriddenBy, isNull);
+        expect(row.overriddenByKind, isNull);
       }
     });
 
@@ -330,16 +330,16 @@ void main() {
       );
 
       expect(fromProject.refusal, isNull);
-      expect(fromProject.overriddenBy, 'project');
+      expect(fromProject.overriddenByKind, ConfigSourceKind.project);
       expect(fromLocal.refusal, isNull);
-      expect(fromLocal.overriddenBy, 'local');
+      expect(fromLocal.overriddenByKind, ConfigSourceKind.projectLocal);
     });
 
     test('источник env отказывает ветвью моста', () {
       final row = rowOf(_field('budget.max_steps', value: 11, source: env));
 
       expect(row.refusal, isA<ExternalSourceSetting>());
-      expect(row.overriddenBy, isNull);
+      expect(row.overriddenByKind, isNull);
     });
   });
 }

@@ -1,6 +1,12 @@
 import 'package:codelab_embedded/codelab_embedded.dart' show McpServerState;
 import 'package:codelab_setup/codelab_setup.dart';
 
+import 'mcp_messages.dart';
+import 'settings_notices.dart';
+
+export 'mcp_messages.dart';
+export 'settings_notices.dart';
+
 /// Состояние страницы «MCP servers» (design.md change
 /// `add-provider-setup-ui`, D11, D12, D21; spec app-settings «Страница «MCP
 /// servers»», «Панель «Agent status» страницы MCP servers»).
@@ -36,73 +42,80 @@ sealed class McpSettingsLoaded extends McpSettingsState {
 
 /// Агент не наш или удалённый: настройки не читаются и не пишутся (SETUP-2).
 final class McpSettingsReadOnly extends McpSettingsLoaded {
-  const McpSettingsReadOnly({
-    required this.notice,
-    this.hint,
-    required super.agentStatus,
-  });
+  const McpSettingsReadOnly({required this.reason, required super.agentStatus});
 
-  /// Заголовок InfoBar `mcp-read-only`.
-  final String notice;
-
-  /// Команды для хоста агента; у стороннего агента `null`.
-  final String? hint;
+  /// Причина «только чтение»: чей агент (D5, «Уточнение итерации 5»). Текст
+  /// InfoBar `mcp-read-only` и команды для хоста строит presentation.
+  final ReadOnlyReason reason;
 
   @override
   McpSettingsReadOnly withAgentStatus(McpAgentStatus status) =>
-      McpSettingsReadOnly(notice: notice, hint: hint, agentStatus: status);
+      McpSettingsReadOnly(reason: reason, agentStatus: status);
 
   @override
-  String toString() => 'McpSettingsReadOnly($notice)';
+  String toString() => 'McpSettingsReadOnly($reason)';
 }
 
 /// Файл не разбирается или нарушает схему: запись недоступна, файл не
 /// перезаписывается (целостность данных, AGENTS.md §2; решение Q26).
 final class McpSettingsUnreadable extends McpSettingsLoaded {
   const McpSettingsUnreadable({
-    required this.problems,
+    required this.issues,
     required super.agentStatus,
   });
 
-  /// Проблемы загрузчика с путём ключа, по строке на проблему.
-  final List<String> problems;
+  /// Проблемы закрытого типа: фраза app (переводится) или текст загрузчика с
+  /// путём ключа как есть (D5, D6).
+  final List<SettingsProblem> issues;
 
   @override
   McpSettingsUnreadable withAgentStatus(McpAgentStatus status) =>
-      McpSettingsUnreadable(problems: problems, agentStatus: status);
+      McpSettingsUnreadable(issues: issues, agentStatus: status);
 
   @override
-  String toString() => 'McpSettingsUnreadable(${problems.length})';
+  String toString() => 'McpSettingsUnreadable(${issues.length})';
 }
 
 /// Вид баннера итога записи и удаления (`mcp-banner`).
 enum McpBannerKind { saved, conflict, error }
 
-/// Баннер итога: первая строка — итог, остальные — подробности (оставшиеся
-/// секреты, предупреждения записи).
+/// Баннер итога записи и удаления.
+///
+/// Хранит типизированное [message] (имя сервера, секреты с исходом
+/// `SecretCleanup`, отказ моста), а текст строит presentation
+/// (`mcpMessageLines`) на текущем языке (D5, «Уточнение итерации 5»).
 final class McpBanner {
-  const McpBanner(this.kind, this.lines);
+  const McpBanner(this.kind, {required this.message});
 
   final McpBannerKind kind;
-  final List<String> lines;
+  final McpMessage message;
 
   @override
-  String toString() => 'McpBanner(${kind.name}, ${lines.length} lines)';
+  String toString() => 'McpBanner(${kind.name})';
+}
+
+/// Когда агент отклонил конфиг: от этого зависит заголовок InfoBar.
+enum McpRejectedKind {
+  /// После своей записи: `Saved, but the agent rejected the new config`.
+  afterSave,
+
+  /// При открытии страницы: `The agent rejects the current config`.
+  onOpen,
 }
 
 /// Содержимое InfoBar `mcp-rejected`: агент отклоняет конфиг (решение Q26).
 final class McpRejectedConfig {
   const McpRejectedConfig({
-    required this.title,
+    required this.kind,
     required this.problems,
     this.editServer,
   });
 
-  /// `Saved, but the agent rejected the new config` после своей записи,
-  /// `The agent rejects the current config` при открытии страницы.
-  final String title;
+  /// Вид заголовка: после своей записи или при открытии страницы.
+  final McpRejectedKind kind;
 
-  /// Строки `<путь ключа>: <проблема>`; значений в них нет.
+  /// Строки `<путь ключа>: <проблема>` от ядра агента как есть; значений в них
+  /// нет.
   final List<String> problems;
 
   /// Сервер, на которого указывает путь проблемы (`Edit <server>`).
@@ -149,12 +162,22 @@ final class McpSecretStorage {
   final String? unavailableReason;
 }
 
+/// Пояснение строки сервера вместо редактора (Q25 (5)).
+enum McpRowNoteKind {
+  /// Сервер из проектного файла: править и удалять нельзя, есть «Disable here».
+  projectFile,
+
+  /// Сервер отключён в `.codelab/config.local.yaml`: «Enable here» снимает.
+  disabledHere,
+}
+
 /// Строка списка серверов.
 final class McpServerRow {
   const McpServerRow({
     required this.name,
     required this.entry,
-    required this.sourceLabel,
+    required this.source,
+    this.sourceFile,
     required this.layer,
     required this.enabled,
     required this.canToggle,
@@ -162,7 +185,7 @@ final class McpServerRow {
     required this.canRemove,
     required this.canDisableHere,
     required this.canEnableHere,
-    this.note,
+    this.noteKind,
     this.draft,
   });
 
@@ -171,8 +194,12 @@ final class McpServerRow {
   /// Вид из моста: тип, цель, значения `args`/`env`/`headers` уже очищены.
   final McpServerEntryView entry;
 
-  /// `user`, `this project` или `defined in <file>`.
-  final String sourceLabel;
+  /// Вид источника: подпись `user`, `this project` или `defined in <file>`
+  /// строит presentation (D7).
+  final ConfigSourceKind source;
+
+  /// Путь файла с `~` вместо домашнего каталога для `defined in <file>`.
+  final String? sourceFile;
 
   /// Слой сервера: показывает неизменяемая цель «Save to» (Q27).
   final ConfigLayer layer;
@@ -192,8 +219,9 @@ final class McpServerRow {
   /// `build()` (AGENTS.md §15).
   final McpServerDraft? draft;
 
-  /// Пояснение строки слоя 3 и `disabled here` вместо редактора (Q25 (5)).
-  final String? note;
+  /// Вид пояснения строки слоя 3 и `disabled here` вместо редактора (Q25 (5));
+  /// текст строит presentation.
+  final McpRowNoteKind? noteKind;
 
   @override
   String toString() => 'McpServerRow($name)';
@@ -269,28 +297,31 @@ final class McpAgentStatusUnavailable extends McpAgentStatus {
   String toString() => 'McpAgentStatusUnavailable';
 }
 
-/// Строка таблицы встроенного агента.
+/// Строка таблицы встроенного агента: данные, а не готовые ячейки.
+///
+/// Почему: подпись состояния (`failed · retry in 24 s`) зависит от языка, а
+/// прочерк при `null` рисует presentation (D5, D8).
 final class McpStatusRow {
   const McpStatusRow({
     required this.name,
     required this.state,
-    required this.stateLabel,
-    required this.tools,
-    required this.lastError,
+    this.retryIn,
+    this.toolCount,
+    this.errorText,
     required this.canReconnect,
   });
 
   final String name;
   final McpServerState state;
 
-  /// `connected`, `failed · retry in 24 s`, `disabled`…
-  final String stateLabel;
+  /// Через сколько агент повторит подключение (`failed`); `null` — не ждёт.
+  final Duration? retryIn;
 
-  /// Число инструментов; у `disabled` — `—`.
-  final String tools;
+  /// Число инструментов; `null` — не определено (у `disabled`).
+  final int? toolCount;
 
-  /// Причина последней ошибки или `—`.
-  final String lastError;
+  /// Причина последней ошибки сервера как есть; `null` — ошибки нет.
+  final String? errorText;
 
   /// У выключенного сервера «Reconnect» нет.
   final bool canReconnect;
@@ -315,7 +346,7 @@ final class McpAgentStatusText extends McpAgentStatus {
     this.text,
     this.sending = false,
     required this.canSend,
-    this.notice,
+    this.listFailed = false,
   });
 
   /// Текст последнего ответа; `null` — ещё не запрашивали.
@@ -327,8 +358,9 @@ final class McpAgentStatusText extends McpAgentStatus {
   /// Кнопки активны: `Connected`, свободная сессия, пустая очередь.
   final bool canSend;
 
+  /// Последний `/mcp list` не завершился: presentation показывает переведённое
   /// `/mcp list did not complete. Try Refresh again.` над прежним текстом.
-  final String? notice;
+  final bool listFailed;
 
   // Текст ответа может быть любым: в строку состояния он не попадает.
   @override

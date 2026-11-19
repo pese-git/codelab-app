@@ -46,5 +46,16 @@ void main() {
       'literal:false',
       'notVerified:null',
     ]);
+    // Типизированные проблемы черновика MCP и поля вида навыков (задача 5.1a).
+    expect(report.draftCodes, [
+      'nameInvalid:null:Use a name without spaces, [, ] or ".',
+      'urlHasUserinfo:null:Remove the user name and password from the URL.',
+      'secretValueEmpty:TOKEN:Enter the secret value for TOKEN.',
+      'keyDuplicate:Authorization:Two values are named Authorization.',
+    ]);
+    expect(report.skillFields, [
+      'delta:null:~/.claude/skills',
+      'review:user:null',
+    ]);
   });
 }

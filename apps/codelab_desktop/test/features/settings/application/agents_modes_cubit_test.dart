@@ -28,6 +28,12 @@ import '../../../support/fake_provider_settings.dart' show FakeWorkspace;
 import '../../../support/modes_fixture.dart';
 import '../../../support/recording_logger.dart';
 
+/// Баннер «Saved. New sessions use `mode`…» целой фразой: режим записан и
+/// действует (D5, «Уточнение итерации 5»).
+Matcher _savedMessage(String mode, AgentsApplyWhen when) => equals(
+  AgentsSavedMessage(setting: AgentsModesSetting.mode, value: mode, when: when),
+);
+
 final _remote = ConnectionProfile.webSocket(
   id: 'devbox',
   label: 'Devbox',
@@ -156,15 +162,17 @@ void main() {
         final state = await ready(cubit);
 
         expect(state.mode, 'standard');
-        expect(state.modeLabel, 'standard');
-        expect(state.modeSource, 'default');
+        // Источник — тип, `null` — по умолчанию (D5, D7); подпись строит
+        // presentation, подписи режима в состоянии нет.
+        expect(state.blocksWriteAndExec, isFalse);
+        expect(state.modeSourceKind, isNull);
         expect(state.effort, 'medium');
-        expect(state.effortSource, 'default');
+        expect(state.effortSourceKind, isNull);
         expect(state.target, ConfigLayer.user);
         expect(state.canTargetProject, isTrue);
         expect(state.saving, isFalse);
         expect(state.banner, isNull);
-        expect(state.narrowedNotice, isNull);
+        expect(state.narrowedByProject, isFalse);
         expect(opened.single.cwd, fx.project);
         expect(events('agents_modes.loaded').single['access'], 'editable');
       },
@@ -185,9 +193,9 @@ void main() {
           'accept-edits',
           reason: 'псевдоним приведён к основному',
         );
-        expect(state.modeSource, 'user');
+        expect(state.modeSourceKind, ConfigSourceKind.user);
         expect(state.effort, 'high');
-        expect(state.effortSource, 'user');
+        expect(state.effortSourceKind, ConfigSourceKind.user);
       },
     );
 
@@ -309,11 +317,8 @@ void main() {
       await cubit.reload();
 
       final state = cubit.state as AgentsModesReadOnly;
-      expect(
-        state.notice,
-        'Read-only: this agent runs on wss://devbox:7420. Change its modes '
-        'and agents on that host: codelab config set, .codelab/agents.',
-      );
+      // Причина — тип с адресом, а не готовая строка (D5).
+      expect(state.reason, const RemoteAgentReadOnly('wss://devbox:7420'));
       expect(opened, isEmpty);
       expect(fx.store.snapshotCalls, 0);
       expect(events('agents_modes.loaded').single['access'], 'remote');
@@ -329,7 +334,7 @@ void main() {
       await cubit.reload();
 
       final state = cubit.state as AgentsModesReadOnly;
-      expect(state.notice, 'Agent settings are managed by python.');
+      expect(state.reason, const ForeignAgentReadOnly('python'));
       expect(opened, isEmpty);
       expect(fx.store.snapshotCalls, 0);
       expect(events('agents_modes.loaded').single['access'], 'not_managed');
@@ -344,7 +349,9 @@ void main() {
       await cubit.reload();
 
       final state = cubit.state as AgentsModesUnreadable;
-      expect(state.problems.single, contains('permissions.mode'));
+      // Текст загрузчика — как есть, под переведённым заголовком (D6).
+      final problem = state.issues.single as LoaderSettingsProblem;
+      expect(problem.text, contains('permissions.mode'));
       expect(events('agents_modes.unreadable'), hasLength(1));
       expect(events('agents_modes.unreadable').single['level'], 'warning');
       expect(fx.store.applied, isEmpty);
@@ -374,12 +381,14 @@ void main() {
         expect(fx.userConfig, contains('mode: accept-edits'));
         final state = now(cubit);
         expect(state.mode, 'accept-edits');
-        expect(state.modeSource, 'user');
+        expect(state.modeSourceKind, ConfigSourceKind.user);
         expect(state.saving, isFalse);
         expect(state.banner?.kind, AgentsModesBannerKind.saved);
+        // Целая фраза «сохранено» с «когда применится» — тип, а не склейка
+        // основы и хвоста (D5, правило 7).
         expect(
-          state.banner?.text,
-          'Saved. New sessions use accept-edits after Restart agent.',
+          state.banner?.message,
+          _savedMessage('accept-edits', AgentsApplyWhen.afterRestart),
         );
         expect(workspace.ensuredAgents, isEmpty);
         final changed = events('agents_modes.mode_changed').single;
@@ -399,8 +408,8 @@ void main() {
         await cubit.selectMode('plan');
 
         expect(
-          now(cubit).banner?.text,
-          'Saved. New sessions use plan when the agent starts.',
+          now(cubit).banner?.message,
+          _savedMessage('plan', AgentsApplyWhen.whenAgentStarts),
         );
       },
     );
@@ -473,13 +482,10 @@ void main() {
       final state = await ready(make(fx));
 
       expect(state.mode, 'ask');
-      expect(state.modeLabel, 'ask');
-      expect(state.modeSource, 'user');
-      expect(
-        state.narrowedNotice,
-        'This project is not trusted, so its config can only make the mode '
-        'stricter. New sessions here use ask.',
-      );
+      expect(state.blocksWriteAndExec, isFalse);
+      expect(state.modeSourceKind, ConfigSourceKind.user);
+      // Сужение — признак: текст InfoBar с режимом строит presentation.
+      expect(state.narrowedByProject, isTrue);
     });
 
     test(
@@ -494,7 +500,8 @@ void main() {
         final state = await ready(make(fx));
 
         expect(state.mode, 'ask');
-        expect(state.modeLabel, 'ask (edits and commands blocked by plan)');
+        // Пометка — признак, подпись строит presentation (D7).
+        expect(state.blocksWriteAndExec, isTrue);
       },
     );
 
@@ -504,8 +511,8 @@ void main() {
       final state = await ready(make(fx));
 
       expect(state.mode, 'plan');
-      expect(state.modeSource, 'local');
-      expect(state.narrowedNotice, isNull);
+      expect(state.modeSourceKind, ConfigSourceKind.projectLocal);
+      expect(state.narrowedByProject, isFalse);
     });
   });
 
@@ -523,10 +530,12 @@ void main() {
       expect(fx.userConfig, contains('mode: accept-edits'));
       final banner = now(cubit).banner!;
       expect(banner.kind, AgentsModesBannerKind.warning);
-      expect(banner.text, contains('Saved to All projects;'));
-      expect(banner.text, contains('overrides it: new sessions use plan'));
-      expect(banner.text, endsWith('after Restart agent.'));
-      expect(banner.text, isNot(contains('New sessions use accept-edits')));
+      final message = banner.message as AgentsSavedOverriddenMessage;
+      expect(message.setting, AgentsModesSetting.mode);
+      expect(message.target, ConfigLayer.user);
+      expect(message.source, ConfigSourceKind.projectLocal);
+      expect(message.value, 'plan');
+      expect(message.when, AgentsApplyWhen.afterRestart);
     });
 
     test('the same without a connected agent ends with "when the agent '
@@ -538,7 +547,10 @@ void main() {
 
       await cubit.selectMode('accept-edits');
 
-      expect(now(cubit).banner!.text, endsWith('when the agent starts.'));
+      expect(
+        (now(cubit).banner!.message as AgentsSavedOverriddenMessage).when,
+        AgentsApplyWhen.whenAgentStarts,
+      );
     });
 
     test('a value narrowed by an untrusted project names the project as the '
@@ -557,14 +569,12 @@ void main() {
       expect(fx.userConfig, contains('mode: ask'));
       final state = now(cubit);
       expect(state.banner?.kind, AgentsModesBannerKind.warning);
-      expect(
-        state.banner?.text,
-        contains(
-          'the untrusted project overrides it: new sessions use '
-          'ask (edits and commands blocked by plan)',
-        ),
-      );
-      expect(state.narrowedNotice, isNotNull);
+      final narrowed = state.banner!.message as AgentsSavedNarrowedMessage;
+      expect(narrowed.target, ConfigLayer.user);
+      expect(narrowed.value, 'ask');
+      expect(narrowed.blocksWriteAndExec, isTrue);
+      expect(narrowed.when, AgentsApplyWhen.afterRestart);
+      expect(state.narrowedByProject, isTrue);
     });
 
     test('a softer mode for an untrusted project is refused by the writer: '
@@ -579,6 +589,7 @@ void main() {
 
       expect(fx.localConfig, isEmpty);
       expect(now(cubit).banner?.kind, AgentsModesBannerKind.error);
+      expect(now(cubit).banner?.message, isA<AgentsNotSavedMessage>());
       expect(events('agents_modes.save_failed').single['outcome'], 'rejected');
     });
 
@@ -592,8 +603,11 @@ void main() {
 
       final banner = now(cubit).banner!;
       expect(banner.kind, AgentsModesBannerKind.warning);
-      expect(banner.text, startsWith('Saved to All projects; '));
-      expect(banner.text, contains('overrides it: new sessions use low'));
+      final message = banner.message as AgentsSavedOverriddenMessage;
+      expect(message.setting, AgentsModesSetting.effort);
+      expect(message.target, ConfigLayer.user);
+      expect(message.source, ConfigSourceKind.projectLocal);
+      expect(message.value, 'low');
     });
   });
 
@@ -618,8 +632,8 @@ void main() {
 
           final state = cubit.state as AgentsModesUnreadable;
           expect(state.banner?.kind, AgentsModesBannerKind.saved);
-          expect(state.banner?.text, 'Saved to $label.');
-          expect(state.banner?.text, isNot(contains('New sessions')));
+          final message = state.banner!.message as AgentsSavedOnlyMessage;
+          expect(message.target, layer, reason: label);
         },
       );
     }
@@ -752,10 +766,7 @@ void main() {
 
       expect(fx.store.applied, isEmpty);
       expect(now(cubit).banner?.kind, AgentsModesBannerKind.warning);
-      expect(
-        now(cubit).banner?.text,
-        'Settings changed while the dialog was open; bypass was not saved.',
-      );
+      expect(now(cubit).banner?.message, isA<AgentsBypassStaleMessage>());
       expect(events('agents_modes.save_failed').single['outcome'], 'stale');
       expect(fx.localConfig, isEmpty);
     });
@@ -888,6 +899,10 @@ void main() {
         expect(fx.store.applied, isEmpty);
         expect(fx.userConfig, isNot(contains('mode: plan')));
         expect(now(cubit).banner?.kind, AgentsModesBannerKind.error);
+        expect(
+          now(cubit).banner?.message,
+          isA<AgentsTargetUnavailableMessage>(),
+        );
         expect(now(cubit).saving, isFalse);
       },
     );
@@ -936,8 +951,15 @@ void main() {
         expect(fx.userConfig, contains('effort: high'));
         final state = now(cubit);
         expect(state.effort, 'high');
-        expect(state.effortSource, 'user');
-        expect(state.banner?.text, 'Saved. New sessions use high.');
+        expect(state.effortSourceKind, ConfigSourceKind.user);
+        expect(
+          state.banner?.message,
+          const AgentsSavedMessage(
+            setting: AgentsModesSetting.effort,
+            value: 'high',
+            when: AgentsApplyWhen.now,
+          ),
+        );
         final changed = events('agents_modes.effort_changed').single;
         expect(changed['effort'], 'high');
         expect(changed['target'], 'user');
@@ -955,8 +977,12 @@ void main() {
       await cubit.selectEffort('low');
 
       expect(
-        now(cubit).banner?.text,
-        'Saved. New sessions use low after Restart agent.',
+        now(cubit).banner?.message,
+        const AgentsSavedMessage(
+          setting: AgentsModesSetting.effort,
+          value: 'low',
+          when: AgentsApplyWhen.afterRestart,
+        ),
       );
     });
 
@@ -989,7 +1015,7 @@ void main() {
 
       final state = await ready(make(fx));
 
-      expect(state.modeSource, 'project');
+      expect(state.modeSourceKind, ConfigSourceKind.project);
       expect(state.target, ConfigLayer.user);
     });
 
@@ -1050,6 +1076,7 @@ void main() {
         reason: 'SETUP-6: без автоповтора',
       );
       expect(now(cubit).banner?.kind, AgentsModesBannerKind.conflict);
+      expect(now(cubit).banner?.message, isA<AgentsConflictMessage>());
       expect(now(cubit).saving, isFalse);
       expect(fx.store.snapshotCalls, greaterThan(snapshotsBefore));
       final failed = events('agents_modes.save_failed').single;
@@ -1069,6 +1096,7 @@ void main() {
         await cubit.selectEffort('high');
 
         expect(now(cubit).banner?.kind, AgentsModesBannerKind.error);
+        expect(now(cubit).banner?.message, isA<AgentsNotSavedMessage>());
         final failed = events('agents_modes.save_failed').single;
         expect(failed['key'], 'effort');
         expect(failed['outcome'], 'rejected');
@@ -1095,7 +1123,8 @@ void main() {
       expect(failed['error_type'], 'FileSystemException');
       expect(logger.entries.toString(), isNot(contains('/Users/demo')));
       expect(logger.entries.toString(), isNot(contains('disk is full')));
-      expect(state.banner!.text, isNot(contains('/Users/demo')));
+      expect(state.banner!.message, isA<AgentsNotSavedMessage>());
+      expect(state.banner.toString(), isNot(contains('/Users/demo')));
     });
   });
 
@@ -1312,14 +1341,17 @@ void main() {
 
       final view = definitionsOf(cubit);
       final byName = {for (final r in view.rows) r.name: r};
-      expect(byName['reviewer']!.status, 'Available');
+      // Статус, область и источник — типы и данные; подписи строит presentation
+      // (D5, D7). `null` у `sourcePath` — встроенный тип.
+      expect(byName['reviewer']!.rowStatus, AgentRowStatus.available);
       expect(byName['reviewer']!.tone, AgentsStatusTone.success);
-      expect(byName['reviewer']!.source, '~/.codelab/agents/reviewer.md');
-      expect(byName['reviewer']!.availableIn, 'both');
-      expect(byName['reviewer']!.tools, 'read, grep');
-      expect(byName['migrator']!.status, 'Error · line 4');
+      expect(byName['reviewer']!.sourcePath, '~/.codelab/agents/reviewer.md');
+      expect(byName['reviewer']!.scope, AgentRowScope.both);
+      expect(byName['reviewer']!.toolNames, ['read', 'grep']);
+      expect(byName['migrator']!.rowStatus, AgentRowStatus.error);
+      expect(byName['migrator']!.errorLine, 4);
       expect(byName['migrator']!.tone, AgentsStatusTone.danger);
-      expect(byName['default']!.source, 'built-in');
+      expect(byName['default']!.sourcePath, isNull);
       final error = view.errors.single;
       expect(error.index, 0);
       expect(error.pathLabel, '~/.codelab/agents/migrator.md');
@@ -1357,9 +1389,10 @@ void main() {
 
       for (final name in const ['a', 'b', 'c', 'd']) {
         final row = definitionsOf(cubit).rows.firstWhere((r) => r.name == name);
-        expect(row.availableIn, '—', reason: name);
-        expect(row.tools, '—', reason: name);
-        expect(row.model, '—', reason: name);
+        // Прочерк рисует presentation: у отклонённого файла нет области и
+        // `loaded == false`, а не строка `'—'` в состоянии.
+        expect(row.scope, isNull, reason: name);
+        expect(row.loaded, isFalse, reason: name);
       }
     });
 
@@ -1387,8 +1420,10 @@ void main() {
       await ready(cubit);
 
       for (final row in definitionsOf(cubit).rows) {
-        expect(row.tools, 'all', reason: row.name);
-        expect(row.model, 'session model', reason: row.name);
+        // «Все инструменты» и «модель сессии» — `null` у загруженной строки.
+        expect(row.loaded, isTrue, reason: row.name);
+        expect(row.toolNames, isNull, reason: row.name);
+        expect(row.modelId, isNull, reason: row.name);
       }
     });
 
@@ -1409,10 +1444,11 @@ void main() {
 
       await ready(cubit);
 
-      expect(
-        definitionsOf(cubit).rows.firstWhere((r) => r.name == 'general').status,
-        'Overridden',
-      );
+      final general = definitionsOf(
+        cubit,
+      ).rows.firstWhere((r) => r.name == 'general');
+      expect(general.rowStatus, AgentRowStatus.overridden);
+      expect(general.overriddenBy, isNull);
     });
 
     test(
@@ -1449,10 +1485,9 @@ void main() {
 
       await ready(cubit);
 
-      expect(
-        definitionsOf(cubit).rows.firstWhere((r) => r.name == 'x').status,
-        'Error',
-      );
+      final broken = definitionsOf(cubit).rows.firstWhere((r) => r.name == 'x');
+      expect(broken.rowStatus, AgentRowStatus.error);
+      expect(broken.errorLine, isNull);
       expect(definitionsOf(cubit).errors.single.line, isNull);
     });
 
@@ -1480,22 +1515,27 @@ void main() {
       await ready(cubit);
 
       final status = {
-        for (final r in definitionsOf(cubit).rows) r.name: (r.status, r.tone),
+        for (final r in definitionsOf(cubit).rows)
+          r.name: (r.rowStatus, r.overriddenBy, r.tone),
       };
       expect(status['docs-writer'], (
-        'Model not configured',
+        AgentRowStatus.modelNotConfigured,
+        null,
         AgentsStatusTone.warning,
       ));
       expect(status['dup'], (
-        'Not loaded: duplicate name',
+        AgentRowStatus.duplicate,
+        null,
         AgentsStatusTone.danger,
       ));
       expect(status['shadow'], (
-        'Shadowed by project',
+        AgentRowStatus.shadowed,
+        null,
         AgentsStatusTone.warning,
       ));
       expect(status['general'], (
-        'Overridden by ~/.codelab/agents/general.md',
+        AgentRowStatus.overridden,
+        '~/.codelab/agents/general.md',
         AgentsStatusTone.warning,
       ));
     });
@@ -1522,8 +1562,8 @@ void main() {
 
       final view = definitionsOf(cubit);
       expect(
-        view.rows.firstWhere((r) => r.name == 'docs-writer').status,
-        'Model not configured',
+        view.rows.firstWhere((r) => r.name == 'docs-writer').rowStatus,
+        AgentRowStatus.modelNotConfigured,
       );
       expect(view.errors.map((e) => e.index), [0, 1]);
       expect(view.errors.first.path, '$userAgentsDir/docs-writer.md');
@@ -1560,15 +1600,13 @@ void main() {
         final errors = definitionsOf(cubit).errors;
         expect(errors, hasLength(1));
         expect(errors.single.path, '$userAgentsDir/dup.md');
-        expect(
-          errors.single.message,
-          'Not loaded: another definition has the same name.',
-        );
+        expect(errors.single.message, isNull);
+        expect(errors.single.reason, AgentsDefinitionErrorKind.duplicate);
         expect(errors.single.line, isNull);
       },
     );
 
-    test('a model error without a message gets a fixed text', () async {
+    test('a model error without a message gets a typed reason', () async {
       final fx = await fixture();
       final cubit = make(
         fx,
@@ -1585,7 +1623,9 @@ void main() {
 
       await ready(cubit);
 
-      expect(definitionsOf(cubit).errors.single.message, isNotEmpty);
+      final error = definitionsOf(cubit).errors.single;
+      expect(error.message, isNull);
+      expect(error.reason, AgentsDefinitionErrorKind.modelNotConfigured);
     });
 
     test('built-in types of a config with subagents.enabled false are '
@@ -1605,10 +1645,10 @@ void main() {
 
       final rows = {for (final r in definitionsOf(cubit).rows) r.name: r};
       for (final n in const ['general', 'explore', 'review', 'plan']) {
-        expect(rows[n]!.status, 'Subagents off', reason: n);
-        expect(rows[n]!.availableIn, 'subagent', reason: n);
+        expect(rows[n]!.rowStatus, AgentRowStatus.subagentsOff, reason: n);
+        expect(rows[n]!.scope, AgentRowScope.subagent, reason: n);
       }
-      expect(rows['default']!.status, 'Available');
+      expect(rows['default']!.rowStatus, AgentRowStatus.available);
     });
 
     test('definitions load together with the snapshot and get a cancel '

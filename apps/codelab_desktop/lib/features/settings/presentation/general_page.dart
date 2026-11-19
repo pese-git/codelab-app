@@ -17,6 +17,7 @@ import '../../../app/app_scope.dart';
 import '../../../app/language/app_language_cubit.dart';
 import '../../../core/platform/app_language_preferences.dart';
 import '../../../l10n/l10n.dart';
+import 'config_source_label.dart';
 import '../application/agent_defaults_cubit.dart';
 import '../application/startup_settings_cubit.dart';
 import '../application/about_ports.dart';
@@ -341,7 +342,7 @@ class _Banner extends StatelessWidget {
         InfoBarSeverity.success,
       ),
       AgentDefaultsBannerKind.overridden => (
-        '${l10n.settingsGeneralSavedOverridden(banner.overriddenBy ?? '', banner.effective ?? '')}$tail',
+        '${l10n.settingsGeneralSavedOverridden(configSourceLabel(l10n, banner.overriddenByKind, forGeneral: true), banner.effective ?? '')}$tail',
         InfoBarSeverity.warning,
       ),
       AgentDefaultsBannerKind.savedUnverified => (
@@ -441,7 +442,11 @@ class _AgentRow extends StatelessWidget {
                     children: [
                       _KeyText(field.key, color: secondary),
                       CodeLabText(
-                        field.sourceName,
+                        configSourceLabel(
+                          l10n,
+                          field.source?.kind,
+                          forGeneral: true,
+                        ),
                         role: CodeLabTextRole.caption,
                         color: secondary,
                       ),
@@ -455,15 +460,25 @@ class _AgentRow extends StatelessWidget {
                       role: CodeLabTextRole.caption,
                       color: secondary,
                     ),
-                  if (row.overriddenBy case final layer?)
+                  if (row.overriddenByKind case final layer?)
                     CodeLabText(
-                      l10n.settingsGeneralOverriddenBy(layer),
+                      l10n.settingsGeneralOverriddenBy(
+                        configSourceLabel(l10n, layer, forGeneral: true),
+                      ),
                       role: CodeLabTextRole.caption,
                       color: secondary,
                     ),
                   if (refusal != null)
                     CodeLabText(
-                      _refusalText(l10n, refusal, field.sourceName),
+                      _refusalText(
+                        l10n,
+                        refusal,
+                        configSourceLabel(
+                          l10n,
+                          field.source?.kind,
+                          forGeneral: true,
+                        ),
+                      ),
                       role: CodeLabTextRole.caption,
                       color: secondary,
                     ),

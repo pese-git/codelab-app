@@ -1,4 +1,11 @@
-import 'package:codelab_setup/codelab_setup.dart' show ConfigLayer;
+import 'package:codelab_setup/codelab_setup.dart'
+    show AgentRowScope, AgentRowStatus, ConfigLayer, ConfigSourceKind;
+
+import 'agents_modes_messages.dart';
+import 'settings_notices.dart';
+
+export 'agents_modes_messages.dart';
+export 'settings_notices.dart';
 
 /// Состояние страницы «Agents & modes» (design.md change
 /// `add-settings-agents-modes`, D3, D4, D11; spec app-settings «Страница
@@ -21,21 +28,21 @@ final class AgentsModesLoading extends AgentsModesState {
 
 /// Агент не наш или удалённый: конфиг и определения не читаются (SETUP-2).
 final class AgentsModesReadOnly extends AgentsModesState {
-  const AgentsModesReadOnly({required this.notice});
+  const AgentsModesReadOnly({required this.reason});
 
-  /// Текст InfoBar `agents-modes-read-only`: `Read-only: this agent runs on
-  /// ORIGIN. Change its modes and agents on that host: codelab config set,
-  /// .codelab/agents.` или `Agent settings are managed by AGENT.`
-  final String notice;
+  /// Причина «только чтение»: чей агент (D5, «Уточнение итерации 5»); текст
+  /// InfoBar `agents-modes-read-only` строит presentation.
+  final ReadOnlyReason reason;
 }
 
 /// `config.yaml` не разбирается или нарушает схему (в том числе
 /// `permissions.mode: autopilot`): записи нет (`agents-modes-unreadable`).
 final class AgentsModesUnreadable extends AgentsModesState {
-  const AgentsModesUnreadable({required this.problems, this.banner});
+  const AgentsModesUnreadable({required this.issues, this.banner});
 
-  /// Проблемы загрузчика с путём ключа, по строке на проблему.
-  final List<String> problems;
+  /// Проблемы закрытого типа: фраза app (переводится) или текст загрузчика как
+  /// есть (D5, D6).
+  final List<SettingsProblem> issues;
 
   /// Баннер записи, после которой перечитывание не удалось: `Saved to
   /// <цель>.` без утверждений о новых сессиях (design.md D16); `null` — записи
@@ -46,53 +53,96 @@ final class AgentsModesUnreadable extends AgentsModesState {
 /// Вид баннера результата записи (`agents-modes-banner`).
 enum AgentsModesBannerKind { saved, warning, conflict, error }
 
-/// Баннер результата записи.
+/// Баннер результата записи: тип и типизированное [message], текст строит
+/// presentation на текущем языке (D5, «Уточнение итерации 5»).
 final class AgentsModesBanner {
-  const AgentsModesBanner(this.kind, this.text);
+  const AgentsModesBanner(this.kind, {required this.message});
 
   final AgentsModesBannerKind kind;
-  final String text;
+  final AgentsModesMessage message;
 }
 
 /// Тон тега статуса строки определения.
 enum AgentsStatusTone { success, warning, danger }
 
-/// Строка таблицы `agents-definitions-table` в виде готовых ячеек.
+/// Строка таблицы `agents-definitions-table`: данные, а не готовые ячейки.
+///
+/// Почему: статус, область и источник переводятся (`agentRowStatusText`,
+/// `agentRowScopeText`), прочерк и «все инструменты» рисует presentation при
+/// `null` или `loaded == false` (D5, «Уточнение итерации 5»).
 final class AgentsDefinitionRow {
   const AgentsDefinitionRow({
     required this.name,
-    required this.description,
-    required this.source,
-    required this.availableIn,
-    required this.tools,
-    required this.model,
-    required this.status,
+    required this.rowStatus,
     required this.tone,
+    this.descriptionText,
+    this.sourcePath,
+    this.scope,
+    this.toolNames,
+    this.modelId,
+    this.errorLine,
+    this.overriddenBy,
+    this.loaded = true,
   });
 
   final String name;
-  final String description;
 
-  /// `built-in` или путь файла с `~` вместо домашнего каталога.
-  final String source;
-
-  /// `session`, `subagent`, `both`; прочерк у файла с ошибкой.
-  final String availableIn;
-  final String tools;
-  final String model;
-
-  /// Текст тега: `Available`, `Error · line 4`, `Overridden by <путь>` и т. д.
-  final String status;
+  /// Статус строки: `Available`, `Error · line 4`, `Overridden by <путь>` и т. д.
+  final AgentRowStatus rowStatus;
   final AgentsStatusTone tone;
+
+  /// Описание как есть; `null` — описания нет (прочерк).
+  final String? descriptionText;
+
+  /// Путь файла с `~`; `null` — встроенный тип (`built-in`).
+  final String? sourcePath;
+
+  /// Где доступно определение; `null` — у файла с ошибкой (прочерк).
+  final AgentRowScope? scope;
+
+  /// Список инструментов; `null` у загруженной строки — «все инструменты».
+  final List<String>? toolNames;
+
+  /// Id модели; `null` у загруженной строки — модель сессии.
+  final String? modelId;
+
+  /// Номер строки ошибки для `Error · line N`; `null` — неизвестен.
+  final int? errorLine;
+
+  /// Путь файла с `~`, заместившего встроенный тип.
+  final String? overriddenBy;
+
+  /// Определение загружено: у отклонённого файла колонки «Tools» и «Model»
+  /// показывают прочерк.
+  final bool loaded;
+}
+
+/// Запасная причина ошибки определения, когда ядро не дало текста.
+///
+/// Почему тип, а не строка: фраза зависит от языка, её строит presentation
+/// (D5, «Уточнение итерации 5»).
+enum AgentsDefinitionErrorKind {
+  /// Модель определения не настроена.
+  modelNotConfigured,
+
+  /// Имя определения повторяется.
+  duplicate,
+
+  /// Любая другая причина.
+  other,
 }
 
 /// Файл определения с ошибкой: InfoBar `agents-definitions-error-<index>`.
+///
+/// Почему данные, а не текст: текст ядра показывается как есть, а запасная
+/// фраза зависит от языка и строится по [reason] (D5, D6).
 final class AgentsDefinitionError {
   const AgentsDefinitionError({
     required this.index,
     required this.path,
     required this.pathLabel,
-    required this.message,
+    this.message,
+    this.reason = AgentsDefinitionErrorKind.other,
     this.line,
   });
 
@@ -107,8 +157,12 @@ final class AgentsDefinitionError {
   /// Номер строки, если известен.
   final int? line;
 
-  /// Фиксированное сообщение кода диагностики, без значений и фрагментов файла.
-  final String message;
+  /// Текст диагностики ядра как есть (без значений и фрагментов файла); `null`,
+  /// когда ядро текста не дало: тогда presentation берёт фразу по [reason].
+  final String? message;
+
+  /// Запасная причина для случая `message == null`.
+  final AgentsDefinitionErrorKind reason;
 }
 
 /// Блок «Agent definitions» страницы (design.md change
@@ -161,11 +215,11 @@ final class AgentsDefinitionsView {
 final class AgentsModesReady extends AgentsModesState {
   const AgentsModesReady({
     required this.mode,
-    required this.modeLabel,
-    required this.modeSource,
-    this.narrowedNotice,
+    this.blocksWriteAndExec = false,
+    this.narrowedByProject = false,
+    this.modeSourceKind,
     required this.effort,
-    required this.effortSource,
+    this.effortSourceKind,
     required this.target,
     required this.canTargetProject,
     this.saving = false,
@@ -177,21 +231,22 @@ final class AgentsModesReady extends AgentsModesState {
   /// `bypass`.
   final String mode;
 
-  /// Подпись итога: `<mode>` или `ask (edits and commands blocked by plan)`.
-  final String modeLabel;
+  /// Режим запрещает правки и команды от `plan` (пометка у `ask`): подпись
+  /// строит presentation (D5, D7).
+  final bool blocksWriteAndExec;
 
-  /// Источник режима для `agents-modes-mode-source`: `default`, `user`,
-  /// `project`, `local` и т. п.
-  final String modeSource;
+  /// Режим сужен недоверенным проектом (InfoBar `agents-modes-mode-narrowed`).
+  final bool narrowedByProject;
 
-  /// Текст InfoBar `agents-modes-mode-narrowed`; `null` — сужения нет.
-  final String? narrowedNotice;
+  /// Источник режима: `null` — по умолчанию; подпись строит presentation по
+  /// `ConfigSourceKind` (D7).
+  final ConfigSourceKind? modeSourceKind;
 
   /// Итоговый effort: `low`, `medium`, `high`.
   final String effort;
 
-  /// Источник effort: `default`, `user`, `project`, `local`.
-  final String effortSource;
+  /// Источник effort, как [modeSourceKind].
+  final ConfigSourceKind? effortSourceKind;
 
   /// Выбранная цель записи: `ConfigLayer.user` или `ConfigLayer.projectLocal`;
   /// одна на режим и effort (Q10 (а)).

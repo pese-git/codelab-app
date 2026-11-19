@@ -229,7 +229,7 @@ void main() {
       final compaction = row(cubit, 'compaction.enabled');
       expect(compaction.field.sourceName, 'local');
       expect(compaction.refusal, isNull);
-      expect(compaction.overriddenBy, 'local');
+      expect(compaction.overriddenByKind, ConfigSourceKind.projectLocal);
     });
   });
 
@@ -311,7 +311,7 @@ void main() {
       expect(state.banner?.kind, AgentDefaultsBannerKind.saved);
       expect(state.banner?.key, 'budget.max_steps');
       expect(state.banner?.restart, AgentDefaultsRestart.none);
-      expect(state.banner?.overriddenBy, isNull);
+      expect(state.banner?.overriddenByKind, isNull);
       expect(workspace.ensuredAgents, isEmpty);
     });
 
@@ -412,7 +412,7 @@ void main() {
       expect(fx.localConfig, localBefore);
       final banner = now(cubit).banner!;
       expect(banner.kind, AgentDefaultsBannerKind.overridden);
-      expect(banner.overriddenBy, 'local');
+      expect(banner.overriddenByKind, ConfigSourceKind.projectLocal);
       expect(banner.effective, 'false');
       expect(banner.restart, AgentDefaultsRestart.none);
     });

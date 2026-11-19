@@ -239,6 +239,7 @@ SkillsSectionView _skills(
         directory: file.dir,
         overrides: overrides,
         overridesLabel: _overridesLabel(root, overrides),
+        overridesScope: _overridesScope(root, overrides),
         warnings: [
           for (final d in all)
             if (d.path == s.path) d,
@@ -320,16 +321,30 @@ List<SkillRootView> _overrides(
   return result;
 }
 
+/// Область первого перекрытого навыка, отличная от области победителя;
+/// `null` — перекрытий нет или перекрыт навык той же области («another
+/// skill»). Одна функция для подписи и поля: текст `overridesLabel` строится
+/// по ней (D6 итерации 5, «текст ⇔ код»).
+ExtensionScope? _overridesScope(
+  SkillRootView root,
+  List<SkillRootView> overrides,
+) {
+  for (final o in overrides) {
+    if (o.scope != root.scope) {
+      return o.scope;
+    }
+  }
+  return null;
+}
+
 String? _overridesLabel(SkillRootView root, List<SkillRootView> overrides) {
   if (overrides.isEmpty) {
     return null;
   }
-  for (final o in overrides) {
-    if (o.scope != root.scope) {
-      return 'Overrides ${o.scope.name} skill';
-    }
-  }
-  return 'Overrides another skill';
+  final scope = _overridesScope(root, overrides);
+  return scope == null
+      ? 'Overrides another skill'
+      : 'Overrides ${scope.name} skill';
 }
 
 SkillRootView _rootView(
@@ -351,7 +366,16 @@ SkillRootView _rootView(
     ExtensionScope.user => _tilde(root.path, userHome),
     ExtensionScope.extra => '${root.extraRoot ?? root.path} (extra root)',
   };
-  return SkillRootView(scope: root.scope, label: label, path: root.path);
+  // Элемент `extra_roots` — то, что подпись называет «extra root»; клиент
+  // строит свой текст по нему (D6 итерации 5).
+  return SkillRootView(
+    scope: root.scope,
+    label: label,
+    path: root.path,
+    extraEntry: root.scope == ExtensionScope.extra
+        ? (root.extraRoot ?? root.path)
+        : null,
+  );
 }
 
 /// Путь [target] от папки [from] через `/`, с `..` для уровней выше.

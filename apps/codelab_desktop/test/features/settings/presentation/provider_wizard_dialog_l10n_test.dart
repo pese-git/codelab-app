@@ -766,11 +766,14 @@ void main() {
             .text,
         'http://api.example.com/v1',
       );
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      // `ignore: {'local'}`: id провайдера `local` — данные на экране,
+      // а не подпись источника «local» (итерация 5, D7); в остальных
+      // вызовах помощник строгий.
+      await expectNoStaleLanguage(tester, from: en, to: ru, ignore: {'local'});
 
       await selectLanguage(tester, binding, AppLanguagePreference.en);
       expect(steps(tester).first, 'API type');
-      await expectNoStaleLanguage(tester, from: ru, to: en);
+      await expectNoStaleLanguage(tester, from: ru, to: en, ignore: {'local'});
       await cancelWizard(tester);
       await tearDownApp(tester);
     });
@@ -811,7 +814,7 @@ void main() {
         findVisibleTextContaining('sk-test-leak-0123456789'),
         findsNothing,
       );
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      await expectNoStaleLanguage(tester, from: en, to: ru, ignore: {'local'});
       await cancelWizard(tester);
       await tearDownApp(tester);
     });
@@ -856,7 +859,7 @@ void main() {
         'my-model',
       );
       expect(find.text('Продолжить'), findsOneWidget);
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      await expectNoStaleLanguage(tester, from: en, to: ru, ignore: {'local'});
       await cancelWizard(tester);
       await tearDownApp(tester);
     });
@@ -881,7 +884,7 @@ void main() {
       );
       expect(find.text('Провайдер'), findsWidgets);
       expect(store.applied, hasLength(1));
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      await expectNoStaleLanguage(tester, from: en, to: ru, ignore: {'local'});
 
       await selectLanguage(tester, binding, AppLanguagePreference.en);
       expect(
@@ -911,7 +914,7 @@ void main() {
         textsOf(tester, _key('provider-wizard-save-failed')),
         'Конфигурация не сохранена (StateError).',
       );
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      await expectNoStaleLanguage(tester, from: en, to: ru, ignore: {'local'});
       await cancelWizard(tester);
       await tearDownApp(tester);
     });

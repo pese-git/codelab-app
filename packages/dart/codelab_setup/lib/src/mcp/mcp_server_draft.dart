@@ -74,12 +74,123 @@ final class McpStoredSecret extends McpValueDraft {
 /// Поле формы, к которому относится проблема.
 enum McpDraftField { name, command, url, env, headers }
 
+/// Код проблемы черновика: закрытый набор, по которому клиент строит текст на
+/// своём языке (`add-desktop-localization`, D6 «Тексты моста настроек
+/// (итерация 5)»; по образцу `ProviderSetupErrorCode`).
+///
+/// Почему: app переводит тексты, а CLI печатает прежний английский `message`;
+/// код делает их независимыми и не раскрывает значения (SETUP-1).
+///
+/// Как использовать: `McpDraftProblem.code` и `argument`; аргумент (имя ключа)
+/// есть ровно у [keyHasSpaces], [keyDuplicate], [secretValueEmpty] и
+/// [secretNameCollision].
+enum McpDraftProblemCode {
+  /// Имя нарушает правило ядра `isValidMcpServerName`.
+  nameInvalid,
+
+  /// Переименование при правке не записывается.
+  renameNotAllowed,
+
+  /// Сервер с таким именем уже есть.
+  nameTaken,
+
+  /// Пустая команда stdio.
+  commandEmpty,
+
+  /// Адрес не http/https или без хоста.
+  urlInvalid,
+
+  /// В адресе есть имя пользователя и пароль.
+  urlHasUserinfo,
+
+  /// Пробелы по краям имени ключа (аргумент — ключ).
+  keyHasSpaces,
+
+  /// Два значения с одним ключом (аргумент — ключ); `validate()` его не
+  /// возвращает: совпавшие ключи клиент находит до построения черновика.
+  keyDuplicate,
+
+  /// Пустое имя ключа.
+  keyEmpty,
+
+  /// Пустое значение нового секрета (аргумент — ключ).
+  secretValueEmpty,
+
+  /// Два секрета получили одно имя в хранилище (аргумент — ключ).
+  secretNameCollision,
+}
+
 /// Проблема черновика до записи: [message] — готовый текст без значений.
+///
+/// Почему: `message` остаётся прежним английским текстом для CLI, а [code] и
+/// [argument] позволяют app построить текст на своём языке (D6). Код и текст
+/// строятся в одном месте — фабрике [of] — поэтому «текст ⇔ код» держится сам.
+///
+/// Как использовать: `validate()` создаёт проблемы через [of]; клиент для
+/// совпавших ключей до черновика тоже зовёт [of]. Конструктор остаётся для
+/// проблем чужого источника (`code == null`). Значения URL, секретов и
+/// заголовков в [argument] и [message] не попадают (SETUP-1).
 final class McpDraftProblem {
-  const McpDraftProblem(this.field, this.message);
+  const McpDraftProblem(this.field, this.message, {this.code, this.argument});
+
+  /// Строит проблему с кодом и прежним английским текстом. [argument] — имя
+  /// ключа у кодов о ключе; у остальных игнорируется.
+  factory McpDraftProblem.of(
+    McpDraftProblemCode code,
+    McpDraftField field, {
+    String? argument,
+  }) {
+    final key = argument ?? '';
+    final (text, keyed) = switch (code) {
+      McpDraftProblemCode.nameInvalid => (
+        'Use a name without spaces, [, ] or ".',
+        false,
+      ),
+      McpDraftProblemCode.renameNotAllowed => (
+        'Remove the server and add it again to rename it.',
+        false,
+      ),
+      McpDraftProblemCode.nameTaken => (
+        'A server with this name already exists.',
+        false,
+      ),
+      McpDraftProblemCode.commandEmpty => ('Enter the command.', false),
+      McpDraftProblemCode.urlInvalid => ('Enter an http or https URL.', false),
+      McpDraftProblemCode.urlHasUserinfo => (
+        'Remove the user name and password from the URL.',
+        false,
+      ),
+      McpDraftProblemCode.keyHasSpaces => (
+        'Remove spaces around the name $key.',
+        true,
+      ),
+      McpDraftProblemCode.keyDuplicate => ('Two values are named $key.', true),
+      McpDraftProblemCode.keyEmpty => ('Enter a name for every value.', false),
+      McpDraftProblemCode.secretValueEmpty => (
+        'Enter the secret value for $key.',
+        true,
+      ),
+      McpDraftProblemCode.secretNameCollision => (
+        'Two secret values get the same secret name; rename $key.',
+        true,
+      ),
+    };
+    return McpDraftProblem(
+      field,
+      text,
+      code: code,
+      argument: keyed ? argument : null,
+    );
+  }
 
   final McpDraftField field;
   final String message;
+
+  /// Код проблемы; `null` — проблема чужого источника.
+  final McpDraftProblemCode? code;
+
+  /// Имя ключа у кодов о ключе, иначе `null`.
+  final String? argument;
 
   @override
   String toString() => 'McpDraftProblem(${field.name}: $message)';
@@ -259,57 +370,55 @@ final class McpServerDraft {
     final out = <McpDraftProblem>[];
     if (!isValidMcpServerName(name)) {
       out.add(
-        const McpDraftProblem(
-          McpDraftField.name,
-          'Use a name without spaces, [, ] or ".',
-        ),
+        McpDraftProblem.of(McpDraftProblemCode.nameInvalid, McpDraftField.name),
       );
     } else if (originalName != null && name != originalName) {
       // Переименование не записывается: `UpsertMcpServer` заменил бы элемент
       // по новому имени, а старый остался бы, и секреты `codelab/mcp/<имя>/`
       // потеряли бы владельца. Решение пользователя (ревью 5a).
       out.add(
-        const McpDraftProblem(
+        McpDraftProblem.of(
+          McpDraftProblemCode.renameNotAllowed,
           McpDraftField.name,
-          'Remove the server and add it again to rename it.',
         ),
       );
     } else if (name != originalName && existingNames.contains(name)) {
       out.add(
-        const McpDraftProblem(
-          McpDraftField.name,
-          'A server with this name already exists.',
-        ),
+        McpDraftProblem.of(McpDraftProblemCode.nameTaken, McpDraftField.name),
       );
     }
     switch (kind) {
       case McpTransportKind.stdio:
         if (command.trim().isEmpty) {
           out.add(
-            const McpDraftProblem(McpDraftField.command, 'Enter the command.'),
+            McpDraftProblem.of(
+              McpDraftProblemCode.commandEmpty,
+              McpDraftField.command,
+            ),
           );
         }
         _tableProblems(env, McpDraftField.env, out);
       case McpTransportKind.http:
-        if (_urlProblem() case final problem?) {
-          out.add(McpDraftProblem(McpDraftField.url, problem));
+        if (_urlProblem() case final code?) {
+          out.add(McpDraftProblem.of(code, McpDraftField.url));
         }
         _tableProblems(headers, McpDraftField.headers, out);
     }
     return out;
   }
 
-  /// Текст проблемы адреса без самого адреса: в нём может быть пароль.
-  String? _urlProblem() {
+  /// Код проблемы адреса; сам адрес в проблему не попадает: в нём может быть
+  /// пароль.
+  McpDraftProblemCode? _urlProblem() {
     final uri = Uri.tryParse(url.trim());
     if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
-      return 'Enter an http or https URL.';
+      return McpDraftProblemCode.urlInvalid;
     }
     if (uri.host.isEmpty) {
-      return 'Enter an http or https URL.';
+      return McpDraftProblemCode.urlInvalid;
     }
     if (uri.userInfo.isNotEmpty) {
-      return 'Remove the user name and password from the URL.';
+      return McpDraftProblemCode.urlHasUserinfo;
     }
     return null;
   }
@@ -334,23 +443,42 @@ final class McpServerDraft {
     for (final MapEntry(:key, :value) in table.entries) {
       if (key.trim().isNotEmpty && key != key.trim()) {
         // Пробелы по краям попали бы в имя переменной или заголовка как есть.
-        out.add(McpDraftProblem(field, 'Remove spaces around the name $key.'));
+        out.add(
+          McpDraftProblem.of(
+            McpDraftProblemCode.keyHasSpaces,
+            field,
+            argument: key,
+          ),
+        );
         continue;
       }
       if (key.trim().isNotEmpty && !seen.add(key.trim())) {
-        out.add(McpDraftProblem(field, 'Two values are named ${key.trim()}.'));
+        out.add(
+          McpDraftProblem.of(
+            McpDraftProblemCode.keyDuplicate,
+            field,
+            argument: key.trim(),
+          ),
+        );
         continue;
       }
       if (key.trim().isEmpty) {
-        out.add(McpDraftProblem(field, 'Enter a name for every value.'));
+        out.add(McpDraftProblem.of(McpDraftProblemCode.keyEmpty, field));
       } else if (value is McpNewSecret && value.value.reveal().isEmpty) {
-        out.add(McpDraftProblem(field, 'Enter the secret value for $key.'));
+        out.add(
+          McpDraftProblem.of(
+            McpDraftProblemCode.secretValueEmpty,
+            field,
+            argument: key,
+          ),
+        );
       } else if (value is McpNewSecret &&
           !taken.add(SecretNames.forMcp(name, key))) {
         out.add(
-          McpDraftProblem(
+          McpDraftProblem.of(
+            McpDraftProblemCode.secretNameCollision,
             field,
-            'Two secret values get the same secret name; rename $key.',
+            argument: key,
           ),
         );
       }

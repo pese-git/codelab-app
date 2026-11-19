@@ -447,19 +447,18 @@ void main() {
       final cubit = FakeAgentsModesCubit(
         const AgentsModesReady(
           mode: 'standard',
-          modeLabel: 'standard',
-          modeSource: 'default',
           effort: 'medium',
-          effortSource: 'default',
           target: ConfigLayer.user,
           canTargetProject: true,
           saving: false,
         ),
       );
       addTearDown(cubit.close);
+      // Страница берёт тексты из ARB (`add-desktop-localization`, итерация 5),
+      // поэтому `FluentApp` — с делегатами локализации.
       await tester.pumpWidget(
-        FluentApp(
-          home: ScaffoldPage(
+        localizedFluentApp(
+          ScaffoldPage(
             content: SingleChildScrollView(
               child: BlocProvider<AgentsModesCubit>.value(
                 value: cubit,

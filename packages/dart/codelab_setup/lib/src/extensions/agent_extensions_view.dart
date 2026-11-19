@@ -81,6 +81,7 @@ final class SkillRootView {
     required this.scope,
     required this.label,
     required this.path,
+    this.extraEntry,
   });
 
   final ExtensionScope scope;
@@ -93,6 +94,12 @@ final class SkillRootView {
 
   /// Абсолютный путь корня на диске (для «Open»).
   final String path;
+
+  /// Элемент `extra_roots` как записан (или путь корня, если элемент не
+  /// записан) у известного корня `extra`; у `project`, `user` и неизвестного
+  /// корня — `null`. Почему: app строит «<элемент> (extra root)» на своём
+  /// языке, а [label] остаётся прежним текстом для CLI (D6 итерации 5).
+  final String? extraEntry;
 
   @override
   String toString() => 'SkillRootView($label)';
@@ -229,11 +236,18 @@ final class SkillEntryView {
     required this.overridesLabel,
     required this.warnings,
     required this.toggle,
+    this.overridesScope,
   });
 
   final String name;
   final String description;
   final String? argumentHint;
+
+  /// Область, которую называет [overridesLabel] («Overrides <область>
+  /// skill»); `null` — перекрытий нет или перекрыт навык той же области
+  /// («another skill»). Почему: app строит подпись на своём языке (D6
+  /// итерации 5).
+  final ExtensionScope? overridesScope;
 
   /// `/skill:<name>[ <hint>]`; `null` — у навыка нет команды (`Model only`).
   final String? invokeAs;

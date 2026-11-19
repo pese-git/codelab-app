@@ -37,6 +37,8 @@ final class SetupWebSmokeReport {
     required this.mcp,
     required this.extensions,
     required this.codes,
+    required this.draftCodes,
+    required this.skillFields,
   });
 
   final String access;
@@ -66,6 +68,15 @@ final class SetupWebSmokeReport {
   /// `dart:io` и без зависимости от локали (`add-desktop-localization`, D6,
   /// задача 4.1a).
   final List<String> codes;
+
+  /// Коды проблем черновика MCP (`McpDraftProblem.code`, `argument`, фабрика
+  /// `McpDraftProblem.of`): читаются без `dart:io` и локали
+  /// (`add-desktop-localization`, D6, задача 5.1a).
+  final List<String> draftCodes;
+
+  /// Поля вида навыков `SkillEntryView.overridesScope` и
+  /// `SkillRootView.extraEntry` на фейковых данных (задача 5.1a).
+  final List<String> skillFields;
 }
 
 /// Клиент, который отвечает списком моделей без сети.
@@ -333,6 +344,100 @@ List<String> _extensionsSmoke() {
   ];
 }
 
+/// Проблемы черновика с кодами и страничная проблема фабрикой моста.
+List<String> _draftCodesSmoke() {
+  final problems = [
+    ...McpServerDraft(
+      name: 'a b',
+      kind: McpTransportKind.http,
+      url: 'https://u:p@h/mcp',
+    ).validate(),
+    ...McpServerDraft(
+      name: 'docs',
+      kind: McpTransportKind.stdio,
+      command: 'srv',
+      env: {'TOKEN': McpValueDraft.secret(SecretValue(''))},
+    ).validate(),
+    McpDraftProblem.of(
+      McpDraftProblemCode.keyDuplicate,
+      McpDraftField.headers,
+      argument: 'Authorization',
+    ),
+  ];
+  return [
+    for (final p in problems) '${p.code?.name}:${p.argument}:${p.message}',
+  ];
+}
+
+/// Вид навыков: проект перекрыл пользователя, навык из дополнительной папки.
+List<String> _skillFieldsSmoke() {
+  const roots = [
+    SkillRootInfo(scope: ExtensionScope.project, path: '/web/.codelab/skills'),
+    SkillRootInfo(scope: ExtensionScope.user, path: '/home/skills'),
+    SkillRootInfo(
+      scope: ExtensionScope.extra,
+      path: '/home/.claude/skills',
+      extraRoot: '~/.claude/skills',
+    ),
+  ];
+  SkillFile skill(String name, int root) => SkillFile(
+    dir: '${roots[root].path}/$name',
+    scope: roots[root].scope,
+    rootIndex: root,
+    frontmatter: ConfigTree(
+      kind: ConfigLayerKind.user,
+      source: '${roots[root].path}/$name/SKILL.md',
+      values: {'name': name, 'description': 'Smoke skill'},
+    ),
+    body: 'Body',
+    bodyLine: 4,
+  );
+  final config = CoreConfig(
+    defaultModel: ModelRef(
+      provider: 'smoke',
+      id: 'm',
+      api: ProviderApi.openaiChat,
+      baseUrl: Uri.parse('https://smoke.invalid/v1'),
+      contextWindow: 8000,
+      maxOutputTokens: 1000,
+    ),
+  );
+  final snapshot = AgentConfigSnapshot.fromLayers(
+    cwd: '/web',
+    layers: {
+      ConfigLayer.user: ConfigSnapshot(
+        target: const ConfigTarget.user(),
+        path: '/home/config.yaml',
+        fingerprint: 'f',
+        values: const {},
+      ),
+    },
+    loaded: ConfigLoadResult(config: config),
+    secrets: const SecretBackendInfo(id: 'env', writable: false),
+  );
+  final view = agentExtensionsOf(
+    snapshot,
+    ProjectExtensions(
+      cwd: '/web',
+      trusted: true,
+      contextRoot: '/web',
+      codelabHome: '/home',
+      projectFiles: PhaseLoaded(ProjectFiles.empty),
+      skills: PhaseLoaded(
+        SkillFiles(
+          skills: [skill('review', 0), skill('review', 1), skill('delta', 2)],
+        ),
+      ),
+      skillRoots: roots,
+    ),
+    userHome: '/home',
+  );
+  return [
+    for (final e in view.skills.entries)
+      '${e.name}:${e.overridesScope?.name}:${e.root.extraEntry}',
+  ];
+}
+
 /// Черновик MCP-сервера с секретным заголовком и строка страницы по снимку.
 List<String> _mcpSmoke() {
   final draft = McpServerDraft(
@@ -428,6 +533,8 @@ Future<SetupWebSmokeReport> runSetupWebSmoke() async {
     mcp: _mcpSmoke(),
     extensions: _extensionsSmoke(),
     codes: await _wizardCodes(snapshot),
+    draftCodes: _draftCodesSmoke(),
+    skillFields: _skillFieldsSmoke(),
   );
 }
 

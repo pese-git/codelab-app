@@ -1,11 +1,10 @@
-import 'package:codelab_setup/codelab_setup.dart'
-    show
-        AgentExtensionsView,
-        SkillsListDisabledByProject,
-        SkillsListLayerUnreadable,
-        SkillsListNotEditable,
-        SkillsListRefusal,
-        SkillsListUntrustedProject;
+import 'package:codelab_setup/codelab_setup.dart' show AgentExtensionsView;
+
+import 'settings_notices.dart';
+import 'skills_messages.dart';
+
+export 'settings_notices.dart';
+export 'skills_messages.dart';
 
 /// Состояние страницы «Skills & extensions» (change `add-app-skills-page`,
 /// D6).
@@ -30,13 +29,14 @@ final class SkillsSettingsLoading extends SkillsSettingsState {
 
 /// Агент не на этой машине или чужой: локальные файлы не читались (SETUP-2).
 ///
-/// [notice] — основная строка InfoBar `skills-read-only`, [hint] — вторая
-/// (как проверить на другом хосте); `null` — подсказки нет.
+/// [reason] — чей агент; InfoBar `skills-read-only` и подсказку строит
+/// presentation по причине.
 final class SkillsSettingsReadOnly extends SkillsSettingsState {
-  const SkillsSettingsReadOnly({required this.notice, this.hint});
+  const SkillsSettingsReadOnly({required this.reason});
 
-  final String notice;
-  final String? hint;
+  /// Причина «только чтение»: чей агент (D5, «Уточнение итерации 5»); текст
+  /// InfoBar и подсказку строит presentation.
+  final ReadOnlyReason reason;
 
   @override
   String toString() => 'SkillsSettingsReadOnly';
@@ -55,14 +55,16 @@ final class SkillsSettingsNoFolder extends SkillsSettingsState {
 
 /// Конфиг агента не читается: файлы не читались и не пишутся.
 ///
-/// [problems] — проблемы загрузчика с путём ключа, по строке на проблему.
+/// [issues] — проблемы: фразы app и тексты загрузчика с путём ключа.
 final class SkillsSettingsUnreadable extends SkillsSettingsState {
-  const SkillsSettingsUnreadable({required this.problems});
+  const SkillsSettingsUnreadable({required this.issues});
 
-  final List<String> problems;
+  /// Проблемы закрытого типа: фраза app (переводится) или текст загрузчика как
+  /// есть (D5, D6).
+  final List<SettingsProblem> issues;
 
   @override
-  String toString() => 'SkillsSettingsUnreadable(${problems.length})';
+  String toString() => 'SkillsSettingsUnreadable(${issues.length})';
 }
 
 /// Страница прочитана.
@@ -123,39 +125,23 @@ final class SkillsSettingsReady extends SkillsSettingsState {
   String toString() => 'SkillsSettingsReady($view)';
 }
 
-/// Вид баннера страницы.
 /// Вид баннера: [openFailed] — отказ открыть каталог; [saved], [conflict] и
 /// [error] — исход записи `skills.*` (D9).
 enum SkillsBannerKind { openFailed, saved, conflict, error }
 
 /// Баннер итога действия (ключ `skills-banner`).
+///
+/// Хранит типизированное [message], а не текст: текст строит presentation
+/// (`skillsMessageText`) на текущем языке (D5, «Уточнение итерации 5»).
 final class SkillsBanner {
-  const SkillsBanner(this.kind, this.text);
+  const SkillsBanner(this.kind, {required this.message});
 
   final SkillsBannerKind kind;
-  final String text;
+  final SkillsMessage message;
 
   @override
   String toString() => 'SkillsBanner(${kind.name})';
 }
-
-/// Текст отказа моста для баннера и подсказки неактивного переключателя
-/// (change `add-app-skills-page`, D5, D9).
-///
-/// Почему в одном месте: Cubit показывает его баннером, когда отказ случился
-/// на нажатии, а страница — подсказкой, когда мост отказал ещё при построении
-/// вида; тексты не должны расходиться. [element] — элемент `extra_roots`
-/// (`.claude/skills`) для отказа «нужно доверие»; у навыков его нет.
-String skillsRefusalText(SkillsListRefusal refusal, {String? element}) =>
-    switch (refusal) {
-      SkillsListNotEditable(:final source) => 'Set in $source; edit that file.',
-      SkillsListDisabledByProject(:final source) =>
-        'Disabled by the project config ($source).',
-      SkillsListUntrustedProject() =>
-        'Trust this project to read ${element ?? 'this folder'}.',
-      SkillsListLayerUnreadable() =>
-        'The config file of this layer cannot be read. Fix it first.',
-    };
 
 /// Вид строки согласия на каталог навыков другого агента (Q3).
 ///

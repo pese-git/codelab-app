@@ -7,7 +7,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../app/app_scope.dart';
+import '../../../l10n/l10n.dart';
 import '../application/skills_settings_cubit.dart';
+import 'settings_problem_text.dart';
+import 'skills_texts.dart';
 
 /// Тело страницы «Skills & extensions» для таблицы `settingsPageBuilders`.
 ///
@@ -71,6 +74,7 @@ class SkillsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<SkillsSettingsCubit>();
+    final l10n = context.l10n;
     return BlocBuilder<SkillsSettingsCubit, SkillsSettingsState>(
       builder: (context, state) => KeyedSubtree(
         key: const ValueKey('settings-skills'),
@@ -83,87 +87,113 @@ class SkillsPage extends StatelessWidget {
                 child: Center(child: ProgressRing()),
               ),
             ],
-            SkillsSettingsReadOnly() => [
-              _header(),
-              _bar(
-                const ValueKey('skills-read-only'),
-                InfoBarSeverity.warning,
-                state.notice,
-                content: state.hint == null ? null : Text(state.hint!),
-              ),
+            SkillsSettingsReadOnly(:final reason) => [
+              _header(l10n),
+              switch (reason) {
+                RemoteAgentReadOnly(:final origin) => _bar(
+                  const ValueKey('skills-read-only'),
+                  InfoBarSeverity.warning,
+                  l10n.providersReadOnlyTitle(origin),
+                  content: Text(l10n.skillsReadOnlyHint),
+                ),
+                ForeignAgentReadOnly(:final agentName) => _bar(
+                  const ValueKey('skills-read-only'),
+                  InfoBarSeverity.warning,
+                  l10n.skillsReadOnlyManaged(agentName),
+                ),
+              },
             ],
             SkillsSettingsNoFolder() => [
               _header(
+                l10n,
                 cubit: cubit,
                 reload: true,
                 open: true,
                 openTooltip: state.codelabHome == null
                     ? null
-                    : 'Open the CodeLab home folder: ${state.codelabHome}',
+                    : l10n.skillsOpenCodelabTooltipHome(state.codelabHome!),
               ),
-              if (state.banner case final banner?) _banner(banner),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
+              if (state.banner case final banner?) _banner(l10n, banner),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 child: CodeLabText(
-                  'Open a project folder to see the context files, skills and '
-                  'prompt templates the agent uses there.',
-                  key: ValueKey('skills-no-folder'),
+                  l10n.skillsNoFolder,
+                  key: const ValueKey('skills-no-folder'),
                 ),
               ),
             ],
             SkillsSettingsUnreadable() => [
-              _header(cubit: cubit, reload: true),
+              _header(l10n, cubit: cubit, reload: true),
               _bar(
                 const ValueKey('skills-unreadable'),
                 InfoBarSeverity.error,
-                'Cannot read the agent config. Fix or remove the file; '
-                'CodeLab will not overwrite it.',
-                content: Text(state.problems.join('\n')),
+                l10n.providersUnreadable,
+                // Тексты загрузчика — как есть под переведённым заголовком (D6).
+                content: Text(settingsProblemsText(l10n, state.issues)),
               ),
             ],
-            SkillsSettingsReady() => _ready(cubit, state),
+            SkillsSettingsReady() => _ready(l10n, cubit, state),
           },
         ),
       ),
     );
   }
 
-  Widget _header({
+  Widget _header(
+    AppLocalizations l10n, {
     SkillsSettingsCubit? cubit,
     bool reload = false,
     bool open = false,
     String? openTooltip,
   }) {
+    final title = CodeLabText(
+      l10n.settingsPageSkillsAndExtensionsTitle,
+      role: CodeLabTextRole.title,
+    );
+    final actions = [
+      if (open && cubit != null)
+        Tooltip(
+          message: openTooltip ?? l10n.skillsOpenCodelabTooltipDefault,
+          child: CodeLabButton(
+            key: const ValueKey('skills-open-codelab'),
+            label: l10n.skillsOpenCodelabButton,
+            icon: FluentIcons.folder_open,
+            onPressed: () => unawaited(cubit.openCodelabFolder()),
+          ),
+        ),
+      if (reload && cubit != null)
+        CodeLabButton(
+          key: const ValueKey('skills-reload'),
+          label: l10n.skillsReload,
+          icon: FluentIcons.refresh,
+          onPressed: () => unawaited(cubit.reload()),
+        ),
+    ];
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          const Expanded(
-            child: CodeLabText(
-              'Skills & extensions',
-              role: CodeLabTextRole.title,
-            ),
-          ),
-          if (open && cubit != null) ...[
-            Tooltip(
-              message: openTooltip ?? 'Open the CodeLab home folder',
-              child: CodeLabButton(
-                key: const ValueKey('skills-open-codelab'),
-                label: 'Open .codelab folder',
-                icon: FluentIcons.folder_open,
-                onPressed: () => unawaited(cubit.openCodelabFolder()),
+      // На широкой колонке заголовок слева, кнопки справа; на узкой (русские
+      // подписи длиннее, колонка ~360 pt) кнопки переносятся под заголовок
+      // (D8, «Длина строк»).
+      child: LayoutBuilder(
+        builder: (context, constraints) => constraints.maxWidth >= 640
+            ? Row(
+                children: [
+                  Expanded(child: title),
+                  for (final (i, action) in actions.indexed) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    action,
+                  ],
+                ],
+              )
+            : Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(width: constraints.maxWidth, child: title),
+                  ...actions,
+                ],
               ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          if (reload && cubit != null)
-            CodeLabButton(
-              key: const ValueKey('skills-reload'),
-              label: 'Reload',
-              icon: FluentIcons.refresh,
-              onPressed: () => unawaited(cubit.reload()),
-            ),
-        ],
       ),
     );
   }
@@ -189,14 +219,23 @@ class SkillsPage extends StatelessWidget {
   /// чтобы управляющие и bidi-символы стали видимыми (`escapeForDisplay`
   /// пакета не экспортируется, D12). Успех записи — `success`, остальное —
   /// `warning`.
-  static Widget _banner(SkillsBanner banner) {
+  static Widget _banner(AppLocalizations l10n, SkillsBanner banner) {
     final (severity, title) = switch (banner.kind) {
-      SkillsBannerKind.saved => (InfoBarSeverity.success, 'Saved'),
-      SkillsBannerKind.conflict => (InfoBarSeverity.warning, 'Not saved'),
-      SkillsBannerKind.error => (InfoBarSeverity.warning, 'Not saved'),
+      SkillsBannerKind.saved => (
+        InfoBarSeverity.success,
+        l10n.skillsBannerSaved,
+      ),
+      SkillsBannerKind.conflict => (
+        InfoBarSeverity.warning,
+        l10n.skillsBannerNotSaved,
+      ),
+      SkillsBannerKind.error => (
+        InfoBarSeverity.warning,
+        l10n.skillsBannerNotSaved,
+      ),
       SkillsBannerKind.openFailed => (
         InfoBarSeverity.warning,
-        'Cannot open the folder',
+        l10n.skillsBannerCannotOpen,
       ),
     };
     return _bar(
@@ -204,79 +243,89 @@ class SkillsPage extends StatelessWidget {
       severity,
       title,
       content: CodeLabStatusTable(
-        columns: const ['MESSAGE'],
+        columns: [l10n.skillsColMessage],
         rows: [
           CodeLabStatusTableRow(
-            cells: [CodeLabStatusTableCell(banner.text, untrusted: true)],
+            cells: [
+              CodeLabStatusTableCell(
+                skillsMessageText(l10n, banner.message),
+                untrusted: true,
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  List<Widget> _ready(SkillsSettingsCubit cubit, SkillsSettingsReady state) {
+  List<Widget> _ready(
+    AppLocalizations l10n,
+    SkillsSettingsCubit cubit,
+    SkillsSettingsReady state,
+  ) {
     final view = state.view;
+    final dotCodelab = p.join(state.folder, '.codelab');
     return [
       _header(
+        l10n,
         cubit: cubit,
         reload: true,
         open: true,
-        openTooltip:
-            'Open ${p.join(state.folder, '.codelab')}'
-            '${state.codelabHome == null ? '' : ', or ${state.codelabHome} if it does not exist'}',
+        openTooltip: state.codelabHome == null
+            ? l10n.skillsOpenCodelabTooltip(dotCodelab)
+            : l10n.skillsOpenCodelabTooltipOr(dotCodelab, state.codelabHome!),
       ),
-      if (state.banner case final banner?) _banner(banner),
+      if (state.banner case final banner?) _banner(l10n, banner),
       if (!view.trusted)
         _bar(
           const ValueKey('skills-untrusted'),
           InfoBarSeverity.warning,
-          'This project is not in trusted_projects, so the agent does not '
-          'read its skills and prompt templates. Your own skills and '
-          'AGENTS.md files are shown.',
+          l10n.skillsUntrustedTitle,
           content: state.userConfigPath == null
               ? null
-              : Text(
-                  'Trust is set in trusted_projects of '
-                  '${state.userConfigPath}.',
-                ),
+              : Text(l10n.skillsUntrustedHint(state.userConfigPath!)),
         ),
-      ..._contextSection(cubit, view),
-      ..._templatesSection(cubit, view),
-      ..._skillsSection(cubit, state),
+      ..._contextSection(l10n, cubit, view),
+      ..._templatesSection(l10n, cubit, view),
+      ..._skillsSection(l10n, cubit, state),
     ];
   }
 
   // --- Context files --------------------------------------------------------
 
   List<Widget> _contextSection(
+    AppLocalizations l10n,
     SkillsSettingsCubit cubit,
     AgentExtensionsView view,
   ) {
     final context = view.context;
     return [
-      _sectionTitle('Context files'),
+      _sectionTitle(l10n.skillsSectionContext),
       ..._phaseBody(
+        l10n,
         context.outcome,
-        subject: 'Context files',
+        timedOut: l10n.skillsPhaseTimedOutContext,
+        failed: l10n.skillsPhaseFailedContext,
         child: () => context.files.isEmpty
-            ? const CodeLabText('No AGENTS.md files for this folder.')
+            ? CodeLabText(l10n.skillsContextEmpty)
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   CodeLabStatusTable(
-                    columns: const ['FILE', 'SIZE'],
+                    columns: [l10n.skillsColFile, l10n.skillsColSize],
                     columnFlex: const [4, 1],
                     rows: [
                       for (var i = 0; i < context.files.length; i++)
-                        _contextRow(cubit, i, context.files[i]),
+                        _contextRow(l10n, cubit, i, context.files[i]),
                     ],
                   ),
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: CodeLabText(
-                      '${context.files.length} '
-                      '${context.files.length == 1 ? 'file' : 'files'} · '
-                      '${_size(context.shownBytes)}',
+                      l10n.skillsContextTotal(
+                        context.files.length,
+                        skillSizeText(l10n, context.shownBytes),
+                      ),
                       role: CodeLabTextRole.caption,
                     ),
                   ),
@@ -284,6 +333,7 @@ class SkillsPage extends StatelessWidget {
               ),
       ),
       ..._diagnostics(
+        l10n,
         const ValueKey('skills-context-warnings'),
         context.warnings,
       ),
@@ -291,6 +341,7 @@ class SkillsPage extends StatelessWidget {
   }
 
   CodeLabStatusTableRow _contextRow(
+    AppLocalizations l10n,
     SkillsSettingsCubit cubit,
     int index,
     ContextFileView file,
@@ -307,28 +358,28 @@ class SkillsPage extends StatelessWidget {
           untrusted: true,
           tags: [
             if (file.isClaudeAlias)
-              const CodeLabStatusTableTag(
-                'used because this folder has no AGENTS.md',
-              ),
+              CodeLabStatusTableTag(l10n.skillsContextClaudeAlias),
             if (file.omitted)
-              const CodeLabStatusTableTag(
-                'not included (budget)',
+              CodeLabStatusTableTag(
+                l10n.skillsContextOmitted,
                 tone: CodeLabTone.warning,
               )
             else if (truncated)
               CodeLabStatusTableTag(
-                'truncated to ${_size(file.shownBytes)}',
+                l10n.skillsContextTruncated(
+                  skillSizeText(l10n, file.shownBytes),
+                ),
                 tone: CodeLabTone.warning,
               ),
           ],
         ),
-        CodeLabStatusTableCell(_size(file.bytes), muted: true),
+        CodeLabStatusTableCell(skillSizeText(l10n, file.bytes), muted: true),
       ],
       action: file.openDir == null
           ? null
           : CodeLabStatusTableAction(
               key: ValueKey('skills-open-context-$index'),
-              label: 'Open',
+              label: l10n.skillsOpen,
               onPressed: () => unawaited(cubit.openFolder(file.openDir!)),
             ),
     );
@@ -337,19 +388,22 @@ class SkillsPage extends StatelessWidget {
   // --- Prompt templates -----------------------------------------------------
 
   List<Widget> _templatesSection(
+    AppLocalizations l10n,
     SkillsSettingsCubit cubit,
     AgentExtensionsView view,
   ) {
     final templates = view.templates;
     return [
-      _sectionTitle('Prompt templates'),
+      _sectionTitle(l10n.skillsSectionTemplates),
       ..._phaseBody(
+        l10n,
         templates.outcome,
-        subject: 'Prompt templates',
+        timedOut: l10n.skillsPhaseTimedOutTemplates,
+        failed: l10n.skillsPhaseFailedTemplates,
         child: () => templates.entries.isEmpty
-            ? const CodeLabText('No prompt templates.')
+            ? CodeLabText(l10n.skillsTemplatesEmpty)
             : CodeLabStatusTable(
-                columns: const ['COMMAND', 'SOURCE'],
+                columns: [l10n.skillsColCommand, l10n.skillsColSource],
                 columnFlex: const [3, 2],
                 rows: [
                   for (final entry in templates.entries)
@@ -379,7 +433,7 @@ class SkillsPage extends StatelessWidget {
                           'skills-open-template-'
                           '${_withoutSlash(entry.command)}',
                         ),
-                        label: 'Open',
+                        label: l10n.skillsOpen,
                         onPressed: () =>
                             unawaited(cubit.openTemplateFolder(entry)),
                       ),
@@ -388,6 +442,7 @@ class SkillsPage extends StatelessWidget {
               ),
       ),
       ..._diagnostics(
+        l10n,
         const ValueKey('skills-templates-warnings'),
         templates.warnings,
       ),
@@ -397,55 +452,56 @@ class SkillsPage extends StatelessWidget {
   // --- Skills ---------------------------------------------------------------
 
   List<Widget> _skillsSection(
+    AppLocalizations l10n,
     SkillsSettingsCubit cubit,
     SkillsSettingsReady state,
   ) {
     final skills = state.view.skills;
     return [
-      _sectionTitle('Skills'),
+      _sectionTitle(l10n.skillsSectionSkills),
       ..._phaseBody(
+        l10n,
         skills.outcome,
-        subject: 'Skills',
+        timedOut: l10n.skillsPhaseTimedOutSkills,
+        failed: l10n.skillsPhaseFailedSkills,
         child: () => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (skills.entries.isEmpty)
-              const CodeLabText('No skills found.')
+              CodeLabText(l10n.skillsEmpty)
             else
               CodeLabStatusTable(
-                columns: const ['SKILL', 'INVOKE AS', 'SOURCE'],
+                columns: [
+                  l10n.skillsColSkill,
+                  l10n.skillsColInvokeAs,
+                  l10n.skillsColSource,
+                ],
                 columnFlex: const [4, 2, 2],
                 rows: [
                   for (final entry in skills.entries)
-                    _skillRow(cubit, entry, saving: state.saving),
+                    _skillRow(l10n, cubit, entry, saving: state.saving),
                 ],
               ),
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
               child: CodeLabText(
-                'Search order: .codelab/skills, then .agents/skills from this '
-                r'folder up to the repository root; then $CODELAB_HOME/skills, '
-                '~/.agents/skills; extra roots last. The nearest overrides the '
-                'farthest.',
-                key: ValueKey('skills-search-order'),
+                l10n.skillsSearchOrder,
+                key: const ValueKey('skills-search-order'),
                 role: CodeLabTextRole.caption,
               ),
             ),
-            const CodeLabText(
-              'The list is fixed when a session opens: new and changed skills '
-              'apply to new sessions.',
-              role: CodeLabTextRole.caption,
-            ),
+            CodeLabText(l10n.skillsListFixed, role: CodeLabTextRole.caption),
             if (skills.consents.isNotEmpty)
-              _consentTable(cubit, skills.consents, saving: state.saving),
+              _consentTable(l10n, cubit, skills.consents, saving: state.saving),
           ],
         ),
       ),
-      ..._skillWarnings(skills.warnings),
+      ..._skillWarnings(l10n, skills.warnings),
     ];
   }
 
   CodeLabStatusTableRow _skillRow(
+    AppLocalizations l10n,
     SkillsSettingsCubit cubit,
     SkillEntryView entry, {
     required bool saving,
@@ -461,31 +517,34 @@ class SkillsPage extends StatelessWidget {
           untrusted: true,
           secondary: entry.description.isEmpty ? null : entry.description,
           tags: [
-            if (entry.overridesLabel case final label?)
-              CodeLabStatusTableTag(label),
+            if (entry.overrides.isNotEmpty)
+              CodeLabStatusTableTag(_overridesText(l10n, entry)),
             if (enabled && entry.userInvocable && !entry.modelVisible)
-              const CodeLabStatusTableTag('Command only'),
+              CodeLabStatusTableTag(l10n.skillsTagCommandOnly),
             if (entry.warnings.isNotEmpty)
               CodeLabStatusTableTag(
-                '${entry.warnings.length} '
-                '${entry.warnings.length == 1 ? 'warning' : 'warnings'}',
+                l10n.skillsWarningCount(entry.warnings.length),
                 tone: CodeLabTone.warning,
                 tooltip: warningText,
               ),
           ],
         ),
         CodeLabStatusTableCell(
-          entry.invokeAs ?? 'Model only',
+          entry.invokeAs ?? l10n.skillsInvokeModelOnly,
           mono: entry.invokeAs != null,
           muted: entry.invokeAs == null,
           untrusted: true,
         ),
-        CodeLabStatusTableCell(entry.root.label, mono: true, untrusted: true),
+        CodeLabStatusTableCell(
+          _rootLabel(l10n, entry.root),
+          mono: true,
+          untrusted: true,
+        ),
       ],
       toggle: CodeLabStatusTableToggle(
         key: ValueKey('skills-toggle-${entry.name}'),
         value: enabled,
-        label: 'Enabled: ${entry.name}',
+        label: l10n.skillsToggleLabel(entry.name),
         // Активен, если мост не отказал и запись не идёт; отказ — подсказка с
         // причиной (D5, D9). Что писать, решает Cubit по свежему снимку.
         onChanged: entry.toggle.isAvailable && !saving
@@ -494,11 +553,11 @@ class SkillsPage extends StatelessWidget {
             : null,
         tooltip: entry.toggle.refusal == null
             ? null
-            : skillsRefusalText(entry.toggle.refusal!),
+            : skillsRefusalText(l10n, entry.toggle.refusal!),
       ),
       action: CodeLabStatusTableAction(
         key: ValueKey('skills-open-skill-${entry.name}'),
-        label: 'Open',
+        label: l10n.skillsOpen,
         onPressed: () => unawaited(cubit.openFolder(entry.directory)),
       ),
     );
@@ -513,48 +572,50 @@ class SkillsPage extends StatelessWidget {
   /// (`escapeForDisplay` пакета не экспортируется, D12). Ключ строки —
   /// `skills-consent-note-<kind>`, переключателя — `skills-consent-<kind>`.
   Widget _consentTable(
+    AppLocalizations l10n,
     SkillsSettingsCubit cubit,
     List<SkillConsentView> consents, {
     required bool saving,
   }) => Padding(
     padding: const EdgeInsets.only(top: 12),
     child: CodeLabStatusTable(
-      columns: const ['SKILLS OF OTHER AGENTS'],
+      columns: [l10n.skillsColOtherAgents],
       rows: [
         for (final consent in consents)
-          _consentRow(cubit, consent, saving: saving),
+          _consentRow(l10n, cubit, consent, saving: saving),
       ],
     ),
   );
 
   CodeLabStatusTableRow _consentRow(
+    AppLocalizations l10n,
     SkillsSettingsCubit cubit,
     SkillConsentView consent, {
     required bool saving,
   }) {
     final kind = consentKindOf(consent.entry);
     final count = consent.skillDirs;
-    final found = count == null
-        ? 'The number of skill folders is not counted.'
-        : '$count skill ${count == 1 ? 'folder' : 'folders'} found.';
-    final scope = kind == SkillsConsentKind.home
-        ? ''
-        : ' Consent applies in every trusted project.';
+    // Три отдельных предложения, а не склейка частей фразы (D5, правило 7).
+    final note = [
+      count == null
+          ? l10n.skillsConsentNotCounted
+          : l10n.skillsConsentFound(count),
+      if (kind != SkillsConsentKind.home) l10n.skillsConsentEveryProject,
+      l10n.skillsConsentAgentsFolder,
+    ].join(' ');
     return CodeLabStatusTableRow(
       key: ValueKey('skills-consent-note-${kind.key}'),
       cells: [
         CodeLabStatusTableCell(
-          'Read ${consent.entry}',
+          l10n.skillsConsentRead(consent.entry),
           mono: true,
-          secondary:
-              '$found$scope The .agents/skills folder of a trusted project is '
-              'read without consent.',
+          secondary: note,
         ),
       ],
       toggle: CodeLabStatusTableToggle(
         key: ValueKey('skills-consent-${kind.key}'),
         value: consent.granted,
-        label: 'Read ${consent.entry}',
+        label: l10n.skillsConsentRead(consent.entry),
         onChanged: consent.toggle.isAvailable && !saving
             ? (value) =>
                   unawaited(cubit.setRootConsent(consent.entry, granted: value))
@@ -562,6 +623,7 @@ class SkillsPage extends StatelessWidget {
         tooltip: consent.toggle.refusal == null
             ? null
             : skillsRefusalText(
+                l10n,
                 consent.toggle.refusal!,
                 element: consent.entry,
               ),
@@ -569,7 +631,10 @@ class SkillsPage extends StatelessWidget {
     );
   }
 
-  List<Widget> _skillWarnings(List<ExtensionDiagnostic> all) {
+  List<Widget> _skillWarnings(
+    AppLocalizations l10n,
+    List<ExtensionDiagnostic> all,
+  ) {
     final shown = all.where((d) => d.level != DiagnosticLevel.info).toList();
     if (shown.isEmpty) {
       return const [];
@@ -580,14 +645,18 @@ class SkillsPage extends StatelessWidget {
         child: _bar(
           const ValueKey('skills-warnings'),
           InfoBarSeverity.warning,
-          '${shown.length} ${shown.length == 1 ? 'warning' : 'warnings'}',
-          content: _diagnosticLines(shown),
+          l10n.skillsWarningCount(shown.length),
+          content: _diagnosticLines(l10n, shown),
         ),
       ),
     ];
   }
 
-  List<Widget> _diagnostics(Key key, List<ExtensionDiagnostic> all) {
+  List<Widget> _diagnostics(
+    AppLocalizations l10n,
+    Key key,
+    List<ExtensionDiagnostic> all,
+  ) {
     final shown = all.where((d) => d.level != DiagnosticLevel.info).toList();
     if (shown.isEmpty) {
       return const [];
@@ -598,8 +667,8 @@ class SkillsPage extends StatelessWidget {
         child: _bar(
           key,
           InfoBarSeverity.warning,
-          '${shown.length} ${shown.length == 1 ? 'warning' : 'warnings'}',
-          content: _diagnosticLines(shown),
+          l10n.skillsWarningCount(shown.length),
+          content: _diagnosticLines(l10n, shown),
         ),
       ),
     ];
@@ -608,22 +677,24 @@ class SkillsPage extends StatelessWidget {
   /// Тексты диагностик ядра фиксированы, пути — из файлов и недоверенны:
   /// строки рисует таблица с `untrusted`, чтобы управляющие и bidi-символы
   /// стали видимыми (D12; `escapeForDisplay` пакета не экспортируется).
-  static Widget _diagnosticLines(List<ExtensionDiagnostic> shown) =>
-      CodeLabStatusTable(
-        columns: const ['MESSAGE'],
-        rows: [
-          for (final d in shown)
-            CodeLabStatusTableRow(
-              cells: [
-                CodeLabStatusTableCell(
-                  d.message,
-                  untrusted: true,
-                  secondary: d.path,
-                ),
-              ],
+  static Widget _diagnosticLines(
+    AppLocalizations l10n,
+    List<ExtensionDiagnostic> shown,
+  ) => CodeLabStatusTable(
+    columns: [l10n.skillsColMessage],
+    rows: [
+      for (final d in shown)
+        CodeLabStatusTableRow(
+          cells: [
+            CodeLabStatusTableCell(
+              d.message,
+              untrusted: true,
+              secondary: d.path,
             ),
-        ],
-      );
+          ],
+        ),
+    ],
+  );
 
   // --- Общее ----------------------------------------------------------------
 
@@ -635,21 +706,40 @@ class SkillsPage extends StatelessWidget {
   /// Тело раздела по исходу фазы: прочитано — [child]; иначе фиксированная
   /// строка исхода (D4: `Skills were not read within 5 s.`).
   static List<Widget> _phaseBody(
+    AppLocalizations l10n,
     SectionOutcome outcome, {
-    required String subject,
+    required String timedOut,
+    required String Function(String errorType) failed,
     required Widget Function() child,
   }) => [
     switch (outcome) {
       SectionRead() => child(),
-      SectionTimedOut() => CodeLabText('$subject were not read within 5 s.'),
-      SectionFailed(:final errorType) => CodeLabText(
-        '$subject could not be read ($errorType).',
-      ),
-      SectionOff(:final source) => CodeLabText(
-        'Skills are switched off: skills.enabled is false in $source.',
-      ),
+      SectionTimedOut() => CodeLabText(timedOut),
+      SectionFailed(:final errorType) => CodeLabText(failed(errorType)),
+      SectionOff(:final source) => CodeLabText(l10n.skillsPhaseOff(source)),
     },
   ];
+
+  /// Подпись перекрытия по области из моста (`overridesScope`), а не по
+  /// английскому `overridesLabel` (D6, решение пользователя В2).
+  static String _overridesText(AppLocalizations l10n, SkillEntryView entry) =>
+      switch (entry.overridesScope) {
+        ExtensionScope.user => l10n.skillsOverridesUser,
+        ExtensionScope.project => l10n.skillsOverridesProject,
+        ExtensionScope.extra => l10n.skillsOverridesExtra,
+        _ => l10n.skillsOverridesOther,
+      };
+
+  /// Подпись корня навыков: дополнительная папка — по элементу
+  /// `extraEntry`, неизвестный корень — отдельной подписью; остальные подписи
+  /// моста (`.codelab/skills`, `~/.agents/skills`) — пути и не переводятся.
+  static String _rootLabel(AppLocalizations l10n, SkillRootView root) {
+    if (root.scope != ExtensionScope.extra) {
+      return root.label;
+    }
+    final entry = root.extraEntry;
+    return entry == null ? l10n.skillsUnknownRoot : l10n.skillsExtraRoot(entry);
+  }
 
   static String _withoutSlash(String command) =>
       command.startsWith('/') ? command.substring(1) : command;
@@ -657,15 +747,4 @@ class SkillsPage extends StatelessWidget {
   /// Путь от папки проекта, если файл внутри неё; иначе как есть.
   static String _relativeTo(String folder, String path) =>
       p.isWithin(folder, path) ? p.relative(path, from: folder) : path;
-
-  /// Размер файла: 1024-ичный, одна цифра после точки (`4.8 KB`).
-  static String _size(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    }
-    if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    }
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
 }

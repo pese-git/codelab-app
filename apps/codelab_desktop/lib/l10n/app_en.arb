@@ -2808,7 +2808,7 @@
   },
   "settingsGeneralOverriddenBy": "This project overrides it ({source}).",
   "@settingsGeneralOverriddenBy": {
-    "description": "Подпись строки, значение которой задаёт проектный файл. {source} — слой конфигурации (project, local), не переводить.",
+    "description": "Подпись строки, значение которой задаёт проектный файл. {source} — подпись источника на языке интерфейса (по ConfigSourceKind, D7).",
     "placeholders": {
       "source": {
         "type": "String"
@@ -2825,7 +2825,7 @@
   },
   "settingsGeneralRefusalExternal": "Set by {source}; it cannot be changed here.",
   "@settingsGeneralRefusalExternal": {
-    "description": "Причина, по которой строку нельзя править здесь: значение пришло из окружения или файла --config. {source} — env или config, не переводить.",
+    "description": "Причина, по которой строку нельзя править здесь: значение пришло из окружения или файла --config. {source} — подпись источника на языке интерфейса.",
     "placeholders": {
       "source": {
         "type": "String"
@@ -2883,7 +2883,7 @@
   },
   "settingsGeneralSavedOverridden": "Saved to all projects; {source} overrides it: the agent uses {effective}.",
   "@settingsGeneralSavedOverridden": {
-    "description": "Баннер записи, значение которой перекрыто другим слоем. {source} — слой (local, project, env, config), {effective} — действующее значение; оба не переводить.",
+    "description": "Баннер записи, значение которой перекрыто другим слоем. {source} — подпись источника на языке интерфейса, {effective} — действующее значение (не переводить).",
     "placeholders": {
       "source": {
         "type": "String"
@@ -3075,6 +3075,1317 @@
   "settingsGeneralAboutThirdPartyCaption": "Entries of the CodeLab third-party notices register, as kept in the repository.",
   "@settingsGeneralAboutThirdPartyCaption": {
     "description": "Подпись над записями в диалоге Third-party notices: сами записи показываются как есть, на языке реестра (русский), и не переводятся; подпись объясняет это при любом языке интерфейса. CodeLab — название продукта, не переводить."
+  },
+  "mcpAddServer": "Add server",
+  "@mcpAddServer": {
+    "description": "Кнопка страницы MCP servers: открыть карточку нового сервера."
+  },
+  "mcpServerCount": "{count, plural, one{{count} server} other{{count} servers}}",
+  "@mcpServerCount": {
+    "description": "Счётчик серверов над списком страницы MCP servers. Плейсхолдер count — число серверов.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mcpCompositionCaption": "Composition from the config · agent status below",
+  "@mcpCompositionCaption": {
+    "description": "Подпись индикатора над списком серверов: список собран из конфига, живое состояние — в панели ниже."
+  },
+  "mcpEmpty": "No MCP servers yet.",
+  "@mcpEmpty": {
+    "description": "Пустой список страницы MCP servers."
+  },
+  "mcpNewServer": "New server",
+  "@mcpNewServer": {
+    "description": "Заголовок карточки нового сервера."
+  },
+  "mcpRemoveTitle": "Remove {name}?",
+  "@mcpRemoveTitle": {
+    "description": "Заголовок подтверждения удаления сервера. Плейсхолдер name — имя сервера, не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpRemoveBody": "The server is removed from the config file.",
+  "@mcpRemoveBody": {
+    "description": "Текст подтверждения удаления сервера."
+  },
+  "mcpRemoveSecretsIntro": "These stored secrets will be deleted if nothing else uses them:",
+  "@mcpRemoveSecretsIntro": {
+    "description": "Подпись над списком секретов в подтверждении удаления сервера. Метка security: перевод не смягчает смысл. Метка security (D14): перевод не смягчает смысл."
+  },
+  "mcpReconnect": "Reconnect",
+  "@mcpReconnect": {
+    "description": "Кнопка строки сервера: переподключить сервер агента (команда /mcp reload <имя>). Переходный глагол; не путать с «Переподключиться» для соединения клиента с агентом (глоссарий)."
+  },
+  "mcpReloadAll": "Reload all",
+  "@mcpReloadAll": {
+    "description": "Кнопка панели состояния: переподключить все серверы агента (команда /mcp reload)."
+  },
+  "mcpRefresh": "Refresh",
+  "@mcpRefresh": {
+    "description": "Кнопка панели состояния для агента вне процесса: запросить /mcp list."
+  },
+  "mcpDisableHere": "Disable here",
+  "@mcpDisableHere": {
+    "description": "Кнопка строки сервера из проектного файла: записать enabled: false в локальный файл проекта."
+  },
+  "mcpEnableHere": "Enable here",
+  "@mcpEnableHere": {
+    "description": "Кнопка строки сервера, отключённого в локальном файле проекта: снять переопределение."
+  },
+  "mcpOn": "On",
+  "@mcpOn": {
+    "description": "Подпись включённого переключателя сервера. Без точки."
+  },
+  "mcpOff": "Off",
+  "@mcpOff": {
+    "description": "Подпись выключенного переключателя сервера. Без точки."
+  },
+  "mcpNoteProjectFile": "{name} comes from the project file: it can't be edited or removed here; \"Disable here\" writes enabled: false to .codelab/config.local.yaml.",
+  "@mcpNoteProjectFile": {
+    "description": "Пояснение вместо редактора для сервера из проектного файла. Плейсхолдер name — имя сервера; enabled: false и путь файла не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpNoteDisabledHere": "{name} is disabled in .codelab/config.local.yaml. \"Enable here\" removes this override.",
+  "@mcpNoteDisabledHere": {
+    "description": "Пояснение вместо редактора для сервера, отключённого локальным файлом проекта. Плейсхолдер name — имя сервера; путь файла не переводить.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpFieldName": "Name",
+  "@mcpFieldName": {
+    "description": "Подпись поля имени сервера и placeholder имени ключа в строках env и headers."
+  },
+  "mcpFieldType": "Type",
+  "@mcpFieldType": {
+    "description": "Подпись поля типа сервера (stdio или http)."
+  },
+  "mcpFieldCommand": "Command",
+  "@mcpFieldCommand": {
+    "description": "Подпись поля команды stdio-сервера."
+  },
+  "mcpFieldArguments": "Arguments",
+  "@mcpFieldArguments": {
+    "description": "Подпись поля аргументов stdio-сервера."
+  },
+  "mcpFieldUrl": "URL",
+  "@mcpFieldUrl": {
+    "description": "Подпись поля адреса http-сервера."
+  },
+  "mcpFieldHeaders": "Headers",
+  "@mcpFieldHeaders": {
+    "description": "Подпись таблицы headers http-сервера; имена заголовков не переводятся."
+  },
+  "mcpFieldEnvironment": "Environment",
+  "@mcpFieldEnvironment": {
+    "description": "Подпись таблицы env stdio-сервера; имена переменных не переводятся."
+  },
+  "mcpFieldSaveTo": "Save to",
+  "@mcpFieldSaveTo": {
+    "description": "Подпись цели записи нового сервера."
+  },
+  "mcpArgumentsNote": "One argument per line.",
+  "@mcpArgumentsNote": {
+    "description": "Подсказка под полем аргументов: аргументы разделяются строками, а не пробелами."
+  },
+  "mcpAddHeader": "+ Add header",
+  "@mcpAddHeader": {
+    "description": "Ссылка под таблицей headers: добавить строку."
+  },
+  "mcpAddVariable": "+ Add variable",
+  "@mcpAddVariable": {
+    "description": "Ссылка под таблицей env: добавить строку."
+  },
+  "mcpMoveNote": "To move a server to another file, remove it and add it again.",
+  "@mcpMoveNote": {
+    "description": "Подсказка у цели записи существующего сервера: цель изменить нельзя."
+  },
+  "mcpTargetUser": "User config",
+  "@mcpTargetUser": {
+    "description": "Вариант цели записи: пользовательский config.yaml."
+  },
+  "mcpTargetProject": "This project only",
+  "@mcpTargetProject": {
+    "description": "Вариант цели записи: локальный файл проекта."
+  },
+  "mcpValueSecretPlaceholder": "Secret value",
+  "@mcpValueSecretPlaceholder": {
+    "description": "Placeholder поля значения, помеченного как секрет."
+  },
+  "mcpValueStored": "stored",
+  "@mcpValueStored": {
+    "description": "Placeholder поля секрета, значение которого уже лежит в хранилище."
+  },
+  "mcpValuePlaceholder": "Value",
+  "@mcpValuePlaceholder": {
+    "description": "Placeholder поля значения."
+  },
+  "mcpHiddenHint": "Hidden — leave empty to keep",
+  "@mcpHiddenHint": {
+    "description": "Placeholder поля, значение которого список скрывает маской: пустое поле оставляет значение. Метка security (D14): перевод не смягчает смысл."
+  },
+  "mcpSecretStoredIn": "Secret — stored in {backend}",
+  "@mcpSecretStoredIn": {
+    "description": "Подпись флажка «Секрет», когда имя секрета ещё неизвестно. Плейсхолдер backend — id хранилища, не переводить. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpSecretStoredInAs": "Secret — stored in {backend} as {name}",
+  "@mcpSecretStoredInAs": {
+    "description": "Подпись флажка «Секрет» с именем секрета. Плейсхолдеры backend (id хранилища) и name (имя секрета) не переводить. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpReplaceTitle": "A secret with this name is already stored",
+  "@mcpReplaceTitle": {
+    "description": "Заголовок вопроса о замене секрета. Метка security (D14): перевод не смягчает смысл."
+  },
+  "mcpReplaceNewValue": "The new value replaces the secret for every server that refers to it.",
+  "@mcpReplaceNewValue": {
+    "description": "Последствие замены секрета. Метка security (D14): перевод не смягчает смысл."
+  },
+  "mcpReplaceRunning": "A running agent keeps the old value until the server reconnects.",
+  "@mcpReplaceRunning": {
+    "description": "Последствие замены секрета для работающего агента. Метка security (D14): перевод не смягчает смысл."
+  },
+  "mcpReplaceConfirm": "Replace it",
+  "@mcpReplaceConfirm": {
+    "description": "Кнопка вопроса о замене секрета: заменить значение. Метка security (D14): перевод не смягчает смысл."
+  },
+  "mcpReplaceKeep": "Keep it",
+  "@mcpReplaceKeep": {
+    "description": "Кнопка вопроса о замене секрета: оставить прежнее значение. Метка security (D14): перевод не смягчает смысл."
+  },
+  "mcpProblemNameInvalid": "Use a name without spaces, [, ] or \".",
+  "@mcpProblemNameInvalid": {
+    "description": "Проблема черновика MCP-сервера по коду McpDraftProblemCode.nameInvalid."
+  },
+  "mcpProblemRenameNotAllowed": "Remove the server and add it again to rename it.",
+  "@mcpProblemRenameNotAllowed": {
+    "description": "Проблема черновика MCP-сервера по коду McpDraftProblemCode.renameNotAllowed."
+  },
+  "mcpProblemNameTaken": "A server with this name already exists.",
+  "@mcpProblemNameTaken": {
+    "description": "Проблема черновика MCP-сервера по коду McpDraftProblemCode.nameTaken."
+  },
+  "mcpProblemCommandEmpty": "Enter the command.",
+  "@mcpProblemCommandEmpty": {
+    "description": "Проблема черновика MCP-сервера по коду McpDraftProblemCode.commandEmpty."
+  },
+  "mcpProblemUrlInvalid": "Enter an http or https URL.",
+  "@mcpProblemUrlInvalid": {
+    "description": "Проблема черновика MCP-сервера по коду McpDraftProblemCode.urlInvalid."
+  },
+  "mcpProblemUrlHasUserinfo": "Remove the user name and password from the URL.",
+  "@mcpProblemUrlHasUserinfo": {
+    "description": "Проблема черновика MCP-сервера по коду McpDraftProblemCode.urlHasUserinfo."
+  },
+  "mcpProblemKeyHasSpaces": "Remove spaces around the name {key}.",
+  "@mcpProblemKeyHasSpaces": {
+    "description": "Проблема черновика MCP-сервера по коду McpDraftProblemCode.keyHasSpaces. Плейсхолдер key — имя ключа, не переводить.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpProblemKeyDuplicate": "Two values are named {key}.",
+  "@mcpProblemKeyDuplicate": {
+    "description": "Проблема черновика MCP-сервера по коду McpDraftProblemCode.keyDuplicate. Плейсхолдер key — имя ключа, не переводить.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpProblemKeyEmpty": "Enter a name for every value.",
+  "@mcpProblemKeyEmpty": {
+    "description": "Проблема черновика MCP-сервера по коду McpDraftProblemCode.keyEmpty."
+  },
+  "mcpProblemSecretValueEmpty": "Enter the secret value for {key}.",
+  "@mcpProblemSecretValueEmpty": {
+    "description": "Проблема черновика MCP-сервера по коду McpDraftProblemCode.secretValueEmpty. Плейсхолдер key — имя ключа, не переводить.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpProblemSecretNameCollision": "Two secret values get the same secret name; rename {key}.",
+  "@mcpProblemSecretNameCollision": {
+    "description": "Проблема черновика MCP-сервера по коду McpDraftProblemCode.secretNameCollision. Плейсхолдер key — имя ключа, не переводить.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpBannerSaved": "Server {server} saved.",
+  "@mcpBannerSaved": {
+    "description": "Баннер после записи сервера. Плейсхолдер server — имя сервера, не переводить.",
+    "placeholders": {
+      "server": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpBannerSavedRestart": "Server {server} saved. It starts after Restart agent (Settings › Connection).",
+  "@mcpBannerSavedRestart": {
+    "description": "Баннер после записи сервера, который агент применит после перезапуска. Плейсхолдер server — имя сервера.",
+    "placeholders": {
+      "server": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpBannerEnabledRestart": "Server {server} enabled. It starts after Restart agent (Settings › Connection).",
+  "@mcpBannerEnabledRestart": {
+    "description": "Баннер после включения сервера, который агент применит после перезапуска. Плейсхолдер server — имя сервера.",
+    "placeholders": {
+      "server": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpBannerRemoved": "Server {server} removed.",
+  "@mcpBannerRemoved": {
+    "description": "Баннер после удаления сервера. Плейсхолдер server — имя сервера.",
+    "placeholders": {
+      "server": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpSecretKept": "{name} is kept: it was not created by this page.",
+  "@mcpSecretKept": {
+    "description": "Строка баннера об очистке секретов: секрет создан вручную и не удалён. Плейсхолдер name — имя секрета, не переводить. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpSecretStillUsed": "{name} is kept because other settings still use it.",
+  "@mcpSecretStillUsed": {
+    "description": "Строка баннера об очистке секретов: секрет ещё используется. Плейсхолдер name — имя секрета. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpSecretDeleteFailed": "{name} could not be deleted. Delete it with: codelab secret delete {name}",
+  "@mcpSecretDeleteFailed": {
+    "description": "Строка баннера: секрет не удалён, показана команда для ручного удаления. Плейсхолдер name — имя секрета; команда codelab secret delete не переводится. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpSecretNotStored": "The secret was not stored, so nothing was saved: {reason}",
+  "@mcpSecretNotStored": {
+    "description": "Баннер: хранилище отказало в записи секрета. Плейсхолдер reason — текст хранилища как есть, не переводить. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpSecretNotRestored": "The stored value of {name} was already replaced and could not be restored.",
+  "@mcpSecretNotRestored": {
+    "description": "Строка баннера: откат не смог вернуть прежнее значение секрета. Плейсхолдер name — имя секрета. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpRefusalChanged": "The MCP settings changed. Review the page and try again.",
+  "@mcpRefusalChanged": {
+    "description": "Баннер отказа моста: сервера нет, слой не читается или нет переопределения."
+  },
+  "mcpRefusalNotEditable": "This server is defined in a read-only file. Change it there.",
+  "@mcpRefusalNotEditable": {
+    "description": "Баннер отказа моста: сервер из файла, который клиент не пишет."
+  },
+  "mcpRefusalNotProject": "Only a server from the project file can be disabled here.",
+  "@mcpRefusalNotProject": {
+    "description": "Баннер отказа моста: «Отключить здесь» применимо к серверу слоя проекта."
+  },
+  "mcpRefusalNoProjectTarget": "The project folder is not known, so nothing can be written to .codelab/config.local.yaml.",
+  "@mcpRefusalNoProjectTarget": {
+    "description": "Баннер отказа моста: нет папки проекта. Путь файла не переводить."
+  },
+  "mcpFailSettingsChanged": "The MCP server settings changed. Review the page and try again.",
+  "@mcpFailSettingsChanged": {
+    "description": "Баннер: страница или подключение сменились, пока шёл ответ хранилища."
+  },
+  "mcpFailSecretStore": "The secret store could not be read, so nothing was saved.",
+  "@mcpFailSecretStore": {
+    "description": "Баннер: сбой чтения хранилища секретов перед записью. Метка security (D14): перевод не смягчает смысл."
+  },
+  "mcpFailChange": "The change was not saved because of an error.",
+  "@mcpFailChange": {
+    "description": "Баннер: непредвиденная ошибка при записи сервера."
+  },
+  "mcpFailConflict": "The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.",
+  "@mcpFailConflict": {
+    "description": "Баннер: конфликт записи."
+  },
+  "mcpFailRejected": "The config was not saved: {issues}",
+  "@mcpFailRejected": {
+    "description": "Баннер: ядро агента отклонило конфиг. Плейсхолдер issues — тексты проверки ядра как есть, не переводить.",
+    "placeholders": {
+      "issues": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpFailConfig": "The config was not saved because of an error.",
+  "@mcpFailConfig": {
+    "description": "Баннер: непредвиденная ошибка записи конфига."
+  },
+  "mcpRejectedAfterSave": "Saved, but the agent rejected the new config",
+  "@mcpRejectedAfterSave": {
+    "description": "Заголовок InfoBar mcp-rejected после собственной записи."
+  },
+  "mcpRejectedOnOpen": "The agent rejects the current config",
+  "@mcpRejectedOnOpen": {
+    "description": "Заголовок InfoBar mcp-rejected при открытии страницы."
+  },
+  "mcpConfigInvalid": "Config: invalid",
+  "@mcpConfigInvalid": {
+    "description": "Строка InfoBar mcp-rejected над списком проблем ядра."
+  },
+  "mcpKeepsRunning": "The agent keeps running on the previous config until this is fixed.",
+  "@mcpKeepsRunning": {
+    "description": "Подпись InfoBar mcp-rejected. Метка security (D14): перевод не смягчает смысл."
+  },
+  "mcpEditServer": "Edit {server}",
+  "@mcpEditServer": {
+    "description": "Кнопка InfoBar mcp-rejected: раскрыть редактор сервера. Плейсхолдер server — имя сервера.",
+    "placeholders": {
+      "server": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpStatusTitle": "Agent status",
+  "@mcpStatusTitle": {
+    "description": "Заголовок панели состояния агента."
+  },
+  "mcpColServer": "SERVER",
+  "@mcpColServer": {
+    "description": "Колонка таблицы состояния: имя сервера."
+  },
+  "mcpColState": "STATE",
+  "@mcpColState": {
+    "description": "Колонка таблицы состояния: состояние сервера."
+  },
+  "mcpColTools": "TOOLS",
+  "@mcpColTools": {
+    "description": "Колонка таблицы состояния: число инструментов."
+  },
+  "mcpColLastError": "LAST ERROR",
+  "@mcpColLastError": {
+    "description": "Колонка таблицы состояния: последняя ошибка сервера."
+  },
+  "mcpStateConnecting": "connecting",
+  "@mcpStateConnecting": {
+    "description": "Состояние сервера в таблице."
+  },
+  "mcpStateConnected": "connected",
+  "@mcpStateConnected": {
+    "description": "Состояние сервера в таблице."
+  },
+  "mcpStateDisabled": "disabled",
+  "@mcpStateDisabled": {
+    "description": "Состояние сервера в таблице."
+  },
+  "mcpStateFailed": "failed",
+  "@mcpStateFailed": {
+    "description": "Состояние сервера в таблице без времени повтора."
+  },
+  "mcpStateFailedRetry": "failed · retry in {seconds} s",
+  "@mcpStateFailedRetry": {
+    "description": "Состояние сервера в таблице с временем до повтора. Плейсхолдер seconds — секунды, число.",
+    "placeholders": {
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpStatusUnavailable": "Open a session to see live status",
+  "@mcpStatusUnavailable": {
+    "description": "Подсказка панели состояния, когда сессии нет."
+  },
+  "mcpStatusLive": "Live from the embedded agent · {time}",
+  "@mcpStatusLive": {
+    "description": "Индикатор панели состояния. Плейсхолдер time — время HH:mm без зависимости от языка.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpStatusFooter": "From the embedded agent. For a stdio or remote agent this panel shows the reply of /mcp list as text.",
+  "@mcpStatusFooter": {
+    "description": "Подвал панели состояния. Команда /mcp list не переводится."
+  },
+  "mcpListFailed": "/mcp list did not complete. Try Refresh again.",
+  "@mcpListFailed": {
+    "description": "Строка над прежним ответом /mcp, когда запрос не завершился. Команда /mcp list не переводится."
+  },
+  "configSourceDefault": "default",
+  "@configSourceDefault": {
+    "description": "Подпись источника значения конфигурации: значение задано умолчанием. Идентификаторы слоёв не переводятся в конфиге, а подпись — да (D7)."
+  },
+  "configSourceUser": "user",
+  "@configSourceUser": {
+    "description": "Подпись источника: пользовательский конфиг."
+  },
+  "configSourceProject": "project",
+  "@configSourceProject": {
+    "description": "Подпись источника: проектный файл (слой 3)."
+  },
+  "configSourceLocal": "local",
+  "@configSourceLocal": {
+    "description": "Подпись источника: локальный файл проекта (config.local.yaml)."
+  },
+  "configSourceFile": "file",
+  "@configSourceFile": {
+    "description": "Подпись источника «Agents & modes»: файл --config."
+  },
+  "configSourceConfig": "config",
+  "@configSourceConfig": {
+    "description": "Подпись источника «General»: файл --config (CODELAB_CONFIG)."
+  },
+  "configSourceEnv": "env",
+  "@configSourceEnv": {
+    "description": "Подпись источника: переменные окружения CODELAB_*."
+  },
+  "mcpSourceThisProject": "this project",
+  "@mcpSourceThisProject": {
+    "description": "Подпись источника строки MCP-сервера: локальный файл проекта."
+  },
+  "mcpSourceDefinedIn": "defined in {file}",
+  "@mcpSourceDefinedIn": {
+    "description": "Подпись источника строки MCP-сервера из слоя 3, файла --config или окружения. Плейсхолдер file — путь, не переводить.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsSaveToTitle": "Save to",
+  "@agentsSaveToTitle": {
+    "description": "Подпись цели записи страницы Agents & modes."
+  },
+  "agentsSaveToDescription": "One target for the mode and the reasoning effort.",
+  "@agentsSaveToDescription": {
+    "description": "Пояснение цели записи страницы Agents & modes."
+  },
+  "agentsTargetAll": "All projects",
+  "@agentsTargetAll": {
+    "description": "Цель записи: пользовательский config.yaml."
+  },
+  "agentsTargetProject": "This project only",
+  "@agentsTargetProject": {
+    "description": "Цель записи: локальный файл проекта."
+  },
+  "agentsModeSection": "Default permission mode",
+  "@agentsModeSection": {
+    "description": "Заголовок блока режима разрешений новой сессии."
+  },
+  "agentsModeCaption": "New sessions start in it after Restart agent; change it for one session from the composer.",
+  "@agentsModeCaption": {
+    "description": "Подпись блока режима."
+  },
+  "agentsModeEffective": "Effective: {mode}",
+  "@agentsModeEffective": {
+    "description": "Итоговый режим. Плейсхолдер mode — id режима с пометкой, не переводить id.",
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsModeSource": "Source: {source}",
+  "@agentsModeSource": {
+    "description": "Источник режима. Плейсхолдер source — подпись источника на языке интерфейса.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsModeBlocked": "{mode} (edits and commands blocked by plan)",
+  "@agentsModeBlocked": {
+    "description": "Режим ask с запретом правок и команд от plan. Плейсхолдер mode — id режима; plan — id режима, не переводить. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsAutopilotHint": "Only as a launch flag of the agent (codelab-agent serve --permission-mode autopilot); never saved in config.",
+  "@agentsAutopilotHint": {
+    "description": "Подсказка у недоступного режима autopilot. Команда и флаг не переводятся. Метка security (D14): перевод не смягчает смысл."
+  },
+  "agentsModeNarrowed": "This project is not trusted, so its config can only make the mode stricter. New sessions here use {mode}.",
+  "@agentsModeNarrowed": {
+    "description": "InfoBar: режим сужен недоверенным проектом. Плейсхолдер mode — режим с пометкой. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsEffortTitle": "Reasoning effort · {source}",
+  "@agentsEffortTitle": {
+    "description": "Заголовок строки уровня рассуждения. Плейсхолдер source — подпись источника.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsEffortSection": "Default reasoning effort",
+  "@agentsEffortSection": {
+    "description": "Заголовок блока уровня рассуждения."
+  },
+  "agentsEffortDescription": "Sent as a session option only if the model supports reasoning; change it for one session from the composer.",
+  "@agentsEffortDescription": {
+    "description": "Пояснение уровня рассуждения."
+  },
+  "agentsBypassTitle": "Use bypass for new sessions?",
+  "@agentsBypassTitle": {
+    "description": "Заголовок подтверждения режима bypass. bypass — id режима. Метка security (D14): перевод не смягчает смысл."
+  },
+  "agentsBypassBody": "Only critical commands, changes to the agent's configuration and network tools still ask. Commands run without asking and can reach the network too. Use bypass only in a disposable checkout.",
+  "@agentsBypassBody": {
+    "description": "Текст подтверждения режима bypass. Метка security (D14): перевод не смягчает смысл."
+  },
+  "agentsBypassConfirm": "Use bypass",
+  "@agentsBypassConfirm": {
+    "description": "Кнопка подтверждения режима bypass. Метка security (D14): перевод не смягчает смысл."
+  },
+  "agentsBannerSaved": "{when, select, now{Saved. New sessions use {value}.} afterRestart{Saved. New sessions use {value} after Restart agent.} whenAgentStarts{Saved. New sessions use {value} when the agent starts.} other{Saved. New sessions use {value}.}}",
+  "@agentsBannerSaved": {
+    "description": "Баннер записи режима или уровня: значение действует. select по when (now, afterRestart, whenAgentStarts), в каждой ветке целое предложение. Плейсхолдер value — значение с пометкой, id не переводить.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      },
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsBannerOverridden": "{when, select, now{Saved to {target}; {source} overrides it: new sessions use {value}.} afterRestart{Saved to {target}; {source} overrides it: new sessions use {value} after Restart agent.} whenAgentStarts{Saved to {target}; {source} overrides it: new sessions use {value} when the agent starts.} other{Saved to {target}; {source} overrides it: new sessions use {value}.}}",
+  "@agentsBannerOverridden": {
+    "description": "Баннер записи: значение перекрыто другим слоем. Плейсхолдеры: target — цель записи, source — подпись источника, value — значение, when — когда применится.",
+    "placeholders": {
+      "target": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      },
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsBannerNarrowed": "{when, select, now{Saved to {target}; the untrusted project overrides it: new sessions use {value}.} afterRestart{Saved to {target}; the untrusted project overrides it: new sessions use {value} after Restart agent.} whenAgentStarts{Saved to {target}; the untrusted project overrides it: new sessions use {value} when the agent starts.} other{Saved to {target}; the untrusted project overrides it: new sessions use {value}.}}",
+  "@agentsBannerNarrowed": {
+    "description": "Баннер записи: режим сужен недоверенным проектом. Плейсхолдеры: target, value, when. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "target": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      },
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsBannerSavedOnly": "Saved to {target}.",
+  "@agentsBannerSavedOnly": {
+    "description": "Баннер записи, когда перечитывание не удалось. Плейсхолдер target — цель записи.",
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsBannerBypassStale": "Settings changed while the dialog was open; bypass was not saved.",
+  "@agentsBannerBypassStale": {
+    "description": "Баннер: подтверждение bypass устарело, запись не выполнена. Метка security (D14): перевод не смягчает смысл."
+  },
+  "agentsBannerConflict": "The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.",
+  "@agentsBannerConflict": {
+    "description": "Баннер: конфликт записи."
+  },
+  "agentsBannerNotSaved": "The config was not saved.",
+  "@agentsBannerNotSaved": {
+    "description": "Баннер: запись отклонена или не удалась."
+  },
+  "agentsBannerTargetUnavailable": "Cannot save: the target config file is not available.",
+  "@agentsBannerTargetUnavailable": {
+    "description": "Баннер: слой цели не прочитан, запись не начиналась."
+  },
+  "agentsReadOnlyHint": "Change its modes and agents on that host: codelab config set, .codelab/agents.",
+  "@agentsReadOnlyHint": {
+    "description": "Вторая часть InfoBar «только чтение» удалённого агента. Команды и путь не переводить. Метка security (D14): перевод не смягчает смысл."
+  },
+  "agentsReadOnlyManaged": "Agent settings are managed by {agent}.",
+  "@agentsReadOnlyManaged": {
+    "description": "InfoBar: сторонний агент. Плейсхолдер agent — имя агента.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsDefinitionsSection": "Agent definitions",
+  "@agentsDefinitionsSection": {
+    "description": "Заголовок блока таблицы определений агентов."
+  },
+  "agentsDefinitionsCaption": "Definitions are read when a session is created; choose one for a single session in the composer agent menu.",
+  "@agentsDefinitionsCaption": {
+    "description": "Подпись блока определений."
+  },
+  "agentsOpenFolder": "Open folder",
+  "@agentsOpenFolder": {
+    "description": "Кнопка и меню открытия папки определений."
+  },
+  "agentsOpenUserFolder": "User definitions ({folder})",
+  "@agentsOpenUserFolder": {
+    "description": "Пункт меню: папка определений пользователя. Плейсхолдер folder — путь, не переводить.",
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsOpenProjectFolder": "This project (.codelab/agents)",
+  "@agentsOpenProjectFolder": {
+    "description": "Пункт меню: папка определений проекта. Путь не переводить."
+  },
+  "agentsOpenProjectMissing": "Create .codelab/agents in the project to add definitions.",
+  "@agentsOpenProjectMissing": {
+    "description": "Подсказка недоступного пункта меню: папки проекта нет."
+  },
+  "agentsReload": "Reload",
+  "@agentsReload": {
+    "description": "Кнопка блока определений: перечитать определения."
+  },
+  "agentsColName": "Name",
+  "@agentsColName": {
+    "description": "Колонка таблицы определений."
+  },
+  "agentsColDescription": "Description",
+  "@agentsColDescription": {
+    "description": "Колонка таблицы определений."
+  },
+  "agentsColSource": "Source",
+  "@agentsColSource": {
+    "description": "Колонка таблицы определений."
+  },
+  "agentsColAvailableIn": "Available in",
+  "@agentsColAvailableIn": {
+    "description": "Колонка таблицы определений: где доступно определение (сессия, субагент)."
+  },
+  "agentsColTools": "Tools",
+  "@agentsColTools": {
+    "description": "Колонка таблицы определений."
+  },
+  "agentsColModel": "Model",
+  "@agentsColModel": {
+    "description": "Колонка таблицы определений."
+  },
+  "agentsColStatus": "Status",
+  "@agentsColStatus": {
+    "description": "Колонка таблицы определений."
+  },
+  "agentsColPath": "PATH",
+  "@agentsColPath": {
+    "description": "Колонка таблицы пути файла определения в InfoBar."
+  },
+  "agentsColMessage": "MESSAGE",
+  "@agentsColMessage": {
+    "description": "Колонка таблицы текста ошибки определения в InfoBar."
+  },
+  "agentsBuiltIn": "built-in",
+  "@agentsBuiltIn": {
+    "description": "Источник строки: встроенный тип агента."
+  },
+  "agentsAllTools": "all",
+  "@agentsAllTools": {
+    "description": "Инструменты загруженного определения без списка: доступны все."
+  },
+  "agentsSessionModel": "session model",
+  "@agentsSessionModel": {
+    "description": "Модель загруженного определения без модели: используется модель сессии."
+  },
+  "agentsStatusAvailable": "Available",
+  "@agentsStatusAvailable": {
+    "description": "Статус строки определения."
+  },
+  "agentsStatusOverridden": "Overridden",
+  "@agentsStatusOverridden": {
+    "description": "Статус строки: встроенный тип заменён определением."
+  },
+  "agentsStatusOverriddenBy": "Overridden by {path}",
+  "@agentsStatusOverriddenBy": {
+    "description": "Статус строки: встроенный тип заменён файлом. Плейсхолдер path — путь, не переводить.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsStatusModelNotConfigured": "Model not configured",
+  "@agentsStatusModelNotConfigured": {
+    "description": "Статус строки: модель определения не настроена."
+  },
+  "agentsStatusError": "Error",
+  "@agentsStatusError": {
+    "description": "Статус строки: ошибка определения без номера строки."
+  },
+  "agentsStatusErrorLine": "Error · line {line}",
+  "@agentsStatusErrorLine": {
+    "description": "Статус строки: ошибка определения. Плейсхолдер line — номер строки.",
+    "placeholders": {
+      "line": {
+        "type": "int"
+      }
+    }
+  },
+  "agentsStatusDuplicate": "Not loaded: duplicate name",
+  "@agentsStatusDuplicate": {
+    "description": "Статус строки: имя определения повторяется."
+  },
+  "agentsStatusShadowed": "Shadowed by project",
+  "@agentsStatusShadowed": {
+    "description": "Статус строки: пользовательское определение заменено проектным."
+  },
+  "agentsStatusSubagentsOff": "Subagents off",
+  "@agentsStatusSubagentsOff": {
+    "description": "Статус строки: subagents.enabled: false."
+  },
+  "agentsScopeSession": "session",
+  "@agentsScopeSession": {
+    "description": "Область определения: сессия."
+  },
+  "agentsScopeSubagent": "subagent",
+  "@agentsScopeSubagent": {
+    "description": "Область определения: субагент."
+  },
+  "agentsScopeBoth": "both",
+  "@agentsScopeBoth": {
+    "description": "Область определения: и сессия, и субагент."
+  },
+  "agentsErrorTitle": "Cannot load the definition",
+  "@agentsErrorTitle": {
+    "description": "Заголовок InfoBar файла с ошибкой без номера строки. Текст ошибки ядра под ним не переводится."
+  },
+  "agentsErrorTitleLine": "Cannot load the definition · line {line}",
+  "@agentsErrorTitleLine": {
+    "description": "Заголовок InfoBar файла с ошибкой. Плейсхолдер line — номер строки.",
+    "placeholders": {
+      "line": {
+        "type": "int"
+      }
+    }
+  },
+  "agentsUntrustedTitle": "Project definitions are not read",
+  "@agentsUntrustedTitle": {
+    "description": "Заголовок InfoBar: проект не доверенный. Метка security (D14): перевод не смягчает смысл."
+  },
+  "agentsUntrustedBody": "Definitions in {project}/.codelab/agents are not read: the project is not trusted.",
+  "@agentsUntrustedBody": {
+    "description": "Текст InfoBar: проект не доверенный. Плейсхолдер project — путь проекта. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "project": {
+        "type": "String"
+      }
+    }
+  },
+  "agentsUntrustedBodyNoPath": "Project definitions in .codelab/agents are not read: the project is not trusted.",
+  "@agentsUntrustedBodyNoPath": {
+    "description": "Текст InfoBar, когда путь проекта неизвестен. Метка security (D14): перевод не смягчает смысл."
+  },
+  "agentsTimedOut": "Agent definitions were not read within 5 s.",
+  "@agentsTimedOut": {
+    "description": "InfoBar: чтение определений не уложилось в 5 секунд."
+  },
+  "agentsFailed": "Agent definitions could not be read.",
+  "@agentsFailed": {
+    "description": "InfoBar: непредвиденный сбой чтения определений."
+  },
+  "agentsOpenFailedTitle": "Cannot open the folder",
+  "@agentsOpenFailedTitle": {
+    "description": "Заголовок InfoBar: платформа отказала в открытии папки."
+  },
+  "agentsOpenFailedBody": "Could not open {label}.",
+  "@agentsOpenFailedBody": {
+    "description": "Текст InfoBar. Плейсхолдер label — путь или название папки.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsOpenCodelabTooltipHome": "Open the CodeLab home folder: {home}",
+  "@skillsOpenCodelabTooltipHome": {
+    "description": "Подсказка кнопки «Open .codelab folder» без папки проекта. Плейсхолдер home — путь.",
+    "placeholders": {
+      "home": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsOpenCodelabTooltipDefault": "Open the CodeLab home folder",
+  "@skillsOpenCodelabTooltipDefault": {
+    "description": "Подсказка кнопки «Open .codelab folder», когда домашняя папка неизвестна."
+  },
+  "skillsOpenCodelabTooltip": "Open {folder}",
+  "@skillsOpenCodelabTooltip": {
+    "description": "Подсказка кнопки «Open .codelab folder»: открывается папка .codelab проекта. Плейсхолдер folder — путь.",
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsOpenCodelabTooltipOr": "Open {folder}, or {home} if it does not exist",
+  "@skillsOpenCodelabTooltipOr": {
+    "description": "Подсказка кнопки «Open .codelab folder» с запасной папкой. Плейсхолдеры folder и home — пути.",
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      },
+      "home": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsOpenCodelabButton": "Open .codelab folder",
+  "@skillsOpenCodelabButton": {
+    "description": "Кнопка заголовка страницы Skills & extensions. .codelab не переводить."
+  },
+  "skillsReload": "Reload",
+  "@skillsReload": {
+    "description": "Кнопка заголовка страницы Skills & extensions: перечитать вид."
+  },
+  "skillsNoFolder": "Open a project folder to see the context files, skills and prompt templates the agent uses there.",
+  "@skillsNoFolder": {
+    "description": "Текст страницы без папки проекта."
+  },
+  "skillsReadOnlyHint": "Its skills, context files and prompt templates are read on that host: codelab-agent config check.",
+  "@skillsReadOnlyHint": {
+    "description": "Вторая часть InfoBar «только чтение» удалённого агента. Команда не переводится. Метка security (D14): перевод не смягчает смысл."
+  },
+  "skillsReadOnlyManaged": "Skills are managed by {agent}.",
+  "@skillsReadOnlyManaged": {
+    "description": "InfoBar: сторонний агент. Плейсхолдер agent — имя агента.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsBannerSaved": "Saved",
+  "@skillsBannerSaved": {
+    "description": "Заголовок баннера успешной записи списка навыков."
+  },
+  "skillsBannerNotSaved": "Not saved",
+  "@skillsBannerNotSaved": {
+    "description": "Заголовок баннера отказа или сбоя записи списка навыков."
+  },
+  "skillsBannerCannotOpen": "Cannot open the folder",
+  "@skillsBannerCannotOpen": {
+    "description": "Заголовок баннера: платформа отказала в открытии папки."
+  },
+  "skillsMsgOpenFailed": "Could not open {path}.",
+  "@skillsMsgOpenFailed": {
+    "description": "Текст баннера. Плейсхолдер path — путь, не переводить.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsMsgSaved": "Saved. New sessions use it; open sessions keep their skills.",
+  "@skillsMsgSaved": {
+    "description": "Текст баннера успешной записи списка навыков."
+  },
+  "skillsMsgConflict": "The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.",
+  "@skillsMsgConflict": {
+    "description": "Текст баннера: конфликт записи."
+  },
+  "skillsMsgRejected": "The config was not saved: {issues}",
+  "@skillsMsgRejected": {
+    "description": "Текст баннера: ядро отклонило конфиг. Плейсхолдер issues — тексты ядра как есть.",
+    "placeholders": {
+      "issues": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsMsgNotSaved": "The config was not saved.",
+  "@skillsMsgNotSaved": {
+    "description": "Текст баннера: непредвиденный сбой записи."
+  },
+  "skillsRefusalNotEditable": "Set in {source}; edit that file.",
+  "@skillsRefusalNotEditable": {
+    "description": "Отказ записи списка навыков: список задан слоем, который клиент не пишет. Плейсхолдер source — путь файла или имя переменной. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsRefusalDisabledByProject": "Disabled by the project config ({source}).",
+  "@skillsRefusalDisabledByProject": {
+    "description": "Отказ записи: имя отключено проектом, включить нельзя. Плейсхолдер source — путь файла. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsRefusalUntrusted": "Trust this project to read {element}.",
+  "@skillsRefusalUntrusted": {
+    "description": "Отказ согласия на относительную папку в недоверенном проекте. Плейсхолдер element — элемент skills.extra_roots. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "element": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsRefusalUntrustedFolder": "Trust this project to read this folder.",
+  "@skillsRefusalUntrustedFolder": {
+    "description": "Отказ согласия, когда элемент папки неизвестен. Метка security (D14): перевод не смягчает смысл."
+  },
+  "skillsRefusalLayerUnreadable": "The config file of this layer cannot be read. Fix it first.",
+  "@skillsRefusalLayerUnreadable": {
+    "description": "Отказ записи: слой не читается. Метка security (D14): перевод не смягчает смысл."
+  },
+  "skillsUntrustedTitle": "This project is not in trusted_projects, so the agent does not read its skills and prompt templates. Your own skills and AGENTS.md files are shown.",
+  "@skillsUntrustedTitle": {
+    "description": "InfoBar skills-untrusted: проект не доверенный. trusted_projects и AGENTS.md не переводить. Метка security (D14): перевод не смягчает смысл."
+  },
+  "skillsUntrustedHint": "Trust is set in trusted_projects of {path}.",
+  "@skillsUntrustedHint": {
+    "description": "Подсказка InfoBar skills-untrusted. Плейсхолдер path — путь файла. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsSectionContext": "Context files",
+  "@skillsSectionContext": {
+    "description": "Заголовок раздела цепочки AGENTS.md."
+  },
+  "skillsSectionTemplates": "Prompt templates",
+  "@skillsSectionTemplates": {
+    "description": "Заголовок раздела шаблонов промптов."
+  },
+  "skillsSectionSkills": "Skills",
+  "@skillsSectionSkills": {
+    "description": "Заголовок раздела навыков."
+  },
+  "skillsContextEmpty": "No AGENTS.md files for this folder.",
+  "@skillsContextEmpty": {
+    "description": "Пустой раздел файлов контекста."
+  },
+  "skillsColFile": "FILE",
+  "@skillsColFile": {
+    "description": "Колонка таблицы файлов контекста."
+  },
+  "skillsColSize": "SIZE",
+  "@skillsColSize": {
+    "description": "Колонка таблицы файлов контекста."
+  },
+  "skillsColCommand": "COMMAND",
+  "@skillsColCommand": {
+    "description": "Колонка таблицы шаблонов."
+  },
+  "skillsColSource": "SOURCE",
+  "@skillsColSource": {
+    "description": "Колонка таблиц шаблонов и навыков."
+  },
+  "skillsColSkill": "SKILL",
+  "@skillsColSkill": {
+    "description": "Колонка таблицы навыков."
+  },
+  "skillsColInvokeAs": "INVOKE AS",
+  "@skillsColInvokeAs": {
+    "description": "Колонка таблицы навыков: как вызвать навык (/skill:<имя>)."
+  },
+  "skillsColOtherAgents": "SKILLS OF OTHER AGENTS",
+  "@skillsColOtherAgents": {
+    "description": "Заголовок таблицы согласия на папки навыков других агентов."
+  },
+  "skillsColMessage": "MESSAGE",
+  "@skillsColMessage": {
+    "description": "Колонка таблицы сообщений баннера и предупреждений."
+  },
+  "skillsContextTotal": "{count, plural, one{{count} file} other{{count} files}} · {size}",
+  "@skillsContextTotal": {
+    "description": "Итог цепочки файлов контекста. Плейсхолдеры: count — число файлов, size — суммарный размер с единицей.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsContextClaudeAlias": "used because this folder has no AGENTS.md",
+  "@skillsContextClaudeAlias": {
+    "description": "Тег файла CLAUDE.md, взятого вместо AGENTS.md."
+  },
+  "skillsContextOmitted": "not included (budget)",
+  "@skillsContextOmitted": {
+    "description": "Тег файла, не попавшего в контекст из-за бюджета."
+  },
+  "skillsContextTruncated": "truncated to {size}",
+  "@skillsContextTruncated": {
+    "description": "Тег усечённого файла. Плейсхолдер size — размер с единицей.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsOpen": "Open",
+  "@skillsOpen": {
+    "description": "Кнопка строки: открыть папку."
+  },
+  "skillsTemplatesEmpty": "No prompt templates.",
+  "@skillsTemplatesEmpty": {
+    "description": "Пустой раздел шаблонов."
+  },
+  "skillsEmpty": "No skills found.",
+  "@skillsEmpty": {
+    "description": "Пустой раздел навыков."
+  },
+  "skillsSearchOrder": "Search order: .codelab/skills, then .agents/skills from this folder up to the repository root; then $CODELAB_HOME/skills, ~/.agents/skills; extra roots last. The nearest overrides the farthest.",
+  "@skillsSearchOrder": {
+    "description": "Подпись порядка поиска навыков. Пути и переменные не переводить."
+  },
+  "skillsListFixed": "The list is fixed when a session opens: new and changed skills apply to new sessions.",
+  "@skillsListFixed": {
+    "description": "Подпись под таблицей навыков."
+  },
+  "skillsTagCommandOnly": "Command only",
+  "@skillsTagCommandOnly": {
+    "description": "Тег навыка, который вызывается только командой."
+  },
+  "skillsInvokeModelOnly": "Model only",
+  "@skillsInvokeModelOnly": {
+    "description": "Значение колонки «Вызов как» у навыка, который вызывает только модель."
+  },
+  "skillsToggleLabel": "Enabled: {name}",
+  "@skillsToggleLabel": {
+    "description": "Семантическая подпись переключателя навыка. Плейсхолдер name — имя навыка.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsOverridesUser": "Overrides user skill",
+  "@skillsOverridesUser": {
+    "description": "Тег навыка, перекрывшего навык пользователя."
+  },
+  "skillsOverridesProject": "Overrides project skill",
+  "@skillsOverridesProject": {
+    "description": "Тег навыка, перекрывшего навык проекта."
+  },
+  "skillsOverridesExtra": "Overrides extra skill",
+  "@skillsOverridesExtra": {
+    "description": "Тег навыка, перекрывшего навык из дополнительной папки skills.extra_roots."
+  },
+  "skillsOverridesOther": "Overrides another skill",
+  "@skillsOverridesOther": {
+    "description": "Тег навыка, перекрывшего навык неизвестной области."
+  },
+  "skillsExtraRoot": "{entry} (extra root)",
+  "@skillsExtraRoot": {
+    "description": "Подпись источника навыка из skills.extra_roots. Плейсхолдер entry — элемент списка, не переводить.",
+    "placeholders": {
+      "entry": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsUnknownRoot": "(unknown root)",
+  "@skillsUnknownRoot": {
+    "description": "Подпись источника навыка, чью папку не удалось определить."
+  },
+  "skillsWarningCount": "{count, plural, one{{count} warning} other{{count} warnings}}",
+  "@skillsWarningCount": {
+    "description": "Тег и заголовок InfoBar предупреждений ядра. Плейсхолдер count — число.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "skillsConsentRead": "Read {entry}",
+  "@skillsConsentRead": {
+    "description": "Подпись согласия на папку навыков другого агента. Плейсхолдер entry — элемент skills.extra_roots, не переводить. Метка security (D14): перевод не смягчает смысл.",
+    "placeholders": {
+      "entry": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsConsentFound": "{count, plural, one{{count} skill folder found.} other{{count} skill folders found.}}",
+  "@skillsConsentFound": {
+    "description": "Подпись согласия: число найденных папок навыков.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "skillsConsentNotCounted": "The number of skill folders is not counted.",
+  "@skillsConsentNotCounted": {
+    "description": "Подпись согласия, когда число папок неизвестно."
+  },
+  "skillsConsentEveryProject": "Consent applies in every trusted project.",
+  "@skillsConsentEveryProject": {
+    "description": "Подпись согласия на относительную папку. Метка security (D14): перевод не смягчает смысл."
+  },
+  "skillsConsentAgentsFolder": "The .agents/skills folder of a trusted project is read without consent.",
+  "@skillsConsentAgentsFolder": {
+    "description": "Подпись согласия. Путь не переводить."
+  },
+  "skillsPhaseTimedOutContext": "Context files were not read within 5 s.",
+  "@skillsPhaseTimedOutContext": {
+    "description": "Исход фазы: чтение файлов контекста не уложилось в 5 секунд."
+  },
+  "skillsPhaseTimedOutTemplates": "Prompt templates were not read within 5 s.",
+  "@skillsPhaseTimedOutTemplates": {
+    "description": "Исход фазы: чтение шаблонов не уложилось в 5 секунд."
+  },
+  "skillsPhaseTimedOutSkills": "Skills were not read within 5 s.",
+  "@skillsPhaseTimedOutSkills": {
+    "description": "Исход фазы: чтение навыков не уложилось в 5 секунд."
+  },
+  "skillsPhaseFailedContext": "Context files could not be read ({errorType}).",
+  "@skillsPhaseFailedContext": {
+    "description": "Исход фазы: сбой чтения файлов контекста. Плейсхолдер errorType — имя типа ошибки, не переводить.",
+    "placeholders": {
+      "errorType": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsPhaseFailedTemplates": "Prompt templates could not be read ({errorType}).",
+  "@skillsPhaseFailedTemplates": {
+    "description": "Исход фазы: сбой чтения шаблонов. Плейсхолдер errorType не переводить.",
+    "placeholders": {
+      "errorType": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsPhaseFailedSkills": "Skills could not be read ({errorType}).",
+  "@skillsPhaseFailedSkills": {
+    "description": "Исход фазы: сбой чтения навыков. Плейсхолдер errorType не переводить.",
+    "placeholders": {
+      "errorType": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsPhaseOff": "Skills are switched off: skills.enabled is false in {source}.",
+  "@skillsPhaseOff": {
+    "description": "Исход фазы навыков: выключены конфигурацией. skills.enabled не переводить; source — путь файла.",
+    "placeholders": {
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsSizeBytes": "{size} B",
+  "@skillsSizeBytes": {
+    "description": "Размер файла в байтах. Число с точкой по правилу D8.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsSizeKilobytes": "{size} KB",
+  "@skillsSizeKilobytes": {
+    "description": "Размер файла в килобайтах. Число с точкой по правилу D8.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsSizeMegabytes": "{size} MB",
+  "@skillsSizeMegabytes": {
+    "description": "Размер файла в мегабайтах. Число с точкой по правилу D8.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsProblemCannotReadExtensions": "Cannot read the skills and extensions of this folder.",
+  "@settingsProblemCannotReadExtensions": {
+    "description": "Проблема списка нечитаемого вида страницы Skills & extensions."
+  },
+  "agentsErrorFallbackModel": "The model of this definition is not configured.",
+  "@agentsErrorFallbackModel": {
+    "description": "Текст InfoBar ошибки определения, когда ядро не дало текста: модель не настроена."
+  },
+  "agentsErrorFallbackDuplicate": "Not loaded: another definition has the same name.",
+  "@agentsErrorFallbackDuplicate": {
+    "description": "Текст InfoBar ошибки определения, когда ядро не дало текста: имя повторяется."
+  },
+  "agentsErrorFallbackOther": "The definition cannot be loaded.",
+  "@agentsErrorFallbackOther": {
+    "description": "Текст InfoBar ошибки определения, когда ядро не дало текста и причина неизвестна."
   },
   "settingsKeyboardTitle": "Keyboard shortcuts",
   "@settingsKeyboardTitle": {

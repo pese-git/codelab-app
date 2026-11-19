@@ -1,3 +1,5 @@
+import 'package:codelab_setup/codelab_setup.dart' show ConfigSourceKind;
+
 import 'agent_defaults_rows.dart';
 
 export 'agent_defaults_rows.dart' show AgentDefaultsGroup, AgentDefaultsRow;
@@ -81,7 +83,7 @@ final class AgentDefaultsBanner {
     this.kind, {
     this.key,
     this.restart = AgentDefaultsRestart.none,
-    this.overriddenBy,
+    this.overriddenByKind,
     this.effective,
     this.problems = const [],
   });
@@ -93,8 +95,9 @@ final class AgentDefaultsBanner {
 
   final AgentDefaultsRestart restart;
 
-  /// Слой, перекрывший запись: `project`, `local`, `env`, `config`.
-  final String? overriddenBy;
+  /// Вид слоя, перекрывшего запись: подпись строит страница по
+  /// `ConfigSourceKind` (D7, В1).
+  final ConfigSourceKind? overriddenByKind;
 
   /// Действующее значение нового снимка (`SettingFieldView.displayValue`).
   final String? effective;
