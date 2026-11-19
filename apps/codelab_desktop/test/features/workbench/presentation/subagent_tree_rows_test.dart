@@ -445,6 +445,7 @@ void main() {
     const resolved = ApprovalStateView.resolved(
       label: 'Allow',
       outcome: ApprovalOutcomeView.allowed,
+      agentLabel: 'Allow',
       subagent: grandchild,
     );
 

@@ -329,6 +329,14 @@
   "@workbenchToolKindFetch": {
     "description": "Метка вызова инструмента вида fetch."
   },
+  "workbenchApprovalCancelled": "Cancelled",
+  "@workbenchApprovalCancelled": {
+    "description": "Метка решённого одобрения, отменённого без выбора варианта агента (ход отменён, пока запрос ждал решения)."
+  },
+  "workbenchApprovalResolved": "Resolved",
+  "@workbenchApprovalResolved": {
+    "description": "Метка решённого одобрения, когда вариант агента не выбран и запрос не отменён; обычно название варианта приходит от агента и не переводится."
+  },
   "workbenchToolKindThink": "Think",
   "@workbenchToolKindThink": {
     "description": "Метка вызова инструмента вида think."
@@ -759,6 +767,18 @@
     "placeholders": {
       "count": {
         "type": "int"
+      }
+    }
+  },
+  "usageTurnLabel": "{index} · “{title}”",
+  "@usageTurnLabel": {
+    "description": "Подпись хода в списке «По ходам»: номер хода и заголовок его промпта в кавычках языка. Плейсхолдеры: index — номер хода, title — текст промпта пользователя; не переводить.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "title": {
+        "type": "String"
       }
     }
   },

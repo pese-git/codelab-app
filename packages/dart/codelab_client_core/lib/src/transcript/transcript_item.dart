@@ -285,6 +285,19 @@ sealed class ApprovalStateView with _$ApprovalStateView {
     required String label,
     required ApprovalOutcomeView outcome,
 
+    /// Подпись от агента: название выбранного варианта или id варианта, если
+    /// его нет среди options; `null` — [label] запасная подпись ядра
+    /// (`Cancelled` при отмене, `Resolved`, когда вариант не выбран).
+    ///
+    /// Почему: хост не отличал английские запасные строки ядра от названия
+    /// варианта агента и не мог перевести первые (D6 change
+    /// `add-desktop-localization`: ядро даёт тип, текст строит хост).
+    ///
+    /// Как использовать: хост показывает значение как есть, а при `null`
+    /// строит подпись на языке интерфейса по [outcome]; [label] остаётся для
+    /// CLI.
+    String? agentLabel,
+
     /// Спрашивавший потомок: по нему хост подписывает строку исхода под
     /// строкой корня (`review: Allow`, D43 п. 2); `null` — запрос корня.
     SubagentRequester? subagent,

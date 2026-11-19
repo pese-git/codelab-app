@@ -503,9 +503,15 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
   ResolvedApprovalView(outcome: ApprovalOutcomeView.cancelled)
       when callStatus == ToolCallStatusView.cancelled =>
     null,
-  ResolvedApprovalView(:final label, :final outcome) =>
+  // Название варианта пришло от агента — не переводится (D4); без него ядро
+  // отдаёт лишь запасной английский `label`, а текст берём из каталога.
+  ResolvedApprovalView(:final agentLabel, :final outcome) =>
     CodeLabTranscriptApproval.resolved(
-      label: label,
+      label:
+          agentLabel ??
+          (outcome == ApprovalOutcomeView.cancelled
+              ? l10n.workbenchApprovalCancelled
+              : l10n.workbenchApprovalResolved),
       outcome: switch (outcome) {
         ApprovalOutcomeView.allowed => CodeLabApprovalOutcome.allowed,
         ApprovalOutcomeView.rejected => CodeLabApprovalOutcome.rejected,

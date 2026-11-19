@@ -399,9 +399,9 @@ void main() {
       expect([for (final t in data.turns) t.index], [2, 1]);
     });
 
-    test('подпись N · “title”, без title — N', () {
-      expect(data.turns.first.label, '2 · “Fix the build”');
-      expect(data.turns.last.label, '1');
+    test('заголовок хода — типизированный title, без title — null', () {
+      expect(data.turns.first.title, 'Fix the build');
+      expect(data.turns.last.title, isNull);
     });
 
     test('столбцы: Input с кэшем, Output, Cost kit; running у идущего', () {

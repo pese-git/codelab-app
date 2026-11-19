@@ -250,6 +250,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get workbenchToolKindFetch => 'Загрузка';
 
   @override
+  String get workbenchApprovalCancelled => 'Отменено';
+
+  @override
+  String get workbenchApprovalResolved => 'Решено';
+
+  @override
   String get workbenchToolKindThink => 'Обдумывание';
 
   @override
@@ -554,6 +560,11 @@ class AppLocalizationsRu extends AppLocalizations {
       one: '$count вызов инструмента',
     );
     return '$_temp0';
+  }
+
+  @override
+  String usageTurnLabel(int index, String title) {
+    return '$index · «$title»';
   }
 
   @override
