@@ -1,6 +1,5 @@
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/services.dart';
 
 import '../../../app/navigation/settings_page.dart';
 import '../../../l10n/app_localizations_en.dart';
@@ -143,9 +142,8 @@ class _SettingsShellState extends State<SettingsShell> {
       node: _scopeNode,
       child: FocusTraversalGroup(
         child: CallbackShortcuts(
-          bindings: {
-            const SingleActivator(LogicalKeyboardKey.escape): widget.onBack,
-          },
+          // Esc экрана настроек — запись каталога кита (D3).
+          bindings: CodeLabShortcut.leaveSettings.bind(widget.onBack),
           child: Focus(
             focusNode: _focusNode,
             child: CodeLabSettingsNavigation(

@@ -24,7 +24,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 Видимых изменений нет, кроме порядка модификаторов подсказки на Windows и Linux (D4; решение пользователя Q4, 2026-11-19).
 
-- [ ] 1.1 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_shortcuts_test.dart` (D2, D4; spec app-settings «Страница «Keyboard»: обозначения клавиш»). Платформа задаётся через `debugDefaultTargetPlatformOverride`, сброс в `tearDown`. Проверяет:
+- [x] 1.1 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_shortcuts_test.dart` (D2, D4; spec app-settings «Страница «Keyboard»: обозначения клавиш»). Платформа задаётся через `debugDefaultTargetPlatformOverride`, сброс в `tearDown`. Проверяет:
   - записи `CodeLabShortcut.values` по порядку и группам совпадают с таблицей D1, `id` — kebab-case из спецификации;
   - у комбинации с основным модификатором два активатора, `control` и `meta`, с теми же `alt` и `shift`; у остальных — один (у `file-tree-open` ещё numpad Enter);
   - `capsFor`: macOS — `⇧ ⌘ E`, `⌥ ⌘ ⏎`, `⌘ ⌫`, `Esc`, `↑`; Windows и Linux — `Ctrl Shift E`, `Ctrl Alt Enter`, `Ctrl Backspace`;
@@ -32,7 +32,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - `spokenFor`: `Option+Cmd+Enter`, `Ctrl+Alt+Enter`, `Shift+Cmd+E`, `Up`;
   - `searchNotations` содержит все три нотации независимо от платформы;
   - `accepts` принимает `KeyDownEvent` своей клавиши с нужными модификаторами и отклоняет чужие.
-- [ ] 1.2 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_shortcut_bindings_test.dart` — сторож 2 для записей кита (D3; spec «Сочетания app и страница «Keyboard» не расходятся», сценарий «Каждая строка проверена нажатием»). `switch` без `default` по `CodeLabShortcut.values` возвращает сценарий. Записи app (`leave-settings`, Esc диалогов) возвращают «проверяется в app», задача 1.5. Сценарии:
+- [x] 1.2 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_shortcut_bindings_test.dart` — сторож 2 для записей кита (D3; spec «Сочетания app и страница «Keyboard» не расходятся», сценарий «Каждая строка проверена нажатием»). `switch` без `default` по `CodeLabShortcut.values` возвращает сценарий. Записи app (`leave-settings`, Esc диалогов) возвращают «проверяется в app», задача 1.5. Сценарии:
   - оболочка `CodeLabWorkbenchShortcuts`: палитра, новая сессия, настройки, сайдбар, Files, Esc;
   - композер: отправка; при открытой inline-палитре ↑/↓, Enter, Esc; при `canCancel` Esc отменяет ход;
   - `CodeLabApprovalOptionGroup` и `CodeLabApprovalPrompt`: четыре варианта по `kind` с подписями не на английском;
@@ -40,22 +40,22 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - выдвижная панель `CodeLabWorkbenchLayout`: Esc.
 
   Каждый активатор с основным модификатором нажимается в варианте `control` и в варианте `meta`.
-- [ ] 1.3 `[desktop]` Красный: `packages/flutter/codelab_ui/test/shortcut_catalog_guard_test.dart` — сторож 1 (D3; сценарий «Привязка вне списка»). Читает `lib/src/**.dart` и падает с именем файла и строкой на `SingleActivator(`, `CharacterActivator(`, `LogicalKeySet(` или сравнении с `LogicalKeyboardKey.` вне `atomics/codelab_shortcuts.dart`. До 1.4 красный на пяти файлах кита.
-- [ ] 1.4 `[desktop]` Реализация 1.1–1.3 (D2–D4):
+- [x] 1.3 `[desktop]` Красный: `packages/flutter/codelab_ui/test/shortcut_catalog_guard_test.dart` — сторож 1 (D3; сценарий «Привязка вне списка»). Читает `lib/src/**.dart` и падает с именем файла и строкой на `SingleActivator(`, `CharacterActivator(`, `LogicalKeySet(` или сравнении с `LogicalKeyboardKey.` вне `atomics/codelab_shortcuts.dart`. До 1.4 красный на пяти файлах кита.
+- [x] 1.4 `[desktop]` Реализация 1.1–1.3 (D2–D4):
   - `atomics/codelab_shortcuts.dart`: `CodeLabShortcutGroup`, `CodeLabKeyCombo`, `CodeLabShortcut`; экспорт через `atomics.dart`;
   - привязки из каталога в `codelab_workbench_shortcuts.dart`, `codelab_prompt_composer.dart`, `codelab_approval_option_group.dart` (`CodeLabApprovalShortcuts.bindings` и `labelFor` через каталог, без своей проверки платформы), `codelab_file_tree.dart` (`accepts` вместо сравнения `logicalKey`), `codelab_workbench_layout.dart`;
   - удалить `onApprove`, `onReject`, `onInspectorPrevious`, `onInspectorNext` из `CodeLabWorkbenchShortcuts` и обновить `codelab_organisms_test.dart` (решение пользователя Q2);
   - doc-комментарии по `AGENTS.md` §15.
 
   1.1–1.3 зелёные. Прежние тесты кита (`codelab_molecules_test.dart`, `codelab_organisms_test.dart`, `codelab_file_tree_test.dart`) зелёные без изменения сценариев; меняются только ожидания `Alt+Ctrl+⏎` → `Ctrl+Alt+⏎` (решение пользователя Q4).
-- [ ] 1.5 `[desktop]` Красный, app:
+- [x] 1.5 `[desktop]` Красный, app:
   - `apps/codelab_desktop/test/app/shortcut_catalog_guard_test.dart` — сторож 1 для `lib/**.dart`, кроме сгенерированного `lib/l10n/app_localizations*.dart`; красный на `settings_shell.dart`, `add_profile_dialog.dart`, `provider_wizard_dialog.dart`, `agents_modes_page.dart`;
   - `apps/codelab_desktop/test/features/settings/presentation/keyboard_bindings_test.dart` — сторож 2 для записей app:
     - `leave-settings` во время хода возвращает на рабочее место без `session/cancel`;
     - `close-overlay` закрывает «Add connection profile», мастер провайдера, подтверждение `bypass` и палитру рабочего места;
   - сценарий «Отправка и одобрение на одной клавише» в дереве `CodeLabApp`: фокус на одобрении — `allow_once`; фокус в композере — сообщение в очереди, одобрение ждёт;
   - подсказки шапки и сайдбара на macOS и Linux — `⌘K`/`Ctrl+K`, `⌘N`/`Ctrl+N` из каталога.
-- [ ] 1.6 `[desktop]` Реализация 1.5: Esc в `settings_shell.dart`, `add_profile_dialog.dart`, `provider_wizard_dialog.dart`, `agents_modes_page.dart` — `CodeLabShortcut.leaveSettings` и `CodeLabShortcut.closeOverlay`; подсказки `workbench_shell.dart` — `compactFor(defaultTargetPlatform)` каталога без своей проверки платформы. 1.5 зелёный; `settings_shell_test.dart`, `workbench_shell_test.dart`, `settings_pending_approval_test.dart` и тесты диалогов зелёные без изменения сценариев.
+- [x] 1.6 `[desktop]` Реализация 1.5: Esc в `settings_shell.dart`, `add_profile_dialog.dart`, `provider_wizard_dialog.dart`, `agents_modes_page.dart` — `CodeLabShortcut.leaveSettings` и `CodeLabShortcut.closeOverlay`; подсказки `workbench_shell.dart` — `compactFor(defaultTargetPlatform)` каталога без своей проверки платформы. 1.5 зелёный; `settings_shell_test.dart`, `workbench_shell_test.dart`, `settings_pending_approval_test.dart` и тесты диалогов зелёные без изменения сценариев.
 
 ## 2. Итерация 2 — виджеты кита
 

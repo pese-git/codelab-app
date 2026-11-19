@@ -43,6 +43,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../support/app_strings.dart';
+import '../../../support/fake_agents_modes_cubit.dart';
 import '../../../support/fake_profile_secrets.dart';
 import '../../../support/fake_provider_settings.dart';
 import '../../../support/in_memory_profile_store.dart';
@@ -50,7 +51,6 @@ import '../../../support/l10n_app.dart';
 import '../../../support/press_shortcut.dart';
 import '../../../support/start_agent.dart';
 import '../../../support/test_app_scope.dart';
-import 'agents_modes_page_test.dart' show FakeAgentsModesCubit;
 
 Finder _key(String key) => find.byKey(ValueKey(key));
 
@@ -177,9 +177,14 @@ void main() {
         .last;
 
     /// Переводит фокус клавиатуры внутрь ожидающего одобрения: сочетания
-    /// вариантов действуют, когда одобрение «в фокусе» (spec
-    /// agent-workbench-ui). Фокус получает первый фокусируемый элемент полосы
-    /// решения (кнопка), события клавиш поднимаются к привязкам полосы.
+    /// вариантов действуют, когда фокус внутри полосы решения (spec
+    /// agent-workbench-ui).
+    ///
+    /// Почему явно: `Focus(autofocus: true)` полосы
+    /// (`codelab_approval_prompt.dart`) срабатывает, только если в области
+    /// фокуса ещё нет сфокусированного узла, а у рабочего места он есть
+    /// (`CodeLabWorkbenchShortcuts` тоже `autofocus`). Пользователь попадает
+    /// в полосу Tab-ом или щелчком по кнопке.
     void focusApproval(WidgetTester tester) {
       final node = FocusManager.instance.rootScope.descendants.firstWhere(
         (node) =>

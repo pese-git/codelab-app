@@ -1,6 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
 
 import '../atomics/atomics.dart';
 import '../l10n/strings.dart';
@@ -285,21 +284,31 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
     List<CodeLabCommandAction> filteredCommands,
   ) {
     final bindings = <ShortcutActivator, VoidCallback>{
-      const SingleActivator(LogicalKeyboardKey.enter, control: true): _submit,
-      const SingleActivator(LogicalKeyboardKey.enter, meta: true): _submit,
+      ...CodeLabShortcut.send.bind(_submit),
     };
 
     if (showInlinePalette) {
-      bindings[const SingleActivator(LogicalKeyboardKey.enter)] = () =>
-          _handleInlineEnter(filteredCommands);
-      bindings[const SingleActivator(LogicalKeyboardKey.arrowDown)] = () =>
-          _moveInlineSelection(1, filteredCommands.length);
-      bindings[const SingleActivator(LogicalKeyboardKey.arrowUp)] = () =>
-          _moveInlineSelection(-1, filteredCommands.length);
-      bindings[const SingleActivator(LogicalKeyboardKey.escape)] =
-          _closeInlinePalette;
+      // Альтернативы записи идут в порядке показа: ↑ первая, ↓ вторая.
+      final move = CodeLabShortcut.commandMenuMove.combos;
+      bindings
+        ..addEntries(
+          CodeLabShortcut.commandMenuRun
+              .bind(() => _handleInlineEnter(filteredCommands))
+              .entries,
+        )
+        ..addEntries(
+          {
+            for (final a in move[1].activators)
+              a: () => _moveInlineSelection(1, filteredCommands.length),
+            for (final a in move[0].activators)
+              a: () => _moveInlineSelection(-1, filteredCommands.length),
+          }.entries,
+        )
+        ..addEntries(
+          CodeLabShortcut.commandMenuClose.bind(_closeInlinePalette).entries,
+        );
     } else if (widget.onCancel != null && widget.canCancel) {
-      bindings[const SingleActivator(LogicalKeyboardKey.escape)] = _cancel;
+      bindings.addAll(CodeLabShortcut.cancelTurn.bind(_cancel));
     }
 
     return bindings;

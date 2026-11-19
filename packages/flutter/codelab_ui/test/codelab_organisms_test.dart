@@ -123,19 +123,13 @@ void main() {
     expect(selected?.slashCommand, '/logs');
   });
 
-  testWidgets('routes workbench command palette and inspector shortcuts', (
-    tester,
-  ) async {
+  testWidgets('routes the workbench command palette shortcut', (tester) async {
     var openedPalette = false;
-    var previousInspector = false;
-    var nextInspector = false;
 
     await tester.pumpWidget(
       FluentApp(
         home: CodeLabWorkbenchShortcuts(
           onOpenCommandPalette: () => openedPalette = true,
-          onInspectorPrevious: () => previousInspector = true,
-          onInspectorNext: () => nextInspector = true,
           child: const SizedBox(width: 320, height: 200),
         ),
       ),
@@ -144,15 +138,9 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(openedPalette, isTrue);
-    expect(previousInspector, isTrue);
-    expect(nextInspector, isTrue);
   });
 
   testWidgets('routes Cmd/Ctrl+, to the settings callback', (tester) async {
