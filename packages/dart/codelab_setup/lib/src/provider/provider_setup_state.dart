@@ -86,6 +86,26 @@ final class ProviderDraft {
   String toString() => 'ProviderDraft($providerId, $kind)';
 }
 
+/// ЗАГЛУШКА красных тестов 4.1a (`add-desktop-localization`): код ошибки шага.
+///
+/// Реализует задача 4.1b: перечисление нужно, чтобы тесты компилировались;
+/// автомат пока не заполняет `errorCode`, поэтому тесты красные на expect.
+/// Закрытый набор из design.md D6 («Тексты моста настроек»).
+enum ProviderSetupErrorCode {
+  addressInvalid,
+  addressHasUserinfo,
+  secretStoreReadOnly,
+  keyEmpty,
+  keyAlreadyStored,
+  nothingToKeep,
+  envVarEmpty,
+  keyNotStored,
+  contextWindowInvalid,
+  maxOutputInvalid,
+  providerIdInvalid,
+  targetUnavailable,
+}
+
 /// Состояние мастера.
 sealed class ProviderSetupState {
   const ProviderSetupState();
@@ -105,10 +125,16 @@ final class ChoosingPreset extends ProviderSetupState {
 /// хосту ждёт подтверждения (`InsecureAddressConfirmed`), привязанного к
 /// адресу и сбрасываемого его правкой.
 final class EnteringBaseUrl extends ProviderSetupState {
-  const EnteringBaseUrl(this.draft, {this.error, this.insecureHost});
+  const EnteringBaseUrl(
+    this.draft, {
+    this.error,
+    this.errorCode,
+    this.insecureHost,
+  });
 
   final ProviderDraft draft;
   final String? error;
+  final ProviderSetupErrorCode? errorCode;
   final String? insecureHost;
 
   @override
@@ -133,7 +159,9 @@ final class ChoosingKey extends ProviderSetupState {
     this.readOnlyHint,
     this.existingSecret,
     this.error,
+    this.errorCode,
     this.notice,
+    this.literalKeyInConfig = false,
     this.suggestedEnvVar,
   });
 
@@ -145,7 +173,9 @@ final class ChoosingKey extends ProviderSetupState {
   final String? readOnlyHint;
   final String? existingSecret;
   final String? error;
+  final ProviderSetupErrorCode? errorCode;
   final String? notice;
+  final bool literalKeyInConfig;
   final String? suggestedEnvVar;
 
   @override
@@ -218,12 +248,14 @@ final class EnteringModelDetails extends ProviderSetupState {
     this.modelId,
     this.suggestedContextWindow, {
     this.error,
+    this.errorCode,
   });
 
   final ProviderDraft draft;
   final String modelId;
   final int suggestedContextWindow;
   final String? error;
+  final ProviderSetupErrorCode? errorCode;
 
   @override
   String toString() => 'EnteringModelDetails($modelId)';
@@ -275,12 +307,21 @@ enum ProviderWizardEntry {
 /// Шаг «Review»: [warnings] (`Not verified: <kind>`), [error] — ошибка правки,
 /// [refusal] — типизированный отказ записи плана (запись не выполнялась).
 final class Reviewing extends ProviderSetupState {
-  const Reviewing(this.plan, this.warnings, {this.error, this.refusal});
+  const Reviewing(
+    this.plan,
+    this.warnings, {
+    this.error,
+    this.errorCode,
+    this.refusal,
+    this.notVerified,
+  });
 
   final ProviderSetupPlan plan;
   final List<String> warnings;
   final String? error;
+  final ProviderSetupErrorCode? errorCode;
   final PlanRefusal? refusal;
+  final String? notVerified;
 
   @override
   String toString() => 'Reviewing($plan)';

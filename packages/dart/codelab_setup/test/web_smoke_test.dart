@@ -40,5 +40,11 @@ void main() {
       'skill:smoke:.codelab/skills',
       'trusted:true',
     ]);
+    expect(report.codes, [
+      'address:addressInvalid',
+      'key:secretStoreReadOnly',
+      'literal:false',
+      'notVerified:null',
+    ]);
   });
 }

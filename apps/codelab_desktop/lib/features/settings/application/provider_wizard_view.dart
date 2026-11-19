@@ -1,5 +1,7 @@
 import 'package:codelab_setup/codelab_setup.dart';
 
+import '../../../l10n/app_localizations.dart';
+
 /// Подписи строки шагов мастера (артборд `Wizard`; design.md change
 /// `add-provider-setup-ui`, D7, таблица «Шаги диалога app и ключи»).
 const wizardStepLabels = <String>[
@@ -49,6 +51,9 @@ List<WizardSummaryRow> wizardSummaryOf(
   ProviderSetupState state, {
   required String backendId,
   required EditableSettings access,
+  // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 4.2.
+  AppLocalizations? l10n,
 }) {
   switch (state) {
     case ChoosingPreset() || Cancelled():
@@ -144,7 +149,12 @@ String? _displayUrl(String? raw) {
 
 /// Заголовок отказа проверки (design.md D7, Q9 (а); образец — артборд
 /// `Wizard`, `Model list not found (404)`).
-String checkFailureTitle(CheckFailed state) {
+String checkFailureTitle(
+  CheckFailed state, {
+  // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 4.2.
+  AppLocalizations? l10n,
+}) {
   final status = state.failure.statusCode;
   return switch (state.failure.kind) {
     ProviderCheckFailureKind.unauthorized =>
@@ -171,8 +181,12 @@ String checkRequestLine(CheckFailed state) {
 }
 
 /// Пояснение в одну строку — только у `notFound` (текст артборда `Wizard`).
-String? checkFailureNote(CheckFailed state) =>
-    state.failure.kind == ProviderCheckFailureKind.notFound
+String? checkFailureNote(
+  CheckFailed state, {
+  // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 4.2.
+  AppLocalizations? l10n,
+}) => state.failure.kind == ProviderCheckFailureKind.notFound
     ? 'The server answered, but GET /models does not exist. '
           'OpenAI-compatible servers usually live under /v1.'
     : null;
@@ -197,7 +211,12 @@ final class WizardKeyOption {
 /// секрете вместо него — «Use the stored key» и «Replace it» (SETUP-5); при
 /// правке с ключом — «Keep the current key». Решение о допустимости остаётся
 /// у автомата: виджет лишь показывает варианты.
-List<WizardKeyOption> wizardKeyOptions(ChoosingKey state) {
+List<WizardKeyOption> wizardKeyOptions(
+  ChoosingKey state, {
+  // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 4.2.
+  AppLocalizations? l10n,
+}) {
   final id = state.draft.providerId;
   final backend = state.backend.id;
   final env = state.suggestedEnvVar;
@@ -229,7 +248,12 @@ List<WizardKeyOption> wizardKeyOptions(ChoosingKey state) {
 ///
 /// Текст исключения записи сюда не попадает: он мог процитировать значение, а
 /// мост передаёт только имя типа (`errorType`, D9).
-String wizardSaveFailureText(SaveFailed state) {
+String wizardSaveFailureText(
+  SaveFailed state, {
+  // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): каталог
+  // языка принят, но не используется; поведение — задача 4.2.
+  AppLocalizations? l10n,
+}) {
   final failure = state.failure;
   final secret = state.plan.secretName;
   final head = switch (failure.outcome) {

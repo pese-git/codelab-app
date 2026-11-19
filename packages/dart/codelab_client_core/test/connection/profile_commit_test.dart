@@ -187,6 +187,53 @@ void main() {
       },
     );
 
+    // change `add-desktop-localization`, D6; spec acp-client-kit «Причина
+    // хранилища у отказа записи профиля». Красные до задачи 4.1d.
+    group('storeReason', () {
+      test('ReadOnly with a reason: storeReason equals message', () async {
+        secrets.nextWrite = const ReadOnly(
+          'secret store keychain is read-only.',
+        );
+
+        final failed = await committer.save(_draft()) as ProfileSaveFailed;
+
+        expect(failed.reason, ProfileSaveFailedReason.secretReadOnly);
+        expect(failed.storeReason, 'secret store keychain is read-only.');
+        expect(failed.message, 'secret store keychain is read-only.');
+        expect(log.entries.any((e) => e.startsWith('profile.save')), isFalse);
+      });
+
+      test('ReadOnly without a reason: storeReason is null, message is the '
+          'core fallback', () async {
+        secrets.nextWrite = const ReadOnly();
+
+        final failed = await committer.save(_draft()) as ProfileSaveFailed;
+
+        expect(failed.reason, ProfileSaveFailedReason.secretReadOnly);
+        expect(failed.storeReason, isNull);
+        expect(failed.message, 'The secret store is read-only.');
+      });
+
+      test('Failed: storeReason is null', () async {
+        secrets.nextWrite = const Failed('disk full');
+
+        final failed = await committer.save(_draft()) as ProfileSaveFailed;
+
+        expect(failed.reason, ProfileSaveFailedReason.secretWrite);
+        expect(failed.storeReason, isNull);
+        expect(failed.message, 'disk full');
+      });
+
+      test('a profile write failure: storeReason is null', () async {
+        store.failSave = StateError('disk full');
+
+        final failed = await committer.save(_draft()) as ProfileSaveFailed;
+
+        expect(failed.reason, ProfileSaveFailedReason.profileWrite);
+        expect(failed.storeReason, isNull);
+      });
+    });
+
     test('Use stored secret writes only the profile with the chosen '
         'name', () async {
       secrets.values['codelab/ws-ci'] = 'v';

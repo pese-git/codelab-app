@@ -3,6 +3,7 @@
 // (без dart:io, dart:isolate, package:codelab_agent_io и
 // package:http/io_client.dart). На Dart VM тот же код проверяет
 // `web_smoke_test.dart` (design.md change `add-provider-setup-ui`, D20).
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:codelab_agent_core/codelab_agent_core.dart'
@@ -35,6 +36,7 @@ final class SetupWebSmokeReport {
     required this.settings,
     required this.mcp,
     required this.extensions,
+    required this.codes,
   });
 
   final String access;
@@ -58,6 +60,12 @@ final class SetupWebSmokeReport {
   /// и `agentExtensionsOf` собираются без `dart:io` (`add-app-skills-page`,
   /// D4, задача 1.4).
   final List<String> extensions;
+
+  /// Типизированные поля мастера (`errorCode`, `literalKeyInConfig`,
+  /// `notVerified`) на шагах с ошибкой: проверяет, что они читаются без
+  /// `dart:io` и без зависимости от локали (`add-desktop-localization`, D6,
+  /// задача 4.1a).
+  final List<String> codes;
 }
 
 /// Клиент, который отвечает списком моделей без сети.
@@ -163,6 +171,70 @@ Future<List<String>> _runWizard(AgentConfigSnapshot snapshot) async {
   ];
   await flow.dispose();
   return edits;
+}
+
+/// Доводит мастер до ошибок шагов и читает новые типизированные поля.
+///
+/// Бэкенд [_NoKeys] только для чтения: `StoreSecret` даёт
+/// `secretStoreReadOnly`. Порядок строк: код ошибки адреса, код ошибки ключа,
+/// `literalKeyInConfig` шага ключа, `notVerified` обзора.
+Future<List<String>> _wizardCodes(AgentConfigSnapshot snapshot) async {
+  final keys = _NoKeys();
+  final flow = ProviderSetupFlow(
+    check: HttpProviderCheck(_FakeModelsClient.new),
+    committer: ProviderSetupCommitter(config: _MemoryStore(), keys: keys),
+    keys: keys,
+    snapshot: snapshot,
+    access: const EditableSettings(ConfigPaths(codelabHome: '/home')),
+    environment: const {},
+    isLocalHost: (host) => host == 'localhost',
+    logger: const _SilentLogger(),
+    entry: ProviderWizardEntry.app,
+  );
+  // Поток broadcast доставляет состояния позже `dispatch`, а опоздавший
+  // подписчик их не получает: ожидания регистрируются один раз и
+  // дополняются уже накопленными состояниями.
+  final seen = <ProviderSetupState>[];
+  final waiters =
+      <(bool Function(ProviderSetupState), Completer<ProviderSetupState>)>[];
+  final sub = flow.states.listen((state) {
+    seen.add(state);
+    for (final (test, done) in [...waiters]) {
+      if (!done.isCompleted && test(state)) {
+        done.complete(state);
+      }
+    }
+  });
+  Future<ProviderSetupState> until(bool Function(ProviderSetupState) test) {
+    final done = Completer<ProviderSetupState>();
+    waiters.add((test, done));
+    return done.future;
+  }
+
+  final addressWait = until((s) => s is EnteringBaseUrl && s.error != null);
+  flow
+    ..dispatch(const PresetChosen('openrouter'))
+    ..dispatch(const BaseUrlSubmitted('ftp://smoke.invalid'));
+  final address = await addressWait;
+  final keyReady = until((s) => s is ChoosingKey && s.ready);
+  flow.dispatch(const BaseUrlSubmitted('https://openrouter.ai/api/v1'));
+  await keyReady;
+  final keyFailed = until((s) => s is ChoosingKey && s.error != null);
+  flow.dispatch(KeySubmitted(StoreSecret(SecretValue('smoke'))));
+  final key = await keyFailed;
+  final modelStep = until((s) => s is ChoosingModel);
+  flow.dispatch(const KeySubmitted(NoKey()));
+  await modelStep;
+  flow.dispatch(const ModelChosen('m'));
+  final review = flow.current as Reviewing;
+  await sub.cancel();
+  await flow.dispose();
+  return [
+    'address:${(address as EnteringBaseUrl).errorCode?.name}',
+    'key:${(key as ChoosingKey).errorCode?.name}',
+    'literal:${key.literalKeyInConfig}',
+    'notVerified:${review.notVerified}',
+  ];
 }
 
 /// Строки `/settings` и символы реестра, реэкспортированные мостом.
@@ -355,6 +427,7 @@ Future<SetupWebSmokeReport> runSetupWebSmoke() async {
     settings: _settingRows(snapshot),
     mcp: _mcpSmoke(),
     extensions: _extensionsSmoke(),
+    codes: await _wizardCodes(snapshot),
   );
 }
 
