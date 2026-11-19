@@ -1427,6 +1427,62 @@ void main() {
       );
     });
 
+    test('rejected and inline-secret outcomes carry the leftover and the '
+        'replaced secrets in the banner message (D9)', () async {
+      final outcomes = <ConfigSaveOutcome, McpWriteFailure>{
+        const ConfigInlineSecret(
+          key: 'mcp.servers[GitHub].headers.Authorization',
+          suggestedSecretName: 'codelab/x',
+        ): McpWriteFailure.inlineSecret,
+        ConfigRejected([
+          ConfigIssue(
+            kind: ConfigIssueKind.value,
+            key: 'mcp.servers',
+            source: 'x',
+            message: 'bad',
+          ),
+        ]): McpWriteFailure.rejected,
+      };
+      for (final MapEntry(:key, :value) in outcomes.entries) {
+        store.user = {};
+        session.secrets.clear();
+        session.mcpKeys.deletion = SecretDeletion.failed;
+        store.nextOutcome = key;
+        final cubit = make();
+        await cubit.reload();
+
+        await cubit.save(_newGithub());
+
+        final failed = current(cubit).banner!.message as McpWriteFailedMessage;
+        expect(failed.failure, value);
+        expect(failed.notRolledBack, [_authorization], reason: '$value');
+
+        session.secrets[_authorization] = 'old';
+        session.mcpKeys.deletion = SecretDeletion.deleted;
+        store.nextOutcome = key;
+        await cubit.save(_newGithub(), replaceSecrets: {_authorization});
+
+        expect(
+          (current(cubit).banner!.message as McpWriteFailedMessage)
+              .replacedSecrets,
+          [_authorization],
+          reason: '$value',
+        );
+        await cubit.close();
+      }
+    });
+
+    test('rejectDuplicateKey outside Ready does nothing and does not throw', () {
+      final cubit = make();
+      cubit.rejectDuplicateKey(_newGithub(), key: 'Authorization');
+      // Страница не `Ready`: возврат без изменений и без исключения.
+      // «Ready без снимка» недостижим через публичный API: `Ready` строится
+      // только из снимка, а `_clearSnapshot` вызывают лишь пути к `ReadOnly` и
+      // `Unreadable`; ветка `snapshot == null` — защитная и отдельным тестом
+      // не покрыта.
+      expect(cubit.state, isA<McpSettingsLoading>());
+    });
+
     test(
       'an exception AFTER the write began resets saving, shows an error '
       'banner and the next write works (toggle, remove, Enable here)',
@@ -2221,7 +2277,7 @@ mcp:
       final live = status(cubit) as McpAgentStatusLive;
       final blocked = live.rows.firstWhere((r) => r.name == 'postgres');
       expect(blocked.state, McpServerState.failed);
-      expect(blocked.retryIn, isNotNull);
+      expect(blocked.retryIn, isNull);
       expect(blocked.errorText, reason);
       expect(blocked.canReconnect, isTrue);
       expect(current(cubit).rejected, isNull);
@@ -2338,7 +2394,7 @@ mcp:
       port.emit([mcpSummary('github', tools: 43)]);
 
       final live = status(cubit) as McpAgentStatusLive;
-      expect(live.rows.single.tools, '43');
+      expect(live.rows.single.toolCount, 43);
       expect(live.updatedAt, clock);
       expect(port.listeners, 1);
       expect(events(), contains('mcp_settings.status_subscribed'));
@@ -2422,7 +2478,7 @@ mcp:
       connect(embeddedConnectionProfile, active: _s1);
 
       expect(port.journal, ['listen p1', 'cancel p1', 'listen p2']);
-      expect((status(cubit) as McpAgentStatusLive).rows.single.tools, '7');
+      expect((status(cubit) as McpAgentStatusLive).rows.single.toolCount, 7);
     });
 
     // Smoke итерации 6: после «Restart agent» поток workspace приходит раньше,
@@ -2473,7 +2529,7 @@ mcp:
       connect(embeddedConnectionProfile, active: _s1);
 
       final live = status(cubit) as McpAgentStatusLive;
-      expect(live.rows.single.tools, '9');
+      expect(live.rows.single.toolCount, 9);
       expect(fresh.listeners, 1);
       expect(port.listeners, 0);
       expect(port.journal, ['listen p1', 'cancel p1', 'listen p2']);

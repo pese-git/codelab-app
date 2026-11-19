@@ -237,7 +237,6 @@ void main() {
           modeSource: ConfigSourceKind.user,
           banner: const AgentsModesBanner(
             AgentsModesBannerKind.saved,
-            '',
             message: AgentsSavedMessage(
               setting: AgentsModesSetting.mode,
               value: 'accept-edits',
@@ -418,7 +417,9 @@ void main() {
       cubit.show(
         const AgentsModesReadOnly(reason: RemoteAgentReadOnly('wss://one')),
       );
-      cubit.show(const AgentsModesUnreadable(problems: ['two']));
+      cubit.show(
+        const AgentsModesUnreadable(issues: [LoaderSettingsProblem('two')]),
+      );
       await tester.pumpAndSettle();
 
       expect(_key('agents-modes-bypass-confirm'), findsNothing);
@@ -453,7 +454,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Use bypass'));
       await tester.pump();
-      cubit.show(const AgentsModesUnreadable(problems: ['gone']));
+      cubit.show(
+        const AgentsModesUnreadable(issues: [LoaderSettingsProblem('gone')]),
+      );
       await tester.pumpAndSettle();
 
       expect(_key('agents-modes-bypass-confirm'), findsNothing);
@@ -468,7 +471,6 @@ void main() {
         _ready(
           banner: const AgentsModesBanner(
             AgentsModesBannerKind.warning,
-            '',
             message: AgentsSavedOverriddenMessage(
               setting: AgentsModesSetting.mode,
               target: ConfigLayer.user,
@@ -584,7 +586,6 @@ void main() {
           effortSource: ConfigSourceKind.user,
           banner: const AgentsModesBanner(
             AgentsModesBannerKind.saved,
-            '',
             message: AgentsSavedMessage(
               setting: AgentsModesSetting.effort,
               value: 'high',
@@ -702,7 +703,6 @@ void main() {
       await pumpPage(
         tester,
         const AgentsModesUnreadable(
-          problems: [],
           issues: [
             LoaderSettingsProblem(
               'config.yaml:11:3: permissions.mode: autopilot is allowed only '
@@ -727,13 +727,11 @@ void main() {
       await pumpPage(
         tester,
         const AgentsModesUnreadable(
-          problems: [],
           issues: [
             AppSettingsProblem(AppSettingsProblemKind.cannotReadSettings),
           ],
           banner: AgentsModesBanner(
             AgentsModesBannerKind.saved,
-            '',
             message: AgentsSavedOnlyMessage(ConfigLayer.user),
           ),
         ),
@@ -782,7 +780,6 @@ void main() {
         _ready(
           banner: const AgentsModesBanner(
             AgentsModesBannerKind.conflict,
-            '',
             message: AgentsConflictMessage(),
           ),
         ),
@@ -1206,7 +1203,7 @@ void main() {
                 index: 0,
                 path: '/work/demo/.codelab/agents/review.md',
                 pathLabel: '/work/demo/.codelab/agents/review.md',
-                message: 'Not loaded: another definition has the same name.',
+                reason: AgentsDefinitionErrorKind.duplicate,
               ),
             ],
           ),
@@ -1418,7 +1415,9 @@ void main() {
     testWidgets('a read-only page has no definitions block', (tester) async {
       await pumpPage(
         tester,
-        const AgentsModesReadOnly(notice: 'Read-only: elsewhere.'),
+        const AgentsModesReadOnly(
+          reason: RemoteAgentReadOnly('wss://elsewhere'),
+        ),
       );
 
       expect(_key('agents-definitions-table'), findsNothing);

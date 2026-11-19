@@ -48,8 +48,6 @@ enum McpWriteFailure {
 /// (`ConfigSaved.warnings`, `ConfigIssue.message`) и хранилища
 /// (`McpSecretNotStored.reason`) лежат строками-аргументами и показываются
 /// как есть под переведённым заголовком (D6). Образец — `ProviderMessage`.
-///
-/// Заглушка задачи 5.1c: типы нужны тестам; Cubit их пока не создаёт.
 sealed class McpMessage {
   const McpMessage();
 }

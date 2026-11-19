@@ -1,4 +1,4 @@
-// Красные тесты задачи 5.1c change `add-desktop-localization`: страница
+// Тесты задач 5.1c и 5.2 change `add-desktop-localization`: страница
 // «Agents & modes» на русском и английском, смена языка на странице (spec
 // app-settings «Режим и баннер записи на русском», «Таблица определений
 // агентов на русском», «Источник конфигурации на русском», «Страницы
@@ -12,7 +12,7 @@
 // вида × три «когда применится»), таблица определений по `AgentRowStatus` и
 // `AgentRowScope`, InfoBar по типу причины.
 //
-// Ожидания `en` — прежние строки (зелёные). Ожидания `ru` — по глоссарию §4:
+// Ожидания `en` — прежние строки. Ожидания `ru` — по глоссарию §4:
 // «Агенты и режимы», «Источник», «Действует», «Только этот проект», «Все
 // проекты», «Доступен в», статусы определений, «сессия и субагент»,
 // «Использовать bypass». Фразы вне глоссария проверяются без выдуманного
@@ -28,6 +28,8 @@ import 'package:codelab_setup/codelab_setup.dart'
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+// В вызовах `expectNoStaleLanguage` ниже указан `ignore`: имя определения `default` — данные, а не подпись источника (итерация 5, D7).
 
 import '../../../support/fake_agents_modes_cubit.dart';
 import '../../../support/l10n_mix.dart';
@@ -357,7 +359,7 @@ void main() {
         for (final MapEntry(:key, :value) in messages.entries) {
           await pumpPage(
             tester,
-            _ready(banner: AgentsModesBanner(key, '', message: value)),
+            _ready(banner: AgentsModesBanner(key, message: value)),
             locale: const Locale('ru'),
           );
           final shown = tester
@@ -390,7 +392,6 @@ void main() {
         _ready(
           banner: const AgentsModesBanner(
             AgentsModesBannerKind.saved,
-            '',
             message: AgentsSavedMessage(
               setting: AgentsModesSetting.mode,
               value: 'accept-edits',
@@ -417,7 +418,6 @@ void main() {
         _ready(
           banner: const AgentsModesBanner(
             AgentsModesBannerKind.warning,
-            '',
             message: AgentsSavedNarrowedMessage(
               target: ConfigLayer.user,
               value: 'ask',
@@ -473,9 +473,18 @@ void main() {
         ),
       );
       expect(
-        find.textContaining(
-          'Read-only: this agent runs on wss://devbox:7420. Change its modes '
-          'and agents on that host: codelab config set, .codelab/agents.',
+        _text(
+          'agents-modes-read-only',
+          'Read-only: this agent runs on '
+              'wss://devbox:7420.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        _text(
+          'agents-modes-read-only',
+          'Change its modes and agents on that '
+              'host: codelab config set, .codelab/agents.',
         ),
         findsOneWidget,
       );
@@ -505,7 +514,6 @@ void main() {
       await pumpPage(
         tester,
         const AgentsModesUnreadable(
-          problems: [],
           issues: [
             AppSettingsProblem(AppSettingsProblemKind.cannotReadSettings),
             LoaderSettingsProblem(
@@ -673,11 +681,21 @@ void main() {
       );
 
       await language.select(tester, const Locale('ru'));
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      await expectNoStaleLanguage(
+        tester,
+        from: en,
+        to: ru,
+        ignore: {'default'},
+      );
       expect(find.text('Доступно'), findsNWidgets(3));
 
       await language.select(tester, const Locale('en'));
-      await expectNoStaleLanguage(tester, from: ru, to: en);
+      await expectNoStaleLanguage(
+        tester,
+        from: ru,
+        to: en,
+        ignore: {'default'},
+      );
       expect(find.text('Available'), findsNWidgets(3));
     });
 
@@ -691,7 +709,6 @@ void main() {
           modeSource: ConfigSourceKind.user,
           banner: const AgentsModesBanner(
             AgentsModesBannerKind.warning,
-            '',
             message: AgentsSavedOverriddenMessage(
               setting: AgentsModesSetting.mode,
               target: ConfigLayer.user,
@@ -705,7 +722,12 @@ void main() {
       );
 
       await language.select(tester, const Locale('ru'));
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      await expectNoStaleLanguage(
+        tester,
+        from: en,
+        to: ru,
+        ignore: {'default'},
+      );
       expectNoEnglish(const [
         'Saved to',
         'after Restart agent',
@@ -713,7 +735,12 @@ void main() {
       ]);
 
       await language.select(tester, const Locale('en'));
-      await expectNoStaleLanguage(tester, from: ru, to: en);
+      await expectNoStaleLanguage(
+        tester,
+        from: ru,
+        to: en,
+        ignore: {'default'},
+      );
       expect(
         find.textContaining(
           'Saved to All projects; local overrides it: new sessions use plan '
@@ -733,12 +760,16 @@ void main() {
         ),
       );
       await language.select(tester, const Locale('ru'));
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      await expectNoStaleLanguage(
+        tester,
+        from: en,
+        to: ru,
+        ignore: {'default'},
+      );
       expectNoEnglish(const ['Read-only: this agent runs on']);
 
       cubit.show(
         const AgentsModesUnreadable(
-          problems: [],
           issues: [AppSettingsProblem(AppSettingsProblemKind.homeUnavailable)],
         ),
       );

@@ -7,8 +7,6 @@ import 'package:codelab_setup/codelab_setup.dart' show SkillsListRefusal;
 /// списка навыков хранится как [SkillsListRefusal] с элементом `extra_roots`,
 /// а не готовой фразой: подсказка неактивного переключателя и баннер строятся
 /// одной функцией presentation (change `add-app-skills-page`, D5, D9).
-///
-/// Заглушка задачи 5.1c: типы нужны тестам; Cubit их пока не создаёт.
 sealed class SkillsMessage {
   const SkillsMessage();
 }

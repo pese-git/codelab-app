@@ -401,16 +401,7 @@ void main() {
       await openPage(
         tester,
         view: extensionsView(
-          skills: [
-            skillEntry(
-              'imported',
-              root: const SkillRootView(
-                scope: ExtensionScope.extra,
-                label: '.claude/skills (extra root)',
-                path: '/work/app/.claude/skills',
-              ),
-            ),
-          ],
+          skills: [skillEntry('imported', root: extraSkillRoot())],
         ),
       );
 
@@ -431,6 +422,7 @@ void main() {
               root: projectSkillRoot(),
               overrides: [userSkillRoot()],
               overridesLabel: 'Overrides user skill',
+              overridesScope: ExtensionScope.user,
             ),
             skillEntry('deploy-check', modelVisible: false),
             skillEntry(

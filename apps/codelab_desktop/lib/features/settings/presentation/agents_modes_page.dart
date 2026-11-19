@@ -7,7 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/app_scope.dart';
+import '../../../l10n/l10n.dart';
 import '../application/agents_modes_cubit.dart';
+import 'agents_modes_texts.dart';
+import 'config_source_label.dart';
+import 'settings_problem_text.dart';
 
 /// Тело страницы «Agents & modes» для таблицы `settingsPageBuilders`.
 ///
@@ -87,26 +91,36 @@ class AgentsModesPage extends StatelessWidget {
             padding: EdgeInsets.all(24),
             child: Center(child: ProgressRing()),
           ),
-          AgentsModesReadOnly() => _page([
-            _bar(
-              const ValueKey('agents-modes-read-only'),
-              InfoBarSeverity.warning,
-              state.notice,
-            ),
+          AgentsModesReadOnly(:final reason) => _page(context, [
+            // Заголовок общий с «Providers», подсказка с командами для хоста —
+            // отдельной строкой `content`, как на MCP и Skills (D5).
+            switch (reason) {
+              RemoteAgentReadOnly(:final origin) => _bar(
+                const ValueKey('agents-modes-read-only'),
+                InfoBarSeverity.warning,
+                context.l10n.providersReadOnlyTitle(origin),
+                content: context.l10n.agentsReadOnlyHint,
+              ),
+              ForeignAgentReadOnly(:final agentName) => _bar(
+                const ValueKey('agents-modes-read-only'),
+                InfoBarSeverity.warning,
+                context.l10n.agentsReadOnlyManaged(agentName),
+              ),
+            },
           ]),
-          AgentsModesUnreadable() => _page([
+          AgentsModesUnreadable() => _page(context, [
             if (state.banner case final banner?)
               _bar(
                 const ValueKey('agents-modes-banner'),
                 InfoBarSeverity.success,
-                banner.text,
+                agentsModesMessageText(context.l10n, banner.message),
               ),
             _bar(
               const ValueKey('agents-modes-unreadable'),
               InfoBarSeverity.error,
-              'Cannot read the agent config. Fix or remove the file; CodeLab '
-              'will not overwrite it.',
-              content: state.problems.join('\n'),
+              context.l10n.providersUnreadable,
+              // Тексты загрузчика — как есть под переведённым заголовком (D6).
+              content: settingsProblemsText(context.l10n, state.issues),
             ),
           ]),
           AgentsModesReady() => _ready(context, state),
@@ -115,12 +129,15 @@ class AgentsModesPage extends StatelessWidget {
     );
   }
 
-  Widget _page(List<Widget> children) => Column(
+  Widget _page(BuildContext context, List<Widget> children) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const Padding(
-        padding: EdgeInsets.only(bottom: 12),
-        child: CodeLabText('Agents & modes', role: CodeLabTextRole.title),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: CodeLabText(
+          context.l10n.settingsPageAgentsAndModesTitle,
+          role: CodeLabTextRole.title,
+        ),
       ),
       ...children,
     ],
@@ -131,10 +148,10 @@ class AgentsModesPage extends StatelessWidget {
   /// (D20.4, как `skills-banner`).
   static Widget _escaped(
     String text, {
+    required String column,
     bool mono = false,
-    String column = 'PATH',
   }) => CodeLabStatusTable(
-    columns: const ['PATH'],
+    columns: [column],
     rows: [
       CodeLabStatusTableRow(
         cells: [CodeLabStatusTableCell(text, mono: mono, untrusted: true)],
@@ -144,6 +161,7 @@ class AgentsModesPage extends StatelessWidget {
 
   Widget _escapedBar(
     Key key,
+    String column,
     InfoBarSeverity severity,
     String title,
     String text,
@@ -153,7 +171,7 @@ class AgentsModesPage extends StatelessWidget {
       key: key,
       title: Text(title),
       content: CodeLabStatusTable(
-        columns: const ['MESSAGE'],
+        columns: [column],
         rows: [
           CodeLabStatusTableRow(
             cells: [CodeLabStatusTableCell(text, untrusted: true)],
@@ -184,36 +202,42 @@ class AgentsModesPage extends StatelessWidget {
   Widget _ready(BuildContext context, AgentsModesReady state) {
     final cubit = context.read<AgentsModesCubit>();
     final secondary = FluentTheme.of(context).resources.textFillColorSecondary;
-    return _page([
+    final l10n = context.l10n;
+    final modeLabel = agentModeLabel(
+      l10n,
+      state.mode,
+      blocksWriteAndExec: state.blocksWriteAndExec,
+    );
+    return _page(context, [
       if (state.banner case final banner?)
         _bar(const ValueKey('agents-modes-banner'), switch (banner.kind) {
           AgentsModesBannerKind.saved => InfoBarSeverity.success,
           AgentsModesBannerKind.warning ||
           AgentsModesBannerKind.conflict => InfoBarSeverity.warning,
           AgentsModesBannerKind.error => InfoBarSeverity.error,
-        }, banner.text),
-      if (state.narrowedNotice case final notice?)
+        }, agentsModesMessageText(l10n, banner.message)),
+      if (state.narrowedByProject)
         _bar(
           const ValueKey('agents-modes-mode-narrowed'),
           InfoBarSeverity.warning,
-          notice,
+          l10n.agentsModeNarrowed(modeLabel),
         ),
       CodeLabSettingsRow(
-        title: 'Save to',
-        description: 'One target for the mode and the reasoning effort.',
+        title: l10n.agentsSaveToTitle,
+        description: l10n.agentsSaveToDescription,
         leading: FluentIcons.save,
         trailing: CodeLabSegmentedControl<ConfigLayer>(
           key: const ValueKey('agents-modes-target'),
-          semanticLabel: 'Save to',
+          semanticLabel: l10n.agentsSaveToTitle,
           options: [
-            const CodeLabSegment(
+            CodeLabSegment(
               value: ConfigLayer.user,
-              label: 'All projects',
+              label: l10n.agentsTargetAll,
             ),
             if (state.canTargetProject)
-              const CodeLabSegment(
+              CodeLabSegment(
                 value: ConfigLayer.projectLocal,
-                label: 'This project only',
+                label: l10n.agentsTargetProject,
               ),
           ],
           value: state.target,
@@ -221,12 +245,12 @@ class AgentsModesPage extends StatelessWidget {
         ),
       ),
       CodeLabSettingsSection(
-        title: 'Default permission mode',
+        title: l10n.agentsModeSection,
         children: [_modeCard(context, state, secondary)],
       ),
       CodeLabSettingsSection(
-        title: 'Default reasoning effort',
-        children: [_effortRow(cubit, state)],
+        title: l10n.agentsEffortSection,
+        children: [_effortRow(context, cubit, state)],
       ),
       if (state.definitions case final definitions?)
         _definitionsSection(context, cubit, definitions, secondary),
@@ -243,6 +267,7 @@ class AgentsModesPage extends StatelessWidget {
     AgentsDefinitionsView definitions,
     Color secondary,
   ) {
+    final l10n = context.l10n;
     final bars = <Widget>[
       for (final error in definitions.errors)
         Padding(
@@ -251,25 +276,41 @@ class AgentsModesPage extends StatelessWidget {
             key: ValueKey('agents-definitions-error-${error.index}'),
             title: Text(
               error.line == null
-                  ? 'Cannot load the definition'
-                  : 'Cannot load the definition · line ${error.line}',
+                  ? l10n.agentsErrorTitle
+                  : l10n.agentsErrorTitleLine(error.line!),
             ),
             // Путь файла — недоверенный текст: показывается экранированным,
             // как в `skills-banner` (D20.4).
             content: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _escaped(error.pathLabel, mono: true),
+                _escaped(
+                  error.pathLabel,
+                  column: l10n.agentsColPath,
+                  mono: true,
+                ),
                 const SizedBox(height: 4),
                 // Сообщение разбора YAML может нести символы из файла.
-                _escaped(error.message, column: 'MESSAGE'),
+                _escaped(
+                  // Текст ядра — как есть; запасная фраза — по причине.
+                  error.message ??
+                      switch (error.reason) {
+                        AgentsDefinitionErrorKind.modelNotConfigured =>
+                          l10n.agentsErrorFallbackModel,
+                        AgentsDefinitionErrorKind.duplicate =>
+                          l10n.agentsErrorFallbackDuplicate,
+                        AgentsDefinitionErrorKind.other =>
+                          l10n.agentsErrorFallbackOther,
+                      },
+                  column: l10n.agentsColMessage,
+                ),
               ],
             ),
             severity: InfoBarSeverity.error,
             isLong: true,
             action: CodeLabButton(
               key: ValueKey('agents-definitions-open-file-${error.index}'),
-              label: 'Open folder',
+              label: l10n.agentsOpenFolder,
               onPressed: () =>
                   unawaited(cubit.openDefinitionFolder(error.path)),
             ),
@@ -278,53 +319,60 @@ class AgentsModesPage extends StatelessWidget {
       if (definitions.untrustedProject)
         _escapedBar(
           const ValueKey('agents-definitions-untrusted'),
+          l10n.agentsColMessage,
           InfoBarSeverity.info,
-          'Project definitions are not read',
-          'Definitions in ${definitions.projectLabel ?? 'the project'}/.codelab/agents '
-              'are not read: the project is not trusted.',
+          l10n.agentsUntrustedTitle,
+          definitions.projectLabel == null
+              ? l10n.agentsUntrustedBodyNoPath
+              : l10n.agentsUntrustedBody(definitions.projectLabel!),
         ),
       if (definitions.timedOut)
         _bar(
           const ValueKey('agents-definitions-timeout'),
           InfoBarSeverity.warning,
-          'Agent definitions were not read within 5 s.',
+          l10n.agentsTimedOut,
         ),
       if (definitions.failed)
         _bar(
           const ValueKey('agents-definitions-failed'),
           InfoBarSeverity.error,
-          'Agent definitions could not be read.',
+          l10n.agentsFailed,
         ),
       if (definitions.openFailure case final label?)
         _escapedBar(
           const ValueKey('agents-definitions-open-failed'),
+          l10n.agentsColMessage,
           InfoBarSeverity.warning,
-          'Cannot open the folder',
-          'Could not open $label.',
+          l10n.agentsOpenFailedTitle,
+          l10n.agentsOpenFailedBody(label),
         ),
     ];
     return CodeLabSettingsSection(
-      title: 'Agent definitions',
+      title: l10n.agentsDefinitionsSection,
       children: [
-        Row(
+        // Подпись и кнопки в Wrap: русские подписи длиннее, и в одну строку на
+        // колонке ~360 pt они не помещаются (D8, «Длина строк»).
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Expanded(
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
               child: CodeLabText(
-                'Definitions are read when a session is created; choose one '
-                'for a single session in the composer agent menu.',
+                l10n.agentsDefinitionsCaption,
                 role: CodeLabTextRole.caption,
                 color: secondary,
               ),
             ),
-            const SizedBox(width: 12),
             DropDownButton(
               key: const ValueKey('agents-definitions-open-folder'),
-              title: const Text('Open folder'),
+              title: Text(l10n.agentsOpenFolder),
               items: [
                 MenuFlyoutItem(
                   key: const ValueKey('agents-definitions-open-user'),
                   text: Text(
-                    'User definitions (${definitions.userFolderLabel})',
+                    l10n.agentsOpenUserFolder(definitions.userFolderLabel),
                   ),
                   onPressed: () =>
                       unawaited(cubit.openFolder(AgentsFolder.user)),
@@ -333,12 +381,10 @@ class AgentsModesPage extends StatelessWidget {
                   MenuFlyoutItem(
                     key: const ValueKey('agents-definitions-open-project'),
                     text: definitions.projectFolderExists
-                        ? const Text('This project (.codelab/agents)')
-                        : const Tooltip(
-                            message:
-                                'Create .codelab/agents in the project to add '
-                                'definitions.',
-                            child: Text('This project (.codelab/agents)'),
+                        ? Text(l10n.agentsOpenProjectFolder)
+                        : Tooltip(
+                            message: l10n.agentsOpenProjectMissing,
+                            child: Text(l10n.agentsOpenProjectFolder),
                           ),
                     // Каталога проекта нет: app его не создаёт (Q11 (б)).
                     onPressed: definitions.projectFolderExists
@@ -348,10 +394,9 @@ class AgentsModesPage extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(width: 8),
             CodeLabButton(
               key: const ValueKey('agents-definitions-reload'),
-              label: 'Reload',
+              label: l10n.agentsReload,
               icon: FluentIcons.refresh,
               onPressed: () => unawaited(cubit.reload()),
             ),
@@ -367,14 +412,14 @@ class AgentsModesPage extends StatelessWidget {
               width: constraints.maxWidth < 880 ? 880 : constraints.maxWidth,
               child: CodeLabStatusTable(
                 key: const ValueKey('agents-definitions-table'),
-                columns: const [
-                  'Name',
-                  'Description',
-                  'Source',
-                  'Available in',
-                  'Tools',
-                  'Model',
-                  'Status',
+                columns: [
+                  l10n.agentsColName,
+                  l10n.agentsColDescription,
+                  l10n.agentsColSource,
+                  l10n.agentsColAvailableIn,
+                  l10n.agentsColTools,
+                  l10n.agentsColModel,
+                  l10n.agentsColStatus,
                 ],
                 // Длинный путь источника переносится, а не съедает статус.
                 columnFlex: const [2, 3, 3, 2, 2, 2, 7],
@@ -389,30 +434,43 @@ class AgentsModesPage extends StatelessWidget {
                           untrusted: true,
                         ),
                         CodeLabStatusTableCell(
-                          row.description,
-                          muted: row.description == '—',
+                          row.descriptionText ?? '—',
+                          muted: row.descriptionText == null,
                           untrusted: true,
                         ),
                         CodeLabStatusTableCell(
-                          row.source,
+                          row.sourcePath ?? l10n.agentsBuiltIn,
                           mono: true,
                           untrusted: true,
                         ),
+                        // Прочерк у отклонённого файла рисует страница (D7).
                         CodeLabStatusTableCell(
-                          row.availableIn,
-                          muted: row.availableIn == '—',
+                          row.scope == null
+                              ? '—'
+                              : agentRowScopeText(l10n, row.scope!),
+                          muted: row.scope == null,
                         ),
                         CodeLabStatusTableCell(
-                          row.tools,
-                          muted: row.tools == '—',
+                          !row.loaded
+                              ? '—'
+                              : (row.toolNames?.join(', ') ??
+                                    l10n.agentsAllTools),
+                          muted: !row.loaded,
                           untrusted: true,
                         ),
                         CodeLabStatusTableCell(
-                          row.model,
-                          muted: row.model == '—',
+                          !row.loaded
+                              ? '—'
+                              : (row.modelId ?? l10n.agentsSessionModel),
+                          muted: !row.loaded,
                         ),
                         CodeLabStatusTableCell(
-                          row.status,
+                          agentRowStatusText(
+                            l10n,
+                            row.rowStatus,
+                            line: row.errorLine,
+                            overriddenBy: row.overriddenBy,
+                          ),
                           maxLines: 3,
                           // «Overridden by <путь>»: путь из файлов (D20.4).
                           untrusted: true,
@@ -452,6 +510,7 @@ class AgentsModesPage extends StatelessWidget {
     Color secondary,
   ) {
     final cubit = context.read<AgentsModesCubit>();
+    final l10n = context.l10n;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: FluentTheme.of(context).resources.cardBackgroundFillColorDefault,
@@ -466,15 +525,24 @@ class AgentsModesPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             CodeLabText(
-              'New sessions start in it after Restart agent; change it for '
-              'one session from the composer.',
+              l10n.agentsModeCaption,
               role: CodeLabTextRole.caption,
               color: secondary,
             ),
             const SizedBox(height: 8),
-            CodeLabText('Effective: ${state.modeLabel}'),
             CodeLabText(
-              'Source: ${state.modeSource}',
+              l10n.agentsModeEffective(
+                agentModeLabel(
+                  l10n,
+                  state.mode,
+                  blocksWriteAndExec: state.blocksWriteAndExec,
+                ),
+              ),
+            ),
+            CodeLabText(
+              l10n.agentsModeSource(
+                configSourceLabel(l10n, state.modeSourceKind),
+              ),
               key: const ValueKey('agents-modes-mode-source'),
               role: CodeLabTextRole.caption,
               color: secondary,
@@ -521,8 +589,7 @@ class AgentsModesPage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(left: 28),
               child: CodeLabText(
-                'Only as a launch flag of the agent (codelab-agent serve '
-                '--permission-mode autopilot); never saved in config.',
+                l10n.agentsAutopilotHint,
                 role: CodeLabTextRole.caption,
                 color: secondary,
               ),
@@ -533,34 +600,39 @@ class AgentsModesPage extends StatelessWidget {
     );
   }
 
-  Widget _effortRow(AgentsModesCubit cubit, AgentsModesReady state) =>
-      CodeLabSettingsRow(
-        title: 'Reasoning effort · ${state.effortSource}',
-        description:
-            'Sent as a session option only if the model supports reasoning; '
-            'change it for one session from the composer.',
-        leading: FluentIcons.lightbulb,
-        trailing: SizedBox(
-          width: 160,
-          child: ComboBox<String>(
-            key: const ValueKey('agents-modes-effort'),
-            isExpanded: true,
-            value: state.effort,
-            items: const [
-              ComboBoxItem(value: 'low', child: Text('low')),
-              ComboBoxItem(value: 'medium', child: Text('medium')),
-              ComboBoxItem(value: 'high', child: Text('high')),
-            ],
-            onChanged: state.saving
-                ? null
-                : (id) {
-                    if (id != null) {
-                      unawaited(cubit.selectEffort(id));
-                    }
-                  },
-          ),
-        ),
-      );
+  static AppLocalizations _l10n(BuildContext context) => context.l10n;
+
+  Widget _effortRow(
+    BuildContext context,
+    AgentsModesCubit cubit,
+    AgentsModesReady state,
+  ) => CodeLabSettingsRow(
+    title: _l10n(context).agentsEffortTitle(
+      configSourceLabel(_l10n(context), state.effortSourceKind),
+    ),
+    description: _l10n(context).agentsEffortDescription,
+    leading: FluentIcons.lightbulb,
+    trailing: SizedBox(
+      width: 160,
+      child: ComboBox<String>(
+        key: const ValueKey('agents-modes-effort'),
+        isExpanded: true,
+        value: state.effort,
+        items: const [
+          ComboBoxItem(value: 'low', child: Text('low')),
+          ComboBoxItem(value: 'medium', child: Text('medium')),
+          ComboBoxItem(value: 'high', child: Text('high')),
+        ],
+        onChanged: state.saving
+            ? null
+            : (id) {
+                if (id != null) {
+                  unawaited(cubit.selectEffort(id));
+                }
+              },
+      ),
+    ),
+  );
 
   /// Подтверждение `bypass` (D5): запись постоянна и действует на все новые
   /// сессии цели, поэтому решает пользователь; закрытие без «Use bypass»
@@ -605,21 +677,16 @@ class AgentsModesPage extends StatelessWidget {
               autofocus: true,
               child: ContentDialog(
                 key: const ValueKey('agents-modes-bypass-confirm'),
-                title: const CodeLabDialogTitle('Use bypass for new sessions?'),
-                content: const Text(
-                  "Only critical commands, changes to the agent's configuration "
-                  'and network tools still ask. Commands run without asking and '
-                  'can reach the network too. Use bypass only in a disposable '
-                  'checkout.',
-                ),
+                title: CodeLabDialogTitle(dialogContext.l10n.agentsBypassTitle),
+                content: Text(dialogContext.l10n.agentsBypassBody),
                 actions: [
                   Button(
                     onPressed: () => close(false),
-                    child: const Text('Cancel'),
+                    child: Text(dialogContext.l10n.commonCancel),
                   ),
                   FilledButton(
                     onPressed: () => close(true),
-                    child: const Text('Use bypass'),
+                    child: Text(dialogContext.l10n.agentsBypassConfirm),
                   ),
                 ],
               ),

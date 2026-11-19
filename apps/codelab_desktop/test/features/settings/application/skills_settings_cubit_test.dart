@@ -327,7 +327,7 @@ void main() {
 
       expect(cubit.state, isA<SkillsSettingsUnreadable>());
       expect(
-        (cubit.state as SkillsSettingsUnreadable).problems.join(),
+        (cubit.state as SkillsSettingsUnreadable).issues.join(),
         isNot(contains(leakMarker)),
       );
       final entry = event('skills_settings.unreadable');

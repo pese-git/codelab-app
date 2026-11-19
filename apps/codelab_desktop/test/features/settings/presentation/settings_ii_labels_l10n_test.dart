@@ -1,4 +1,4 @@
-// Красные тесты задачи 5.1c change `add-desktop-localization`: функции
+// Тесты задач 5.1c и 5.2 change `add-desktop-localization`: функции
 // presentation подписей страниц «MCP servers», «Agents & modes» и «Skills &
 // extensions» на `en` и `ru` (spec app-settings «Источник конфигурации на
 // русском», «Таблица «Agent status» на русском», «Таблица определений
@@ -10,14 +10,13 @@
 // баннеров), а текст строит presentation. Каждая функция — чистая «(данные,
 // язык)», поэтому её можно проверить без дерева виджетов на обоих каталогах.
 //
-// Заглушки задачи 5.1c возвращают пустую строку, поэтому красные и `en`, и
-// `ru`. Ожидания `en` — прежние строки страниц (D3). Ожидания `ru` — по
+// Ожидания `en` — прежние строки страниц (D3). Ожидания `ru` — по
 // глоссарию §4 «Настройки II» (подписи источника, состояния сервера, статусы
 // определений, области, пометка режима); фразы вне глоссария (баннеры,
 // отказы навыков) проверяются без выдуманного перевода: `ru` отличается от
 // `en`, не содержит английской основы и хвоста, а значения (имена, пути,
-// команды) сохранены (D7). Расхождение `en` у `ConfigSourceKind.extraFile`
-// (`config` на «General» и `file` на «Agents & modes») — в отчёте задачи.
+// команды) сохранены (D7). `en` у `ConfigSourceKind.extraFile` различается
+// по странице: `file` на «Agents & modes» и `config` на «General» (D7).
 
 import 'package:codelab_desktop/features/settings/application/agents_modes_messages.dart';
 import 'package:codelab_desktop/features/settings/application/mcp_messages.dart';
@@ -37,14 +36,23 @@ void main() {
   final ru = AppLocalizationsRu();
 
   group('configSourceLabel: одна функция по ConfigSourceKind? (D7)', () {
-    test('en совпадает с прежними подписями «Agents & modes» и «General»', () {
-      expect(configSourceLabel(en, null), 'default');
-      expect(configSourceLabel(en, ConfigSourceKind.user), 'user');
-      expect(configSourceLabel(en, ConfigSourceKind.project), 'project');
-      expect(configSourceLabel(en, ConfigSourceKind.projectLocal), 'local');
-      expect(configSourceLabel(en, ConfigSourceKind.extraFile), 'config');
-      expect(configSourceLabel(en, ConfigSourceKind.environment), 'env');
-    });
+    test(
+      'en совпадает с прежними подписями «Agents & modes» и «General» (forGeneral)',
+      () {
+        expect(configSourceLabel(en, null), 'default');
+        expect(configSourceLabel(en, ConfigSourceKind.user), 'user');
+        expect(configSourceLabel(en, ConfigSourceKind.project), 'project');
+        expect(configSourceLabel(en, ConfigSourceKind.projectLocal), 'local');
+        // Файл `--config`: прежние подписи страниц различались — `file` на
+        // «Agents & modes» и `config` на «General» (D7).
+        expect(configSourceLabel(en, ConfigSourceKind.extraFile), 'file');
+        expect(
+          configSourceLabel(en, ConfigSourceKind.extraFile, forGeneral: true),
+          'config',
+        );
+        expect(configSourceLabel(en, ConfigSourceKind.environment), 'env');
+      },
+    );
 
     test(
       'ru — по глоссарию: именительная форма, окружение и файл --config',

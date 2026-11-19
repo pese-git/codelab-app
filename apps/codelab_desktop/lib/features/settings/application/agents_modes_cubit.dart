@@ -182,17 +182,9 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
     final access = _accessOf(profile);
     switch (access) {
       case RemoteReadOnly(:final endpoint):
-        _setReadOnly(
-          'Read-only: this agent runs on ${profileOrigin(endpoint)}. Change '
-              'its modes and agents on that host: codelab config set, '
-              '.codelab/agents.',
-          'remote',
-        );
+        _setReadOnly(RemoteAgentReadOnly(profileOrigin(endpoint)), 'remote');
       case NotManaged(:final agentName):
-        _setReadOnly(
-          'Agent settings are managed by $agentName.',
-          'not_managed',
-        );
+        _setReadOnly(ForeignAgentReadOnly(agentName), 'not_managed');
       case EditableSettings():
         await _loadEditable(attempt, profile, access);
     }
@@ -242,11 +234,11 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
     };
   }
 
-  void _setReadOnly(String notice, String access) {
+  void _setReadOnly(ReadOnlyReason reason, String access) {
     _forgetSession();
     _saved = null;
     _logger?.debug('agents_modes.loaded', context: {'access': access});
-    _emit(AgentsModesReadOnly(notice: notice));
+    _emit(AgentsModesReadOnly(reason: reason));
   }
 
   void _forgetSession() {
@@ -270,7 +262,9 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
     EditableSettings access,
   ) async {
     if (access.paths.codelabHome.isEmpty) {
-      _setUnreadable(const ['The CodeLab home folder is not available.']);
+      _setUnreadable(const [
+        AppSettingsProblem(AppSettingsProblemKind.homeUnavailable),
+      ]);
       return;
     }
     final environment = {
@@ -292,7 +286,9 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
         'agents_modes.unreadable',
         context: {'error_type': error.runtimeType.toString()},
       );
-      _setUnreadable(const ['Cannot read the agent settings.'], log: false);
+      _setUnreadable(const [
+        AppSettingsProblem(AppSettingsProblemKind.cannotReadSettings),
+      ], log: false);
       return;
     }
     if (_stale(attempt)) {
@@ -300,8 +296,10 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
     }
     if (snapshot.issues.isNotEmpty || !snapshot.isReadable(ConfigLayer.user)) {
       _setUnreadable([
-        for (final issue in snapshot.issues) issue.toString(),
-        if (snapshot.issues.isEmpty) 'The user config.yaml cannot be read.',
+        for (final issue in snapshot.issues)
+          LoaderSettingsProblem(issue.toString()),
+        if (snapshot.issues.isEmpty)
+          const AppSettingsProblem(AppSettingsProblemKind.userConfigUnreadable),
       ]);
       return;
     }
@@ -384,7 +382,7 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
     _emit(_buildReady());
   }
 
-  void _setUnreadable(List<String> problems, {bool log = true}) {
+  void _setUnreadable(List<SettingsProblem> problems, {bool log = true}) {
     _forgetSession();
     if (log) {
       _logger?.warning(
@@ -392,7 +390,7 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
         context: {'error_type': 'ConfigIssue'},
       );
     }
-    _emit(AgentsModesUnreadable(problems: problems));
+    _emit(AgentsModesUnreadable(issues: problems));
   }
 
   ConfigLayer get _target {
@@ -407,30 +405,16 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
         : suggested;
   }
 
-  static String _sourceLabel(ConfigSourceView? source) =>
-      switch (source?.kind) {
-        null => 'default',
-        ConfigSourceKind.user => 'user',
-        ConfigSourceKind.project => 'project',
-        ConfigSourceKind.projectLocal => 'local',
-        ConfigSourceKind.extraFile => 'file',
-        ConfigSourceKind.environment => 'env',
-      };
-
   AgentsModesReady _buildReady() {
     final defaults = _defaults!;
     final mode = defaults.mode;
-    final label = _modeLabel(mode);
     return AgentsModesReady(
       mode: mode.id,
-      modeLabel: label,
-      modeSource: _sourceLabel(mode.source),
-      narrowedNotice: mode.narrowedByProject
-          ? 'This project is not trusted, so its config can only make the '
-                'mode stricter. New sessions here use $label.'
-          : null,
+      blocksWriteAndExec: mode.blocksWriteAndExec,
+      narrowedByProject: mode.narrowedByProject,
+      modeSourceKind: mode.source?.kind,
       effort: defaults.effort.id,
-      effortSource: _sourceLabel(defaults.effort.source),
+      effortSourceKind: defaults.effort.source?.kind,
       target: _target,
       canTargetProject: _canTargetProject,
       saving: _saving,
@@ -469,13 +453,18 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
       rows.add(
         AgentsDefinitionRow(
           name: row.name,
-          description: row.description ?? '—',
-          source: path == null ? 'built-in' : homePathLabel(path, _environment),
-          availableIn: failed ? '—' : (row.availableIn?.name ?? '—'),
+          descriptionText: row.description,
+          sourcePath: path == null ? null : homePathLabel(path, _environment),
+          scope: failed ? null : row.availableIn,
           // `null` у рабочей строки — «все инструменты» и модель сессии (D7).
-          tools: failed ? '—' : (row.tools?.join(', ') ?? 'all'),
-          model: failed ? '—' : (row.model ?? 'session model'),
-          status: _statusText(row),
+          toolNames: failed ? null : row.tools,
+          modelId: failed ? null : row.model,
+          loaded: !failed,
+          rowStatus: row.status,
+          errorLine: row.errorLine,
+          overriddenBy: row.overriddenBy == null
+              ? null
+              : homePathLabel(row.overriddenBy!, _environment),
           tone: _statusTone(row.status),
         ),
       );
@@ -490,15 +479,14 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
             path: path!,
             pathLabel: homePathLabel(path, _environment),
             line: row.errorLine,
-            message:
-                row.errorMessage ??
-                switch (row.status) {
-                  AgentRowStatus.modelNotConfigured =>
-                    'The model of this definition is not configured.',
-                  AgentRowStatus.duplicate =>
-                    'Not loaded: another definition has the same name.',
-                  _ => 'The definition cannot be loaded.',
-                },
+            // Текст ядра — как есть; без него причина типом (D5, D6).
+            message: row.errorMessage,
+            reason: switch (row.status) {
+              AgentRowStatus.modelNotConfigured =>
+                AgentsDefinitionErrorKind.modelNotConfigured,
+              AgentRowStatus.duplicate => AgentsDefinitionErrorKind.duplicate,
+              _ => AgentsDefinitionErrorKind.other,
+            },
           ),
         );
       }
@@ -530,20 +518,6 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
       (row.status == AgentRowStatus.error ||
           row.status == AgentRowStatus.modelNotConfigured ||
           row.status == AgentRowStatus.duplicate);
-
-  String _statusText(AgentDefinitionRowView row) => switch (row.status) {
-    AgentRowStatus.available => 'Available',
-    AgentRowStatus.overridden =>
-      row.overriddenBy == null
-          ? 'Overridden'
-          : 'Overridden by ${homePathLabel(row.overriddenBy!, _environment)}',
-    AgentRowStatus.modelNotConfigured => 'Model not configured',
-    AgentRowStatus.error =>
-      row.errorLine == null ? 'Error' : 'Error · line ${row.errorLine}',
-    AgentRowStatus.duplicate => 'Not loaded: duplicate name',
-    AgentRowStatus.shadowed => 'Shadowed by project',
-    AgentRowStatus.subagentsOff => 'Subagents off',
-  };
 
   static AgentsStatusTone _statusTone(AgentRowStatus status) =>
       switch (status) {
@@ -738,7 +712,7 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
       if (state is AgentsModesReady) {
         _banner = const AgentsModesBanner(
           AgentsModesBannerKind.warning,
-          'Settings changed while the dialog was open; bypass was not saved.',
+          message: AgentsBypassStaleMessage(),
         );
         _publishReady();
       }
@@ -766,7 +740,7 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
       );
       _banner = const AgentsModesBanner(
         AgentsModesBannerKind.error,
-        'Cannot save: the target config file is not available.',
+        message: AgentsTargetUnavailableMessage(),
       );
       _publishReady();
       return;
@@ -815,12 +789,11 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
       ConfigSaved() => null,
       ConfigConflict() => const AgentsModesBanner(
         AgentsModesBannerKind.conflict,
-        'The config changed on disk, so nothing was saved. The page was '
-        'reloaded; review it and try again.',
+        message: AgentsConflictMessage(),
       ),
       _ => const AgentsModesBanner(
         AgentsModesBannerKind.error,
-        'The config was not saved.',
+        message: AgentsNotSavedMessage(),
       ),
     };
     _SavedNote? note;
@@ -851,52 +824,68 @@ class AgentsModesCubit extends Cubit<AgentsModesState> {
         !isClosed) {
       _emit(
         AgentsModesUnreadable(
-          problems: after.problems,
+          issues: after.issues,
           banner: AgentsModesBanner(
             AgentsModesBannerKind.saved,
-            'Saved to ${_targetName(note.layer)}.',
+            message: AgentsSavedOnlyMessage(note.layer),
           ),
         ),
       );
     }
   }
 
-  static String _targetName(ConfigLayer layer) =>
-      layer == ConfigLayer.projectLocal ? 'This project only' : 'All projects';
-
   /// Баннер «Saved» по действующему значению нового снимка: если оно не равно
   /// записанному, баннер прямо говорит, что запись перекрыта (другим слоем,
-  /// окружением) или сужена недоверенным проектом (design.md D3, D4).
+  /// окружением) или сужена недоверенным проектом (design.md D3, D4). Это три
+  /// целых сообщения, а не основа с хвостом (D5, правило 7).
   AgentsModesBanner _savedBanner(_SavedNote note) {
     final defaults = _defaults!;
     final isMode = note.kind == 'mode';
+    final setting = isMode
+        ? AgentsModesSetting.mode
+        : AgentsModesSetting.effort;
     final effective = isMode ? defaults.mode.id : defaults.effort.id;
-    final label = isMode ? _modeLabel(defaults.mode) : effective;
-    final suffix = !note.restart.contains(note.key)
-        ? '.'
+    final blocks = isMode && defaults.mode.blocksWriteAndExec;
+    final when = !note.restart.contains(note.key)
+        ? AgentsApplyWhen.now
         : _agentConnected()
-        ? ' after Restart agent.'
-        : ' when the agent starts.';
-    final target = _targetName(note.layer);
+        ? AgentsApplyWhen.afterRestart
+        : AgentsApplyWhen.whenAgentStarts;
     final narrowed = isMode && defaults.mode.narrowedByProject;
     if (!narrowed && effective == note.value) {
       return AgentsModesBanner(
         AgentsModesBannerKind.saved,
-        'Saved. New sessions use $label$suffix',
+        message: AgentsSavedMessage(
+          setting: setting,
+          value: effective,
+          when: when,
+          blocksWriteAndExec: blocks,
+        ),
       );
     }
-    final source = narrowed
-        ? 'the untrusted project'
-        : _sourceLabel(isMode ? defaults.mode.source : defaults.effort.source);
+    if (narrowed) {
+      return AgentsModesBanner(
+        AgentsModesBannerKind.warning,
+        message: AgentsSavedNarrowedMessage(
+          target: note.layer,
+          value: effective,
+          when: when,
+          blocksWriteAndExec: blocks,
+        ),
+      );
+    }
     return AgentsModesBanner(
       AgentsModesBannerKind.warning,
-      'Saved to $target; $source overrides it: new sessions use $label$suffix',
+      message: AgentsSavedOverriddenMessage(
+        setting: setting,
+        target: note.layer,
+        source: (isMode ? defaults.mode.source : defaults.effort.source)?.kind,
+        value: effective,
+        when: when,
+        blocksWriteAndExec: blocks,
+      ),
     );
   }
-
-  static String _modeLabel(ModeChoiceView mode) => mode.blocksWriteAndExec
-      ? '${mode.id} (edits and commands blocked by plan)'
-      : mode.id;
 
   /// Агент подключён: `Connected` или `Reconnecting` (D3).
   bool _agentConnected() => _connectedProfile(_workspace.current) != null;

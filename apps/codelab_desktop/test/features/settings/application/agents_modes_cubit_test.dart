@@ -899,7 +899,10 @@ void main() {
         expect(fx.store.applied, isEmpty);
         expect(fx.userConfig, isNot(contains('mode: plan')));
         expect(now(cubit).banner?.kind, AgentsModesBannerKind.error);
-        expect(now(cubit).banner?.message, isA<AgentsNotSavedMessage>());
+        expect(
+          now(cubit).banner?.message,
+          isA<AgentsTargetUnavailableMessage>(),
+        );
         expect(now(cubit).saving, isFalse);
       },
     );
@@ -1597,15 +1600,13 @@ void main() {
         final errors = definitionsOf(cubit).errors;
         expect(errors, hasLength(1));
         expect(errors.single.path, '$userAgentsDir/dup.md');
-        expect(
-          errors.single.message,
-          'Not loaded: another definition has the same name.',
-        );
+        expect(errors.single.message, isNull);
+        expect(errors.single.reason, AgentsDefinitionErrorKind.duplicate);
         expect(errors.single.line, isNull);
       },
     );
 
-    test('a model error without a message gets a fixed text', () async {
+    test('a model error without a message gets a typed reason', () async {
       final fx = await fixture();
       final cubit = make(
         fx,
@@ -1622,7 +1623,9 @@ void main() {
 
       await ready(cubit);
 
-      expect(definitionsOf(cubit).errors.single.message, isNotEmpty);
+      final error = definitionsOf(cubit).errors.single;
+      expect(error.message, isNull);
+      expect(error.reason, AgentsDefinitionErrorKind.modelNotConfigured);
     });
 
     test('built-in types of a config with subagents.enabled false are '
