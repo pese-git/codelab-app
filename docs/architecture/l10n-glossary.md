@@ -328,6 +328,63 @@
 
 `Max …` переводится как «Лимит …», а не «Макс. …»: сокращения с точкой запрещены (§1 п. 9; решение пользователя 2026-11-19).
 
+### Настройки I: «Подключение», «Провайдеры», мастер провайдера (итерация 4)
+
+Термины, добавленные итерацией 4. Идентификаторы в русских фразах — по правилу 5 §1: id профиля, имя секрета и отдельные символы в «ёлочках», id провайдера, переменные окружения, id бэкенда, команды, пути и URL — без кавычек. Тексты хранилища секретов (`readOnlyHint`, `unavailableReason`, причина отказа записи) и `ConfigIssue.message` показываются как есть (§2; design.md D6).
+
+| en | ru | Примечание |
+|---|---|---|
+| Behavior | Поведение | секция страницы «Подключение» (перезапуск агента) |
+| Profiles | Профили | секция списка профилей |
+| Add profile | Добавить профиль | кнопка страницы; заголовок диалога — «Добавить профиль подключения» |
+| Use (кнопка строки) | Использовать | выбрать профиль для следующего старта агента |
+| Rename | Переименовать | |
+| Default (метка) | По умолчанию | профиль или провайдер по умолчанию |
+| Current (метка) | Текущий | профиль, к которому подключено окно; см. §4 (решение пользователя 2026-11-19); `Selected` — «Выбрано» (§5) |
+| Name / Type / Command / Arguments / Folder / Environment | Имя / Тип / Команда / Аргументы / Папка / Окружение | подписи полей диалога профиля |
+| After saving | После сохранения | |
+| Use by default | Использовать по умолчанию | флажок диалога профиля |
+| Run in the project folder | Запускать в папке проекта | |
+| Local stdio | Локальный stdio | сегмент типа профиля; `stdio` и `WebSocket` не переводятся (§2) |
+| No token | Без токена | |
+| Use stored secret | Использовать сохранённый секрет | вариант токена |
+| Store a new token | Сохранить новый токен | вариант токена |
+| From environment variable | Из переменной окружения | вариант токена |
+| Paste the token | Вставьте токен | подсказка скрытого поля |
+| `{name}` is not set in CodeLab's environment. | `{name}` не задана в окружении CodeLab. | `{name}` — имя переменной без кавычек |
+| Unencrypted connection | Соединение без шифрования | заголовок подтверждения `ws://`; security |
+| Save anyway | Всё равно сохранить | кнопка подтверждения `ws://`; security |
+| Profile saved | Профиль сохранён | |
+| Add another | Добавить ещё | |
+| Done | Готово | |
+| Current connection (not saved) | Текущее подключение (не сохранено) | строка профиля окна, которого нет в `profiles.json` |
+| Use another profile first. | Сначала выберите другой профиль. | подсказка недоступного удаления |
+| Key storage | Хранилище ключей | строка страницы «Провайдеры»; id бэкенда — без кавычек |
+| writable / read-only (тег хранилища) | запись разрешена / только чтение | |
+| Configured providers | Настроенные провайдеры | |
+| Default model | Модель по умолчанию | уже в §4; строка выбора на странице |
+| Used by new sessions. | Используется новыми сессиями. | |
+| Active in this session | Активна в этой сессии | |
+| Last check | Последняя проверка | строка раскрытой карточки |
+| Unknown kind | Неизвестный вид | подпись; значение вида (`future-kind`) не переводится |
+| Key: in `{backend}` / Key: missing in `{backend}` | Ключ: в хранилище `{backend}` / Ключ: нет в хранилище `{backend}` | статус ключа; `Key: env X (set)` → «Ключ: переменная X (задана)» |
+| No key | Без ключа | |
+| defined in `{path}` | определён в `{path}` | подпись провайдера из нередактируемого файла |
+| Теги проверки: not checked / checking… / unauthorized / not found / unreachable / timeout / TLS error / bad response | не проверялся / проверка… / не авторизован / не найдено / недоступен / тайм-аут / ошибка TLS / неверный ответ | тег и строка «Последняя проверка»; «ok, N models» → «успешно, N моделей» (`plural`) |
+| API type / Base URL / Key / Check / Model / Review | Тип API / Базовый URL / Ключ / Проверка / Модель / Обзор | шаги мастера |
+| Next / Back | Далее / Назад | кнопки мастера |
+| API key source / API key / Variable name | Источник ключа API / Ключ API / Имя переменной | шаг ключа |
+| Custom OpenAI-compatible endpoint | Свой адрес, совместимый с OpenAI | пресет `custom-openai`; `custom-anthropic` — «…совместимый с Anthropic»; `ollama` — «Ollama (локально, без ключа)»; `OpenAI`, `Anthropic`, `OpenRouter` — как есть (D7) |
+| Key rejected / Model list not found / Server unreachable / Timed out after N s / TLS error / Unexpected response | Ключ отклонён / Список моделей не найден / Сервер недоступен / Время ожидания истекло: N с / Ошибка TLS / Неожиданный ответ | заголовки отказа проверки |
+| Use http anyway | Всё равно использовать http | security |
+| Save without check / Continue without check | Сохранить без проверки / Продолжить без проверки | security |
+| Model id | ID модели | |
+| Context window / Max output tokens | Окно контекста / Максимум токенов вывода | шаг ограничений модели |
+| Make default model | Сделать моделью по умолчанию | флажок обзора |
+| Saving… | Сохранение… | |
+| Not verified: `{reason}` | Не проверено: `{reason}` | см. §5 «Статусы» |
+| Config changed on disk — review and save again | Конфигурация изменилась на диске — проверьте и сохраните снова | |
+
 ---
 
 ## 5. Подписи кита: действия, статусы, риски
@@ -489,7 +546,7 @@
 
 ## 6. Предупреждения безопасности
 
-Сообщения с меткой `security` в `@description` (D14): `ws://` без шифрования, «This file may contain secrets.», раскрытие вывода терминала, подтверждение корня диска, диалог `bypass`, риски одобрения. Правила:
+Сообщения с меткой `security` в `@description` (D14): `ws://` без шифрования, токены и ключи провайдеров в открытом виде, команды удаления оставшихся секретов, «This file may contain secrets.», раскрытие вывода терминала, подтверждение корня диска, диалог `bypass`, риски одобрения. Правила:
 
 * перевод не смягчает предупреждение: «может», «не», «только» и «всё равно» из `en` сохраняются;
 * команды, адреса и имена секретов в тексте — плейсхолдеры (§2);
@@ -510,6 +567,36 @@
 | Only http and https links can be opened. | Можно открывать только ссылки http и https. | вычитано (2026-11-19); `terminalLinkRefusal` |
 | The agent rejected the token (HTTP {status}). | Агент отклонил токен (HTTP {status}). | вычитано (2026-11-19); `workbenchTokenRejected` |
 | The agent requires a token (HTTP {status}). | Агент требует токен (HTTP {status}). | вычитано (2026-11-19); `workbenchTokenRequired` |
+| CodeLab reads the token from this environment variable when it connects. Token values are not saved in profiles.json. | CodeLab читает токен из этой переменной окружения при подключении. Значения токенов не сохраняются в profiles.json. | вычитано (2026-11-19); `addProfileTokenEnvNote` |
+| Saved as {name} in {backend}. The value is never shown again or written to profiles.json. | Сохраняется как «{name}» в {backend}. Значение больше не показывается и не записывается в profiles.json. | вычитано (2026-11-19); `addProfileNewTokenHint` |
+| ws:// to another machine: the token is sent unencrypted. | ws:// к другой машине: токен передаётся без шифрования. | вычитано (2026-11-19); `addProfileWarningTokenPlaintext` |
+| ws:// to another machine: traffic is sent unencrypted. | ws:// к другой машине: трафик передаётся без шифрования. | вычитано (2026-11-19); `addProfileWarningTrafficPlaintext` |
+| Unencrypted connection | Соединение без шифрования | вычитано (2026-11-19); `addProfilePlaintextTitle` |
+| The token for {origin} will travel in clear text. Use wss:// if the host supports it. | Токен для {origin} будет передан открытым текстом. Используйте wss://, если хост это поддерживает. | вычитано (2026-11-19); `addProfilePlaintextWithToken` |
+| Prompts and files sent to {origin} will travel in clear text. Use wss:// if the host supports it. | Промпты и файлы, отправленные на {origin}, будут переданы открытым текстом. Используйте wss://, если хост это поддерживает. | вычитано (2026-11-19); `addProfilePlaintextWithoutToken` |
+| Save anyway | Всё равно сохранить | вычитано (2026-11-19); `addProfileSaveAnyway` |
+| Remove the user name and password from the URL; use the Token setting instead. | Уберите имя пользователя и пароль из URL; вместо этого используйте поле «Токен». | вычитано (2026-11-19); `addProfileErrorUrlUserInfo` |
+| A stored token {name} already exists in {backend}. Choose it with "Use stored secret" or remove it with codelab secret delete. | Сохранённый токен «{name}» уже есть в {backend}. Выберите его в варианте «Использовать сохранённый секрет» или удалите командой codelab secret delete. | вычитано (2026-11-19); `addProfileErrorTokenSecretExists` |
+| Could not store the token. Try again. | Не удалось сохранить токен. Повторите попытку. | вычитано (2026-11-19); `addProfileFailureSecret` |
+| The profile was not saved; the token stays in {backend} as {name}. Remove it with codelab secret delete {name}. | Профиль не сохранён; токен остался в {backend} под именем «{name}». Удалите его командой codelab secret delete {name}. | вычитано (2026-11-19); `addProfileFailureOrphanedToken` |
+| {key} looks like a secret. Set it in the system environment or reference it from the agent config as {syntax}. | {key} похоже на секрет. Задайте его в системном окружении или сошлитесь на него в конфигурации агента как {syntax}. | вычитано (2026-11-19); `addProfileErrorEnvSecretLike` |
+| Keys are stored in an open file {path} (mode 0600). | Ключи хранятся в открытом файле {path} (режим 0600). | вычитано (2026-11-19); `providersKeysInOpenFile` |
+| Key: in config file (plain text) | Ключ: в файле конфигурации (открытым текстом) | вычитано (2026-11-19); `providersKeyLabelLiteral` |
+| In the config file (plain text) | В файле конфигурации (открытым текстом) | вычитано (2026-11-19); `providersKeyLiteral` |
+| The key is written in config.yaml. Move it to the secret store: codelab secret migrate. | Ключ записан в config.yaml. Перенесите его в хранилище секретов: codelab secret migrate. | вычитано (2026-11-19); `providersKeyHintLiteral` |
+| The key is sent unencrypted to {host}. | Ключ отправляется в открытом виде на {host}. | вычитано (2026-11-19); `settingsKeyUnencryptedToHost` |
+| Provider {id} removed, but its stored key could not be deleted. Delete it with: codelab secret delete {secret} | Провайдер {id} удалён, но его сохранённый ключ удалить не удалось. Удалите его командой: codelab secret delete {secret} | вычитано (2026-11-19); `providersBannerRemovedKeyFailed` |
+| The config was not saved: {key} must not hold a literal secret. | Конфигурация не сохранена: {key} не должен содержать секрет в открытом виде. | вычитано (2026-11-19); `configNotSavedInlineSecret` |
+| Store in {backend} as "{name}" | Сохранить в {backend} как «{name}» | вычитано (2026-11-19); `wizardKeyStore` |
+| Remove the user name and password from the address. | Уберите имя пользователя и пароль из адреса. | вычитано (2026-11-19); `wizardErrorAddressUserInfo` |
+| A stored key {name} already exists in {backend}. | Сохранённый ключ «{name}» уже есть в {backend}. | вычитано (2026-11-19); `wizardErrorKeyAlreadyStored` |
+| The key is written in config.yaml. Choose where to keep it instead. | Ключ записан в config.yaml. Выберите, где его хранить вместо этого. | вычитано (2026-11-19); `wizardKeyNoticeLiteral` |
+| Use http anyway | Всё равно использовать http | вычитано (2026-11-19); `wizardInsecureConfirm` |
+| The address and the key are not verified, and the model list is not available. You will enter the model yourself. | Адрес и ключ не проверены, список моделей недоступен. Модель придётся ввести самостоятельно. | вычитано (2026-11-19); `wizardSkipWarning` |
+| Continue without check | Продолжить без проверки | вычитано (2026-11-19); `wizardSkipConfirm` |
+| The stored key {name} was already replaced. | Сохранённый ключ «{name}» уже заменён. | вычитано (2026-11-19); `wizardSaveKeyReplaced` |
+| The new key {name} is still in the secret store. Delete it with: codelab secret delete {name} | Новый ключ «{name}» остался в хранилище секретов. Удалите его командой: codelab secret delete {name} | вычитано (2026-11-19); `wizardSaveKeyStillStored` |
+| The profile was removed, but the stored token {name} was not deleted. Remove it with codelab secret delete {name}. | Профиль удалён, но сохранённый токен «{name}» не удалён. Удалите его командой codelab secret delete {name}. | вычитано (2026-11-19); `connectionFailureTokenNotDeleted` |
 
 ### Принятые переводы фраз ленты: заметки и сбои хода
 
