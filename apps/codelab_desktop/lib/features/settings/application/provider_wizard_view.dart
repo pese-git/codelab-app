@@ -356,12 +356,9 @@ String? wizardErrorText(ProviderSetupState state, AppLocalizations l10n) {
     ProviderSetupErrorCode.addressInvalid => l10n.wizardErrorAddressInvalid,
     ProviderSetupErrorCode.addressHasUserinfo =>
       l10n.wizardErrorAddressUserInfo,
-    ProviderSetupErrorCode.secretStoreReadOnly =>
-      state is ChoosingKey
-          ? (state.readOnlyHint ??
-                state.backend.unavailableReason ??
-                l10n.secretStoreReadOnly)
-          : error,
+    // Заголовок из каталога (security); текст хранилища — в
+    // [wizardErrorDetail].
+    ProviderSetupErrorCode.secretStoreReadOnly => l10n.secretStoreReadOnly,
     ProviderSetupErrorCode.keyEmpty => l10n.wizardErrorKeyEmpty,
     ProviderSetupErrorCode.keyAlreadyStored =>
       state is ChoosingKey && state.existingSecret != null
@@ -382,6 +379,24 @@ String? wizardErrorText(ProviderSetupState state, AppLocalizations l10n) {
     null => error,
   };
 }
+
+/// Подробность баннера «хранилище только для чтения» на шаге ключа:
+/// `readOnlyHint`, иначе `unavailableReason` — текст хранилища как есть (D6);
+/// `null` — бэкенд пишущий или подсказки нет. Баннер показывает заголовок
+/// `secretStoreReadOnly` из каталога, а это — подробность под ним. Тот же
+/// текст не повторяется ошибкой `secretStoreReadOnly` (см.
+/// [isSecretStoreReadOnlyError]).
+String? wizardReadOnlyDetail(ProviderSetupState state) =>
+    state is ChoosingKey && !state.canStoreSecret
+    ? (state.readOnlyHint ?? state.backend.unavailableReason)
+    : null;
+
+/// Ошибка шага ключа `secretStoreReadOnly` дублирует постоянный баннер
+/// «только для чтения» (он виден, пока `canStoreSecret == false`), поэтому
+/// отдельно не показывается — по коду, а не по строке.
+bool isSecretStoreReadOnlyError(ChoosingKey state) =>
+    state.errorCode == ProviderSetupErrorCode.secretStoreReadOnly &&
+    !state.canStoreSecret;
 
 /// Ошибка шага ключа — дубль подписи существующего ключа: автомат выставляет
 /// `keyAlreadyStored` только вместе с `existingSecret`, поэтому диалог не

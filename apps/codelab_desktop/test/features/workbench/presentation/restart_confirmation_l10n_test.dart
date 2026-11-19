@@ -28,15 +28,21 @@ void main() {
   Future<String> russianMessage(
     WidgetTester tester,
     CodeLabShellCubit cubit,
-    List<String> sessions,
-  ) async {
+    List<String> sessions, {
+    bool embedded = false,
+    Locale locale = const Locale('ru'),
+  }) async {
     await tester.pumpWidget(
       localizedFluentApp(
-        locale: const Locale('ru'),
+        locale: locale,
         Stack(
           children: [
             RestartConfirmationDialog(
-              pending: RestartConfirmation(title: 'Remote', sessions: sessions),
+              pending: RestartConfirmation(
+                title: embedded ? 'Embedded agent' : 'Remote',
+                embedded: embedded,
+                sessions: sessions,
+              ),
               cubit: cubit,
             ),
           ],
@@ -78,6 +84,45 @@ void main() {
         expect(text, contains('Отмена'));
       });
     }
+  });
+
+  group('встроенный агент: своя формулировка без подстановки подписи', () {
+    testWidgets('ru', (tester) async {
+      final binding = CodeLabTestBinding(project: '/work/app');
+      final cubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      final text = await russianMessage(tester, cubit, ['a'], embedded: true);
+
+      expect(
+        text,
+        contains(
+          'Перезапустить встроенного агента? Это прервёт 1 выполняющуюся '
+          'сессию: a. Промпты в очереди сохранятся.',
+        ),
+      );
+      expect(text, isNot(contains('Встроенн')));
+    });
+
+    testWidgets('en', (tester) async {
+      final binding = CodeLabTestBinding(project: '/work/app');
+      final cubit = binding.scope.resolve<CodeLabShellCubit>();
+
+      final text = await russianMessage(
+        tester,
+        cubit,
+        ['a'],
+        embedded: true,
+        locale: const Locale('en'),
+      );
+
+      expect(
+        text,
+        contains(
+          'Restart the embedded agent? This interrupts 1 running session: '
+          'a. Queued prompts stay.',
+        ),
+      );
+    });
   });
 
   testWidgets('открытый диалог пересобирается при смене языка, plural и '

@@ -335,6 +335,34 @@ void main() {
       await tearDownApp(tester);
     });
 
+    testWidgets('бэкенд только для чтения: жёлтый баннер — заголовок на '
+        'русском, подсказка хранилища под ним как есть, один раз', (
+      tester,
+    ) async {
+      store.backend = const SecretBackendInfo(
+        id: 'env',
+        writable: false,
+        unavailableReason: 'Secrets are read from the environment.',
+      );
+      session.readOnlyHint =
+          "secret store env is read-only. Add 'secrets.backend: file' to "
+          'config.yaml.';
+      await openPage(tester, locale: const Locale('ru'));
+      await toKey(tester);
+
+      final banner = _key('provider-wizard-key-readonly');
+      expect(banner, findsOneWidget);
+      final text = textsOf(tester, banner);
+      expect(text, contains('Хранилище секретов доступно только для чтения.'));
+      expect(text, contains("secret store env is read-only. Add 'secrets."));
+      expect(
+        find.textContaining("secret store env is read-only. Add 'secrets."),
+        findsOneWidget,
+      );
+      await cancelWizard(tester);
+      await tearDownApp(tester);
+    });
+
     testWidgets('пустой ключ: ошибка шага по коду моста, перевод «Enter the '
         'API key.»', (tester) async {
       await openPage(tester, locale: const Locale('ru'));

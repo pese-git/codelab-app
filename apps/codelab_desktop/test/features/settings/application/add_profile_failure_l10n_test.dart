@@ -56,8 +56,11 @@ void main() {
   String text(AddProfileCubit cubit, AppLocalizations l10n) =>
       addProfileFailureText(l10n, (cubit.state as SaveFailed).failure);
 
-  test('хранилище назвало причину: она в состоянии и показывается как '
-      'есть', () async {
+  String? detail(AddProfileCubit cubit) =>
+      addProfileFailureDetail((cubit.state as SaveFailed).failure);
+
+  test('хранилище назвало причину: она в состоянии, заголовок — каталог, '
+      'причина — подробность как есть', () async {
     secrets.nextWrite = const ReadOnly('keychain is read-only.');
 
     final cubit = await failedSave();
@@ -68,8 +71,12 @@ void main() {
       (failure as SecretStoreReadOnlyFailure).reason,
       'keychain is read-only.',
     );
-    expect(text(cubit, AppLocalizationsEn()), 'keychain is read-only.');
-    expect(text(cubit, AppLocalizationsRu()), 'keychain is read-only.');
+    expect(text(cubit, AppLocalizationsEn()), 'The secret store is read-only.');
+    expect(
+      text(cubit, AppLocalizationsRu()),
+      'Хранилище секретов доступно только для чтения.',
+    );
+    expect(detail(cubit), 'keychain is read-only.');
   });
 
   test('хранилище причину не назвало: в состоянии `null`, текст — перевод '
@@ -85,6 +92,7 @@ void main() {
       text(cubit, AppLocalizationsRu()),
       'Хранилище секретов доступно только для чтения.',
     );
+    expect(detail(cubit), isNull);
   });
 
   test('хранилище отказало словами запасной строки ядра: это всё равно '
@@ -99,7 +107,11 @@ void main() {
       (failure as SecretStoreReadOnlyFailure).reason,
       'The secret store is read-only.',
     );
-    expect(text(cubit, AppLocalizationsRu()), 'The secret store is read-only.');
+    expect(
+      text(cubit, AppLocalizationsRu()),
+      'Хранилище секретов доступно только для чтения.',
+    );
+    expect(detail(cubit), 'The secret store is read-only.');
   });
 
   test('отказ записи секрета: тип без текста, значение токена не в '

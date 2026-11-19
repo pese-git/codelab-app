@@ -354,14 +354,23 @@ sealed class ConnectionSettingsLoaded extends ConnectionSettingsState {
   /// `session/cancel` (D9).
   String get restartDescription {
     final target = restartTarget;
+    final running = currentProfile;
+    final differs =
+        target != null && running != null && running.id != target.id;
+    // Встроенный агент — отдельные фразы без подстановки подписи: «Встроенный
+    // агент» посреди русского предложения читается как ошибка. Выбор по типу
+    // профиля, не по сравнению строк (D5 п. 5, D6).
+    if (target is EmbeddedProfile) {
+      return differs
+          ? l10n.connectionRestartToUseEmbedded
+          : l10n.connectionRestartDescriptionEmbedded;
+    }
     final subject = target == null
         ? l10n.connectionRestartSubjectWindow
         : localizedProfileTitle(target, l10n);
-    final running = currentProfile;
-    if (target != null && running != null && running.id != target.id) {
-      return l10n.connectionRestartToUse(subject);
-    }
-    return l10n.connectionRestartDescription(subject);
+    return differs
+        ? l10n.connectionRestartToUse(subject)
+        : l10n.connectionRestartDescription(subject);
   }
 }
 

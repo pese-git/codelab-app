@@ -164,6 +164,10 @@ class _FormDialog extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 12),
                   child: InfoBar(
                     title: Text(addProfileFailureText(l10n, failure)),
+                    content: switch (addProfileFailureDetail(failure)) {
+                      final detail? => Text(detail),
+                      null => null,
+                    },
                     severity: InfoBarSeverity.error,
                     isLong: true,
                   ),
@@ -523,6 +527,14 @@ class _TokenChoices extends StatelessWidget {
                   child: CodeLabFormNote(
                     form.newTokenHint,
                     key: const ValueKey('add-profile-token-backend'),
+                  ),
+                ),
+              if (showNewHint && form.newTokenDetail != null)
+                Padding(
+                  padding: _indent,
+                  child: CodeLabFormNote(
+                    form.newTokenDetail!,
+                    key: const ValueKey('add-profile-token-backend-detail'),
                   ),
                 ),
               const SizedBox(height: 6),

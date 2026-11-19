@@ -40,11 +40,16 @@ class RestartConfirmationDialog extends StatelessWidget {
             key: const ValueKey('restart-agent-dialog'),
             title: Text(l10n.workbenchRestartTitle),
             content: Text(
-              l10n.workbenchRestartMessage(
-                pending.title,
-                pending.sessions.length,
-                pending.sessions.join(', '),
-              ),
+              pending.embedded
+                  ? l10n.workbenchRestartMessageEmbedded(
+                      pending.sessions.length,
+                      pending.sessions.join(', '),
+                    )
+                  : l10n.workbenchRestartMessage(
+                      pending.title,
+                      pending.sessions.length,
+                      pending.sessions.join(', '),
+                    ),
             ),
             actions: [
               FilledButton(
