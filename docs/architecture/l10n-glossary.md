@@ -19,6 +19,8 @@
 5. **Кавычки — «ёлочки».**
    * Вокруг названий экранов и кнопок: «Настройки › Общие».
    * Вокруг идентификаторов внутри русской фразы: id профиля, имя секрета, отдельные символы. Примеры: `Профиль с id «dev» уже существует.`, `Сохранённый ключ «codelab/openai» уже есть в file.`, `буквы, цифры и «_»`. В `en` такие места остаются как есть. Прямые кавычки `"…"` вокруг идентификатора в `en` в `ru` тоже становятся «ёлочками» (решение пользователя 2026-11-19, change `add-desktop-localization`).
+   * Имя MCP-сервера в русской фразе — тоже в «ёлочках», как имя секрета: `Сервер «github» сохранён.`, `Изменить «github»` (решение пользователя 2026-11-19, сверка 5.4).
+   * Исключение: путь меню настроек в скобках остаётся без кавычек — `(Настройки › Подключение)` (решение пользователя 2026-11-19, сверка 5.4). Название экрана или кнопки внутри фразы — в «ёлочках», как выше.
    * Без кавычек, как в `en`: команды (`codelab secret delete <имя>`), пути, URL, ключи конфигурации, имена переменных окружения, id бэкенда хранилища (`file`, `keychain`), id провайдера (`Изменить провайдера local`; решение пользователя 2026-11-19), названия продуктов. Они и так отличаются от слов фразы: регистром, символами или моноширинным шрифтом.
 6. **Многоточие — один символ `…`**, как в `en` («Открыть папку…»).
 7. **Количество — только ICU `plural`** с формами `one`, `few`, `many`, `other` (D8): «1 сессия», «2 сессии», «5 сессий». Склейка `n == 1 ? … : …` ЗАПРЕЩЕНА.
@@ -417,7 +419,7 @@
 | stored in {backend} | хранится в {backend} | значение секрета сохранено; `{backend}` — id без кавычек (§1, правило 5); security |
 | Hidden — leave empty to keep | Скрыто — оставьте пустым, чтобы не менять | маска значения; security |
 | Replace it / Keep it | Заменить / Оставить | вопрос о секрете с тем же именем; security |
-| Save to User config | Сохранить в пользовательскую конфигурацию | цель записи; «This project only» — «Только этот проект» (§4) |
+| Save to / User config | Куда сохранить / Пользовательская конфигурация | поле и вариант цели записи редактора сервера (`mcpFieldSaveTo`, `mcpTargetUser`); «This project only» — «Только этот проект» (§4). Сверка 5.4: в ARB нет фразы «Save to User config», есть поле и вариант по отдельности |
 | user / this project / defined in {file} | пользователь / этот проект / определён в {file} | источник строки MCP-сервера; «определён в» — как у провайдера (§4) (решение пользователя 2026-11-19) |
 | default / user / project / local / file / env | по умолчанию / пользователь / проект / локально / файл / окружение | подпись источника `ConfigSourceKind` на страницах «Агенты и режимы» (`Source: …`, `Reasoning effort · …`) и «Общие» (`{source}`; `config` — файл `--config` → «файл»). Подпись — в именительной форме, поэтому в `ru` она стоит после «источник:», в скобках или после тире; фразы с другим падежом переформулируются (design.md D7; решение пользователя 2026-11-19) |
 | Default permission mode | Режим разрешений по умолчанию | значения режимов — как есть |
@@ -444,6 +446,37 @@
 | Consent applies in every trusted project | Согласие действует во всех доверенных проектах | security |
 | untrusted project | недоверенный проект | пара к «доверенный проект» (§4) |
 | B / KB / MB | Б / КБ / МБ | размер файла; число — с точкой, без локали (design.md D8; решение пользователя 2026-11-19) |
+
+Термины, которые ввёл исполнитель задачи 5.2 сверх таблицы выше (сверка 5.4, 2026-11-19):
+
+| en | ru | Примечание |
+|---|---|---|
+| Composition from the config · agent status below | Состав из конфигурации · состояние агента ниже | подпись страницы «MCP-серверы» |
+| {count} servers / files / warnings | {count} сервер / файл / предупреждение (`plural`) | `mcpServerCount`, `skillsContextTotal`, `skillsWarningCount` |
+| + Add header / + Add variable | + Добавить заголовок / + Добавить переменную | строки таблиц редактора сервера |
+| Value / Secret value | Значение / Значение секрета | подсказки пустого поля |
+| stored (подсказка поля секрета) | сохранён | значение уже в хранилище; согласуется с «секрет» |
+| Edit {server} | Изменить «{server}» | кнопка InfoBar отказа агента; имя сервера в «ёлочках» (§1, правило 5; решение пользователя 2026-11-19) |
+| Config: invalid | Конфигурация: недействительна | |
+| Saved, but the agent rejected the new config / The agent rejects the current config | Сохранено, но агент отклонил новую конфигурацию / Агент отклоняет текущую конфигурацию | заголовки InfoBar; текст ядра под ними — как есть (design.md D6) |
+| The config changed on disk, so nothing was saved. … | Файл конфигурации изменился на диске, поэтому ничего не записано. Страница перечитана; проверьте её и повторите. | одна фраза на трёх страницах (`mcpFailConflict`, `agentsBannerConflict`, `skillsMsgConflict`) |
+| Status / Description / Path / Message | Статус / Описание / Путь / Сообщение | колонки таблиц; «State» (MCP-сервер) — «Состояние» |
+| File / Size / Command / Skill / Skills of other agents | Файл / Размер / Команда / Навык / Навыки других агентов | колонки страницы «Навыки и расширения» |
+| built-in (источник определения) | встроенный | |
+| all (инструменты) / session model | все / модель сессии | значения колонок таблицы определений |
+| Reload (определения, навыки) | Перечитать | перечитать с диска; не «Переподключить» — это `/mcp reload` сервера (выше) |
+| Open folder / User definitions ({folder}) / This project (.codelab/agents) | Открыть папку / Определения пользователя ({folder}) / Этот проект (.codelab/agents) | меню открытия папки определений |
+| Open .codelab folder | Открыть папку .codelab | |
+| Cannot open the folder | Не удалось открыть папку | заголовок отказа |
+| {source} overrides it: … | значение переопределено (источник: {source}), … | баннер записи «Агенты и режимы» и «Общие» (`settingsGeneralSavedOverridden`): подпись источника — в именительной форме (D7) |
+| Set by {source}; it cannot be changed here. | Источник значения: {source}; изменить здесь нельзя. | `settingsGeneralRefusalExternal`; та же причина |
+| Reasoning effort · {source} | Уровень рассуждения · {source} | |
+| Agent settings are managed by {agent}. / Skills are managed by {agent}. | Настройками агента управляет {agent}. / Навыками управляет {agent}. | страница только для чтения |
+| not read within 5 s | не прочитаны за 5 с | «с» без `plural`, как у повтора MCP-сервера (design.md D8) |
+| Enabled: {name} | Включён: {name} | подпись переключателя навыка для скринридера |
+| used because this folder has no AGENTS.md / not included (budget) / truncated to {size} | используется, потому что в этой папке нет AGENTS.md / не включён (бюджет) / усечён до {size} | пометки файла контекста |
+| The list is fixed when a session opens… | Список фиксируется при открытии сессии… | |
+| Trust (глагол) / trust (сущ.) | сделать доверенным / доверие | «Trust this project to read …» → «Сделайте проект доверенным, чтобы читать …»; «Trust is set in …» → «Доверие задаётся в …» |
 
 ---
 
@@ -606,7 +639,7 @@
 
 ## 6. Предупреждения безопасности
 
-Сообщения с меткой `security` в `@description` (D14): `ws://` без шифрования, токены и ключи провайдеров в открытом виде, команды удаления оставшихся секретов, «This file may contain secrets.», раскрытие вывода терминала, подтверждение корня диска, диалог `bypass`, риски одобрения. Правила:
+Сообщения с меткой `security` в `@description` (D14): `ws://` без шифрования, токены и ключи провайдеров в открытом виде, команды удаления оставшихся секретов, «This file may contain secrets.», раскрытие вывода терминала, подтверждение корня диска, диалог `bypass`, риски одобрения, секреты MCP-серверов, сужение режима и чтение конфигурации в недоверенном проекте, согласие на папки навыков других агентов. Правила:
 
 * перевод не смягчает предупреждение: «может», «не», «только» и «всё равно» из `en` сохраняются;
 * команды, адреса и имена секретов в тексте — плейсхолдеры (§2);
@@ -657,6 +690,54 @@
 | The stored key {name} was already replaced. | Сохранённый ключ «{name}» уже заменён. | вычитано (2026-11-19); `wizardSaveKeyReplaced` |
 | The new key {name} is still in the secret store. Delete it with: codelab secret delete {name} | Новый ключ «{name}» остался в хранилище секретов. Удалите его командой: codelab secret delete {name} | вычитано (2026-11-19); `wizardSaveKeyStillStored` |
 | The profile was removed, but the stored token {name} was not deleted. Remove it with codelab secret delete {name}. | Профиль удалён, но сохранённый токен «{name}» не удалён. Удалите его командой codelab secret delete {name}. | вычитано (2026-11-19); `connectionFailureTokenNotDeleted` |
+
+Принятые переводы итерации 5 («MCP-серверы», «Агенты и режимы», «Навыки и расширения»): 41 сообщение с меткой `security` (секреты MCP-сервера и их удаление, секрет в открытом виде, `bypass` и `autopilot`, сужение режима и чтение определений и навыков в недоверенном проекте, согласие на папку навыков другого агента, отказы записи). Пользователь вычитал их 2026-11-19 и принял все без правок (задача 5.3 change `add-desktop-localization`).
+
+После вычитки решением пользователя 2026-11-19 (сверка 5.4) меняются семь строк: `mcpFailInlineSecret`, `skillsMsgInlineSecret`, `mcpSecretStoredInAs`, `agentsBannerNarrowed`, `agentsModeNarrowed`, `agentsUntrustedBody`, `agentsUntrustedBodyNoPath`. Они приведены к глоссарию, и пользователь принял их при повторной вычитке 2026-11-19 без правок; `mcpFailInlineSecret` и `skillsMsgInlineSecret` удалены — страницы берут существующий `configNotSavedInlineSecret` (итерация 4).
+
+| en | ru | Вычитка (D14) |
+|---|---|---|
+| These stored secrets will be deleted if nothing else uses them: | Эти секреты из хранилища будут удалены, если ими больше никто не пользуется: | вычитано (2026-11-19); `mcpRemoveSecretsIntro` |
+| Hidden — leave empty to keep | Скрыто — оставьте пустым, чтобы не менять | вычитано (2026-11-19); `mcpHiddenHint` |
+| Secret — stored in {backend} | Секрет — хранится в {backend} | вычитано (2026-11-19); `mcpSecretStoredIn` |
+| Secret — stored in {backend} as {name} | Секрет — хранится в {backend} как «{name}» | вычитано повторно (2026-11-19); `mcpSecretStoredInAs` |
+| The secret store is read-only. | Хранилище секретов только для чтения. | вычитано (2026-11-19); `mcpStoreReadOnly` |
+| A secret with this name is already stored | Секрет с таким именем уже есть в хранилище | вычитано (2026-11-19); `mcpReplaceTitle` |
+| The new value replaces the secret for every server that refers to it. | Новое значение заменит секрет у каждого сервера, который на него ссылается. | вычитано (2026-11-19); `mcpReplaceNewValue` |
+| A running agent keeps the old value until the server reconnects. | Работающий агент сохраняет прежнее значение, пока сервер не переподключится. | вычитано (2026-11-19); `mcpReplaceRunning` |
+| Replace it | Заменить | вычитано (2026-11-19); `mcpReplaceConfirm` |
+| Keep it | Оставить | вычитано (2026-11-19); `mcpReplaceKeep` |
+| {name} is kept: it was not created by this page. | Секрет «{name}» оставлен: он создан не этой страницей. | вычитано (2026-11-19); `mcpSecretKept` |
+| {name} is kept because other settings still use it. | Секрет «{name}» оставлен: его ещё используют другие настройки. | вычитано (2026-11-19); `mcpSecretStillUsed` |
+| {name} could not be deleted. Delete it with: codelab secret delete {name} | Не удалось удалить секрет «{name}». Удалите его командой: codelab secret delete {name} | вычитано (2026-11-19); `mcpSecretDeleteFailed` |
+| The secret was not stored, so nothing was saved: {reason} | Секрет не сохранён, поэтому ничего не записано: {reason} | вычитано (2026-11-19); `mcpSecretNotStored` |
+| The stored value of {name} was already replaced and could not be restored. | Сохранённое значение секрета «{name}» уже заменено и не может быть восстановлено. | вычитано (2026-11-19); `mcpSecretNotRestored` |
+| The secret store could not be read, so nothing was saved. | Хранилище секретов не удалось прочитать, поэтому ничего не записано. | вычитано (2026-11-19); `mcpFailSecretStore` |
+| The config was not saved: {key} must not hold a literal secret. | Конфигурация не сохранена: {key} не должен содержать секрет в открытом виде. | вычитано повторно (2026-11-19); ключ удалён, используется `configNotSavedInlineSecret` (итерация 4) вместо `mcpFailInlineSecret` |
+| The agent keeps running on the previous config until this is fixed. | Пока это не исправлено, агент продолжает работать на прежней конфигурации. | вычитано (2026-11-19); `mcpKeepsRunning` |
+| {mode} (edits and commands blocked by plan) | {mode} (правки и команды запрещены режимом plan) | вычитано (2026-11-19); `agentsModeBlocked` |
+| Only as a launch flag of the agent (codelab-agent serve --permission-mode autopilot); never saved in config. | Только как флаг запуска агента (codelab-agent serve --permission-mode autopilot); в конфиге не сохраняется никогда. | вычитано (2026-11-19); `agentsAutopilotHint` |
+| This project is not trusted, so its config can only make the mode stricter. New sessions here use {mode}. | Этот проект недоверенный, поэтому его конфигурация может только ужесточить режим. Новые сессии здесь используют {mode}. | вычитано повторно (2026-11-19); `agentsModeNarrowed` |
+| Use bypass for new sessions? | Использовать bypass для новых сессий? | вычитано (2026-11-19); `agentsBypassTitle` |
+| Only critical commands, changes to the agent's configuration and network tools still ask. Commands run without asking and can reach the network too. Use bypass only in a disposable checkout. | Запрос подтверждения остаётся только для критичных команд, изменений конфигурации агента и сетевых инструментов. Остальные команды выполняются без запроса и тоже могут выходить в сеть. Используйте bypass только в одноразовой копии проекта. | вычитано (2026-11-19); `agentsBypassBody` |
+| Use bypass | Использовать bypass | вычитано (2026-11-19); `agentsBypassConfirm` |
+| {when, select, now{Saved to {target}; the untrusted project overrides it: new sessions use {value}.} afterRestart{Saved to {target}; the untrusted project overrides it: new sessions use {value} after Restart agent.} whenAgentStarts{Saved to {target}; the untrusted project overrides it: new sessions use {value} when the agent starts.} other{Saved to {target}; the untrusted project overrides it: new sessions use {value}.}} | {when, select, now{Сохранено: {target}; режим сужен недоверенным проектом, новые сессии используют {value}.} afterRestart{Сохранено: {target}; режим сужен недоверенным проектом, новые сессии будут использовать {value} после «Перезапустить агента».} whenAgentStarts{Сохранено: {target}; режим сужен недоверенным проектом, новые сессии будут использовать {value} при запуске агента.} other{Сохранено: {target}; режим сужен недоверенным проектом, новые сессии используют {value}.}} | вычитано повторно (2026-11-19); `agentsBannerNarrowed` |
+| Settings changed while the dialog was open; bypass was not saved. | Настройки изменились, пока диалог был открыт; bypass не сохранён. | вычитано (2026-11-19); `agentsBannerBypassStale` |
+| Change its modes and agents on that host: codelab config set, .codelab/agents. | Измените режимы и агентов на том хосте: codelab config set, .codelab/agents. | вычитано (2026-11-19); `agentsReadOnlyHint` |
+| Project definitions are not read | Определения проекта не читаются | вычитано (2026-11-19); `agentsUntrustedTitle` |
+| Definitions in {project}/.codelab/agents are not read: the project is not trusted. | Определения в {project}/.codelab/agents не читаются: проект недоверенный. | вычитано повторно (2026-11-19); `agentsUntrustedBody` |
+| Project definitions in .codelab/agents are not read: the project is not trusted. | Определения проекта в .codelab/agents не читаются: проект недоверенный. | вычитано повторно (2026-11-19); `agentsUntrustedBodyNoPath` |
+| Its skills, context files and prompt templates are read on that host: codelab-agent config check. | Навыки, файлы контекста и шаблоны промптов читаются на том хосте: codelab-agent config check. | вычитано (2026-11-19); `skillsReadOnlyHint` |
+| The config was not saved: {key} must not hold a literal secret. | Конфигурация не сохранена: {key} не должен содержать секрет в открытом виде. | вычитано повторно (2026-11-19); ключ удалён, используется `configNotSavedInlineSecret` (итерация 4) вместо `skillsMsgInlineSecret` |
+| Set in {source}; edit that file. | Задано в {source}; измените этот файл. | вычитано (2026-11-19); `skillsRefusalNotEditable` |
+| Disabled by the project config ({source}). | Отключено конфигурацией проекта ({source}). | вычитано (2026-11-19); `skillsRefusalDisabledByProject` |
+| Trust this project to read {element}. | Сделайте проект доверенным, чтобы читать {element}. | вычитано (2026-11-19); `skillsRefusalUntrusted` |
+| Trust this project to read this folder. | Сделайте проект доверенным, чтобы читать эту папку. | вычитано (2026-11-19); `skillsRefusalUntrustedFolder` |
+| The config file of this layer cannot be read. Fix it first. | Файл конфигурации этого слоя не читается. Сначала исправьте его. | вычитано (2026-11-19); `skillsRefusalLayerUnreadable` |
+| This project is not in trusted_projects, so the agent does not read its skills and prompt templates. Your own skills and AGENTS.md files are shown. | Этого проекта нет в trusted_projects, поэтому агент не читает его навыки и шаблоны промптов. Показаны ваши навыки и файлы AGENTS.md. | вычитано (2026-11-19); `skillsUntrustedTitle` |
+| Trust is set in trusted_projects of {path}. | Доверие задаётся в trusted_projects файла {path}. | вычитано (2026-11-19); `skillsUntrustedHint` |
+| Read {entry} | Читать {entry} | вычитано (2026-11-19); `skillsConsentRead` |
+| Consent applies in every trusted project. | Согласие действует во всех доверенных проектах. | вычитано (2026-11-19); `skillsConsentEveryProject` |
 
 ### Принятые переводы фраз ленты: заметки и сбои хода
 
