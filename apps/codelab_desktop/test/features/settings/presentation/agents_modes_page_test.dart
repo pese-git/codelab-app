@@ -21,78 +21,29 @@
 
 import 'dart:async';
 
+import 'package:codelab_desktop/l10n/app_localizations.dart';
 import 'package:codelab_desktop/features/settings/application/agents_modes_cubit.dart';
 import 'package:codelab_desktop/features/settings/presentation/agents_modes_page.dart';
-import 'package:codelab_setup/codelab_setup.dart' show ConfigLayer;
+import 'package:codelab_setup/codelab_setup.dart'
+    show AgentRowScope, AgentRowStatus, ConfigLayer, ConfigSourceKind;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 
-/// Cubit-двойник: состояние задаёт тест, вызовы страницы — в [calls].
-final class FakeAgentsModesCubit extends Cubit<AgentsModesState>
-    implements AgentsModesCubit {
-  FakeAgentsModesCubit(super.initialState);
+import '../../../support/fake_agents_modes_cubit.dart';
+import '../../../support/l10n_app.dart';
 
-  /// Вызовы страницы по порядку: `selectMode:<id>`, `selectEffort:<id>`,
-  /// `selectTarget:<layer>`, `confirmBypass`, `cancelBypass`.
-  final calls = <String>[];
-
-  @override
-  Future<void> reload() async => calls.add('reload');
-
-  @override
-  Future<void> selectMode(String id) async => calls.add('selectMode:$id');
-
-  @override
-  BypassToken? beginBypass() {
-    calls.add('beginBypass');
-    return token;
-  }
-
-  /// Показывает состояние (в самом Cubit `emit` защищён).
-  void show(AgentsModesState state) => emit(state);
-
-  @override
-  void dismissBypass(BypassToken token) => calls.add('dismissBypass');
-
-  @override
-  bool isCurrent(BypassToken token) => true;
-
-  /// Токен, который двойник отдаёт странице.
-  final token = BypassToken(0, ConfigLayer.user, null);
-
-  @override
-  Future<void> confirmBypass(BypassToken token) async =>
-      calls.add(identical(token, this.token) ? 'confirmBypass' : 'wrongToken');
-
-  @override
-  void cancelBypass() => calls.add('cancelBypass');
-
-  @override
-  Future<void> selectEffort(String id) async => calls.add('selectEffort:$id');
-
-  @override
-  Future<void> openDefinitionFolder(String filePath) async =>
-      calls.add('openFolderOf:$filePath');
-
-  @override
-  Future<void> openFolder(AgentsFolder folder) async =>
-      calls.add('openFolder:${folder.name}');
-
-  @override
-  void selectTarget(ConfigLayer layer) =>
-      calls.add('selectTarget:${layer.name}');
-}
-
+/// Готовое состояние в целевой форме (D5, «Уточнение итерации 5»): источник —
+/// `ConfigSourceKind?`, пометка режима и сужение — признаки, а не строки.
 AgentsModesReady _ready({
   String mode = 'standard',
-  String? modeLabel,
-  String modeSource = 'default',
-  String? narrowedNotice,
+  bool blocksWriteAndExec = false,
+  ConfigSourceKind? modeSource,
+  bool narrowed = false,
   String effort = 'medium',
-  String effortSource = 'default',
+  ConfigSourceKind? effortSource,
   ConfigLayer target = ConfigLayer.user,
   bool canTargetProject = true,
   bool saving = false,
@@ -100,16 +51,43 @@ AgentsModesReady _ready({
   AgentsDefinitionsView? definitions,
 }) => AgentsModesReady(
   mode: mode,
-  modeLabel: modeLabel ?? mode,
-  modeSource: modeSource,
-  narrowedNotice: narrowedNotice,
+  blocksWriteAndExec: blocksWriteAndExec,
+  modeSourceKind: modeSource,
+  narrowedByProject: narrowed,
   effort: effort,
-  effortSource: effortSource,
+  effortSourceKind: effortSource,
   target: target,
   canTargetProject: canTargetProject,
   saving: saving,
   banner: banner,
   definitions: definitions,
+);
+
+/// Строка определения в целевой форме: статус, область и источник — типы.
+AgentsDefinitionRow _defRow(
+  String name, {
+  String? description,
+  String? sourcePath,
+  AgentRowScope? scope,
+  List<String>? tools,
+  String? model,
+  AgentRowStatus status = AgentRowStatus.available,
+  int? line,
+  String? overriddenBy,
+  bool loaded = true,
+  AgentsStatusTone tone = AgentsStatusTone.success,
+}) => AgentsDefinitionRow(
+  name: name,
+  descriptionText: description,
+  sourcePath: sourcePath,
+  scope: scope,
+  toolNames: tools,
+  modelId: model,
+  rowStatus: status,
+  errorLine: line,
+  overriddenBy: overriddenBy,
+  loaded: loaded,
+  tone: tone,
 );
 
 Finder _key(String key) => find.byKey(ValueKey(key));
@@ -133,6 +111,8 @@ void main() {
     addTearDown(cubit.close);
     await tester.pumpWidget(
       FluentApp(
+        localizationsDelegates: l10nTestDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: ScaffoldPage(
           content: SingleChildScrollView(
             child: BlocProvider<AgentsModesCubit>.value(
@@ -210,7 +190,10 @@ void main() {
     testWidgets('the selected mode and its source come from the state', (
       tester,
     ) async {
-      await pumpPage(tester, _ready(mode: 'accept-edits', modeSource: 'user'));
+      await pumpPage(
+        tester,
+        _ready(mode: 'accept-edits', modeSource: ConfigSourceKind.user),
+      );
 
       expect(checked(tester, 'accept-edits'), isTrue);
       expect(checked(tester, 'standard'), isFalse);
@@ -251,10 +234,15 @@ void main() {
         tester,
         _ready(
           mode: 'accept-edits',
-          modeSource: 'user',
+          modeSource: ConfigSourceKind.user,
           banner: const AgentsModesBanner(
             AgentsModesBannerKind.saved,
-            'Saved. New sessions use accept-edits after Restart agent.',
+            '',
+            message: AgentsSavedMessage(
+              setting: AgentsModesSetting.mode,
+              value: 'accept-edits',
+              when: AgentsApplyWhen.afterRestart,
+            ),
           ),
         ),
       );
@@ -280,6 +268,8 @@ void main() {
     addTearDown(cubit.close);
     await tester.pumpWidget(
       FluentApp(
+        localizationsDelegates: l10nTestDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) => ScaffoldPage(
             content: SingleChildScrollView(
@@ -337,7 +327,10 @@ void main() {
     testWidgets('Cancel closes the dialog and reports the cancellation', (
       tester,
     ) async {
-      await pumpPage(tester, _ready(mode: 'ask', modeSource: 'user'));
+      await pumpPage(
+        tester,
+        _ready(mode: 'ask', modeSource: ConfigSourceKind.user),
+      );
 
       await tester.tap(_key('agents-modes-mode-bypass'));
       await tester.pumpAndSettle();
@@ -368,7 +361,11 @@ void main() {
 
       await tester.tap(_key('agents-modes-mode-bypass'));
       await tester.pumpAndSettle();
-      cubit.show(const AgentsModesReadOnly(notice: 'Read-only: elsewhere.'));
+      cubit.show(
+        const AgentsModesReadOnly(
+          reason: RemoteAgentReadOnly('wss://elsewhere'),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(_key('agents-modes-bypass-confirm'), findsNothing);
@@ -386,6 +383,8 @@ void main() {
       addTearDown(cubit.close);
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Builder(
             builder: (context) => ScaffoldPage(
               content: SingleChildScrollView(
@@ -416,7 +415,9 @@ void main() {
 
       await tester.tap(_key('agents-modes-mode-bypass'));
       await tester.pumpAndSettle();
-      cubit.show(const AgentsModesReadOnly(notice: 'one'));
+      cubit.show(
+        const AgentsModesReadOnly(reason: RemoteAgentReadOnly('wss://one')),
+      );
       cubit.show(const AgentsModesUnreadable(problems: ['two']));
       await tester.pumpAndSettle();
 
@@ -435,7 +436,9 @@ void main() {
       await tester.tap(find.text('Cancel'));
       // Диалог уже закрывается (анимация идёт), а страница уходит из Ready.
       await tester.pump();
-      cubit.show(const AgentsModesReadOnly(notice: 'gone'));
+      cubit.show(
+        const AgentsModesReadOnly(reason: RemoteAgentReadOnly('wss://gone')),
+      );
       await tester.pumpAndSettle();
 
       expect(_key('agents-modes-bypass-confirm'), findsNothing);
@@ -465,8 +468,14 @@ void main() {
         _ready(
           banner: const AgentsModesBanner(
             AgentsModesBannerKind.warning,
-            'Saved to All projects; local overrides it: new sessions use '
-            'plan after Restart agent.',
+            '',
+            message: AgentsSavedOverriddenMessage(
+              setting: AgentsModesSetting.mode,
+              target: ConfigLayer.user,
+              source: ConfigSourceKind.projectLocal,
+              value: 'plan',
+              when: AgentsApplyWhen.afterRestart,
+            ),
           ),
         ),
       );
@@ -496,13 +505,7 @@ void main() {
     ) async {
       await pumpPage(
         tester,
-        _ready(
-          mode: 'ask',
-          modeSource: 'user',
-          narrowedNotice:
-              'This project is not trusted, so its config can only make the '
-              'mode stricter. New sessions here use ask.',
-        ),
+        _ready(mode: 'ask', modeSource: ConfigSourceKind.user, narrowed: true),
       );
 
       expect(
@@ -527,8 +530,8 @@ void main() {
         tester,
         _ready(
           mode: 'ask',
-          modeLabel: 'ask (edits and commands blocked by plan)',
-          modeSource: 'user',
+          blocksWriteAndExec: true,
+          modeSource: ConfigSourceKind.user,
         ),
       );
 
@@ -554,7 +557,10 @@ void main() {
 
     testWidgets('the ComboBox offers low, medium and high; the caption says '
         'that only a reasoning model gets the option', (tester) async {
-      await pumpPage(tester, _ready(effort: 'high', effortSource: 'user'));
+      await pumpPage(
+        tester,
+        _ready(effort: 'high', effortSource: ConfigSourceKind.user),
+      );
 
       await tester.tap(_key('agents-modes-effort'));
       await tester.pumpAndSettle();
@@ -575,10 +581,15 @@ void main() {
         tester,
         _ready(
           effort: 'high',
-          effortSource: 'user',
+          effortSource: ConfigSourceKind.user,
           banner: const AgentsModesBanner(
             AgentsModesBannerKind.saved,
-            'Saved. New sessions use high.',
+            '',
+            message: AgentsSavedMessage(
+              setting: AgentsModesSetting.effort,
+              value: 'high',
+              when: AgentsApplyWhen.now,
+            ),
           ),
         ),
       );
@@ -655,10 +666,7 @@ void main() {
       await pumpPage(
         tester,
         const AgentsModesReadOnly(
-          notice:
-              'Read-only: this agent runs on wss://devbox:7420. Change its '
-              'modes and agents on that host: codelab config set, '
-              '.codelab/agents.',
+          reason: RemoteAgentReadOnly('wss://devbox:7420'),
         ),
       );
 
@@ -679,9 +687,7 @@ void main() {
     ) async {
       await pumpPage(
         tester,
-        const AgentsModesReadOnly(
-          notice: 'Agent settings are managed by python.',
-        ),
+        const AgentsModesReadOnly(reason: ForeignAgentReadOnly('python')),
       );
 
       expect(
@@ -696,9 +702,12 @@ void main() {
       await pumpPage(
         tester,
         const AgentsModesUnreadable(
-          problems: [
-            'config.yaml:11:3: permissions.mode: autopilot is allowed only as '
-                'a launch flag (--permission-mode autopilot)',
+          problems: [],
+          issues: [
+            LoaderSettingsProblem(
+              'config.yaml:11:3: permissions.mode: autopilot is allowed only '
+              'as a launch flag (--permission-mode autopilot)',
+            ),
           ],
         ),
       );
@@ -718,10 +727,14 @@ void main() {
       await pumpPage(
         tester,
         const AgentsModesUnreadable(
-          problems: ['Cannot read the agent settings.'],
+          problems: [],
+          issues: [
+            AppSettingsProblem(AppSettingsProblemKind.cannotReadSettings),
+          ],
           banner: AgentsModesBanner(
             AgentsModesBannerKind.saved,
-            'Saved to All projects.',
+            '',
+            message: AgentsSavedOnlyMessage(ConfigLayer.user),
           ),
         ),
       );
@@ -744,6 +757,8 @@ void main() {
       addTearDown(cubit.close);
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: ScaffoldPage(
             content: BlocProvider<AgentsModesCubit>.value(
               value: cubit,
@@ -767,7 +782,8 @@ void main() {
         _ready(
           banner: const AgentsModesBanner(
             AgentsModesBannerKind.conflict,
-            'The config changed on disk. Choose again.',
+            '',
+            message: AgentsConflictMessage(),
           ),
         ),
       );
@@ -777,24 +793,19 @@ void main() {
   });
 
   group('Блок «Agent definitions» (итерация 2)', () {
-    const reviewer = AgentsDefinitionRow(
-      name: 'reviewer',
+    final reviewer = _defRow(
+      'reviewer',
       description: 'Reviews diffs',
-      source: '~/.codelab/agents/reviewer.md',
-      availableIn: 'both',
-      tools: 'read, grep',
-      model: 'session model',
-      status: 'Available',
-      tone: AgentsStatusTone.success,
+      sourcePath: '~/.codelab/agents/reviewer.md',
+      scope: AgentRowScope.both,
+      tools: const ['read', 'grep'],
     );
-    const migrator = AgentsDefinitionRow(
-      name: 'migrator',
-      description: '—',
-      source: '~/.codelab/agents/migrator.md',
-      availableIn: '—',
-      tools: '—',
-      model: '—',
-      status: 'Error · line 4',
+    final migrator = _defRow(
+      'migrator',
+      sourcePath: '~/.codelab/agents/migrator.md',
+      status: AgentRowStatus.error,
+      line: 4,
+      loaded: false,
       tone: AgentsStatusTone.danger,
     );
     const error = AgentsDefinitionError(
@@ -804,7 +815,7 @@ void main() {
       line: 4,
       message: 'tools must be a list',
     );
-    const broken = AgentsDefinitionsView(
+    final broken = AgentsDefinitionsView(
       rows: [reviewer, migrator],
       errors: [error],
       projectFolderAvailable: true,
@@ -843,16 +854,7 @@ void main() {
     testWidgets('row keys stay unique when names repeat: the first row of a '
         'name has the plain key, the next ones get #2, #3', (tester) async {
       AgentsDefinitionRow row(String name, String source) =>
-          AgentsDefinitionRow(
-            name: name,
-            description: '—',
-            source: source,
-            availableIn: 'subagent',
-            tools: 'all',
-            model: 'session model',
-            status: 'Available',
-            tone: AgentsStatusTone.success,
-          );
+          _defRow(name, sourcePath: source, scope: AgentRowScope.subagent);
       await pumpPage(
         tester,
         _ready(
@@ -897,23 +899,25 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       const statuses = [
-        'Overridden by ~/g.md',
-        'Model not configured',
-        'Not loaded: duplicate name',
+        (AgentRowStatus.overridden, '~/g.md'),
+        (AgentRowStatus.modelNotConfigured, null),
+        (AgentRowStatus.duplicate, null),
       ];
       cubit = FakeAgentsModesCubit(
         _ready(
           definitions: AgentsDefinitionsView(
             rows: [
-              for (final (i, status) in statuses.indexed)
-                AgentsDefinitionRow(
-                  name: 'row$i',
+              for (final (i, (status, by)) in statuses.indexed)
+                _defRow(
+                  'row$i',
                   description: 'A long description of the helper $i',
-                  source: '/private/var/folders/xx/.codelab/agents/row$i.md',
-                  availableIn: 'subagent',
-                  tools: 'read, grep, edit',
+                  sourcePath:
+                      '/private/var/folders/xx/.codelab/agents/row$i.md',
+                  scope: AgentRowScope.subagent,
+                  tools: const ['read', 'grep', 'edit'],
                   model: 'anthropic/claude-sonnet',
                   status: status,
+                  overriddenBy: by,
                   tone: AgentsStatusTone.warning,
                 ),
             ],
@@ -926,6 +930,8 @@ void main() {
       const boxKey = ValueKey('content-box');
       await tester.pumpWidget(
         FluentApp(
+          localizationsDelegates: l10nTestDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: ScaffoldPage(
             content: Align(
               alignment: Alignment.topLeft,
@@ -946,7 +952,12 @@ void main() {
       await tester.pumpAndSettle();
 
       final box = tester.getRect(find.byKey(boxKey));
-      for (final status in statuses) {
+      // Тексты тегов на `en` — прежние; строит их presentation по типам.
+      for (final status in const [
+        'Overridden by ~/g.md',
+        'Model not configured',
+        'Not loaded: duplicate name',
+      ]) {
         final paragraph = tester.renderObject<RenderParagraph>(
           find.text(status),
         );
@@ -965,7 +976,7 @@ void main() {
       await pumpPage(
         tester,
         _ready(
-          definitions: const AgentsDefinitionsView(
+          definitions: AgentsDefinitionsView(
             rows: [reviewer],
             userFolderLabel: '/srv/codelab/agents',
           ),
@@ -987,26 +998,20 @@ void main() {
       await pumpPage(
         tester,
         _ready(
-          definitions: const AgentsDefinitionsView(
+          definitions: AgentsDefinitionsView(
             rows: [
-              AgentsDefinitionRow(
-                name: 'docs-writer',
-                description: '—',
-                source: '~/.codelab/agents/docs-writer.md',
-                availableIn: 'session',
-                tools: 'all',
+              _defRow(
+                'docs-writer',
+                sourcePath: '~/.codelab/agents/docs-writer.md',
+                scope: AgentRowScope.session,
                 model: 'openai/gpt-x',
-                status: 'Model not configured',
+                status: AgentRowStatus.modelNotConfigured,
                 tone: AgentsStatusTone.warning,
               ),
-              AgentsDefinitionRow(
-                name: 'general',
-                description: '—',
-                source: 'built-in',
-                availableIn: 'subagent',
-                tools: 'all',
-                model: 'session model',
-                status: 'Subagents off',
+              _defRow(
+                'general',
+                scope: AgentRowScope.subagent,
+                status: AgentRowStatus.subagentsOff,
                 tone: AgentsStatusTone.warning,
               ),
             ],
@@ -1051,7 +1056,7 @@ void main() {
       await pumpPage(
         tester,
         _ready(
-          definitions: const AgentsDefinitionsView(
+          definitions: AgentsDefinitionsView(
             rows: [reviewer],
             errors: [
               AgentsDefinitionError(
@@ -1084,16 +1089,16 @@ void main() {
       await pumpPage(
         tester,
         _ready(
-          definitions: const AgentsDefinitionsView(
+          definitions: AgentsDefinitionsView(
             rows: [
-              AgentsDefinitionRow(
-                name: 'rev\u202eiewer',
+              _defRow(
+                'rev\u202eiewer',
                 description: 'Reviews\u202e diffs\u{E0041}',
-                source: '~/.codelab/agents/rev\u202eiewer.md',
-                availableIn: 'both',
-                tools: 'read, gr\u202eep',
-                model: 'session model',
-                status: 'Overridden by ~/x\u202e.md',
+                sourcePath: '~/.codelab/agents/rev\u202eiewer.md',
+                scope: AgentRowScope.both,
+                tools: const ['read', 'gr\u202eep'],
+                status: AgentRowStatus.overridden,
+                overriddenBy: '~/x\u202e.md',
                 tone: AgentsStatusTone.warning,
               ),
             ],
@@ -1123,7 +1128,7 @@ void main() {
       await pumpPage(
         tester,
         _ready(
-          definitions: const AgentsDefinitionsView(
+          definitions: AgentsDefinitionsView(
             rows: [reviewer],
             errors: [
               AgentsDefinitionError(
@@ -1153,7 +1158,7 @@ void main() {
       await pumpPage(
         tester,
         _ready(
-          definitions: const AgentsDefinitionsView(
+          definitions: AgentsDefinitionsView(
             rows: [reviewer],
             errors: [
               AgentsDefinitionError(
@@ -1194,7 +1199,7 @@ void main() {
       await pumpPage(
         tester,
         _ready(
-          definitions: const AgentsDefinitionsView(
+          definitions: AgentsDefinitionsView(
             rows: [reviewer],
             errors: [
               AgentsDefinitionError(
@@ -1260,7 +1265,7 @@ void main() {
       await pumpPage(
         tester,
         _ready(
-          definitions: const AgentsDefinitionsView(
+          definitions: AgentsDefinitionsView(
             rows: [reviewer],
             untrustedProject: true,
             projectLabel: '~/work/demo',
@@ -1284,9 +1289,7 @@ void main() {
     testWidgets('the timeout InfoBar', (tester) async {
       await pumpPage(
         tester,
-        _ready(
-          definitions: const AgentsDefinitionsView(rows: [], timedOut: true),
-        ),
+        _ready(definitions: AgentsDefinitionsView(rows: [], timedOut: true)),
       );
 
       expect(
@@ -1301,7 +1304,7 @@ void main() {
     testWidgets('no InfoBars for a clean load', (tester) async {
       await pumpPage(
         tester,
-        _ready(definitions: const AgentsDefinitionsView(rows: [reviewer])),
+        _ready(definitions: AgentsDefinitionsView(rows: [reviewer])),
       );
 
       expect(_key('agents-definitions-table'), findsOneWidget);
@@ -1317,7 +1320,7 @@ void main() {
       await pumpPage(
         tester,
         _ready(
-          definitions: const AgentsDefinitionsView(
+          definitions: AgentsDefinitionsView(
             rows: [reviewer],
             openFailure: '~/.codelab/agents',
           ),
@@ -1367,7 +1370,7 @@ void main() {
         await pumpPage(
           tester,
           _ready(
-            definitions: const AgentsDefinitionsView(
+            definitions: AgentsDefinitionsView(
               rows: [reviewer],
               untrustedProject: true,
             ),
@@ -1389,7 +1392,7 @@ void main() {
         await pumpPage(
           tester,
           _ready(
-            definitions: const AgentsDefinitionsView(
+            definitions: AgentsDefinitionsView(
               rows: [reviewer],
               projectFolderAvailable: true,
               projectFolderExists: false,

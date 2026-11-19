@@ -50,7 +50,19 @@ import '../../../support/recording_logger.dart';
 
 const _home = '/home/u/.codelab';
 const _authorization = 'codelab/mcp/github/authorization';
-const _listFailed = '/mcp list did not complete. Try Refresh again.';
+
+/// Баннер — сообщение «Server `name` saved.» с признаком подсказки перезапуска
+/// (D5, «Уточнение итерации 5»: текст строит presentation).
+Matcher _savedMessage(String server, {bool restartHint = false}) =>
+    isA<McpServerSavedMessage>()
+        .having((m) => m.server, 'server', server)
+        .having((m) => m.restartHint, 'restartHint', restartHint);
+
+Matcher _enabledMessage(String server) =>
+    isA<McpServerEnabledMessage>().having((m) => m.server, 'server', server);
+
+Matcher _removedMessage(String server) =>
+    isA<McpServerRemovedMessage>().having((m) => m.server, 'server', server);
 const _unsetVariable = 'config.variable.unset';
 
 final _s1 = SessionId('s1');
@@ -278,11 +290,13 @@ void main() {
         'docs-fs',
       ]);
       expect(row(state, 'github').entry.kind, McpTransportKind.http);
-      expect(row(state, 'github').sourceLabel, 'user');
-      expect(row(state, 'docs-fs').sourceLabel, 'this project');
+      // Источник — тип и путь, а не готовая подпись (D5, D7, задача 5.1c).
+      expect(row(state, 'github').source, ConfigSourceKind.user);
+      expect(row(state, 'docs-fs').source, ConfigSourceKind.projectLocal);
+      expect(row(state, 'playwright').source, ConfigSourceKind.project);
       expect(
-        row(state, 'playwright').sourceLabel,
-        'defined in ${FakeAgentConfigStore.projectPath}',
+        row(state, 'playwright').sourceFile,
+        FakeAgentConfigStore.projectPath,
       );
       // «флаг значение»: значение после `--token` закрыто правилом ядра.
       expect(row(state, 'docs-fs').entry.args, isNot(contains(leakMarker)));
@@ -349,8 +363,8 @@ void main() {
       await cubit.reload();
 
       final state = cubit.state as McpSettingsReadOnly;
-      expect(state.notice, 'Read-only: this agent runs on wss://devbox:7420.');
-      expect(state.hint, contains('codelab mcp add'));
+      // Причина — тип с адресом, а не готовые `notice` и `hint` (D5).
+      expect(state.reason, const RemoteAgentReadOnly('wss://devbox:7420'));
       expect(state.agentStatus, isA<McpAgentStatusText>());
       expect(opened, isEmpty);
       expect(store.snapshots, 0);
@@ -364,7 +378,7 @@ void main() {
       await cubit.reload();
 
       final state = cubit.state as McpSettingsReadOnly;
-      expect(state.notice, 'Provider settings are managed by python.');
+      expect(state.reason, const ForeignAgentReadOnly('python'));
       expect(opened, isEmpty);
     });
 
@@ -376,6 +390,10 @@ void main() {
       await cubit.reload();
 
       expect(cubit.state, isA<McpSettingsUnreadable>());
+      // Фраза app — тип, а не английская строка (D5).
+      expect((cubit.state as McpSettingsUnreadable).issues, const [
+        AppSettingsProblem(AppSettingsProblemKind.userConfigUnreadable),
+      ]);
       expect(events(), contains('mcp_settings.unreadable'));
       expect(await cubit.save(_newGithub()), isFalse);
       expect(store.applied, isEmpty);
@@ -403,7 +421,9 @@ void main() {
         await cubit.reload();
 
         final state = cubit.state as McpSettingsUnreadable;
-        expect(state.problems.single, contains('mcp.servers'));
+        // Текст загрузчика — как есть, под переведённым заголовком (D6).
+        final problem = state.issues.single as LoaderSettingsProblem;
+        expect(problem.text, contains('mcp.servers'));
         expect(await cubit.save(_newGithub()), isFalse);
         expect(store.applied, isEmpty);
       });
@@ -422,7 +442,7 @@ void main() {
         final state = await ready(make());
 
         final rejected = state.rejected!;
-        expect(rejected.title, 'The agent rejects the current config');
+        expect(rejected.kind, McpRejectedKind.onOpen);
         expect(
           rejected.problems.single,
           contains('mcp.servers[postgres].env.DATABASE_URL'),
@@ -708,6 +728,10 @@ void main() {
       expect(session.secrets, isNot(contains(_authorization)));
       final state = current(cubit);
       expect(state.banner?.kind, McpBannerKind.conflict);
+      expect(
+        (state.banner!.message as McpWriteFailedMessage).failure,
+        McpWriteFailure.conflict,
+      );
       expect(state.saving, isFalse);
       // Форма остаётся открытой: пользователь повторит запись сам.
       expect(state.newServerOpen, isTrue);
@@ -745,6 +769,19 @@ void main() {
         await cubit.save(_newGithub(name: 'x', headers: const {}));
 
         expect(current(cubit).banner?.kind, McpBannerKind.error);
+        final failed = current(cubit).banner!.message as McpWriteFailedMessage;
+        expect(
+          failed.failure,
+          value == 'rejected'
+              ? McpWriteFailure.rejected
+              : McpWriteFailure.inlineSecret,
+        );
+        // Тексты ядра — аргументы как есть; сам ключ — путь без значения.
+        if (value == 'rejected') {
+          expect(failed.issues, contains('mcp.servers'));
+        } else {
+          expect(failed.key, 'mcp.servers[x].env.TOKEN');
+        }
         expect(event('mcp_settings.save_failed')['outcome'], value);
       }
       expect(logger.entries.toString(), isNot(contains(leakMarker)));
@@ -807,7 +844,7 @@ void main() {
 
       expect(saved, isTrue);
       final rejected = current(cubit).rejected!;
-      expect(rejected.title, 'Saved, but the agent rejected the new config');
+      expect(rejected.kind, McpRejectedKind.afterSave);
       expect(
         rejected.problems.single,
         contains('mcp.servers[postgres].env.DATABASE_URL'),
@@ -835,7 +872,9 @@ void main() {
 
       final banner = current(cubit).banner!;
       expect(banner.kind, McpBannerKind.saved);
-      expect(banner.lines.join('\n'), contains('variable PG_URL is not set'));
+      // Предупреждение ядра — строка-аргумент, как есть (D6).
+      final saved = banner.message as McpServerSavedMessage;
+      expect(saved.warnings.join('\n'), contains('variable PG_URL is not set'));
     });
 
     test('editing writes the whole raw element of its own layer: unknown '
@@ -961,12 +1000,8 @@ void main() {
       expect(await cubit.setEnabled('playwright', enabled: false), isFalse);
       expect(await cubit.remove('playwright'), isFalse);
       expect(store.applied, isEmpty);
-      expect(
-        playwright.note,
-        'playwright comes from the project file: it can\'t be edited or '
-        'removed here; "Disable here" writes enabled: false to '
-        '.codelab/config.local.yaml.',
-      );
+      // Пояснение — вид, а не готовая строка; текст строит presentation (D5).
+      expect(playwright.noteKind, McpRowNoteKind.projectFile);
     });
 
     test('scenario "project layer server": Disable here writes only '
@@ -991,11 +1026,7 @@ void main() {
       expect(playwright.canEnableHere, isTrue);
       expect(playwright.canDisableHere, isFalse);
       expect(playwright.canRemove, isFalse);
-      expect(
-        playwright.note,
-        'playwright is disabled in .codelab/config.local.yaml. "Enable here" '
-        'removes this override.',
-      );
+      expect(playwright.noteKind, McpRowNoteKind.disabledHere);
       expect(event('mcp_settings.toggled')['action'], 'disable_here');
       expect(event('mcp_settings.toggled')['target'], 'local');
     });
@@ -1034,6 +1065,10 @@ void main() {
 
       expect(done, isFalse);
       expect(current(cubit).banner?.kind, McpBannerKind.error);
+      expect(
+        (current(cubit).banner!.message as McpRefusedMessage).reason,
+        McpServerRefusal.noProjectTarget,
+      );
       expect(store.applied, isEmpty);
       final failed = event('mcp_settings.save_failed');
       expect(failed['operation'], 'toggle');
@@ -1053,6 +1088,10 @@ void main() {
 
       expect(done, isFalse);
       expect(current(cubit).banner?.kind, McpBannerKind.error);
+      expect(
+        (current(cubit).banner!.message as McpRefusedMessage).reason,
+        McpServerRefusal.layerUnreadable,
+      );
       expect(store.applied, isEmpty);
       expect(event('mcp_settings.save_failed')['refusal'], 'layerUnreadable');
     });
@@ -1123,7 +1162,9 @@ void main() {
       expect(session.secrets, contains('codelab/mcp/github/token'));
       final state = current(cubit);
       expect(state.banner?.kind, McpBannerKind.saved);
-      expect(state.banner?.lines, ['Server github removed.']);
+      final removed = state.banner!.message as McpServerRemovedMessage;
+      expect(removed.server, 'github');
+      expect(removed.secrets, isEmpty);
       expect(state.rows.map((r) => r.name), ['GitHub', 'docs']);
       expect(event('mcp_settings.removed'), {
         'server': 'github',
@@ -1145,10 +1186,12 @@ void main() {
 
       expect(session.secrets, contains('team/docs-token'));
       expect(current(cubit).banner?.kind, McpBannerKind.saved);
-      expect(current(cubit).banner?.lines, [
-        'Server docs removed.',
-        'team/docs-token is kept: it was not created by this page.',
-      ]);
+      final removed = current(cubit).banner!.message as McpServerRemovedMessage;
+      expect(removed.server, 'docs');
+      expect(
+        [for (final n in removed.secrets) (n.name, n.cleanup)],
+        [('team/docs-token', SecretCleanup.kept)],
+      );
       expect(event('mcp_settings.removed')['cleanup_kept'], 1);
       expect(logger.entries.toString(), isNot(contains('team/docs-token')));
     });
@@ -1172,10 +1215,12 @@ void main() {
 
         expect(session.secrets, contains(_authorization));
         expect(current(cubit).banner?.kind, McpBannerKind.saved);
-        expect(current(cubit).banner?.lines, [
-          'Server github removed.',
-          '$_authorization is kept because other settings still use it.',
-        ]);
+        final removed =
+            current(cubit).banner!.message as McpServerRemovedMessage;
+        expect(
+          [for (final n in removed.secrets) (n.name, n.cleanup)],
+          [(_authorization, SecretCleanup.stillReferenced)],
+        );
         expect(event('mcp_settings.removed')['cleanup_kept'], 1);
       },
     );
@@ -1191,11 +1236,13 @@ void main() {
       expect(done, isTrue);
       final banner = current(cubit).banner!;
       expect(banner.kind, McpBannerKind.error);
-      expect(banner.lines, [
-        'Server github removed.',
-        '$_authorization could not be deleted. Delete it with: '
-            'codelab secret delete $_authorization',
-      ]);
+      // Имя секрета и исход — данные; команду `codelab secret delete <имя>`
+      // собирает presentation (D5, D7).
+      final removed = banner.message as McpServerRemovedMessage;
+      expect(
+        [for (final n in removed.secrets) (n.name, n.cleanup)],
+        [(_authorization, SecretCleanup.failed)],
+      );
       expect(event('mcp_settings.removed')['cleanup_failed'], 1);
     });
 
@@ -1229,6 +1276,11 @@ void main() {
       expect(saved, isFalse);
       final state = current(cubit);
       expect(state.banner?.kind, McpBannerKind.error);
+      // Исключение хранилища — своё сообщение без текста исключения.
+      expect(
+        (state.banner!.message as McpWriteFailedMessage).failure,
+        McpWriteFailure.secretStoreUnreadable,
+      );
       expect(state.saving, isFalse);
       expect(store.applied, isEmpty);
       final failed = event('mcp_settings.save_failed');
@@ -1319,7 +1371,10 @@ void main() {
       expect(saved, isTrue);
       expect(session.secrets, isNot(contains(_authorization)));
       expect(current(cubit).banner?.kind, McpBannerKind.saved);
-      expect(current(cubit).banner?.lines, ['Server github saved.']);
+      final savedMessage =
+          current(cubit).banner!.message as McpServerSavedMessage;
+      expect(savedMessage.server, 'github');
+      expect(savedMessage.secrets, isEmpty);
       expect(event('mcp_settings.saved')['cleanup_deleted'], 1);
       expect(logger.entries.toString(), isNot(contains(_authorization)));
     });
@@ -1336,12 +1391,11 @@ void main() {
       await cubit.save(plain);
 
       expect(current(cubit).banner?.kind, McpBannerKind.error);
+      final failedSaved =
+          current(cubit).banner!.message as McpServerSavedMessage;
       expect(
-        current(cubit).banner?.lines,
-        contains(
-          '$_authorization could not be deleted. Delete it with: '
-          'codelab secret delete $_authorization',
-        ),
+        [for (final n in failedSaved.secrets) (n.name, n.cleanup)],
+        [(_authorization, SecretCleanup.failed)],
       );
       expect(event('mcp_settings.saved')['cleanup_failed'], 1);
     });
@@ -1357,17 +1411,19 @@ void main() {
 
       await cubit.save(_newGithub());
 
-      final lines = current(cubit).banner!.lines.join('\n');
-      expect(lines, contains('codelab secret delete $_authorization'));
-      expect(lines, isNot(contains(leakMarker)));
+      final conflict = current(cubit).banner!.message as McpWriteFailedMessage;
+      expect(conflict.failure, McpWriteFailure.conflict);
+      expect(conflict.notRolledBack, [_authorization]);
+      expect(conflict.toString(), isNot(contains(leakMarker)));
 
       session.secrets[_authorization] = 'old';
       store.nextOutcome = const ConfigConflict(FakeAgentConfigStore.userPath);
       await cubit.save(_newGithub(), replaceSecrets: {_authorization});
 
       expect(
-        current(cubit).banner!.lines.join('\n'),
-        contains('$_authorization was already replaced'),
+        (current(cubit).banner!.message as McpWriteFailedMessage)
+            .replacedSecrets,
+        [_authorization],
       );
     });
 
@@ -1389,6 +1445,11 @@ void main() {
           final state = current(cubit);
           expect(state.saving, isFalse, reason: operation);
           expect(state.banner?.kind, McpBannerKind.error, reason: operation);
+          expect(
+            (state.banner!.message as McpWriteFailedMessage).failure,
+            McpWriteFailure.changeNotSaved,
+            reason: operation,
+          );
           final failed = event('mcp_settings.save_failed');
           expect(failed['operation'], operation);
           expect(failed['outcome'], 'error');
@@ -1504,7 +1565,7 @@ void main() {
         'event': 'mcp_settings.command_discarded',
         'level': 'debug',
       });
-      expect((status(cubit) as McpAgentStatusText).notice, _listFailed);
+      expect((status(cubit) as McpAgentStatusText).listFailed, isTrue);
     });
 
     test('a refused second secret rolls back the first; when the rollback '
@@ -1530,16 +1591,13 @@ void main() {
         ),
       );
 
-      final lines = current(cubit).banner!.lines;
+      final refused =
+          current(cubit).banner!.message as McpSecretNotStoredMessage;
       expect(current(cubit).banner?.kind, McpBannerKind.error);
-      expect(
-        lines,
-        contains(
-          'codelab/mcp/fresh/a could not be deleted. Delete it with: '
-          'codelab secret delete codelab/mcp/fresh/a',
-        ),
-      );
-      expect(lines.join('\n'), isNot(contains('fresh/b could not')));
+      // Причина хранилища — аргумент как есть (D6); остались ровно секреты,
+      // которые откат не удалил: имя и команда строятся presentation.
+      expect(refused.reason, 'the store is read-only');
+      expect(refused.notRolledBack, ['codelab/mcp/fresh/a']);
       final failed = event('mcp_settings.save_failed');
       expect(failed['outcome'], 'secret_failed');
       expect(failed['rollback'], 'failed');
@@ -1606,7 +1664,7 @@ void main() {
       expect(saved, isTrue);
       final state = current(cubit);
       expect(state.banner?.kind, McpBannerKind.saved);
-      expect(state.banner?.lines.first, 'Server fresh saved.');
+      expect(state.banner?.message, _savedMessage('fresh'));
       expect(state.saving, isFalse);
       expect(
         logger.entries.where((e) => e['event'] == 'mcp_settings.saved'),
@@ -1637,7 +1695,7 @@ void main() {
 
       expect(await cubit.remove('postgres'), isTrue);
 
-      expect(current(cubit).banner?.lines.first, 'Server postgres removed.');
+      expect(current(cubit).banner?.message, _removedMessage('postgres'));
       expect(
         logger.entries.where((e) => e['event'] == 'mcp_settings.save_failed'),
         isEmpty,
@@ -1693,9 +1751,7 @@ void main() {
     late Directory root;
     late RealConfigSession real;
 
-    const restartSaved =
-        'Server fresh saved. It starts after Restart agent '
-        '(Settings › Connection).';
+    final restartSaved = _savedMessage('fresh', restartHint: true);
 
     setUp(() async {
       root = Directory.systemTemp.createTempSync('codelab_mcp_restart_');
@@ -1746,7 +1802,7 @@ void main() {
         expect(await cubit.save(stdio('fresh')), isTrue);
 
         expect(current(cubit).banner?.kind, McpBannerKind.saved);
-        expect(current(cubit).banner?.lines.first, restartSaved);
+        expect(current(cubit).banner?.message, restartSaved);
         expect(event('mcp_settings.saved')['restart_required'], isTrue);
       },
     );
@@ -1765,7 +1821,7 @@ void main() {
           ),
         );
 
-        expect(current(cubit).banner?.lines.first, restartSaved);
+        expect(current(cubit).banner?.message, restartSaved);
         expect(event('mcp_settings.saved')['restart_required'], isTrue);
       },
     );
@@ -1781,7 +1837,7 @@ void main() {
         ),
       );
 
-      expect(current(cubit).banner?.lines.first, 'Server fresh saved.');
+      expect(current(cubit).banner?.message, _savedMessage('fresh'));
       expect(event('mcp_settings.saved')['restart_required'], isFalse);
     });
 
@@ -1803,7 +1859,7 @@ mcp:
         final draft = cubit.draftFor('web')!;
         await cubit.save(draft.copyWith(enabled: true));
 
-        expect(current(cubit).banner?.lines.first, 'Server web saved.');
+        expect(current(cubit).banner?.message, _savedMessage('web'));
         expect(event('mcp_settings.saved')['restart_required'], isFalse);
       },
     );
@@ -1829,9 +1885,8 @@ mcp:
         );
 
         expect(
-          current(cubit).banner?.lines.first,
-          'Server docs saved. It starts after Restart agent '
-          '(Settings › Connection).',
+          current(cubit).banner?.message,
+          _savedMessage('docs', restartHint: true),
         );
       },
     );
@@ -1854,11 +1909,7 @@ mcp:
 
         expect(await cubit.setEnabled('docs', enabled: true), isTrue);
 
-        expect(
-          current(cubit).banner?.lines.first,
-          'Server docs enabled. It starts after Restart agent '
-          '(Settings › Connection).',
-        );
+        expect(current(cubit).banner?.message, _enabledMessage('docs'));
       },
     );
 
@@ -1886,11 +1937,7 @@ mcp:
 
       expect(await cubit.enableHere('playwright'), isTrue);
 
-      expect(
-        current(cubit).banner?.lines.first,
-        'Server playwright enabled. It starts after Restart agent '
-        '(Settings › Connection).',
-      );
+      expect(current(cubit).banner?.message, _enabledMessage('playwright'));
     });
 
     test('Enable here without a restart has no banner', () async {
@@ -1932,7 +1979,7 @@ mcp:
         ),
       );
 
-      expect(current(cubit).banner?.lines.first, 'Server web saved.');
+      expect(current(cubit).banner?.message, _savedMessage('web'));
       expect(event('mcp_settings.saved')['restart_required'], isFalse);
       expect(
         logger.entries.where((e) => e['event'] == 'mcp_settings.saved'),
@@ -1963,7 +2010,7 @@ mcp:
 
       expect(await cubit.remove('extra'), isTrue);
 
-      expect(current(cubit).banner?.lines.first, 'Server extra removed.');
+      expect(current(cubit).banner?.message, _removedMessage('extra'));
     });
 
     test('the write passed but the page was closed during the commit: the '
@@ -2025,7 +2072,7 @@ mcp:
 
       expect(await cubit.save(stdio('fresh')), isTrue);
 
-      expect(current(cubit).banner?.lines.first, 'Server fresh saved.');
+      expect(current(cubit).banner?.message, _savedMessage('fresh'));
       final failed = logger.entries.singleWhere(
         (e) => e['event'] == 'mcp_settings.restart_hint_failed',
       );
@@ -2060,7 +2107,7 @@ mcp:
 
       await cubit.save(stdio('fresh'));
 
-      expect(current(cubit).banner?.lines.first, 'Server fresh saved.');
+      expect(current(cubit).banner?.message, _savedMessage('fresh'));
     });
   });
 
@@ -2174,8 +2221,8 @@ mcp:
       final live = status(cubit) as McpAgentStatusLive;
       final blocked = live.rows.firstWhere((r) => r.name == 'postgres');
       expect(blocked.state, McpServerState.failed);
-      expect(blocked.stateLabel, 'failed');
-      expect(blocked.lastError, reason);
+      expect(blocked.retryIn, isNotNull);
+      expect(blocked.errorText, reason);
       expect(blocked.canReconnect, isTrue);
       expect(current(cubit).rejected, isNull);
       expect(events(), isNot(contains('mcp_settings.rejected_after_save')));
@@ -2214,8 +2261,8 @@ mcp:
       expect(current(cubit).rejected, isNull);
       expect(current(cubit).banner!.kind, McpBannerKind.saved);
       expect(
-        current(cubit).banner!.lines.join('\n'),
-        isNot(contains('bound to another address')),
+        (current(cubit).banner!.message as McpServerSavedMessage).warnings,
+        isNot(contains(contains('bound to another address'))),
       );
       expect(
         logger.entries.map((e) => '$e').join('\n'),
@@ -2261,16 +2308,20 @@ mcp:
       final live = status(cubit) as McpAgentStatusLive;
       expect(live.updatedAt, clock);
       expect(
-        live.rows.map((r) => (r.name, r.stateLabel, r.tools, r.lastError)),
+        live.rows.map(
+          (r) => (r.name, r.state, r.retryIn, r.toolCount, r.errorText),
+        ),
         [
-          ('github', 'connected', '42', '—'),
+          ('github', McpServerState.connected, null, 42, null),
           (
             'postgres',
-            'failed · retry in 24 s',
-            '0',
+            McpServerState.failed,
+            const Duration(seconds: 24),
+            0,
             'ECONNREFUSED 127.0.0.1:5432',
           ),
-          ('playwright', 'disabled', '—', '—'),
+          // Прочерк рисует presentation при `null`, а не состояние строкой.
+          ('playwright', McpServerState.disabled, null, null, null),
         ],
       );
       expect(live.rows.map((r) => r.canReconnect), [true, true, false]);
@@ -2552,7 +2603,7 @@ mcp:
       final text = status(cubit) as McpAgentStatusText;
       expect(text.text, 'github   connected\npostgres failed');
       expect(text.sending, isFalse);
-      expect(text.notice, isNull);
+      expect(text.listFailed, isFalse);
       expect(event('mcp_settings.command_sent'), {
         'command': 'list',
         'session_id': 's1',
@@ -2774,7 +2825,7 @@ mcp:
         await cubit.refresh();
 
         final text = status(cubit) as McpAgentStatusText;
-        expect(text.notice, _listFailed, reason: key);
+        expect(text.listFailed, isTrue, reason: key);
         expect(text.text, 'old text', reason: key);
         expect(text.toString(), isNot(contains('boom')));
         expect(event('mcp_settings.command_discarded')['reason'], key);
@@ -2786,7 +2837,7 @@ mcp:
       await cubit.refresh();
       final text = status(cubit) as McpAgentStatusText;
       expect(text.text, 'new text');
-      expect(text.notice, isNull);
+      expect(text.listFailed, isFalse);
       expect(logger.entries.toString(), isNot(contains(leakMarker)));
       expect(logger.entries.toString(), isNot(contains('old text')));
     });
@@ -2798,7 +2849,7 @@ mcp:
 
       await cubit.refresh();
 
-      expect((status(cubit) as McpAgentStatusText).notice, _listFailed);
+      expect((status(cubit) as McpAgentStatusText).listFailed, isTrue);
       expect(event('mcp_settings.command_discarded')['reason'], 'failed');
       expect(logger.entries.toString(), isNot(contains(leakMarker)));
     });

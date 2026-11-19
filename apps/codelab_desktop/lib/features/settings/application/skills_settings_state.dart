@@ -7,6 +7,12 @@ import 'package:codelab_setup/codelab_setup.dart'
         SkillsListRefusal,
         SkillsListUntrustedProject;
 
+import 'settings_notices.dart';
+import 'skills_messages.dart';
+
+export 'settings_notices.dart';
+export 'skills_messages.dart';
+
 /// Состояние страницы «Skills & extensions» (change `add-app-skills-page`,
 /// D6).
 ///
@@ -33,8 +39,14 @@ final class SkillsSettingsLoading extends SkillsSettingsState {
 /// [notice] — основная строка InfoBar `skills-read-only`, [hint] — вторая
 /// (как проверить на другом хосте); `null` — подсказки нет.
 final class SkillsSettingsReadOnly extends SkillsSettingsState {
-  const SkillsSettingsReadOnly({required this.notice, this.hint});
+  const SkillsSettingsReadOnly({this.reason, this.notice = '', this.hint});
 
+  /// Причина «только чтение»: чей агент (D5, «Уточнение итерации 5»); текст
+  /// InfoBar и подсказку строит presentation. Заглушка задачи 5.1c: Cubit пока
+  /// оставляет `null`.
+  final ReadOnlyReason? reason;
+
+  /// Прежние готовые строки (удаляются в задаче 5.2).
   final String notice;
   final String? hint;
 
@@ -57,9 +69,17 @@ final class SkillsSettingsNoFolder extends SkillsSettingsState {
 ///
 /// [problems] — проблемы загрузчика с путём ключа, по строке на проблему.
 final class SkillsSettingsUnreadable extends SkillsSettingsState {
-  const SkillsSettingsUnreadable({required this.problems});
+  const SkillsSettingsUnreadable({
+    required this.problems,
+    this.issues = const [],
+  });
 
+  /// Прежние проблемы строками; удаляются в задаче 5.2.
   final List<String> problems;
+
+  /// Проблемы закрытого типа: фраза app или текст загрузчика как есть (D5).
+  /// Заглушка задачи 5.1c: пусто.
+  final List<SettingsProblem> issues;
 
   @override
   String toString() => 'SkillsSettingsUnreadable(${problems.length})';
@@ -130,10 +150,16 @@ enum SkillsBannerKind { openFailed, saved, conflict, error }
 
 /// Баннер итога действия (ключ `skills-banner`).
 final class SkillsBanner {
-  const SkillsBanner(this.kind, this.text);
+  const SkillsBanner(this.kind, this.text, {this.message});
 
   final SkillsBannerKind kind;
+
+  /// Прежний готовый текст; удаляется в задаче 5.2.
   final String text;
+
+  /// Типизированное сообщение, по которому presentation строит текст (D5).
+  /// Заглушка задачи 5.1c: Cubit пока оставляет `null`.
+  final SkillsMessage? message;
 
   @override
   String toString() => 'SkillsBanner(${kind.name})';

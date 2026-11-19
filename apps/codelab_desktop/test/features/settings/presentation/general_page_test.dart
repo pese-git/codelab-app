@@ -990,6 +990,187 @@ void main() {
       });
     });
 
+    // --- Подпись источника конфигурации на двух языках (задача 5.1c change
+    // `add-desktop-localization`, итерация 5, решение пользователя В1; spec
+    // app-settings «Источник конфигурации на русском»; design.md D7). Три
+    // сообщения с `{source}` — «Этот проект переопределяет значение», отказ
+    // правки внешним источником и баннер записи с перекрытием — получают
+    // подпись одной функцией по `ConfigSourceKind`, а не строкой
+    // `SettingFieldView.sourceName`. Фразы `ru` не склеивают подпись с
+    // несогласованным падежом, поэтому точная форма не фиксируется: подпись
+    // источника на русском есть, английской подписи и прежней фразы нет.
+    group('Подпись источника конфигурации (В1)', () {
+      Finder bannerText(String value) => find.descendant(
+        of: key('settings-general-agent-banner'),
+        matching: find.textContaining(value),
+      );
+
+      /// Подпись слоя как отдельное слово: «проект» не совпадает с «проектов».
+      Finder bannerWord(String word) => find.descendant(
+        of: key('settings-general-agent-banner'),
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Text &&
+              RegExp('(?<![а-яё])$word(?![а-яё])').hasMatch(w.data ?? ''),
+        ),
+      );
+
+      testWidgets('en: строки прежние — local, project, config, env', (
+        tester,
+      ) async {
+        await pumpPage(
+          tester,
+          _ready(
+            values: {'compaction.enabled': false},
+            sources: {'compaction.enabled': _local},
+          ),
+        );
+
+        expect(
+          inRow('compaction.enabled', 'This project overrides it (local).'),
+          findsOneWidget,
+        );
+        expect(inRow('compaction.enabled', 'local'), findsOneWidget);
+      });
+
+      testWidgets('ru: «Этот проект переопределяет значение» с подписью '
+          'слоя «локально» и «проект»', (tester) async {
+        await pumpPage(
+          tester,
+          _ready(
+            values: {'compaction.enabled': false, 'budget.max_steps': 5},
+            sources: {
+              'compaction.enabled': _local,
+              'budget.max_steps': const ConfigSourceView(
+                kind: ConfigSourceKind.project,
+                label: 'p',
+              ),
+            },
+          ),
+          locale: const Locale('ru'),
+        );
+
+        expect(
+          inRow(
+            'compaction.enabled',
+            'Этот проект переопределяет значение (локально).',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          inRow(
+            'budget.max_steps',
+            'Этот проект переопределяет значение (проект).',
+          ),
+          findsOneWidget,
+        );
+        // Колонка источника строки — та же функция: «локально», а не `local`.
+        expect(inRow('compaction.enabled', 'локально'), findsOneWidget);
+        expect(inRow('compaction.enabled', 'local'), findsNothing);
+        expect(inRow('budget.max_steps', 'проект'), findsOneWidget);
+      });
+
+      testWidgets('ru: отказ правки внешним источником называет окружение и '
+          'файл --config на русском', (tester) async {
+        await pumpPage(
+          tester,
+          _ready(
+            values: {'budget.max_steps': 11, 'compaction.enabled': false},
+            sources: {'budget.max_steps': _env, 'compaction.enabled': _extra},
+          ),
+          locale: const Locale('ru'),
+        );
+
+        final env = find.descendant(
+          of: row('budget.max_steps'),
+          matching: find.textContaining('окружение'),
+        );
+        expect(env, findsWidgets);
+        final file = find.descendant(
+          of: row('compaction.enabled'),
+          matching: find.textContaining('файл'),
+        );
+        expect(file, findsWidgets);
+        expect(
+          find.descendant(
+            of: row('budget.max_steps'),
+            matching: find.textContaining('Set by env'),
+          ),
+          findsNothing,
+        );
+        // Несогласованный падеж («Задано источником окружение») — дефект.
+        expect(find.textContaining('источником окружение'), findsNothing);
+        expect(find.textContaining('источником файл'), findsNothing);
+        expect(find.text('env'), findsNothing);
+      });
+
+      testWidgets('en: отказ внешним источником прежний', (tester) async {
+        await pumpPage(
+          tester,
+          _ready(
+            values: {'budget.max_steps': 11},
+            sources: {'budget.max_steps': _env},
+          ),
+        );
+
+        expect(
+          inRow('budget.max_steps', 'Set by env; it cannot be changed here.'),
+          findsOneWidget,
+        );
+      });
+
+      for (final (kind, label, expected) in const [
+        (ConfigSourceKind.projectLocal, 'local', 'локально'),
+        (ConfigSourceKind.project, 'project', 'проект'),
+        (ConfigSourceKind.environment, 'env', 'окружение'),
+        (ConfigSourceKind.extraFile, 'config', 'файл'),
+      ]) {
+        testWidgets('ru: баннер записи с перекрытием слоем ${kind.name} — '
+            'подпись «$expected», значение как есть, английской основы нет', (
+          tester,
+        ) async {
+          await pumpPage(
+            tester,
+            _ready(
+              banner: AgentDefaultsBanner(
+                AgentDefaultsBannerKind.overridden,
+                key: 'compaction.enabled',
+                overriddenByKind: kind,
+                effective: 'false',
+              ),
+            ),
+            locale: const Locale('ru'),
+          );
+
+          expect(bannerWord(expected), findsOneWidget, reason: kind.name);
+          expect(bannerText('false'), findsOneWidget);
+          expect(bannerText('overrides it'), findsNothing);
+          expect(bannerText(' $label '), findsNothing);
+        });
+      }
+
+      testWidgets('en: баннер перекрытия прежний', (tester) async {
+        await pumpPage(
+          tester,
+          _ready(
+            banner: const AgentDefaultsBanner(
+              AgentDefaultsBannerKind.overridden,
+              key: 'compaction.enabled',
+              overriddenByKind: ConfigSourceKind.projectLocal,
+              effective: 'false',
+            ),
+          ),
+        );
+
+        expect(
+          bannerText(
+            'Saved to all projects; local overrides it: the agent uses false.',
+          ),
+          findsOneWidget,
+        );
+      });
+    });
+
     group('Только чтение, нечитаемый конфиг, загрузка', () {
       testWidgets('WebSocket: предупреждение без пути, нет строк и InfoBar, '
           'Language остаётся', (tester) async {
@@ -1649,7 +1830,7 @@ void main() {
           const AgentDefaultsBanner(
             AgentDefaultsBannerKind.overridden,
             key: 'compaction.enabled',
-            overriddenBy: 'local',
+            overriddenByKind: ConfigSourceKind.projectLocal,
             effective: 'false',
           ),
         );
@@ -1672,7 +1853,7 @@ void main() {
             AgentDefaultsBannerKind.overridden,
             key: 'logging.level',
             restart: AgentDefaultsRestart.afterRestart,
-            overriddenBy: 'local',
+            overriddenByKind: ConfigSourceKind.projectLocal,
             effective: 'error',
           ),
         );
@@ -1830,14 +2011,17 @@ void main() {
             banner: const AgentDefaultsBanner(
               AgentDefaultsBannerKind.overridden,
               key: 'compaction.enabled',
-              overriddenBy: 'local',
+              overriddenByKind: ConfigSourceKind.projectLocal,
               effective: 'false',
             ),
           ),
         );
         await tester.pumpAndSettle();
         expect(inBanner('Сохранено для всех проектов'), findsOneWidget);
-        expect(inBanner('local'), findsOneWidget);
+        // Подпись слоя — на русском, одной функцией по `ConfigSourceKind`
+        // (итерация 5, В1); `local` на русском экране больше нет.
+        expect(inBanner('локально'), findsOneWidget);
+        expect(inBanner('local'), findsNothing);
         expect(inBanner('false'), findsOneWidget);
 
         cubit.show(
@@ -1944,7 +2128,7 @@ void main() {
               AgentDefaultsBannerKind.overridden,
               key: 'logging.level',
               restart: AgentDefaultsRestart.afterRestart,
-              overriddenBy: 'local',
+              overriddenByKind: ConfigSourceKind.projectLocal,
               effective: 'debug',
             ),
             configHome: '~/work/very/long/path/to/codelab-home',
@@ -1998,7 +2182,7 @@ void main() {
             banner: const AgentDefaultsBanner(
               AgentDefaultsBannerKind.overridden,
               key: 'compaction.enabled',
-              overriddenBy: 'local',
+              overriddenByKind: ConfigSourceKind.projectLocal,
               effective: 'false',
               restart: AgentDefaultsRestart.whenStarts,
             ),

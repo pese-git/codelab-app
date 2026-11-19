@@ -330,9 +330,9 @@ void main() {
       );
 
       expect(fromProject.refusal, isNull);
-      expect(fromProject.overriddenBy, 'project');
+      expect(fromProject.overriddenByKind, ConfigSourceKind.project);
       expect(fromLocal.refusal, isNull);
-      expect(fromLocal.overriddenBy, 'local');
+      expect(fromLocal.overriddenByKind, ConfigSourceKind.projectLocal);
     });
 
     test('источник env отказывает ветвью моста', () {
