@@ -972,4 +972,80 @@ void main() {
       expect(logger.entries.toString(), isNot(contains('7351')));
     });
   });
+
+  // Новая правка снимает баннер прошлой записи (задача 7.3 change
+  // `add-app-general-page`, D7): иначе под неверным вводом висит «Saved.».
+  group('Баннер снимается новой правкой (D7)', () {
+    test('неверный ввод после успешной записи: баннера нет, ошибка поля, '
+        'файл не изменён', () async {
+      final fx = await fixture();
+      final cubit = make(fx);
+      await ready(cubit);
+      await cubit.submit('budget.max_steps', '80');
+      expect(now(cubit).banner?.kind, AgentDefaultsBannerKind.saved);
+      final saved = fx.userConfig;
+      final applied = fx.store.applied.length;
+
+      await cubit.submit('budget.max_steps', '0');
+
+      final state = now(cubit);
+      expect(state.banner, isNull);
+      expect(state.fieldErrors, {'budget.max_steps'});
+      expect(fx.userConfig, saved);
+      expect(fx.store.applied, hasLength(applied));
+    });
+
+    test('пустое поле без записи снимает баннер', () async {
+      final fx = await fixture();
+      final cubit = make(fx);
+      await ready(cubit);
+      await cubit.submit('budget.max_steps', '80');
+      expect(now(cubit).banner, isNotNull);
+      final applied = fx.store.applied.length;
+
+      // Ключ `budget.max_tokens` в слое user не задан: записи нет.
+      await cubit.submit('budget.max_tokens', '');
+
+      expect(now(cubit).banner, isNull);
+      expect(fx.store.applied, hasLength(applied));
+    });
+
+    test('новая успешная запись заменяет баннер новым', () async {
+      final fx = await fixture();
+      final cubit = make(fx);
+      await ready(cubit);
+      await cubit.submit('budget.max_steps', '80');
+
+      await cubit.submit('logging.level', 'debug');
+
+      expect(now(cubit).banner?.key, 'logging.level');
+    });
+
+    test('правка во время saving баннер не трогает и игнорируется', () async {
+      final fx = await fixture();
+      final cubit = make(fx);
+      await ready(cubit);
+      await cubit.submit('budget.max_steps', '80');
+      final before = now(cubit).banner;
+      final applying = Completer<void>();
+      final release = Completer<void>();
+      fx.store.onApply = () {
+        applying.complete();
+        return release.future;
+      };
+
+      final write = cubit.submit('compaction.enabled', 'false');
+      await arrive(applying);
+      final during = now(cubit);
+      expect(during.saving, isTrue);
+      await cubit.submit('budget.max_steps', '0');
+      expect(now(cubit).fieldErrors, isEmpty);
+      expect(now(cubit).saving, isTrue);
+      release.complete();
+      await write;
+
+      expect(before?.kind, AgentDefaultsBannerKind.saved);
+      expect(fx.store.applied, hasLength(2));
+    });
+  });
 }

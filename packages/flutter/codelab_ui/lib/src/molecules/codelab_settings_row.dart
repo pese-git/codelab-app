@@ -29,6 +29,7 @@ class CodeLabSettingsRow extends StatelessWidget {
   const CodeLabSettingsRow({
     required this.title,
     this.description,
+    this.descriptionMaxLines = 2,
     this.leading,
     this.trailing,
     super.key,
@@ -39,6 +40,13 @@ class CodeLabSettingsRow extends StatelessWidget {
 
   /// Пояснение под заголовком, до двух строк.
   final String? description;
+
+  /// Сколько строк занимает [description]: по умолчанию 2 (с многоточием), `null`
+  /// — без ограничения, описание переносится целиком (change
+  /// `add-app-general-page`, D17).
+  ///
+  /// Заглушка красных тестов 7.5: параметр принят, но пока не применяется.
+  final int? descriptionMaxLines;
 
   /// Значок слева.
   final IconData? leading;

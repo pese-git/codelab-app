@@ -205,6 +205,42 @@ void main() {
     });
   });
 
+  // Подзаголовки групп (задача 7.1 change `add-app-general-page`, D2): раздел
+  // каждого ключа `general` — один из четырёх, подзаголовок на английском
+  // равен имени раздела реестра, на русском — по глоссарию.
+  group('Подзаголовки групп (D2)', () {
+    const sections = ['Budget', 'Agent', 'Subagents', 'Logging'];
+
+    test('раздел каждого ключа general — один из четырёх', () {
+      final general = _general();
+      expect(general, hasLength(_generalKeys.length));
+      for (final d in general) {
+        expect(sections, contains(d.section), reason: d.key);
+      }
+    });
+
+    test('английские settingsGeneralGroup* равны разделу реестра', () {
+      final en = _arb('app_en.arb');
+      for (final section in sections) {
+        expect(en['settingsGeneralGroup$section'], section, reason: section);
+        expect(en['@settingsGeneralGroup$section'], isA<Map>());
+      }
+    });
+
+    test('русские подзаголовки по глоссарию', () {
+      final ru = _arb('app_ru.arb');
+      expect(
+        {for (final s in sections) s: ru['settingsGeneralGroup$s']},
+        {
+          'Budget': 'Бюджет',
+          'Agent': 'Агент',
+          'Subagents': 'Субагенты',
+          'Logging': 'Журнал агента',
+        },
+      );
+    });
+  });
+
   group('Группировка строк (D2)', () {
     test('Budget, Agent, Subagents, Logging; порядок реестра в группе', () {
       final groups = agentDefaultsGroupsOf(_allFields());

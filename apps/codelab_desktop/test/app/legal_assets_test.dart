@@ -48,6 +48,32 @@ void main() {
     });
   });
 
+  // Диалог «Third-party notices» показывает только раздел `## Записи` (D13,
+  // решение пользователя 2026-11-19): без этого заголовка реестр в диалоге
+  // пришлось бы показывать целиком.
+  group('реестр без раздела записей', () {
+    for (final path in [
+      '../../THIRD_PARTY_NOTICES.md',
+      'assets/legal/THIRD_PARTY_NOTICES.md',
+    ]) {
+      test('в $path ровно один заголовок `## Записи`', () {
+        final file = File(path);
+        expect(file.existsSync(), isTrue, reason: path);
+
+        final headings = [
+          for (final line in file.readAsLinesSync())
+            if (line.trimRight() == '## Записи') line,
+        ];
+
+        expect(
+          headings,
+          hasLength(1),
+          reason: 'в $path нет единственного заголовка `## Записи`',
+        );
+      });
+    }
+  });
+
   group('строка лицензии из ресурса', () {
     test('имя и строка авторского права из текста LICENSE', () {
       const text =

@@ -42,6 +42,7 @@ import 'package:codelab_desktop/features/settings/application/about_diagnostics.
 import 'package:codelab_desktop/features/settings/application/about_ports.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_rows.dart';
+import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
 import 'package:codelab_desktop/features/settings/application/startup_settings_cubit.dart';
 import 'package:codelab_desktop/features/settings/presentation/general_page.dart';
 import 'package:codelab_desktop/features/settings/presentation/settings_shell.dart';
@@ -63,6 +64,8 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 import '../../../support/fake_external_link_opener.dart';
 import '../../../support/fake_local_folder_opener.dart';
 import '../../../support/l10n_app.dart';
+import '../../../support/modes_fixture.dart';
+import '../../../support/fake_provider_settings.dart' show FakeWorkspace;
 import '../../../support/recording_logger.dart';
 import '../../../support/l10n_mix.dart';
 import '../../../support/settings_search.dart';
@@ -1235,6 +1238,281 @@ void main() {
       });
     });
 
+    // Подзаголовки групп (задача 7.1 change `add-app-general-page`, D2):
+    // строки `budget.max_steps` и `subagents.max_steps` одинаково называются
+    // «Max steps», различает их только группа.
+    group('Подзаголовки групп (D2)', () {
+      const groupKey = 'settings-general-agent-group-';
+
+      Future<void> checkOrder(WidgetTester tester) async {
+        final order = [
+          key('${groupKey}budget'),
+          row('budget.max_steps'),
+          row('budget.max_duration'),
+          key('${groupKey}agent'),
+          row('compaction.enabled'),
+          key('${groupKey}subagents'),
+          row('subagents.max_steps'),
+          row('subagents.cancel_grace'),
+          key('${groupKey}logging'),
+          row('logging.level'),
+        ];
+        for (final finder in order) {
+          expect(finder, findsOneWidget, reason: '$finder');
+        }
+        for (var i = 1; i < order.length; i++) {
+          expect(
+            tester.getTopLeft(order[i - 1]).dy,
+            lessThan(tester.getTopLeft(order[i]).dy),
+            reason: 'позиция ${i - 1} выше позиции $i',
+          );
+        }
+      }
+
+      Finder titleOf(String section) => find.descendant(
+        of: key('$groupKey$section'),
+        matching: find.byType(Text),
+      );
+
+      testWidgets('en: порядок и тексты равны разделам реестра', (
+        tester,
+      ) async {
+        await pumpPage(tester, _ready());
+
+        await checkOrder(tester);
+        for (final entry in {
+          'budget': 'Budget',
+          'agent': 'Agent',
+          'subagents': 'Subagents',
+          'logging': 'Logging',
+        }.entries) {
+          expect(
+            find.descendant(
+              of: key('$groupKey${entry.key}'),
+              matching: find.text(entry.value),
+            ),
+            findsOneWidget,
+            reason: entry.key,
+          );
+        }
+      });
+
+      testWidgets('ru: «Бюджет», «Агент», «Субагенты», «Журнал агента»', (
+        tester,
+      ) async {
+        await pumpPage(tester, _ready(), locale: const Locale('ru'));
+
+        await checkOrder(tester);
+        for (final entry in {
+          'budget': 'Бюджет',
+          'agent': 'Агент',
+          'subagents': 'Субагенты',
+          'logging': 'Журнал агента',
+        }.entries) {
+          expect(
+            find.descendant(
+              of: key('$groupKey${entry.key}'),
+              matching: find.text(entry.value),
+            ),
+            findsOneWidget,
+            reason: entry.key,
+          );
+        }
+        expect(titleOf('budget'), findsOneWidget);
+      });
+
+      testWidgets('пустая группа подзаголовка не даёт', (tester) async {
+        await pumpPage(
+          tester,
+          _ready(
+            groups: (all) => [
+              for (final g in all)
+                if (g.section == 'Logging') g,
+            ],
+          ),
+        );
+
+        expect(key('${groupKey}logging'), findsOneWidget);
+        for (final section in ['budget', 'agent', 'subagents']) {
+          expect(key('$groupKey$section'), findsNothing, reason: section);
+        }
+      });
+
+      testWidgets('смена языка со подзаголовками не оставляет английского', (
+        tester,
+      ) async {
+        await pumpPage(tester, _ready());
+        expect(key('${groupKey}budget'), findsOneWidget);
+
+        await choose(tester, 'settings-language-ru');
+
+        expect(key('${groupKey}budget'), findsOneWidget);
+        await expectNoStaleLanguage(tester, from: en, to: ru);
+      });
+    });
+
+    // Баннер снимается новой правкой (задача 7.3, D7): сценарий «Неверный ввод
+    // после успешной записи» на настоящем Cubit-е с файлом во временной папке.
+    group('Баннер и неверный ввод (D7)', () {
+      testWidgets('после «Saved.» неверный ввод снимает баннер, подсказка '
+          'видна', (tester) async {
+        late ModesFixture fx;
+        late AgentDefaultsCubit real;
+        await tester.runAsync(() async {
+          fx = await ModesFixture.open();
+          real = AgentDefaultsCubit(
+            workspace: FakeWorkspace(),
+            defaultProfile: () async => embeddedConnectionProfile,
+            open: (access, env) async => ModesSession(fx.store),
+            environment: {'HOME': fx.home},
+            codelabHome: fx.home,
+            projectDirectory: () => fx.project,
+          );
+          await real.reload();
+        });
+        addTearDown(real.close);
+        addTearDown(() => fx.dispose());
+        tester.view.physicalSize = const Size(1200, 2600);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        SharedPreferences.setMockInitialValues({});
+        await tester.pumpWidget(
+          localizedFluentApp(
+            MultiBlocProvider(
+              providers: [
+                BlocProvider<AppLanguageCubit>.value(
+                  value: AppLanguageCubit(
+                    preferences:
+                        const SharedPreferencesAppLanguagePreferences(),
+                    preference: AppLanguagePreference.system,
+                    locale: const Locale('en'),
+                  ),
+                ),
+                BlocProvider<AgentDefaultsCubit>.value(value: real),
+                BlocProvider<StartupSettingsCubit>.value(
+                  value: StartupSettingsCubit(preferences: _StartupPort()),
+                ),
+              ],
+              child: const ScaffoldPage(
+                content: SingleChildScrollView(child: GeneralPage()),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        await tester.runAsync(() => real.submit('budget.max_steps', '80'));
+        await tester.pump();
+        expect(key('settings-general-agent-banner'), findsOneWidget);
+        expect(find.text('Saved.'), findsOneWidget);
+
+        await tester.runAsync(() => real.submit('budget.max_steps', '0'));
+        await tester.pump();
+
+        expect(key('settings-general-agent-banner'), findsNothing);
+        expect(
+          find.descendant(
+            of: row('budget.max_steps'),
+            matching: find.text('Enter a whole number of 1 or greater.'),
+          ),
+          findsOneWidget,
+        );
+      });
+    });
+
+    // Узкое окно не обрезает описания и ключи (задача 7.5, D17): окно 760 px
+    // на русском.
+    group('Узкое окно не обрезает описания и ключи (D17)', () {
+      const heartbeat = 'subagents.heartbeat_interval';
+
+      Text textIn(WidgetTester tester, Finder scope, String text) => tester
+          .widget<Text>(find.descendant(of: scope, matching: find.text(text)));
+
+      testWidgets('описание «Reopen» показано целиком: maxLines не задан, '
+          'многоточия нет', (tester) async {
+        await pumpPage(
+          tester,
+          _ready(),
+          locale: const Locale('ru'),
+          size: const Size(760, 3600),
+        );
+
+        final description = textIn(
+          tester,
+          key('settings-general-reopen-last-project'),
+          ru.settingsGeneralReopenDescription,
+        );
+
+        expect(description.maxLines, isNull);
+        expect(description.overflow, isNot(TextOverflow.ellipsis));
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('описания строк ключей без maxLines', (tester) async {
+        await pumpPage(
+          tester,
+          _ready(),
+          locale: const Locale('ru'),
+          size: const Size(760, 3600),
+        );
+
+        for (final entry in {
+          'budget.max_steps': 'Запросов к модели за ход.',
+          'subagents.heartbeat_interval':
+              'Пауза, после которой молчащий вызов субагента сообщает, что он '
+              'жив.',
+        }.entries) {
+          final description = textIn(tester, row(entry.key), entry.value);
+          expect(description.maxLines, isNull, reason: entry.key);
+          expect(
+            description.overflow,
+            isNot(TextOverflow.ellipsis),
+            reason: entry.key,
+          );
+        }
+      });
+
+      testWidgets('ключ рвётся только после «.» и «_»: сегменты — по одной '
+          'строке', (tester) async {
+        await pumpPage(
+          tester,
+          _ready(),
+          locale: const Locale('ru'),
+          size: const Size(760, 3600),
+        );
+
+        final last = find.descendant(
+          of: row(heartbeat),
+          matching: find.text('interval'),
+        );
+        expect(last, findsOneWidget, reason: 'сегмент interval');
+        final line = tester.getSize(last);
+        for (final segment in ['subagents.', 'heartbeat_', 'interval']) {
+          final finder = find.descendant(
+            of: row(heartbeat),
+            matching: find.text(segment),
+          );
+          expect(finder, findsOneWidget, reason: segment);
+          expect(tester.getSize(finder).height, line.height, reason: segment);
+        }
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('для скринридера весь ключ — одна метка', (tester) async {
+        final semantics = tester.ensureSemantics();
+        await pumpPage(
+          tester,
+          _ready(),
+          locale: const Locale('ru'),
+          size: const Size(760, 3600),
+        );
+
+        expect(find.bySemanticsLabel(heartbeat), findsOneWidget);
+        semantics.dispose();
+      });
+    });
+
     group('Причина Unreadable — из ARB (D7)', () {
       const cases = {
         AgentDefaultsUnreadableReason.cannotRead: (
@@ -2063,6 +2341,66 @@ void main() {
         );
         final opened = aboutEvents().where((e) => e['action'] == 'third_party');
         expect(opened.single['outcome'], 'opened');
+      });
+    });
+
+    // Только записи реестра (задача 7.7, D13): без заголовка первого уровня,
+    // вводной, «Формат записи» и шаблона; подпись на языке интерфейса.
+    group('Third-party notices: только записи реестра (D13)', () {
+      const dialogKey = 'settings-general-third-party-dialog';
+      const captionEn =
+          'Entries of the CodeLab third-party notices register, as kept in '
+          'the repository.';
+      const captionRu =
+          'Записи реестра сторонних уведомлений CodeLab в том виде, в каком '
+          'они хранятся в репозитории.';
+
+      Finder inDialog(Finder matching) =>
+          find.descendant(of: key(dialogKey), matching: matching);
+
+      testWidgets('en: записи на русском, подпись на английском, служебных '
+          'разделов нет, заголовок диалога один раз', (tester) async {
+        await openAbout(tester);
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-third-party');
+
+        expect(key(dialogKey), findsOneWidget);
+        expect(
+          inDialog(find.textContaining('JetBrains Mono', findRichText: true)),
+          findsWidgets,
+        );
+        expect(inDialog(find.text(captionEn)), findsOneWidget);
+        expect(
+          inDialog(find.textContaining('Формат записи', findRichText: true)),
+          findsNothing,
+        );
+        expect(
+          inDialog(
+            find.textContaining('<Название источника>', findRichText: true),
+          ),
+          findsNothing,
+        );
+        expect(inDialog(find.text('Third-party notices')), findsOneWidget);
+      });
+
+      testWidgets('ru: подпись на русском, записи те же', (tester) async {
+        await openAbout(tester);
+        await choose(tester, 'settings-language-ru');
+        await expand(tester);
+
+        await press(tester, 'settings-general-about-third-party');
+
+        expect(inDialog(find.text(captionRu)), findsOneWidget);
+        expect(inDialog(find.text(captionEn)), findsNothing);
+        expect(
+          inDialog(find.textContaining('JetBrains Mono', findRichText: true)),
+          findsWidgets,
+        );
+        expect(
+          inDialog(find.textContaining('Формат записи', findRichText: true)),
+          findsNothing,
+        );
       });
     });
 
