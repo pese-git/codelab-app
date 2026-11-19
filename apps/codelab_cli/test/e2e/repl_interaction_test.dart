@@ -143,9 +143,12 @@ Future<void> main() async {
       await pty.waitFor('> ');
       final from = pty.text.length;
       pty.write('/\t');
+      // Меню печатается построчно: ждём каждую проверяемую строку, а не
+      // одну `/compact` — иначе снимок вывода может оборваться до
+      // `/agent:plan` (нестабильный прогон CI 44334048597).
       await pty.waitFor('/compact', from: from);
+      await pty.waitFor('/agent:plan', from: from);
       expect(pty.text.substring(from), contains('(agent)'));
-      expect(pty.text.substring(from), contains('/agent:plan'));
       expect(pty.text.substring(from), contains('/help'));
 
       pty.write('\x15');
