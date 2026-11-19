@@ -701,7 +701,7 @@
 | Hidden — leave empty to keep | Скрыто — оставьте пустым, чтобы не менять | вычитано (2026-11-19); `mcpHiddenHint` |
 | Secret — stored in {backend} | Секрет — хранится в {backend} | вычитано (2026-11-19); `mcpSecretStoredIn` |
 | Secret — stored in {backend} as {name} | Секрет — хранится в {backend} как «{name}» | вычитано повторно (2026-11-19); `mcpSecretStoredInAs` |
-| The secret store is read-only. | Хранилище секретов только для чтения. | вычитано (2026-11-19); `mcpStoreReadOnly` |
+| The secret store is read-only. | Хранилище секретов доступно только для чтения. | ключ `mcpStoreReadOnly` удалён по ручной проверке (2026-11-20): MCP и «Провайдеры» берут вычитанный `secretStoreReadOnly` итерации 4 |
 | A secret with this name is already stored | Секрет с таким именем уже есть в хранилище | вычитано (2026-11-19); `mcpReplaceTitle` |
 | The new value replaces the secret for every server that refers to it. | Новое значение заменит секрет у каждого сервера, который на него ссылается. | вычитано (2026-11-19); `mcpReplaceNewValue` |
 | A running agent keeps the old value until the server reconnects. | Работающий агент сохраняет прежнее значение, пока сервер не переподключится. | вычитано (2026-11-19); `mcpReplaceRunning` |
