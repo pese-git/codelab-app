@@ -161,8 +161,23 @@ void main() {
     expect(find.byType(CodeLabUsagePane), findsOneWidget);
     expect(find.text('This session'), findsOneWidget);
 
+    // Сброс дерева: `Overlay` превью берёт записи только при создании.
+    await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(codelabApprovalPromptPreview());
     expect(tester.takeException(), isNull);
+    // Без фокуса полоса активного одобрения подсказывает, как к ней перейти
+    // (change `fix-approval-focus`, D4, п. 6).
+    expect(find.textContaining('to answer from the keyboard'), findsOneWidget);
+    expect(find.byKey(CodeLabApprovalPrompt.focusFrameKey), findsNothing);
+
+    // Превью с фокусом: рамка есть, подсказки нет.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(codelabApprovalPromptFocusedPreview());
+    await tester.pump();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(CodeLabApprovalPrompt.focusFrameKey), findsOneWidget);
+    expect(find.textContaining('to answer from the keyboard'), findsNothing);
 
     await tester.pumpWidget(codelabConnectionScreenPreview());
     expect(tester.takeException(), isNull);

@@ -53,8 +53,8 @@ String keyboardShortcutActionOf(
   CodeLabShortcut.commandMenuRun => l10n.settingsKeyboardActionCommandMenuRun,
   CodeLabShortcut.commandMenuClose =>
     l10n.settingsKeyboardActionCommandMenuClose,
-  // ЗАГЛУШКА задачи 2.1 (`fix-approval-focus`): текста строки ещё нет, ARB
-  // добавляет задача 4.2; запись без комбинаций страница не показывает.
+  // Временно (change `fix-approval-focus`): текста строки ещё нет, ARB
+  // добавляет задача 4.2, она же заменит пустую строку сообщением.
   CodeLabShortcut.goToApproval => '',
   CodeLabShortcut.allowOnce => l10n.settingsKeyboardActionAllowOnce,
   CodeLabShortcut.allowAlways => l10n.settingsKeyboardActionAllowAlways,
@@ -83,6 +83,7 @@ String keyboardShortcutWhereOf(
   CodeLabShortcut.commandMenuMove ||
   CodeLabShortcut.commandMenuRun ||
   CodeLabShortcut.commandMenuClose => l10n.settingsKeyboardWhereCommandMenu,
+  // Временно до задачи 4.2 `fix-approval-focus` (см. `keyboardEntriesOf`).
   CodeLabShortcut.goToApproval => '',
   CodeLabShortcut.allowOnce ||
   CodeLabShortcut.allowAlways ||
@@ -111,10 +112,11 @@ List<KeyboardShortcutEntry> keyboardEntriesOf(AppLocalizations l10n) {
   final english = AppLocalizationsEn();
   return [
     for (final shortcut in CodeLabShortcut.values)
-      // ЗАГЛУШКА задачи 2.1 (`fix-approval-focus`): запись без комбинаций
-      // (`goToApproval` до задачи 2.2) на страницу не попадает; условие уходит
-      // с задачей 4.2.
-      if (shortcut.combos.isNotEmpty)
+      // Временно (change `fix-approval-focus`): строку «Go to approval» страница
+      // пока не показывает — её тексты и ARB добавляет задача 4.2, она же
+      // уберёт это условие. Пропускается только эта запись, а не любая без
+      // комбинаций: пустая запись в каталоге остаётся ошибкой.
+      if (shortcut != CodeLabShortcut.goToApproval)
         KeyboardShortcutEntry(
           shortcut: shortcut,
           action: keyboardShortcutActionOf(l10n, shortcut),

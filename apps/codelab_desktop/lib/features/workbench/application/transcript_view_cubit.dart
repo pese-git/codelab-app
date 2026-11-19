@@ -20,9 +20,11 @@ final class TranscriptShowRequest {
   final String targetId;
   final int serial;
 
-  /// После показа поставить фокус на полосу решения цели (change
-  /// `fix-approval-focus`, D4). ЗАГЛУШКА задачи 2.3: поле есть, но
-  /// `requestShow` его не заполняет — поведение добавляет задача 2.4.
+  /// После показа поставить клавиатурный фокус на полосу решения цели
+  /// (change `fix-approval-focus`, D4): сочетание «Go to approval». Признак
+  /// живёт в том же разовом запросе, что и прокрутка: его гасят
+  /// `finishShowRequest` и `dropShowRequestOutside`, поэтому возврат в сессию
+  /// и перемонтированная лента фокус не повторяют (§9).
   final bool focusApproval;
 }
 
@@ -168,8 +170,6 @@ final class TranscriptViewCubit extends ShellPartCubit<TranscriptViewState> {
   void requestShow({
     required String sessionId,
     required AgentsShowTarget target,
-    // ЗАГЛУШКА задачи 2.3 (`fix-approval-focus`, D4): параметр принят, но
-    // в запрос пока не попадает; поведение добавляет задача 2.4.
     bool focusApproval = false,
   }) {
     final session = {
@@ -187,6 +187,7 @@ final class TranscriptViewCubit extends ShellPartCubit<TranscriptViewState> {
           rowId: target.rowId,
           targetId: target.targetId,
           serial: state.showSerial + 1,
+          focusApproval: focusApproval,
         ),
         showSerial: state.showSerial + 1,
       ),

@@ -316,6 +316,9 @@ void main() {
       final selected = <String>[];
       await tester.pumpWidget(host(selected));
       barNode(tester).requestFocus();
+      // Первый кадр применяет смену фокуса, второй перерисовывает рамку и
+      // подсказку по `onFocusChange`.
+      await tester.pump();
       await tester.pump();
 
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -333,6 +336,9 @@ void main() {
       expect(frame, findsNothing);
 
       barNode(tester).requestFocus();
+      // Первый кадр применяет смену фокуса, второй перерисовывает рамку и
+      // подсказку по `onFocusChange`.
+      await tester.pump();
       await tester.pump();
       expect(frame, findsOneWidget);
 
@@ -348,6 +354,7 @@ void main() {
 
       beforeNode.requestFocus();
       await tester.pump();
+      await tester.pump();
       expect(frame, findsNothing);
     });
 
@@ -356,6 +363,9 @@ void main() {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(host(<String>[]));
       barNode(tester).requestFocus();
+      // Первый кадр применяет смену фокуса, второй перерисовывает рамку и
+      // подсказку по `onFocusChange`.
+      await tester.pump();
       await tester.pump();
 
       final data = tester
@@ -380,6 +390,9 @@ void main() {
       );
 
       barNode(tester).requestFocus();
+      // Первый кадр применяет смену фокуса, второй перерисовывает рамку и
+      // подсказку по `onFocusChange`.
+      await tester.pump();
       await tester.pump();
       expect(find.text('Press ⇧⌘A to answer from the keyboard'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
@@ -417,6 +430,9 @@ void main() {
         host(<String>[], promptKey: const ValueKey('r1')),
       );
       barNode(tester).requestFocus();
+      // Первый кадр применяет смену фокуса, второй перерисовывает рамку и
+      // подсказку по `onFocusChange`.
+      await tester.pump();
       await tester.pump();
       expect(focusIsInside(tester, prompt), isTrue);
 

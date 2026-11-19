@@ -559,6 +559,18 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     }
     if (isClosed) return;
     emit(state._copyWith(isRespondingToApproval: false));
+    // Кнопки других одобрений гасились на время ответа (`approvalsEnabled`),
+    // а лента пересобирается только по `sessionChanges`. Если после ответа
+    // нового кадра нет, оставшееся одобрение так и осталось бы выключенным и
+    // не отвечало бы на сочетание: лента пересобирается здесь же
+    // (`fix-approval-focus`, design.md, Risks).
+    final id = state.sessionId;
+    final shown = _shown;
+    if (id != null && shown != null && shown.id.value == id) {
+      emit(
+        state._copyWith(transcriptRows: _rowsOf(shown, _handle(id)?.current)),
+      );
+    }
   }
 
   /// Отправляет агенту выбор [value] опции [configId]. Показанные опции

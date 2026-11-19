@@ -3,7 +3,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import '../atomics/atomics.dart';
 
 /// Сочетания клавиш рабочего места: палитра, новая сессия, настройки, сайдбар,
-/// панель Files и Esc отмены хода.
+/// панель Files, переход к одобрению и Esc отмены хода.
 ///
 /// Почему: активаторы берутся из каталога [CodeLabShortcut], а не объявляются
 /// здесь литералами, иначе страница «Keyboard» разошлась бы с привязками
@@ -57,8 +57,11 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
   final VoidCallback? onToggleFiles;
 
   /// Cmd/Ctrl+Shift+A — перейти к ожидающему одобрению (change
-  /// `fix-approval-focus`, D3, D4). ЗАГЛУШКА задачи 2.1: параметр есть, но
-  /// не привязан — привязку добавляет задача 2.2.
+  /// `fix-approval-focus`, D3, D4). Хост передаёт колбэк всегда, а наличие
+  /// цели проверяет при нажатии: иначе привязка появлялась бы и пропадала с
+  /// каждым снимком состояния, и нажатие между снимком и перестроением
+  /// терялось бы. Колбэк только прокручивает и ставит фокус на полосу, ответа
+  /// не отправляет (AGENTS.md §10).
   final VoidCallback? onGoToApproval;
   final bool enabled;
 
@@ -80,6 +83,8 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
         ...CodeLabShortcut.openSettings.bind(onOpenSettings!),
       if (onToggleFiles != null)
         ...CodeLabShortcut.toggleFiles.bind(onToggleFiles!),
+      if (onGoToApproval != null)
+        ...CodeLabShortcut.goToApproval.bind(onGoToApproval!),
     };
 
     return CallbackShortcuts(

@@ -6,6 +6,7 @@ import '../atomics/atomics.dart';
 import '../l10n/strings.dart';
 import '../molecules/molecules.dart';
 import '../rendering/rendering.dart';
+import 'codelab_approval_prompt.dart';
 import 'codelab_tool_call_tile.dart';
 import 'codelab_transcript_notice.dart';
 import 'codelab_transcript_row.dart';
@@ -136,8 +137,10 @@ final class CodeLabTranscriptShowRequest {
   final int serial;
 
   /// После показа поставить клавиатурный фокус на полосу решения цели
-  /// (change `fix-approval-focus`, D4). ЗАГЛУШКА задачи 2.1: признак есть, но
-  /// лента его не читает — поведение добавляет задача 2.2.
+  /// (change `fix-approval-focus`, D4, п. 2): сочетание «Go to approval».
+  /// Фокус ставится только в построенной цели и только пока запрос актуален;
+  /// не нашли полосу или запрос устарел — фокус прежний. Разовость запроса
+  /// (`serial`, `onShowRequestDone`) защищает от повтора при перемонтировании.
   final bool focusApproval;
 }
 
@@ -393,6 +396,11 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
         if (!mounted || token != _showToken) return;
         final again = _findKeyed(_targetKeyOf(request));
         if (again != null) _reveal(again);
+        // Запрос мог устареть между кадрами: фокус ставит только актуальный.
+        if (request.focusApproval &&
+            widget.showRequest?.serial == request.serial) {
+          _focusApprovalBar(again ?? target);
+        }
         widget.onShowRequestDone?.call(request.serial);
       });
       return;
@@ -432,6 +440,28 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
       request.targetId == request.rowId
       ? CodeLabTranscriptPanel.rowKey(request.rowId)
       : CodeLabTranscriptPanel.targetKey(request.targetId);
+
+  /// Ставит фокус на полосу решения внутри построенной цели [target]; полосы
+  /// нет — фокус не трогает. Другое одобрение фокус не получает: ищется только
+  /// внутри цели запроса (§9).
+  void _focusApprovalBar(BuildContext target) {
+    if (target is! Element || !target.mounted) return;
+    Element? bar;
+    void visit(Element element) {
+      if (bar != null) return;
+      if (element.widget.key == CodeLabApprovalPrompt.barKey) {
+        bar = element;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    target.visitChildren(visit);
+    final found = bar;
+    if (found == null || !found.mounted) return;
+    final node = Focus.maybeOf(found, createDependency: false);
+    if (node != null && node.canRequestFocus) node.requestFocus();
+  }
 
   void _reveal(BuildContext target) {
     Scrollable.ensureVisible(target, alignment: 0.1, duration: Duration.zero);

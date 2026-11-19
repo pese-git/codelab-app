@@ -98,6 +98,10 @@ class CodeLabShell extends StatelessWidget {
           onNewSession: state.selectedProjectPath != null
               ? () => unawaited(cubit.createSession())
               : null,
+          // Передаётся всегда: наличие цели проверяется при нажатии, иначе
+          // привязка появлялась бы и пропадала с каждым снимком
+          // (`fix-approval-focus`, D4, п. 1).
+          onGoToApproval: cubit.goToApproval,
           onOpenSettings: () =>
               _openSettings(context, SettingsOpenSource.shortcut),
           onToggleFiles: state.projectFilesAvailable

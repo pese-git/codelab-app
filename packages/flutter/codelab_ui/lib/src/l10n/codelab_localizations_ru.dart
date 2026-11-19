@@ -34,6 +34,11 @@ class CodeLabLocalizationsRu extends CodeLabLocalizations {
       'Агент не предлагает такого варианта';
 
   @override
+  String codeLabApprovalGoToHint(String shortcut) {
+    return 'Нажмите $shortcut, чтобы ответить с клавиатуры';
+  }
+
+  @override
   String get codeLabApprovalSelected => 'Выбрано';
 
   @override

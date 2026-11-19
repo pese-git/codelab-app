@@ -183,6 +183,11 @@ final class CodeLabApprovalShortcuts {
     return shortcut?.combos.single.compactFor(defaultTargetPlatform);
   }
 
+  /// Сочетание варианта [optionId] словами для чтения с экрана
+  /// (`spokenFor`: `Cmd+Enter`); `null` — у варианта нет сочетания.
+  String? spokenFor(String optionId) =>
+      _shortcutOf(optionId)?.combos.single.spokenFor(defaultTargetPlatform);
+
   CodeLabShortcut? _shortcutOf(String optionId) {
     if (optionId == allowOnceId) return CodeLabShortcut.allowOnce;
     if (optionId == allowAlwaysId) return CodeLabShortcut.allowAlways;

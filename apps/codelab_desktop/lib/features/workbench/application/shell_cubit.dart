@@ -33,6 +33,7 @@ import '../../../core/platform/startup_preferences.dart';
 import '../../../core/platform/usage_csv_saver.dart';
 import '../../settings/application/default_profile_resolver.dart';
 import 'agents_pane_data.dart' show AgentsShowTarget;
+import 'approval_go_to_target.dart';
 import 'active_session_cubit.dart';
 import 'connection_cubit.dart';
 import 'layout_cubit.dart';
@@ -600,6 +601,32 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     _parts.transcriptView.requestShow(sessionId: sessionId, target: target);
   }
 
+  /// Сочетание «Go to approval» (Cmd/Ctrl+Shift+A): прокручивает ленту к
+  /// активному одобрению активной сессии и ставит клавиатурный фокус на его
+  /// полосу (`fix-approval-focus`, D3, D4). Цель выбирается в момент нажатия
+  /// (`goToApprovalTargetOf`); нет цели или открыта палитра команд — ничего
+  /// не делает. Ответа на запрос не отправляет: решение принимается только в
+  /// самой полосе (PERM-4, AGENTS.md §10).
+  void goToApproval() {
+    final sessionId = _parts.activeSession.state.sessionId;
+    if (sessionId == null || state.isCommandPaletteOpen) {
+      return;
+    }
+    final target = goToApprovalTargetOf(
+      connectionStatus: state.connectionStatus,
+      view: _workspace.session(SessionId(sessionId))?.current,
+      rows: state.transcriptRows,
+    );
+    if (target == null) {
+      return;
+    }
+    _parts.transcriptView.requestShow(
+      sessionId: sessionId,
+      target: target,
+      focusApproval: true,
+    );
+  }
+
   /// Лента закончила показ запроса [serial]: запрос разовый и гасится.
   void finishTranscriptShow(int serial) =>
       _parts.transcriptView.finishShowRequest(serial);
@@ -847,6 +874,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           rowId: request.rowId,
           targetId: request.targetId,
           serial: request.serial,
+          focusApproval: request.focusApproval,
         ),
         null => null,
       },

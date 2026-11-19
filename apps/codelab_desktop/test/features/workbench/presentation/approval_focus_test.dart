@@ -780,6 +780,29 @@ void main() {
       await tearDownApp(tester);
     });
 
+    testWidgets('у активной сессии одобрения нет, а у фоновой есть: переход '
+        'ничего не делает', (tester) async {
+      await pumpConnected(tester);
+      await createSession(tester, 'session-1');
+      await startTurn(tester);
+      ask('session-1', 925);
+      await settle(tester);
+      // Вторая сессия становится активной; одобрение остаётся у первой.
+      await createSession(tester, 'session-2');
+      await shortFrames(tester);
+      expect(prompts, findsNothing, reason: 'в активной сессии одобрения нет');
+      await tester.tap(composerField);
+      await tester.pump();
+      expect(focusInside<CodeLabPromptComposer>(), isTrue);
+
+      await pressGoTo(tester);
+
+      expect(focusInside<CodeLabPromptComposer>(), isTrue);
+      expect(prompts, findsNothing);
+      expect(answers(), isEmpty);
+      await tearDownApp(tester);
+    });
+
     testWidgets('цель ушла до фокуса: другое одобрение фокус не получает', (
       tester,
     ) async {

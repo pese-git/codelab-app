@@ -138,16 +138,22 @@ final class AgentsPaneData {
   AgentsShowTarget? approvalTargetOf(
     String id,
     List<CodeLabTranscriptRow> transcriptRows,
-  ) => _approvalTarget(rowOf(id)?.approvalId?.value, transcriptRows);
+  ) => approvalTargetById(rowOf(id)?.approvalId?.value, transcriptRows);
 
   /// То же для шага дерева [id] (id элемента ленты): у шага своего
   /// `approvalId` в строке нет, он берётся только из [pendingApprovals].
   AgentsShowTarget? stepApprovalTargetOf(
     String id,
     List<CodeLabTranscriptRow> transcriptRows,
-  ) => _approvalTarget(pendingApprovals[id], transcriptRows);
+  ) => approvalTargetById(pendingApprovals[id], transcriptRows);
 
-  static AgentsShowTarget? _approvalTarget(
+  /// Цель показа ожидающего одобрения [approvalId] в строках ленты: строка с
+  /// собственным одобрением или строка `agent` корня, под которой стоит блок
+  /// потомка (путь не раскрывается). `null` — одобрения в ленте нет.
+  ///
+  /// Публичен, чтобы сочетание «Go to approval» (`goToApprovalTargetOf`) и
+  /// кнопки панели Agents находили цель одним правилом (§14).
+  static AgentsShowTarget? approvalTargetById(
     String? approvalId,
     List<CodeLabTranscriptRow> transcriptRows,
   ) {

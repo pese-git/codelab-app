@@ -32,6 +32,15 @@
   "@codeLabApprovalNoSuchOption": {
     "description": "Подсказка недоступной кнопки решения: у агента нет варианта для выбранного охвата. Метка security (D14): перевод не смягчает смысл. "
   },
+  "codeLabApprovalGoToHint": "Press {shortcut} to answer from the keyboard",
+  "@codeLabApprovalGoToHint": {
+    "description": "Приглушённая подпись полосы активного одобрения, пока фокус вне полосы: какое сочетание переводит к ней фокус. Плейсхолдер shortcut — сочетание перехода в обозначениях платформы (⇧⌘A или Ctrl+Shift+A), не переводить. Метка security (D14): перевод не смягчает смысл. ",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
   "codeLabApprovalSelected": "Selected",
   "@codeLabApprovalSelected": {
     "description": "Бейдж выбранного варианта в группе вариантов одобрения."

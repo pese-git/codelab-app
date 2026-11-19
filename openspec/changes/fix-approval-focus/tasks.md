@@ -53,7 +53,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
 
 ## 2. Итерация 2 — переход «Go to approval»
 
-- [ ] 2.1 `[desktop]` Красный, кит (D3, D4; spec «Переход к ожидающему одобрению с клавиатуры»):
+- [x] 2.1 `[desktop]` Красный, кит (D3, D4; spec «Переход к ожидающему одобрению с клавиатуры»):
   - `codelab_shortcuts_test.dart`:
     - 20 записей, `go-to-approval` — первая в группе `approvals`;
     - активаторы `control` и `meta` с `shift`;
@@ -74,7 +74,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
     - запрос без признака фокус не меняет;
     - цель не построилась или запрос устарел — фокус прежний, `onShowRequestDone` вызван;
     - перемонтированная лента запрос не повторяет.
-- [ ] 2.2 `[desktop]` Реализация 2.1 в ките:
+- [x] 2.2 `[desktop]` Реализация 2.1 в ките:
   - `CodeLabShortcut.goToApproval`;
   - `CodeLabWorkbenchShortcuts.onGoToApproval`;
   - в `CodeLabApprovalPrompt`:
@@ -89,7 +89,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - doc-комментарии (`AGENTS.md` §15).
 
   2.1 и `l10n:check` зелёные.
-- [ ] 2.3 `[desktop]` Красный, app (D4; spec «Переход к ожидающему одобрению с клавиатуры», все сценарии):
+- [x] 2.3 `[desktop]` Красный, app (D4; spec «Переход к ожидающему одобрению с клавиатуры», все сценарии):
   - `agents_pane_state_test.dart` (или новый `transcript_view_cubit_test.dart` рядом): `requestShow(focusApproval: true)` кладёт признак в запрос; `dropShowRequestOutside` гасит его при смене сессии;
   - тест выбора цели (`apps/codelab_desktop/test/features/workbench/application/`):
     - самое раннее ожидающее одобрение активной сессии;
@@ -109,7 +109,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
     - «Подсказка перехода на macOS и Linux»;
     - «Чтение с экрана»;
     - риск design.md «Активное одобрение сменилось при фокусе в полосе»: Tab на полосу `B`, `A` решена кнопкой — сочетания на `B` начинают действовать, фокус не переходит.
-- [ ] 2.4 `[desktop]` Реализация 2.3 в app:
+- [x] 2.4 `[desktop]` Реализация 2.3 в app:
   - выбор цели в application (`features/workbench/application/`), без логики в `build`;
   - `TranscriptViewCubit.requestShow(focusApproval:)`;
   - `onGoToApproval` в `workbench_shell.dart`, передаётся всегда (D4, п. 1);
