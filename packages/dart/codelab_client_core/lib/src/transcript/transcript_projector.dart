@@ -779,6 +779,7 @@ ApprovalStateView? _approvalView(
   if (approval.status != ApprovalStatus.pending) {
     return ApprovalStateView.resolved(
       label: _resolvedLabel(approval),
+      agentLabel: _agentLabel(approval),
       outcome: _resolvedOutcome(approval),
       subagent: _requesterOf(turn, approval),
     );
@@ -797,13 +798,19 @@ ApprovalStateView? _approvalView(
   );
 }
 
-String _resolvedLabel(ApprovalRequest approval) {
+String _resolvedLabel(ApprovalRequest approval) =>
+    _agentLabel(approval) ??
+    (approval.status == ApprovalStatus.cancelled ? 'Cancelled' : 'Resolved');
+
+/// Подпись от агента для [ApprovalStateView.resolved] (`agentLabel`, D6):
+/// `null` при отмене и когда вариант не выбран — тогда подпись запасная.
+String? _agentLabel(ApprovalRequest approval) {
   if (approval.status == ApprovalStatus.cancelled) {
-    return 'Cancelled';
+    return null;
   }
   final selectedId = approval.selectedOptionId;
   if (selectedId == null) {
-    return 'Resolved';
+    return null;
   }
   for (final option in approval.options) {
     if (option.optionId == selectedId) {

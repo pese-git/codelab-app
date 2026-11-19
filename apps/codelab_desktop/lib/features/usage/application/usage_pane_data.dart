@@ -209,7 +209,7 @@ final class UsagePaneStep {
 final class UsagePaneTurn {
   const UsagePaneTurn({
     required this.index,
-    required this.label,
+    required this.title,
     required this.running,
     required this.input,
     required this.output,
@@ -221,8 +221,10 @@ final class UsagePaneTurn {
   /// Номер хода журнала (с 1).
   final int index;
 
-  /// `N · “<title>”` или `N`.
-  final String label;
+  /// Заголовок хода — текст промпта; `null` — у хода его нет. Подпись
+  /// `N · “title”` собирает presentation по каталогу (D5 п. 2/4): кавычки
+  /// зависят от языка, а CSV берёт заголовок из журнала.
+  final String? title;
   final bool running;
   final String input;
   final String output;
@@ -513,9 +515,7 @@ UsagePaneTurn _turnOf(UsageLedgerTurn turn, UsageStepLabeler labeler) {
   ];
   return UsagePaneTurn(
     index: turn.index,
-    label: title == null || title.isEmpty
-        ? '${turn.index}'
-        : '${turn.index} · “$title”',
+    title: title == null || title.isEmpty ? null : title,
     running: turn.running,
     input: _inputOf(total.tokens, total.partial),
     output: _outputOf(total.tokens, total.partial),

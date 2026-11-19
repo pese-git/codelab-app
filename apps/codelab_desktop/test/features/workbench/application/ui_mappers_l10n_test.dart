@@ -680,4 +680,57 @@ void main() {
       expect(searchPaletteActions(second, 'session').map((a) => a.id), ['new']);
     });
   });
+
+  group('метка решённого одобрения', () {
+    String labelOf(ResolvedApprovalView approval, AppLocalizations l10n) {
+      final row =
+          _rows([
+                TranscriptItem.toolCall(
+                  id: 't1/tool-call-1',
+                  toolCallId: const ToolCallId('call-1'),
+                  title: 'Clean',
+                  approval: approval,
+                ),
+              ], l10n: l10n).single
+              as CodeLabToolCallRow;
+      return (row.approval! as CodeLabTranscriptApprovalResolved).label;
+    }
+
+    test('agentLabel показывается как есть на ru и en (D4)', () {
+      const approval = ResolvedApprovalView(
+        label: 'Cancelled',
+        outcome: ApprovalOutcomeView.allowed,
+        agentLabel: 'Allow once',
+      );
+
+      expect(labelOf(approval, _ru), 'Allow once');
+      expect(labelOf(approval, _en), 'Allow once');
+    });
+
+    test('без agentLabel отмена переводится: Cancelled / Отменено', () {
+      const approval = ResolvedApprovalView(
+        label: 'Cancelled',
+        outcome: ApprovalOutcomeView.cancelled,
+      );
+
+      expect(labelOf(approval, _en), 'Cancelled');
+      expect(labelOf(approval, _ru), 'Отменено');
+    });
+
+    test('без agentLabel прочие исходы: Resolved / Решено', () {
+      for (final outcome in [
+        ApprovalOutcomeView.allowed,
+        ApprovalOutcomeView.rejected,
+        ApprovalOutcomeView.unknown,
+      ]) {
+        final approval = ResolvedApprovalView(
+          label: 'Resolved',
+          outcome: outcome,
+        );
+
+        expect(labelOf(approval, _en), 'Resolved', reason: outcome.name);
+        expect(labelOf(approval, _ru), 'Решено', reason: outcome.name);
+      }
+    });
+  });
 }

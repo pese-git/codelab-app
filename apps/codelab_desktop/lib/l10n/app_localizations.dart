@@ -512,6 +512,18 @@ abstract class AppLocalizations {
   /// **'Fetch'**
   String get workbenchToolKindFetch;
 
+  /// Метка решённого одобрения, отменённого без выбора варианта агента (ход отменён, пока запрос ждал решения).
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get workbenchApprovalCancelled;
+
+  /// Метка решённого одобрения, когда вариант агента не выбран и запрос не отменён; обычно название варианта приходит от агента и не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolved'**
+  String get workbenchApprovalResolved;
+
   /// Метка вызова инструмента вида think.
   ///
   /// In en, this message translates to:
@@ -973,6 +985,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, one{{count} tool call} other{{count} tool calls}}'**
   String usageStepToolCalls(int count);
+
+  /// Подпись хода в списке «По ходам»: номер хода и заголовок его промпта в кавычках языка. Плейсхолдеры: index — номер хода, title — текст промпта пользователя; не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{index} · “{title}”'**
+  String usageTurnLabel(int index, String title);
 
   /// Подпись хода: сколько запусков субагентов было в ходе.
   ///

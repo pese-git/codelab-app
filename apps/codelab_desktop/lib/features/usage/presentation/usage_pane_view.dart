@@ -63,6 +63,15 @@ String usageStepTitleText(UsageStepTitle title, AppLocalizations l10n) =>
       ].join(' '),
     };
 
+/// Подпись хода `N · “title”` (ru — `N · «title»`) или `N` без заголовка.
+///
+/// Почему здесь: типографские кавычки зависят от языка, а application отдаёт
+/// только индекс и заголовок (D5 п. 2/4).
+String usageTurnLabelText(int index, String? title, AppLocalizations l10n) =>
+    title == null || title.isEmpty
+    ? '$index'
+    : l10n.usageTurnLabel(index, title);
+
 /// Строки `Per turn` в модели кита: id шага — `<ход>-<индекс>` (ключ
 /// `usage-step-<ход>-<индекс>`), модель шага — подсказка строки (D2 п. 4).
 List<CodeLabUsageRow> usageTurnRowsOf(
@@ -72,7 +81,7 @@ List<CodeLabUsageRow> usageTurnRowsOf(
   for (final turn in data.turns)
     CodeLabUsageRow(
       id: '${turn.index}',
-      label: turn.label,
+      label: usageTurnLabelText(turn.index, turn.title, l10n),
       input: turn.input,
       output: turn.output,
       cost: turn.cost,

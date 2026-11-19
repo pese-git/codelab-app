@@ -567,7 +567,11 @@ void main() {
               as CodeLabToolCallRow;
 
       ResolvedApprovalView resolved(ApprovalOutcomeView outcome) =>
-          ResolvedApprovalView(label: outcome.name, outcome: outcome);
+          ResolvedApprovalView(
+            label: outcome.name,
+            outcome: outcome,
+            agentLabel: outcome.name,
+          );
 
       test('a cancelled approval on a cancelled call has no outcome tag', () {
         final row = rowOf(
@@ -619,6 +623,7 @@ void main() {
             approval: ResolvedApprovalView(
               label: 'Allowed once',
               outcome: ApprovalOutcomeView.allowed,
+              agentLabel: 'Allowed once',
             ),
           ),
         ],
