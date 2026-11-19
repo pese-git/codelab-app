@@ -22,7 +22,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 1. Итерация 1 — каталог сочетаний и привязки из него
 
-Видимых изменений нет, кроме порядка модификаторов подсказки на Windows и Linux (D4; решение пользователя Q4, 2026-11-19).
+Видимых изменений два: порядок модификаторов подсказки на Windows и Linux (D4; решение пользователя Q4, 2026-11-19) и точная сверка модификаторов в дереве Files — Ctrl+Enter, ⌘⏎ и Alt+→ там больше не срабатывают (D3, по ревью 2026-11-19).
 
 - [x] 1.1 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_shortcuts_test.dart` (D2, D4; spec app-settings «Страница «Keyboard»: обозначения клавиш»). Платформа задаётся через `debugDefaultTargetPlatformOverride`, сброс в `tearDown`. Проверяет:
   - записи `CodeLabShortcut.values` по порядку и группам совпадают с таблицей D1, `id` — kebab-case из спецификации;
@@ -67,49 +67,49 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 3. Итерация 3 — страница «Keyboard»
 
-- [ ] 3.1 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/application/keyboard_shortcut_search_test.dart` (D8; spec «…поиск»). Сценарии «Поиск по действию», «Поиск по клавише в чужой нотации», «Поиск по клавише словами», «Ничего не найдено». Плюс:
+- [x] 3.1 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/application/keyboard_shortcut_search_test.dart` (D8; spec «…поиск»). Сценарии «Поиск по действию», «Поиск по клавише в чужой нотации», «Поиск по клавише словами», «Ничего не найдено». Плюс:
   - регистр и пробелы по краям;
   - пустой запрос — все записи;
   - `+` и пробелы в запросе;
   - поиск не идёт по «Where».
-- [ ] 3.2 `[desktop]` Реализация 3.1: `features/settings/application/keyboard_shortcut_search.dart` (`KeyboardShortcutEntry`, `filterKeyboardShortcuts`). 3.1 зелёный.
-- [ ] 3.3 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/keyboard_page_test.dart` (spec app-settings, все требования «Страница «Keyboard»: …»). Проверяет:
+- [x] 3.2 `[desktop]` Реализация 3.1: `features/settings/application/keyboard_shortcut_search.dart` (`KeyboardShortcutEntry`, `filterKeyboardShortcuts`). 3.1 зелёный.
+- [x] 3.3 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/keyboard_page_test.dart` (spec app-settings, все требования «Страница «Keyboard»: …»). Проверяет:
   - «Страница видна в рабочей сборке», «Узкое окно не скрывает страницу», «Поиск страницы по ключевому слову», «Последняя страница», «Страница ничего не меняет» (`InMemoryProfileStore` и подменённые `SharedPreferences` не изменились, транспорт не получил сообщений);
   - «Полный список на Linux»: 19 строк, порядок, группы и английские тексты символ в символ со спецификацией;
   - «Сочетаний без поведения нет», «Строка «Agent commands»»;
   - «macOS», «Windows»;
   - «Ничего не найдено»: скрытые группы, `settings-keyboard-empty`, footer на месте;
   - «Узкое окно» 600 px, «Обход с клавиатуры».
-- [ ] 3.4 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/keyboard_page_l10n_test.dart`:
+- [x] 3.4 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/keyboard_page_l10n_test.dart`:
   - «Русский интерфейс»;
   - «Английский текст при русском интерфейсе», «Переведённый текст при русском интерфейсе»;
   - «Смена языка с запросом» (`expectNoStaleLanguage`);
   - поиск страницы по русскому ключевому слову `сочетание` при русском интерфейсе и его отсутствие при английском.
-- [ ] 3.5 `[desktop]` Реализация 3.3 и 3.4 (D5–D7):
+- [x] 3.5 `[desktop]` Реализация 3.3 и 3.4 (D5–D7):
   - `features/settings/presentation/keyboard_page.dart` (`buildKeyboardPage`, `KeyboardPage`, сборка записей из каталога и ARB, `keyboardShortcutActionOf`, `keyboardShortcutWhereOf`, `keyboardShortcutGroupOf` — исчерпывающие `switch`);
   - `SettingsPage.keyboard` в `defaultSettingsPages` и `settingsPageBuilders`, комментарий `default_settings_pages.dart`;
   - `settingsSearchKeywordsKeyboard` в `settingsPageKeywordsOf`;
   - сообщения `settingsKeyboard…` в `app_en.arb` и `app_ru.arb`, у строк одобрения метка `security` в `@description`.
 
   3.3 и 3.4 зелёные, `settings_shell_test.dart` и `settings_search_l10n_test.dart` зелёные, `l10n:check` зелёный.
-- [ ] 3.6 `[desktop]` Вычитка пользователем русских текстов страницы: термины D5 и строки одобрения с меткой `security` (D14 `add-desktop-localization`; Q5). Правки — в ARB и глоссарий одним PR.
+- [x] 3.6 `[desktop]` Вычитка пользователем русских текстов страницы: термины D5 и строки одобрения с меткой `security` (D14 `add-desktop-localization`; Q5). Правки — в ARB и глоссарий одним PR. Итог: тексты приняты пользователем без правок (2026-11-19), включая строки одобрения «Разрешить только сейчас», «Всегда разрешать», «Отклонить только сейчас», «Всегда отклонять».
 
 ## 4. Итерация 4 — документация (`docs-writer`, стандарт `.claude/skills/codelab-docs/SKILL.md`)
 
-- [ ] 4.1 `[desktop]` `docs/architecture/l10n-glossary.md` — подраздел «Страница «Keyboard»» в §4 по таблице D5 с итогом вычитки 3.6 (правило §7 глоссария: термин — в том же PR, что и сообщение).
-- [ ] 4.2 `[desktop]` `apps/codelab_desktop/doc/user-guide.md`:
+- [x] 4.1 `[desktop]` `docs/architecture/l10n-glossary.md` — подраздел «Страница «Keyboard»» в §4 по таблице D5 с итогом вычитки 3.6 (правило §7 глоссария: термин — в том же PR, что и сообщение).
+- [x] 4.2 `[desktop]` `apps/codelab_desktop/doc/user-guide.md`:
   - раздел «Настройка» → «Сочетания клавиш»: где страница, что она только для чтения, поиск по действию и клавише, обозначения на macOS и других ОС;
   - сочетания в остальных разделах — в нотации страницы (`⇧⌘E` вместо `⌘⇧E`);
   - таблица сочетаний карточки одобрения сверена с каталогом;
   - на какие тексты распространяется русский язык интерфейса — дополнить страницей «Keyboard».
-- [ ] 4.3 `[desktop]` `apps/codelab_desktop/AGENTS.md` — раздел «Страница «Keyboard»»:
+- [x] 4.3 `[desktop]` `apps/codelab_desktop/AGENTS.md` — раздел «Страница «Keyboard»»:
   - каталог кита — единственный источник активаторов;
   - сторожа 1 и 2;
   - новое сочетание — запись каталога, тексты ARB и сценарий нажатия в одном change;
   - тексты по `switch`.
 
   `packages/flutter/codelab_ui/AGENTS.md` §4 — `CodeLabShortcut`, `CodeLabKeycaps`, `CodeLabShortcutTable`; правило «литералы активаторов только в каталоге». `packages/flutter/codelab_ui/README.md` — новые виджеты в таблице слоёв.
-- [ ] 4.4 `[desktop]` Проверка фактов документов 4.1–4.3 (`architecture-reviewer`), исправления.
+- [x] 4.4 `[desktop]` Проверка фактов документов 4.1–4.3 (`architecture-reviewer`), исправления.
 
 ## 5. Проверки и PR
 

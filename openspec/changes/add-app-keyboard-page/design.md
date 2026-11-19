@@ -147,7 +147,7 @@ enum CodeLabShortcut {
 
 ### D3. Привязки только из каталога; сторожа
 
-- Каждая привязка в ките и app берёт активаторы из записи каталога: `CodeLabShortcut.x.bind(action)` или `combo.activators`. Дерево Files сравнивает событие через `combo.accepts(event, HardwareKeyboard.instance)` вместо сравнения `logicalKey`. Порядок обработки, условия (`canCancel`, открыта ли inline-палитра) и цепочка Esc рабочего места не меняются.
+- Каждая привязка в ките и app берёт активаторы из записи каталога: `CodeLabShortcut.x.bind(action)` или `combo.activators`. Дерево Files сравнивает событие через `combo.accepts(event, HardwareKeyboard.instance)` вместо сравнения `logicalKey`. Порядок обработки, условия (`canCancel`, открыта ли inline-палитра) и цепочка Esc рабочего места не меняются. Одно видимое следствие: дерево Files сверяет модификаторы точно, как `SingleActivator`, — Ctrl+Enter, ⌘⏎, Shift+↓ и Alt+→ в дереве больше не срабатывают и всплывают выше (раньше дерево сравнивало только `logicalKey` и поглощало их). Это освобождает Alt+←/→ под резерв DSK-18 и не даёт дереву глотать Cmd/Ctrl+Enter; негативный сценарий — `codelab_file_tree_test.dart` (по ревью 2026-11-19).
 - **Неподключённые параметры удаляются** из `CodeLabWorkbenchShortcuts`: `onApprove`, `onReject`, `onInspectorPrevious`, `onInspectorNext`.
   - app их не передаёт с тех пор, как одобрение привязывает свои клавиши само (`lighten-approval-block`, D2), а навигации инспектора по Alt+←/→ в сборке нет;
   - оставить их значит держать в каталоге записи без поведения, то есть нарушить D1;
@@ -155,7 +155,9 @@ enum CodeLabShortcut {
 - **Подсказки** `⌘K`/`Ctrl+K` (шапка), `⌘N`/`Ctrl+N` (сайдбар) и подсказки вариантов одобрения строятся `compactFor(defaultTargetPlatform)` каталога. Проверки платформы в `workbench_shell.dart` и `CodeLabApprovalShortcuts.labelFor` уходят.
 - **Сторож 1, литералы.** Тест `packages/flutter/codelab_ui/test/shortcut_catalog_guard_test.dart` читает `lib/src/**.dart`. Тест `apps/codelab_desktop/test/app/shortcut_catalog_guard_test.dart` читает `lib/**.dart`, кроме сгенерированного `lib/l10n/app_localizations*.dart`. Оба падают, если вне `codelab_shortcuts.dart` встречаются:
   - `SingleActivator(`, `CharacterActivator(`, `LogicalKeySet(`;
-  - сравнение с `LogicalKeyboardKey.` (`==` или `!=`).
+  - сравнение с `LogicalKeyboardKey.` (`==` или `!=`);
+  - `LogicalKeySet.fromSet(`, `isLogicalKeyPressed(`;
+  - чтение `.logicalKey` и `.physicalKey`, любое упоминание `PhysicalKeyboardKey.`, `case LogicalKeyboardKey.` и `LogicalKeyboardKey.x =>` — так сторож ловит и привязку по физической клавише, и разбор клавиш `switch` (по ревью 2026-11-19).
 
   Сообщение называет файл и строку.
 - **Сторож 2, нажатие.** Табличный тест обходит `CodeLabShortcut.values`. Для каждой записи `switch` без `default` возвращает сценарий: виджет, место фокуса и ожидаемое действие. Новая запись без сценария не компилируется.
@@ -192,7 +194,7 @@ enum CodeLabShortcut {
 - Тексты страницы — сообщения `app_en.arb` и `app_ru.arb` с префиксом `settingsKeyboard…`:
   - заголовок, подсказка поиска, подпись, колонки, группы, строка «Agent commands», `No shortcuts match "{query}"`;
   - ключевые слова навигации `settingsSearchKeywordsKeyboard`;
-  - по одному сообщению «Action» и «Where» на запись каталога.
+  - по одному сообщению «Action» на запись каталога (для `new-session` — существующее `commonNewSession`); сообщения «Where» общие для записей с одинаковым местом (11 сообщений на 19 записей) — одинаковое место не переводится дважды.
 - Соответствие «запись → сообщение» — исчерпывающие `switch` в presentation app: `keyboardShortcutActionOf(l10n, shortcut)`, `keyboardShortcutWhereOf`, `keyboardShortcutGroupOf`. Так же устроены `settingsPageTitleOf` и `settingsPageKeywordsOf`. Новая запись каталога без текста не компилируется.
 - Английский эталон совпадает со спецификацией символ в символ (тест задачи 3.1).
 - Обозначения клавиш и `/` в «Command menu after /» не переводятся (D7 `add-desktop-localization`).
@@ -318,4 +320,4 @@ enum CodeLabShortcut {
 
 ## Open Questions
 
-- **Q5.** Русские термины D5 («Сочетания клавиш», «Поле ввода» для группы Composer, «Дерево файлов», «Меню команд после /») — вычитка при задаче 3.6.
+- **Q5.** Закрыт 2026-11-19: пользователь принял русские тексты страницы без правок (задача 3.6). Вычитывались термины D5: «Сочетания клавиш», «Поле ввода» для группы Composer, «Дерево файлов», «Меню команд после /».
