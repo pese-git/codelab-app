@@ -28,6 +28,7 @@ class CodeLabPromptComposer extends StatefulWidget {
     this.configOptions = const [],
     this.onConfigOptionSelected,
     this.isRespondingToConfigOption = false,
+    this.textFocusNode,
     super.key,
   });
 
@@ -59,6 +60,12 @@ class CodeLabPromptComposer extends StatefulWidget {
   final bool isSubmitting;
   final bool canCancel;
   final bool enabled;
+
+  /// Узел фокуса поля ввода, которым владеет хост (change
+  /// `fix-approval-focus`, D5): через него хост возвращает фокус в композер
+  /// после ухода полосы одобрения. ЗАГЛУШКА задачи 3.1: параметр принят, но
+  /// композер по-прежнему использует свой узел — поведение добавляет 3.2.
+  final FocusNode? textFocusNode;
   final bool shortcutsEnabled;
 
   /// Commands available for the inline `/` trigger. An empty list (the

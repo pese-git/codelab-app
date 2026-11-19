@@ -445,4 +445,135 @@ void main() {
       expect(frame, findsNothing);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Уход полосы с фокусом (задача 3.1 change `fix-approval-focus`; design.md
+  // D5; spec «Фокус после ухода одобрения»): полоса сообщает хосту, что фокус
+  // был у неё, когда она исчезает или заменяется полосой другого запроса.
+  group('уход полосы с фокусом (D5)', () {
+    const english = [
+      CodeLabApprovalOption(
+        id: 'ao',
+        label: 'Allow once',
+        kind: CodeLabApprovalOptionKind.allowOnce,
+      ),
+      CodeLabApprovalOption(
+        id: 'ro',
+        label: 'Reject',
+        kind: CodeLabApprovalOptionKind.rejectOnce,
+      ),
+    ];
+
+    Widget host({
+      required int Function() released,
+      required void Function() onReleased,
+      bool show = true,
+      Key promptKey = const ValueKey('r1'),
+    }) => FluentApp(
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: 720,
+          child: show
+              ? CodeLabApprovalPrompt(
+                  key: promptKey,
+                  options: english,
+                  onOptionSelected: (_) {},
+                  onApprovalFocusReleased: onReleased,
+                )
+              : const SizedBox.shrink(),
+        ),
+      ),
+    );
+
+    FocusNode barNode(WidgetTester tester) =>
+        Focus.of(tester.element(find.byKey(CodeLabApprovalPrompt.barKey)));
+
+    testWidgets('dispose with focus on the bar reports once', (tester) async {
+      var released = 0;
+      void onReleased() => released++;
+      await tester.pumpWidget(
+        host(released: () => released, onReleased: onReleased),
+      );
+      barNode(tester).requestFocus();
+      await tester.pump();
+      await tester.pump();
+
+      await tester.pumpWidget(
+        host(released: () => released, onReleased: onReleased, show: false),
+      );
+      await tester.pump();
+
+      expect(released, 1);
+    });
+
+    testWidgets('dispose with focus on a button inside reports once', (
+      tester,
+    ) async {
+      var released = 0;
+      void onReleased() => released++;
+      await tester.pumpWidget(
+        host(released: () => released, onReleased: onReleased),
+      );
+      await tabTo(tester, find.byKey(CodeLabApprovalPrompt.allowKey));
+
+      await tester.pumpWidget(
+        host(released: () => released, onReleased: onReleased, show: false),
+      );
+      await tester.pump();
+
+      expect(released, 1);
+    });
+
+    testWidgets('a new request key with focus reports once', (tester) async {
+      var released = 0;
+      void onReleased() => released++;
+      await tester.pumpWidget(
+        host(released: () => released, onReleased: onReleased),
+      );
+      barNode(tester).requestFocus();
+      await tester.pump();
+      await tester.pump();
+
+      await tester.pumpWidget(
+        host(
+          released: () => released,
+          onReleased: onReleased,
+          promptKey: const ValueKey('r2'),
+        ),
+      );
+      await tester.pump();
+
+      expect(released, 1);
+      // Новая полоса фокуса не получила: следующая смена ничего не сообщает.
+      await tester.pumpWidget(
+        host(released: () => released, onReleased: onReleased, show: false),
+      );
+      await tester.pump();
+      expect(released, 1);
+    });
+
+    testWidgets('a bar without focus never reports', (tester) async {
+      var released = 0;
+      void onReleased() => released++;
+      await tester.pumpWidget(
+        host(released: () => released, onReleased: onReleased),
+      );
+      await tester.pump();
+
+      await tester.pumpWidget(
+        host(
+          released: () => released,
+          onReleased: onReleased,
+          promptKey: const ValueKey('r2'),
+        ),
+      );
+      await tester.pumpWidget(
+        host(released: () => released, onReleased: onReleased, show: false),
+      );
+      await tester.pump();
+
+      expect(released, 0);
+    });
+  });
 }

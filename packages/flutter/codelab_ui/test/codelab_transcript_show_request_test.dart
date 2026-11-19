@@ -466,4 +466,94 @@ void main() {
       expect(outside.hasPrimaryFocus, isTrue);
     });
   });
+
+  // Уход полосы с фокусом из ленты (задача 3.1 `fix-approval-focus`, D5): лента
+  // сообщает хосту `onApprovalFocusReleased`, когда исчезает полоса, в которой
+  // был фокус; без фокуса — не сообщает.
+  group('onApprovalFocusReleased', () {
+    const options = [
+      CodeLabApprovalOption(
+        id: 'ao',
+        label: 'Allow once',
+        kind: CodeLabApprovalOptionKind.allowOnce,
+      ),
+    ];
+
+    List<CodeLabTranscriptRow> rows({required bool pending}) => [
+      CodeLabToolCallRow(
+        id: 'tool-1',
+        status: CodeLabToolCallStatus.running,
+        label: 'Run echo',
+        approval: pending
+            ? CodeLabTranscriptApproval.pending(
+                risk: CodeLabApprovalRisk.shell,
+                options: options,
+                onOptionSelected: (_) {},
+                targetId: 'perm-1',
+              )
+            : const CodeLabTranscriptApproval.resolved(label: 'Allow once'),
+      ),
+    ];
+
+    Widget host(
+      List<CodeLabTranscriptRow> rows, {
+      CodeLabTranscriptShowRequest? request,
+      required VoidCallback onReleased,
+    }) => FluentApp(
+      home: SizedBox(
+        width: 700,
+        height: 400,
+        child: CodeLabTranscriptPanel(
+          rows: rows,
+          showRequest: request,
+          onApprovalFocusReleased: onReleased,
+        ),
+      ),
+    );
+
+    const request = CodeLabTranscriptShowRequest(
+      rowId: 'tool-1',
+      targetId: 'tool-1',
+      serial: 5,
+      focusApproval: true,
+    );
+
+    testWidgets('the focused bar is gone: reported once', (tester) async {
+      var released = 0;
+      void onReleased() => released++;
+      await tester.pumpWidget(
+        host(rows(pending: true), onReleased: onReleased),
+      );
+      await tester.pumpWidget(
+        host(rows(pending: true), request: request, onReleased: onReleased),
+      );
+      await _frames(tester);
+      expect(focusIsInside(tester, find.byType(CodeLabApprovalPrompt)), isTrue);
+
+      await tester.pumpWidget(
+        host(rows(pending: false), onReleased: onReleased),
+      );
+      await tester.pump();
+
+      expect(find.byType(CodeLabApprovalPrompt), findsNothing);
+      expect(released, 1);
+    });
+
+    testWidgets('a bar without focus is gone: not reported', (tester) async {
+      var released = 0;
+      void onReleased() => released++;
+      await tester.pumpWidget(
+        host(rows(pending: true), onReleased: onReleased),
+      );
+      await tester.pump();
+
+      await tester.pumpWidget(
+        host(rows(pending: false), onReleased: onReleased),
+      );
+      await tester.pump();
+
+      expect(find.byType(CodeLabApprovalPrompt), findsNothing);
+      expect(released, 0);
+    });
+  });
 }

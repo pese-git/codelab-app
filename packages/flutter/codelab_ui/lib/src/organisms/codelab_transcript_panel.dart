@@ -80,6 +80,7 @@ class CodeLabTranscriptPanel extends StatefulWidget {
     this.viewMode = CodeLabViewMode.normal,
     this.showRequest,
     this.onShowRequestDone,
+    this.onApprovalFocusReleased,
     super.key,
   });
 
@@ -104,6 +105,12 @@ class CodeLabTranscriptPanel extends StatefulWidget {
   /// сессии или `dispose`. Хост по нему гасит разовый запрос, чтобы
   /// перемонтированная лента не прокрутила снова (D49 Т7).
   final ValueChanged<int>? onShowRequestDone;
+
+  /// Полоса одобрения с клавиатурным фокусом исчезла из ленты (ответ, отмена
+  /// хода, снятие запроса, смена сессии): хост возвращает фокус (change
+  /// `fix-approval-focus`, D5). ЗАГЛУШКА задачи 3.1: параметр принят, но не
+  /// вызывается — поведение добавляет задача 3.2.
+  final VoidCallback? onApprovalFocusReleased;
 
   final List<CodeLabTranscriptRow> rows;
   final Map<String, bool> expansionOverrides;

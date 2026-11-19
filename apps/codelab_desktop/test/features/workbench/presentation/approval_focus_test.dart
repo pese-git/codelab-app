@@ -134,7 +134,7 @@ void main() {
     await settle(tester);
   }
 
-  void ask(String sessionId, int id) {
+  void ask(String sessionId, int id, {String? toolCallId}) {
     agent.emitInbound(
       JsonRpcMessage.request(
         id: JsonRpcId.integer(id),
@@ -142,7 +142,7 @@ void main() {
         params: RequestPermissionRequest(
           sessionId: SessionId(sessionId),
           toolCall: ToolCallUpdate(
-            toolCallId: ToolCallId('call-$id'),
+            toolCallId: ToolCallId(toolCallId ?? 'call-$id'),
             title: 'Run echo',
             kind: ToolKind.execute,
             status: ToolCallStatus.inProgress,
@@ -987,6 +987,189 @@ void main() {
       expect(given, hasLength(2));
       expect(given.last.id, const JsonRpcId.integer(982));
       expect(chosenOption(given.last), 'allow-once');
+      await tearDownApp(tester);
+    });
+
+    // -----------------------------------------------------------------------
+    // Фокус после ухода одобрения (задача 3.1 change `fix-approval-focus`;
+    // design.md D5; spec «Фокус после ухода одобрения»). Возврат — в поле
+    // композера активной сессии; следующее одобрение фокус само не берёт.
+
+    bool focusInComposerField() => focusIn(composerField);
+
+    // Во всех сценариях ниже перед переходом фокус стоит на строке сайдбара,
+    // а не в композере: иначе Flutter сам вернул бы фокус узлу, который был до
+    // полосы, и тест не отличил бы возврат в композер от этого совпадения.
+    // Сочетание перехода при этом работает: фокус внутри рабочего места.
+    Future<void> focusSidebarRow(WidgetTester tester) async {
+      final row = find
+          .byKey(CodeLabSessionSidebar.sessionKey('session-1'))
+          .evaluate()
+          .single;
+      FocusManager.instance.rootScope.descendants.firstWhere((node) {
+        var inside = false;
+        node.context?.visitAncestorElements((element) {
+          if (identical(element, row)) inside = true;
+          return !inside;
+        });
+        return inside && node.canRequestFocus;
+      }).requestFocus();
+      await tester.pump();
+      expect(focusInside<CodeLabSessionSidebar>(), isTrue);
+    }
+
+    testWidgets('ответ клавишами возвращает фокус в композер, следующее '
+        'одобрение фокус не получает', (tester) async {
+      await pumpConnected(tester);
+      await createSession(tester, 'session-1');
+      await startTurn(tester);
+      await focusSidebarRow(tester);
+      ask('session-1', 1001);
+      await settle(tester);
+      ask('session-1', 1002);
+      await settle(tester);
+      await shortFrames(tester);
+      await pressGoTo(tester);
+      expect(focusInApproval(), isTrue);
+
+      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await settle(tester);
+      await shortFrames(tester);
+
+      expect(answers(), hasLength(1));
+      expect(focusInComposerField(), isTrue, reason: 'фокус в поле композера');
+      expect(prompts, findsOneWidget);
+      expect(focusIn(prompts), isFalse, reason: 'полоса B фокус не получила');
+
+      // Повторное Cmd/Ctrl+Enter уходит в композер: поле пусто, ничего не
+      // отправляется и на B не отвечает.
+      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await settle(tester);
+      expect(answers(), hasLength(1));
+      expect(cubit.state.queuedPrompts, isEmpty);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('отмена хода при фокусе в полосе: тег Cancelled и фокус в '
+        'композере', (tester) async {
+      await pumpConnected(tester);
+      await createSession(tester, 'session-1');
+      await startTurn(tester);
+      final prompt = agent.sentMessages.whereType<JsonRpcRequest>().singleWhere(
+        (r) => r.method == sessionPromptMethod,
+      );
+      ask('session-1', 1011);
+      await settle(tester);
+      await shortFrames(tester);
+      await focusSidebarRow(tester);
+      await pressGoTo(tester);
+      expect(focusInApproval(), isTrue);
+
+      unawaited(cubit.cancelTurn());
+      await settle(tester);
+      agent.emitInbound(
+        JsonRpcMessage.response(
+          id: prompt.id,
+          result: const {'stopReason': 'cancelled'},
+        ),
+      );
+      await settle(tester);
+      await shortFrames(tester);
+
+      expect(prompts, findsNothing);
+      expect(find.textContaining('Cancelled'), findsWidgets);
+      expect(focusInComposerField(), isTrue);
+      await tearDownApp(tester);
+    });
+
+    // ВНИМАНИЕ: красный по причине вне итерации 3 — `_approvalFor` в
+    // `transcript_projector.dart` (`codelab_client_core`) отдаёт строке вызова
+    // первое одобрение вызова, то есть уже решённое, и новый запрос того же
+    // вызова в строке не показывается (design.md D11: ядро не меняется).
+    testWidgets('новый запрос того же вызова: полоса без фокуса, фокус в '
+        'композере', (tester) async {
+      await pumpConnected(tester);
+      await createSession(tester, 'session-1');
+      await startTurn(tester);
+      await focusSidebarRow(tester);
+      ask('session-1', 1021, toolCallId: 'call-same');
+      await settle(tester);
+      await shortFrames(tester);
+      await pressGoTo(tester);
+      expect(focusInApproval(), isTrue);
+
+      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await settle(tester);
+      ask('session-1', 1022, toolCallId: 'call-same');
+      await settle(tester);
+      await shortFrames(tester);
+
+      expect(prompts, findsOneWidget, reason: 'новая полоса в той же строке');
+      expect(focusIn(prompts), isFalse);
+      expect(focusInComposerField(), isTrue);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('переключение сессии при фокусе в полосе: фокус в композере '
+        'новой сессии', (tester) async {
+      await pumpConnected(tester);
+      await createSession(tester, 'session-1');
+      await startTurn(tester);
+      ask('session-1', 1031);
+      await settle(tester);
+      await createSession(tester, 'session-2');
+      cubit.selectSession('session-1');
+      await settle(tester);
+      await shortFrames(tester);
+      await focusSidebarRow(tester);
+      await pressGoTo(tester);
+      expect(focusInApproval(), isTrue);
+
+      cubit.selectSession('session-2');
+      await settle(tester);
+      await shortFrames(tester);
+
+      expect(prompts, findsNothing);
+      expect(focusInComposerField(), isTrue);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('клик в дерево Files в том же кадре, что и ответ: фокус в '
+        'дереве, а не в композере', (tester) async {
+      await pumpConnected(
+        tester,
+        projectFiles: FakeProjectFiles(
+          listings: {
+            '/workspace': {
+              '': listingOf('', [dirEntry('lib'), fileEntry('README.md')]),
+            },
+          },
+        ),
+      );
+      await turnWithComposerFocus(tester);
+      cubit.openPane(ToolPane.files);
+      await settle(tester);
+      await shortFrames(tester);
+      ask('session-1', 1041);
+      await settle(tester);
+      await shortFrames(tester);
+      await pressGoTo(tester);
+      expect(focusInApproval(), isTrue);
+
+      unawaited(
+        cubit.respondToApproval(
+          approvalId: const ApprovalRequestId('permission-1041'),
+          sessionId: const SessionId('session-1'),
+          optionId: 'allow-once',
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('file-tree-row-lib')));
+      await settle(tester);
+      await shortFrames(tester);
+
+      expect(prompts, findsNothing);
+      expect(focusInside<CodeLabFileTree>(), isTrue);
+      expect(focusInComposerField(), isFalse);
       await tearDownApp(tester);
     });
   });

@@ -118,6 +118,7 @@ class CodeLabApprovalPrompt extends StatefulWidget {
     this.approveOptionId,
     this.rejectOptionId,
     this.shortcutsEnabled = true,
+    this.onApprovalFocusReleased,
     super.key,
   });
 
@@ -154,6 +155,12 @@ class CodeLabApprovalPrompt extends StatefulWidget {
   final String? approveOptionId;
   final String? rejectOptionId;
   final bool shortcutsEnabled;
+
+  /// Полоса с клавиатурным фокусом уходит (`dispose` или смена ключа):
+  /// хост возвращает фокус в композер (change `fix-approval-focus`, D5).
+  /// ЗАГЛУШКА задачи 3.1: параметр принят, но не вызывается — поведение
+  /// добавляет задача 3.2.
+  final VoidCallback? onApprovalFocusReleased;
 
   @override
   State<CodeLabApprovalPrompt> createState() => _CodeLabApprovalPromptState();
