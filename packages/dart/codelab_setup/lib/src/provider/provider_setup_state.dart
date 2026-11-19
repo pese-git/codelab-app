@@ -86,23 +86,60 @@ final class ProviderDraft {
   String toString() => 'ProviderDraft($providerId, $kind)';
 }
 
-/// ЗАГЛУШКА красных тестов 4.1a (`add-desktop-localization`): код ошибки шага.
+/// Код ошибки шага мастера (design.md change `add-desktop-localization`, D5
+/// п. 5, D6 «Тексты моста настроек»; spec `client-agent-setup` «Типизированные
+/// ошибки и пояснения мастера провайдера»).
 ///
-/// Реализует задача 4.1b: перечисление нужно, чтобы тесты компилировались;
-/// автомат пока не заполняет `errorCode`, поэтому тесты красные на expect.
-/// Закрытый набор из design.md D6 («Тексты моста настроек»).
+/// Почему: app переводит тексты на язык пользователя, а разбирать английскую
+/// строку `error` нельзя: она меняется вместе с формулировкой. Мост без `intl`
+/// и без локали, поэтому отдаёт закрытый набор кодов.
+///
+/// Для чего: `ProviderSetupFlow` заполняет код там же, где задаёт `error`, так
+/// что код и текст не расходятся. У `EnteringBaseUrl`, `ChoosingKey` и
+/// `EnteringModelDetails` `error != null` тогда и только тогда, когда
+/// `errorCode != null`; у `Reviewing` ошибку сопровождает ровно одно из
+/// `errorCode` (ошибка правки) и `refusal` (отказ записи плана).
+///
+/// Как использовать: клиент строит текст по коду, аргументы берёт из полей
+/// состояния (`ChoosingKey.existingSecret`, `backend.id`, `readOnlyHint`,
+/// `backend.unavailableReason`); CLI по-прежнему печатает `error`. Тексты,
+/// полученные от хранилища секретов (`keyNotStored`, подсказка бэкенда),
+/// передаются как есть.
 enum ProviderSetupErrorCode {
+  /// Адрес не `http` и не `https` или без хоста.
   addressInvalid,
+
+  /// В адресе есть имя и пароль (userinfo).
   addressHasUserinfo,
+
+  /// Хранилище секретов только для чтения.
   secretStoreReadOnly,
+
+  /// Пустой ключ.
   keyEmpty,
+
+  /// Сохранённый ключ уже есть (`existingSecret` задан всегда).
   keyAlreadyStored,
+
+  /// Нечего оставлять: сохранённого ключа нет.
   nothingToKeep,
+
+  /// Пустое имя переменной окружения.
   envVarEmpty,
+
+  /// Хранилище не записало ключ; `error` — его причина как есть.
   keyNotStored,
+
+  /// Окно контекста не положительное.
   contextWindowInvalid,
+
+  /// Лимит вывода не положительный.
   maxOutputInvalid,
+
+  /// Id провайдера занят или не подходит под шаблон.
   providerIdInvalid,
+
+  /// Цель записи недоступна.
   targetUnavailable,
 }
 
@@ -134,6 +171,8 @@ final class EnteringBaseUrl extends ProviderSetupState {
 
   final ProviderDraft draft;
   final String? error;
+
+  /// Код [error] для перевода клиентом; `null` ровно тогда, когда нет [error].
   final ProviderSetupErrorCode? errorCode;
   final String? insecureHost;
 
@@ -173,8 +212,14 @@ final class ChoosingKey extends ProviderSetupState {
   final String? readOnlyHint;
   final String? existingSecret;
   final String? error;
+
+  /// Код [error] для перевода клиентом; `null` ровно тогда, когда нет [error].
   final ProviderSetupErrorCode? errorCode;
   final String? notice;
+
+  /// Правится провайдер с литеральным ключом в файле конфига: шаг показывает
+  /// пояснение [notice]. Клиент строит свой текст по признаку, а не по [notice]
+  /// (D6; сценарий «Литеральный ключ — признак, а не только текст»).
   final bool literalKeyInConfig;
   final String? suggestedEnvVar;
 
@@ -255,6 +300,8 @@ final class EnteringModelDetails extends ProviderSetupState {
   final String modelId;
   final int suggestedContextWindow;
   final String? error;
+
+  /// Код [error] для перевода клиентом; `null` ровно тогда, когда нет [error].
   final ProviderSetupErrorCode? errorCode;
 
   @override
@@ -304,7 +351,8 @@ enum ProviderWizardEntry {
   final String wire;
 }
 
-/// Шаг «Review»: [warnings] (`Not verified: <kind>`), [error] — ошибка правки,
+/// Шаг «Review»: [warnings] (`Not verified: <kind>`), [error] — ошибка правки
+/// (её код — [errorCode]),
 /// [refusal] — типизированный отказ записи плана (запись не выполнялась).
 final class Reviewing extends ProviderSetupState {
   const Reviewing(
@@ -319,8 +367,14 @@ final class Reviewing extends ProviderSetupState {
   final ProviderSetupPlan plan;
   final List<String> warnings;
   final String? error;
+
+  /// Код ошибки правки на обзоре; у отказа записи плана — `null`, там [refusal].
   final ProviderSetupErrorCode? errorCode;
   final PlanRefusal? refusal;
+
+  /// Вид пропущенной проверки (`unreachable` или `timeout`), если план
+  /// записывается без проверки; иначе `null`. Клиент строит текст по виду, а
+  /// не по [warnings] (D6; сценарий «Пропущенная проверка»).
   final String? notVerified;
 
   @override

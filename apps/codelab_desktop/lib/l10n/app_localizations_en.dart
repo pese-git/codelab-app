@@ -70,317 +70,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLanguageSaveRetry => 'Retry';
 
   @override
-  String get agentSettingLabel_budget_max_steps => 'Max steps';
-
-  @override
-  String get agentSettingDescription_budget_max_steps =>
-      'Model requests per turn.';
-
-  @override
-  String get agentSettingLabel_budget_max_tokens => 'Max tokens';
-
-  @override
-  String get agentSettingDescription_budget_max_tokens =>
-      'Sum of input and output tokens per turn.';
-
-  @override
-  String get agentSettingLabel_budget_max_cost => 'Max cost';
-
-  @override
-  String get agentSettingDescription_budget_max_cost =>
-      'USD per turn; works only with known prices.';
-
-  @override
-  String get agentSettingLabel_budget_max_duration => 'Max duration';
-
-  @override
-  String get agentSettingDescription_budget_max_duration =>
-      'Turn time without waiting for approvals.';
-
-  @override
-  String get agentSettingLabel_subagents_enabled => 'Subagents';
-
-  @override
-  String get agentSettingDescription_subagents_enabled =>
-      'Let the agent start subagents (new sessions only).';
-
-  @override
-  String get agentSettingLabel_subagents_max_depth => 'Max depth';
-
-  @override
-  String get agentSettingDescription_subagents_max_depth =>
-      'How deep subagents may nest (new sessions only).';
-
-  @override
-  String get agentSettingLabel_subagents_max_concurrent => 'Max concurrent';
-
-  @override
-  String get agentSettingDescription_subagents_max_concurrent =>
-      'Subagents working at the same time in one session tree.';
-
-  @override
-  String get agentSettingLabel_subagents_max_per_turn => 'Max per turn';
-
-  @override
-  String get agentSettingDescription_subagents_max_per_turn =>
-      'Subagents started per turn of the session.';
-
-  @override
-  String get agentSettingLabel_subagents_max_steps => 'Max steps';
-
-  @override
-  String get agentSettingDescription_subagents_max_steps =>
-      'Model requests of one subagent.';
-
-  @override
-  String get agentSettingLabel_subagents_max_tokens => 'Max tokens';
-
-  @override
-  String get agentSettingDescription_subagents_max_tokens =>
-      'Input and output tokens of one subagent.';
-
-  @override
-  String get agentSettingLabel_subagents_max_cost => 'Max cost';
-
-  @override
-  String get agentSettingDescription_subagents_max_cost =>
-      'USD of one subagent; works only with known prices.';
-
-  @override
-  String get agentSettingLabel_subagents_max_duration => 'Max duration';
-
-  @override
-  String get agentSettingDescription_subagents_max_duration =>
-      'Time of one subagent without waiting for approvals.';
-
-  @override
-  String get agentSettingLabel_subagents_report_max_bytes => 'Report size';
-
-  @override
-  String get agentSettingDescription_subagents_report_max_bytes =>
-      'Largest report a subagent returns, in bytes.';
-
-  @override
-  String get agentSettingLabel_subagents_progress_interval =>
-      'Progress interval';
-
-  @override
-  String get agentSettingDescription_subagents_progress_interval =>
-      'Shortest pause between progress lines of a subagent call.';
-
-  @override
-  String get agentSettingLabel_subagents_heartbeat_interval =>
-      'Heartbeat interval';
-
-  @override
-  String get agentSettingDescription_subagents_heartbeat_interval =>
-      'Pause after which a silent subagent call reports that it is alive.';
-
-  @override
-  String get agentSettingLabel_subagents_cancel_grace => 'Cancel grace';
-
-  @override
-  String get agentSettingDescription_subagents_cancel_grace =>
-      'How long a call waits for subagents to stop after a cancel.';
-
-  @override
-  String get agentSettingLabel_compaction_enabled => 'Automatic compaction';
-
-  @override
-  String get agentSettingDescription_compaction_enabled =>
-      'Compact the context automatically when it grows.';
-
-  @override
-  String get agentSettingLabel_logging_level => 'Log level';
-
-  @override
-  String get agentSettingDescription_logging_level =>
-      'Verbosity of the agent log.';
-
-  @override
-  String get settingsGeneralAgentDefaultsTitle => 'Agent defaults';
-
-  @override
-  String get settingsGeneralAgentDefaultsCaption =>
-      'Changes are saved for all projects.';
-
-  @override
-  String settingsGeneralSharedInfo(String home) {
-    return 'Shared with the codelab CLI. Rows marked shared come from the agent\'s settings registry and are saved to $home/config.yaml; codelab /settings shows them too.';
-  }
-
-  @override
-  String get settingsGeneralTagShared => 'shared';
-
-  @override
-  String get settingsGeneralNotSet => 'Not set';
-
-  @override
-  String get settingsGeneralAppliesAfterRestart => '(applies after restart)';
-
-  @override
-  String settingsGeneralOverriddenBy(String source) {
-    return 'This project overrides it ($source).';
-  }
-
-  @override
-  String get settingsGeneralRefusalSecret =>
-      'Change it with codelab secret set.';
-
-  @override
-  String get settingsGeneralRefusalMasked =>
-      'This value contains a secret; change it in the config file.';
-
-  @override
-  String settingsGeneralRefusalExternal(String source) {
-    return 'Set by $source; it cannot be changed here.';
-  }
-
-  @override
-  String get settingsGeneralRefusalOther =>
-      'This setting cannot be changed here.';
-
-  @override
-  String settingsGeneralHintIntMin(String min) {
-    return 'Enter a whole number of $min or greater.';
-  }
-
-  @override
-  String settingsGeneralHintIntRange(String min, String max) {
-    return 'Enter a whole number from $min to $max.';
-  }
-
-  @override
-  String get settingsGeneralHintInt => 'Enter a whole number.';
-
-  @override
-  String get settingsGeneralHintNumber => 'Enter a number.';
-
-  @override
-  String get settingsGeneralHintDuration =>
-      'Enter a duration like 500ms, 30s, 2m or 1h.';
-
-  @override
-  String get settingsGeneralSaved => 'Saved.';
-
-  @override
-  String get settingsGeneralTailAfterRestart => 'Applies after Restart agent.';
-
-  @override
-  String get settingsGeneralTailWhenStarts => 'Applies when the agent starts.';
-
-  @override
-  String settingsGeneralSavedOverridden(String source, String effective) {
-    return 'Saved to all projects; $source overrides it: the agent uses $effective.';
-  }
-
-  @override
-  String settingsGeneralSavedUnverified(String home) {
-    return 'Saved to $home/config.yaml.';
-  }
-
-  @override
-  String get settingsGeneralConflict =>
-      'The config file changed on disk; the page was reloaded. Try again.';
-
-  @override
-  String get settingsGeneralRejected => 'The config was not saved.';
-
-  @override
-  String settingsGeneralReadOnlyRemote(String origin) {
-    return 'Read-only: this agent runs on $origin. Change its settings on that host: codelab config set.';
-  }
-
-  @override
-  String settingsGeneralReadOnlyManaged(String agent) {
-    return 'Agent settings are managed by $agent.';
-  }
-
-  @override
-  String get settingsGeneralUnreadable => 'The agent config cannot be read.';
-
-  @override
-  String get settingsGeneralSectionStartup => 'Startup and files';
-
-  @override
-  String get settingsGeneralReopenTitle =>
-      'Reopen the last project and its tabs';
-
-  @override
-  String get settingsGeneralReopenDescription =>
-      'On: open the last project and its open sessions. Off: start with recent projects in the sidebar. Applies at the next start.';
-
-  @override
-  String get settingsGeneralStartupSaveFailed =>
-      'Couldn\'t save this setting. The previous value applies at the next start.';
-
-  @override
-  String get settingsGeneralSectionAbout => 'About';
-
-  @override
-  String settingsGeneralAboutSubtitle(String platform, String agentVersion) {
-    return '$platform · embedded agent $agentVersion';
-  }
-
-  @override
-  String get settingsGeneralAboutLicense => 'License';
-
-  @override
-  String get settingsGeneralAboutConfigFolder => 'Config folder';
-
-  @override
-  String get settingsGeneralAboutCopyDiagnostics => 'Copy diagnostics';
-
-  @override
-  String get settingsGeneralAboutThirdParty => 'Third-party notices';
-
-  @override
-  String get settingsGeneralAboutReleaseNotes => 'Release notes';
-
-  @override
-  String get settingsGeneralAboutOpenLogs => 'Open log folder';
-
-  @override
-  String get settingsGeneralAboutUpdates =>
-      'Updates come from the installer or your package manager — the app does not update itself.';
-
-  @override
-  String get settingsGeneralAboutCopied => 'Diagnostics copied.';
-
-  @override
-  String get settingsGeneralAboutReleaseNotesFailed =>
-      'Couldn\'t open the release notes.';
-
-  @override
-  String get settingsGeneralAboutLogsFailed => 'Couldn\'t open the log folder.';
-
-  @override
-  String get settingsGeneralAboutPackageLicenses => 'Package licenses';
-
-  @override
-  String get settingsGeneralAboutClose => 'Close';
-
-  @override
-  String get settingsGeneralUnreadableCannotRead =>
-      'Cannot read the agent settings.';
-
-  @override
-  String get settingsGeneralUnreadableHome =>
-      'The CodeLab home folder is not available.';
-
-  @override
-  String get settingsGeneralUnreadableUserLayer =>
-      'The user config.yaml cannot be read.';
-
-  @override
-  String get settingsGeneralAboutCopyFailed =>
-      'Couldn\'t copy the diagnostics.';
-
-  @override
-  String get settingsGeneralAboutLoadFailed =>
-      'Couldn\'t load the About section.';
-
-  @override
   String get commonCancel => 'Cancel';
 
   @override
@@ -1077,6 +766,1387 @@ class AppLocalizationsEn extends AppLocalizations {
   String workbenchTokenRequired(int status) {
     return 'The agent requires a token (HTTP $status).';
   }
+
+  @override
+  String get commonSave => 'Save';
+
+  @override
+  String get commonRemove => 'Remove';
+
+  @override
+  String get commonBack => 'Back';
+
+  @override
+  String get commonNext => 'Next';
+
+  @override
+  String get commonDone => 'Done';
+
+  @override
+  String get commonEdit => 'Edit';
+
+  @override
+  String get commonCheck => 'Check';
+
+  @override
+  String get commonDefault => 'Default';
+
+  @override
+  String get commonContinue => 'Continue';
+
+  @override
+  String get connectionAddProfile => 'Add profile';
+
+  @override
+  String get connectionSectionProfiles => 'Profiles';
+
+  @override
+  String get connectionSectionBehavior => 'Behavior';
+
+  @override
+  String get connectionProfilesHelp =>
+      'Shared with codelab_cli through profiles.json in \$CODELAB_HOME. The default profile is used when the agent starts, until you choose another with Use.';
+
+  @override
+  String get connectionJoinCliTitle => 'Join a session started in the CLI';
+
+  @override
+  String get connectionJoinCliBody =>
+      'On the host run codelab-agent serve --ws <port>; the CLI connects with codelab -a <profile>. Choose the same WebSocket profile here; its sessions appear in the sidebar.';
+
+  @override
+  String get connectionBadgeCurrent => 'Current';
+
+  @override
+  String get connectionBadgeSelected => 'Selected';
+
+  @override
+  String get connectionStatusConnecting => 'Connecting…';
+
+  @override
+  String get connectionStatusConnected => 'Connected';
+
+  @override
+  String get connectionStatusFailed => 'Failed';
+
+  @override
+  String get connectionRowUse => 'Use';
+
+  @override
+  String get connectionRowRename => 'Rename';
+
+  @override
+  String get connectionRowUseAnotherFirst => 'Use another profile first.';
+
+  @override
+  String get connectionRowNotSaved => 'Current connection (not saved)';
+
+  @override
+  String get connectionRenameName => 'Name';
+
+  @override
+  String get connectionEmbeddedAgentTitle => 'Embedded agent';
+
+  @override
+  String get connectionEmbeddedAgentSummary =>
+      'Runs inside CodeLab; no separate process.';
+
+  @override
+  String get connectionTokenNone => 'No token';
+
+  @override
+  String connectionTokenFromEnv(String variable) {
+    return 'From $variable';
+  }
+
+  @override
+  String tokenEnvNotSet(String name) {
+    return '$name is not set in CodeLab\'s environment.';
+  }
+
+  @override
+  String connectionTokenSecret(String name) {
+    return 'Token secret $name';
+  }
+
+  @override
+  String connectionTokenSecretSet(String backend) {
+    return '$backend · set';
+  }
+
+  @override
+  String connectionTokenSecretMissing(String backend) {
+    return '$backend · missing';
+  }
+
+  @override
+  String get connectionTokenUnsupported =>
+      'unrecognized token reference (not supported in this version)';
+
+  @override
+  String connectionReadOnlyTitle(String origin) {
+    return 'Read-only: this agent runs on $origin';
+  }
+
+  @override
+  String get settingsRemoteHostHint =>
+      'Change providers and MCP on that host: codelab provider add, codelab mcp add, codelab config set.';
+
+  @override
+  String get connectionIgnoredDefault =>
+      'Profile \"default\" in profiles.json is ignored: default is the built-in agent. Remove it with codelab profiles remove default.';
+
+  @override
+  String get connectionIgnoredDefaultRemoveTitle =>
+      'Remove the ignored \"default\" profile?';
+
+  @override
+  String get connectionIgnoredDefaultRemoveDetails =>
+      'Only the \"default\" entry is deleted from profiles.json; other profiles stay.';
+
+  @override
+  String connectionUnreadableWithPath(String path, String reason) {
+    return 'Cannot read $path: $reason. Fix or remove the file; CodeLab will not overwrite it.';
+  }
+
+  @override
+  String connectionUnreadableWithoutPath(String reason) {
+    return 'Cannot use the profiles: $reason.';
+  }
+
+  @override
+  String get connectionUnreadableUnsupported =>
+      'the file has an unsupported version or an invalid structure';
+
+  @override
+  String connectionUnreadableCannotRead(String errorType) {
+    return 'the file cannot be read ($errorType)';
+  }
+
+  @override
+  String get connectionFailureSaveFailed =>
+      'Could not save the change. Try again.';
+
+  @override
+  String connectionFailureTokenNotDeleted(String name) {
+    return 'The profile was removed, but the stored token $name was not deleted. Remove it with codelab secret delete $name.';
+  }
+
+  @override
+  String connectionRemoveTitle(String name) {
+    return 'Remove profile $name?';
+  }
+
+  @override
+  String get connectionRemoveDetails =>
+      'The entry is deleted from profiles.json. Environment variables and other settings are not touched.';
+
+  @override
+  String connectionRemoveDeleteToken(String name) {
+    return 'Also delete the stored token $name';
+  }
+
+  @override
+  String get connectionReconnect => 'Reconnect';
+
+  @override
+  String get connectionRestartButton => 'Restart';
+
+  @override
+  String get connectionRestartHint => 'Starts when you open a project.';
+
+  @override
+  String connectionRestartDescription(String subject) {
+    return 'Reconnects $subject and reloads open sessions. A running turn is interrupted; queued prompts stay.';
+  }
+
+  @override
+  String get connectionRestartSubjectWindow => 'the profile of this window';
+
+  @override
+  String connectionRestartToUse(String subject) {
+    return 'Restart $subject to use it.';
+  }
+
+  @override
+  String get addProfileTitle => 'Add connection profile';
+
+  @override
+  String addProfileSubtitle(String path, String command) {
+    return 'Saved to $path and shared with codelab_cli as $command.';
+  }
+
+  @override
+  String get addProfileFieldType => 'Type';
+
+  @override
+  String get addProfileFieldName => 'Name';
+
+  @override
+  String get addProfileFieldCommand => 'Command';
+
+  @override
+  String get addProfileFieldArguments => 'Arguments';
+
+  @override
+  String get addProfileFieldFolder => 'Folder';
+
+  @override
+  String get addProfileFieldEnvironment => 'Environment';
+
+  @override
+  String get addProfileFieldToken => 'Token';
+
+  @override
+  String get addProfileFieldAfterSaving => 'After saving';
+
+  @override
+  String get addProfileTypeSemantics => 'Profile type';
+
+  @override
+  String get addProfileTypeStdio => 'Local stdio';
+
+  @override
+  String get addProfileTypeStdioNote =>
+      'Starts the agent as a child process per window and talks ACP over stdin/stdout.';
+
+  @override
+  String get addProfileTypeWebSocketNote =>
+      'Connects to codelab-agent serve --ws on this or another machine.';
+
+  @override
+  String get addProfileIdCannotChange => '· cannot change after saving';
+
+  @override
+  String get addProfileNamePlaceholder => 'devbox 2';
+
+  @override
+  String get addProfileArgumentsNote =>
+      'Parsed like a shell: quotes and escapes work.';
+
+  @override
+  String get addProfileRunInProject => 'Run in the project folder';
+
+  @override
+  String get addProfileUseByDefault => 'Use by default';
+
+  @override
+  String get addProfileUsedWhenAgentStarts => 'Used when the agent starts.';
+
+  @override
+  String get addProfileTokenNone => 'No token';
+
+  @override
+  String get addProfileTokenStored => 'Use stored secret';
+
+  @override
+  String get addProfileTokenNew => 'Store a new token';
+
+  @override
+  String get addProfileTokenEnv => 'From environment variable';
+
+  @override
+  String get addProfileTokenPaste => 'Paste the token';
+
+  @override
+  String get addProfileTokenEnvNote =>
+      'CodeLab reads the token from this environment variable when it connects. Token values are not saved in profiles.json.';
+
+  @override
+  String get addProfileTokenEnvFinderNote =>
+      'Apps opened from Finder do not see variables set in your shell profile.';
+
+  @override
+  String addProfileStoredSecretsHint(String backend) {
+    return 'No stored secrets in $backend.';
+  }
+
+  @override
+  String addProfileNewTokenHint(String name, String backend) {
+    return 'Saved as $name in $backend. The value is never shown again or written to profiles.json.';
+  }
+
+  @override
+  String addProfileSecretStoreReadOnly(String backend) {
+    return 'Secret store $backend is read-only.';
+  }
+
+  @override
+  String get addProfileWarningTokenPlaintext =>
+      'ws:// to another machine: the token is sent unencrypted.';
+
+  @override
+  String get addProfileWarningTrafficPlaintext =>
+      'ws:// to another machine: traffic is sent unencrypted.';
+
+  @override
+  String get addProfilePlaintextTitle => 'Unencrypted connection';
+
+  @override
+  String addProfilePlaintextWithToken(String origin) {
+    return 'The token for $origin will travel in clear text. Use wss:// if the host supports it.';
+  }
+
+  @override
+  String addProfilePlaintextWithoutToken(String origin) {
+    return 'Prompts and files sent to $origin will travel in clear text. Use wss:// if the host supports it.';
+  }
+
+  @override
+  String get addProfileSaveAnyway => 'Save anyway';
+
+  @override
+  String get addProfileErrorLabelEmpty => 'Enter a name.';
+
+  @override
+  String get addProfileErrorIdEmpty => 'Id is required.';
+
+  @override
+  String addProfileErrorIdReserved(String id) {
+    return '\"$id\" is reserved for the built-in agent.';
+  }
+
+  @override
+  String addProfileErrorIdTaken(String id) {
+    return 'A profile with id \"$id\" already exists.';
+  }
+
+  @override
+  String get addProfileErrorIdInvalid =>
+      'Use lowercase letters, digits, \".\", \"_\" and \"-\" (up to 64 characters).';
+
+  @override
+  String get addProfileErrorCommandEmpty =>
+      'Enter the command that starts the agent.';
+
+  @override
+  String get addProfileErrorArgsInvalid => 'Arguments have an unclosed quote.';
+
+  @override
+  String get addProfileErrorUrlInvalid => 'Use ws:// or wss:// with a host.';
+
+  @override
+  String get addProfileErrorUrlUserInfo =>
+      'Remove the user name and password from the URL; use the Token setting instead.';
+
+  @override
+  String get addProfileErrorTokenEnvNameInvalid =>
+      'Variable name: letters, digits and \"_\", not starting with a digit.';
+
+  @override
+  String get addProfileErrorTokenSecretNameInvalid =>
+      'Secret name: lowercase letters, digits and . _ / -, up to 128 characters.';
+
+  @override
+  String get addProfileErrorTokenSecretEmpty => 'Enter the token.';
+
+  @override
+  String get addProfileErrorTokenSecretIdInvalid =>
+      'This id cannot name a stored token; avoid \"..\".';
+
+  @override
+  String addProfileErrorTokenSecretExists(String name, String backend) {
+    return 'A stored token $name already exists in $backend. Choose it with \"Use stored secret\" or remove it with codelab secret delete.';
+  }
+
+  @override
+  String get addProfileSavedTitle => 'Profile saved';
+
+  @override
+  String addProfileSavedMessage(String id) {
+    return 'Added to profiles.json as $id';
+  }
+
+  @override
+  String get addProfileSavedUsedByDefault => ' · used by default';
+
+  @override
+  String get addProfileSavedNote =>
+      'The running agent is unchanged. Select it with Use in the profile row; Restart agent applies it.';
+
+  @override
+  String get addProfileAddAnother => 'Add another';
+
+  @override
+  String get addProfileFailureProfile =>
+      'Could not save the profile. Try again.';
+
+  @override
+  String get addProfileFailureSecret => 'Could not store the token. Try again.';
+
+  @override
+  String addProfileFailureOrphanedToken(String backend, String name) {
+    return 'The profile was not saved; the token stays in $backend as $name. Remove it with codelab secret delete $name.';
+  }
+
+  @override
+  String get secretStoreReadOnly => 'The secret store is read-only.';
+
+  @override
+  String addProfileErrorEnvSecretLike(String key, String syntax) {
+    return '$key looks like a secret. Set it in the system environment or reference it from the agent config as $syntax.';
+  }
+
+  @override
+  String get providersAdd => 'Add provider';
+
+  @override
+  String get providersDefaultModel => 'Default model';
+
+  @override
+  String get providersUsedByNewSessions => 'Used by new sessions.';
+
+  @override
+  String providersActiveInSession(String model) {
+    return 'Active in this session: $model';
+  }
+
+  @override
+  String get providersChooseModel => 'Choose a model';
+
+  @override
+  String providersKeyStorage(String backend) {
+    return 'Key storage: $backend';
+  }
+
+  @override
+  String get providersKeyStorageDescription =>
+      'Only key names and presence are read — values never enter the app';
+
+  @override
+  String get providersStorageWritable => 'writable';
+
+  @override
+  String get providersStorageReadOnly => 'read-only';
+
+  @override
+  String providersKeysInOpenFile(String path) {
+    return 'Keys are stored in an open file $path (mode 0600).';
+  }
+
+  @override
+  String get providersConfigured => 'Configured providers';
+
+  @override
+  String get providersEmpty =>
+      'No providers yet. The embedded agent needs one to run a turn.';
+
+  @override
+  String providersConfigFile(String path) {
+    return 'Config file: $path';
+  }
+
+  @override
+  String get providersRemoveHelp =>
+      'Remove asks to confirm with “Also delete the stored key”; removing the default provider asks for a “New default model”. Rows defined in the project file are not editable here.';
+
+  @override
+  String providersReadOnlyTitle(String origin) {
+    return 'Read-only: this agent runs on $origin.';
+  }
+
+  @override
+  String providersNotManaged(String agent) {
+    return 'Provider settings are managed by $agent.';
+  }
+
+  @override
+  String get providersUnreadable =>
+      'Cannot read the agent config. Fix or remove the file; CodeLab will not overwrite it.';
+
+  @override
+  String get providersProblemNoHome =>
+      'The CodeLab home folder is not available.';
+
+  @override
+  String get providersProblemCannotReadSettings =>
+      'Cannot read the agent settings.';
+
+  @override
+  String get providersProblemUserConfig =>
+      'The user config.yaml cannot be read.';
+
+  @override
+  String get providersUnknownKind => 'Unknown kind';
+
+  @override
+  String providersModelCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count models',
+      one: '$count model',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String providersDefinedIn(String path) {
+    return 'defined in $path';
+  }
+
+  @override
+  String get providersDefinedInEnvironment => 'defined in the environment';
+
+  @override
+  String get providersSourceEnvironment => 'Environment';
+
+  @override
+  String providersKeyLabelInStore(String backend) {
+    return 'Key: in $backend';
+  }
+
+  @override
+  String providersKeyLabelMissing(String backend) {
+    return 'Key: missing in $backend';
+  }
+
+  @override
+  String providersKeyLabelEnvSet(String name) {
+    return 'Key: env $name (set)';
+  }
+
+  @override
+  String providersKeyLabelEnvNotSet(String name) {
+    return 'Key: env $name (not set)';
+  }
+
+  @override
+  String get providersKeyLabelLiteral => 'Key: in config file (plain text)';
+
+  @override
+  String get providersKeyLabelNone => 'No key';
+
+  @override
+  String providersKeyInStore(String backend, String name) {
+    return 'In $backend as $name';
+  }
+
+  @override
+  String providersKeyNotStored(String backend, String name) {
+    return 'Not stored in $backend as $name';
+  }
+
+  @override
+  String providersKeyEnvSet(String name) {
+    return 'Environment variable $name (set)';
+  }
+
+  @override
+  String providersKeyEnvNotSet(String name) {
+    return 'Environment variable $name (not set)';
+  }
+
+  @override
+  String get providersKeyLiteral => 'In the config file (plain text)';
+
+  @override
+  String get providersKeyHintLiteral =>
+      'The key is written in config.yaml. Move it to the secret store: codelab secret migrate.';
+
+  @override
+  String settingsKeyUnencryptedToHost(String host) {
+    return 'The key is sent unencrypted to $host.';
+  }
+
+  @override
+  String providersCheckUnavailable(String kind) {
+    return 'Check is not available for $kind providers yet.';
+  }
+
+  @override
+  String get providersRemoveLast =>
+      'The agent needs at least one provider. Add another provider first.';
+
+  @override
+  String get providersRefusalNotEditable =>
+      'This provider is defined in a read-only file. Change it there.';
+
+  @override
+  String get providersRefusalSeveralFiles =>
+      'This provider is defined in several config files. Change it there.';
+
+  @override
+  String get providersRefusalNewDefault => 'Choose a new default model.';
+
+  @override
+  String get providersRefusalDefaultOverridden =>
+      'The default model is set in a file CodeLab does not write. Change it there first.';
+
+  @override
+  String get providersRefusalChanged =>
+      'The provider settings changed. Review the page and try again.';
+
+  @override
+  String get providersCheckNotChecked => 'not checked';
+
+  @override
+  String get providersCheckNotCheckedYet => 'Not checked yet';
+
+  @override
+  String get providersCheckRunning => 'checking…';
+
+  @override
+  String get providersCheckRunningDetail => 'Checking…';
+
+  @override
+  String providersCheckOkLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count models',
+      one: '$count model',
+    );
+    return 'ok, $_temp0';
+  }
+
+  @override
+  String providersCheckOkDetail(String time, int count, int ms) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count models',
+      one: '$count model',
+    );
+    return '$time · $_temp0 · $ms ms';
+  }
+
+  @override
+  String providersCheckFailedDetail(String time, String label) {
+    return '$time · $label';
+  }
+
+  @override
+  String providersCheckFailedDetailStatus(
+    String time,
+    String label,
+    int status,
+  ) {
+    return '$time · $label (HTTP $status)';
+  }
+
+  @override
+  String get providersCheckUnauthorized => 'unauthorized';
+
+  @override
+  String get providersCheckNotFound => 'not found';
+
+  @override
+  String get providersCheckUnreachable => 'unreachable';
+
+  @override
+  String get providersCheckTimeout => 'timeout';
+
+  @override
+  String get providersCheckTlsError => 'TLS error';
+
+  @override
+  String get providersCheckBadResponse => 'bad response';
+
+  @override
+  String get providersCheckKeyMissing => 'Key: missing';
+
+  @override
+  String get providersCheckKeyMissingDetail =>
+      'Not checked: the key is missing';
+
+  @override
+  String get providersRowKey => 'Key';
+
+  @override
+  String get providersRowLastCheck => 'Last check';
+
+  @override
+  String get providersRowSource => 'Source';
+
+  @override
+  String providersRemoveTitle(String id) {
+    return 'Remove provider $id?';
+  }
+
+  @override
+  String get providersRemoveDetails =>
+      'The provider is removed from the config file. Sessions that use its models keep running until the agent reloads.';
+
+  @override
+  String get providersRemoveDeleteKey => 'Also delete the stored key';
+
+  @override
+  String get providersRemoveNewDefault => 'New default model';
+
+  @override
+  String get providersBannerDefaultModelSaved => 'Default model saved.';
+
+  @override
+  String providersBannerRemoved(String id) {
+    return 'Provider $id removed.';
+  }
+
+  @override
+  String providersBannerRemovedKeyDeleted(String id) {
+    return 'Provider $id removed. Its stored key was deleted.';
+  }
+
+  @override
+  String providersBannerRemovedKeyKept(String id, String secret) {
+    return 'Provider $id removed. The stored key $secret is kept because other settings still use it.';
+  }
+
+  @override
+  String providersBannerRemovedKeyFailed(String id, String secret) {
+    return 'Provider $id removed, but its stored key could not be deleted. Delete it with: codelab secret delete $secret';
+  }
+
+  @override
+  String get configConflict =>
+      'The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.';
+
+  @override
+  String configNotSavedRejected(String issues) {
+    return 'The config was not saved: $issues';
+  }
+
+  @override
+  String configNotSavedInlineSecret(String key) {
+    return 'The config was not saved: $key must not hold a literal secret.';
+  }
+
+  @override
+  String get configNotSavedPlain => 'The config was not saved.';
+
+  @override
+  String configNotSavedErrorType(String errorType) {
+    return 'The config was not saved ($errorType).';
+  }
+
+  @override
+  String get providersBannerCannotOpenWizard =>
+      'Cannot open the provider wizard: the agent config cannot be read.';
+
+  @override
+  String get providersBannerSavedNextStart =>
+      'Saved. The agent uses it the next time it starts.';
+
+  @override
+  String providersBannerSaved(String id) {
+    return 'Provider $id saved.';
+  }
+
+  @override
+  String providersBannerSavedKeyRestart(String id) {
+    return 'Provider $id saved. The new key is used after Restart agent (Settings › Connection).';
+  }
+
+  @override
+  String providersBannerSavedModelsRestart(String id) {
+    return 'Provider $id saved. Its models are available after Restart agent (Settings › Connection).';
+  }
+
+  @override
+  String get wizardTitleAdd => 'Add provider';
+
+  @override
+  String wizardTitleEdit(String id) {
+    return 'Edit provider $id';
+  }
+
+  @override
+  String get wizardStepApiType => 'API type';
+
+  @override
+  String get wizardStepBaseUrl => 'Base URL';
+
+  @override
+  String get wizardStepKey => 'Key';
+
+  @override
+  String get wizardStepCheck => 'Check';
+
+  @override
+  String get wizardStepModel => 'Model';
+
+  @override
+  String get wizardStepReview => 'Review';
+
+  @override
+  String get wizardSummaryType => 'Type';
+
+  @override
+  String get wizardSummaryProvider => 'Provider';
+
+  @override
+  String get wizardSummaryFile => 'File';
+
+  @override
+  String get wizardPresetOllama => 'Ollama (local, no key)';
+
+  @override
+  String get wizardPresetCustomOpenAi => 'Custom OpenAI-compatible endpoint';
+
+  @override
+  String get wizardPresetCustomAnthropic =>
+      'Custom Anthropic-compatible endpoint';
+
+  @override
+  String get wizardTypeCustomOpenAi => 'Custom OpenAI-compatible';
+
+  @override
+  String get wizardTypeCustomAnthropic => 'Custom Anthropic-compatible';
+
+  @override
+  String wizardSummaryKeyStore(String backend, String name) {
+    return 'Store in $backend as $name';
+  }
+
+  @override
+  String wizardSummaryKeyUseStored(String name) {
+    return 'Use the stored key $name';
+  }
+
+  @override
+  String get wizardKeepCurrentKey => 'Keep the current key';
+
+  @override
+  String wizardSummaryKeyEnv(String name) {
+    return 'Read from environment variable ($name)';
+  }
+
+  @override
+  String wizardPlanKeySecret(String name, String backend) {
+    return 'secret \"$name\" ($backend)';
+  }
+
+  @override
+  String get wizardPlanKeyKept => 'kept as is';
+
+  @override
+  String wizardPlanKeyEnv(String name) {
+    return 'environment variable $name';
+  }
+
+  @override
+  String get wizardPlanKeyNone => 'none';
+
+  @override
+  String wizardFailKeyRejectedStatus(int status) {
+    return 'Key rejected ($status)';
+  }
+
+  @override
+  String get wizardFailKeyRejected => 'Key rejected';
+
+  @override
+  String wizardFailNotFound(int status) {
+    return 'Model list not found ($status)';
+  }
+
+  @override
+  String get wizardFailUnreachable => 'Server unreachable';
+
+  @override
+  String wizardFailTimeout(int seconds) {
+    return 'Timed out after $seconds s';
+  }
+
+  @override
+  String get wizardFailTls => 'TLS error';
+
+  @override
+  String wizardFailUnexpectedStatus(int status) {
+    return 'Unexpected response ($status)';
+  }
+
+  @override
+  String get wizardFailUnexpected => 'Unexpected response';
+
+  @override
+  String get wizardFailNotFoundNote =>
+      'The server answered, but GET /models does not exist. OpenAI-compatible servers usually live under /v1.';
+
+  @override
+  String get wizardKeyUseStored => 'Use the stored key';
+
+  @override
+  String get wizardKeyReplace => 'Replace it';
+
+  @override
+  String wizardKeyStore(String backend, String name) {
+    return 'Store in $backend as \"$name\"';
+  }
+
+  @override
+  String get wizardKeyEnv => 'Read from environment variable';
+
+  @override
+  String wizardKeyEnvNamed(String name) {
+    return 'Read from environment variable ($name)';
+  }
+
+  @override
+  String get wizardKeySourceLabel => 'API key source';
+
+  @override
+  String get wizardKeyFieldLabel => 'API key';
+
+  @override
+  String get wizardKeyEnvFieldLabel => 'Variable name';
+
+  @override
+  String get wizardErrorAddressInvalid => 'Enter an http or https address.';
+
+  @override
+  String get wizardErrorAddressUserInfo =>
+      'Remove the user name and password from the address.';
+
+  @override
+  String get wizardErrorKeyEmpty => 'Enter the API key.';
+
+  @override
+  String wizardErrorKeyAlreadyStored(String name, String backend) {
+    return 'A stored key $name already exists in $backend.';
+  }
+
+  @override
+  String get wizardErrorNothingToKeep => 'There is no stored key to keep.';
+
+  @override
+  String get wizardErrorEnvVarEmpty => 'Enter the environment variable name.';
+
+  @override
+  String get wizardErrorContextWindow =>
+      'Context window must be a positive number.';
+
+  @override
+  String get wizardErrorMaxOutput =>
+      'Max output tokens must be a positive number.';
+
+  @override
+  String get wizardErrorProviderId =>
+      'Provider id must be unused and match [a-z0-9_-]+.';
+
+  @override
+  String get wizardErrorTargetUnavailable => 'This target is not available.';
+
+  @override
+  String get wizardRefusalProviderExists =>
+      'A provider with this id already exists.';
+
+  @override
+  String get wizardRefusalProviderMissing =>
+      'The provider is no longer in the config.';
+
+  @override
+  String get wizardRefusalNotEditable => 'This provider cannot be edited here.';
+
+  @override
+  String get wizardRefusalSeveralFiles =>
+      'This provider is defined in several config files.';
+
+  @override
+  String get wizardRefusalLayerUnreadable => 'The config file cannot be read.';
+
+  @override
+  String get wizardKeyNoticeLiteral =>
+      'The key is written in config.yaml. Choose where to keep it instead.';
+
+  @override
+  String wizardNotVerified(String reason) {
+    return 'Not verified: $reason';
+  }
+
+  @override
+  String get wizardNotVerifiedUnreachable => 'unreachable';
+
+  @override
+  String get wizardNotVerifiedTimeout => 'timeout';
+
+  @override
+  String get wizardInsecureConfirm => 'Use http anyway';
+
+  @override
+  String get wizardChecking => 'Checking the address and the key…';
+
+  @override
+  String get wizardContinueQuestion => 'How do you want to continue?';
+
+  @override
+  String wizardUseAddress(String address) {
+    return 'Use $address';
+  }
+
+  @override
+  String get wizardEnterModelManually => 'Enter the model manually';
+
+  @override
+  String get wizardModelId => 'Model id';
+
+  @override
+  String get wizardSkipWarning =>
+      'The address and the key are not verified, and the model list is not available. You will enter the model yourself.';
+
+  @override
+  String get wizardSkipConfirm => 'Continue without check';
+
+  @override
+  String get wizardSaveWithoutCheck => 'Save without check';
+
+  @override
+  String get wizardModelNotChecked =>
+      'The model list was not checked: enter the model id.';
+
+  @override
+  String get wizardModelFilter => 'Model (type to filter)';
+
+  @override
+  String get wizardModelManual => 'Enter model id manually';
+
+  @override
+  String wizardLimitsOf(String model) {
+    return 'Limits of $model';
+  }
+
+  @override
+  String get wizardContextWindow => 'Context window';
+
+  @override
+  String get wizardMaxOutputTokens => 'Max output tokens (optional)';
+
+  @override
+  String get wizardMakeDefault => 'Make default model';
+
+  @override
+  String get wizardProjectOnly => 'This project only';
+
+  @override
+  String get wizardSaving => 'Saving…';
+
+  @override
+  String get wizardReviewConflict =>
+      'Config changed on disk — review and save again';
+
+  @override
+  String wizardSaveKeyReplaced(String name) {
+    return 'The stored key $name was already replaced.';
+  }
+
+  @override
+  String wizardSaveKeyStillStored(String name) {
+    return 'The new key $name is still in the secret store. Delete it with: codelab secret delete $name';
+  }
+
+  @override
+  String get wizardKeyNone => 'No key';
+
+  @override
+  String get agentSettingLabel_budget_max_steps => 'Max steps';
+
+  @override
+  String get agentSettingDescription_budget_max_steps =>
+      'Model requests per turn.';
+
+  @override
+  String get agentSettingLabel_budget_max_tokens => 'Max tokens';
+
+  @override
+  String get agentSettingDescription_budget_max_tokens =>
+      'Sum of input and output tokens per turn.';
+
+  @override
+  String get agentSettingLabel_budget_max_cost => 'Max cost';
+
+  @override
+  String get agentSettingDescription_budget_max_cost =>
+      'USD per turn; works only with known prices.';
+
+  @override
+  String get agentSettingLabel_budget_max_duration => 'Max duration';
+
+  @override
+  String get agentSettingDescription_budget_max_duration =>
+      'Turn time without waiting for approvals.';
+
+  @override
+  String get agentSettingLabel_subagents_enabled => 'Subagents';
+
+  @override
+  String get agentSettingDescription_subagents_enabled =>
+      'Let the agent start subagents (new sessions only).';
+
+  @override
+  String get agentSettingLabel_subagents_max_depth => 'Max depth';
+
+  @override
+  String get agentSettingDescription_subagents_max_depth =>
+      'How deep subagents may nest (new sessions only).';
+
+  @override
+  String get agentSettingLabel_subagents_max_concurrent => 'Max concurrent';
+
+  @override
+  String get agentSettingDescription_subagents_max_concurrent =>
+      'Subagents working at the same time in one session tree.';
+
+  @override
+  String get agentSettingLabel_subagents_max_per_turn => 'Max per turn';
+
+  @override
+  String get agentSettingDescription_subagents_max_per_turn =>
+      'Subagents started per turn of the session.';
+
+  @override
+  String get agentSettingLabel_subagents_max_steps => 'Max steps';
+
+  @override
+  String get agentSettingDescription_subagents_max_steps =>
+      'Model requests of one subagent.';
+
+  @override
+  String get agentSettingLabel_subagents_max_tokens => 'Max tokens';
+
+  @override
+  String get agentSettingDescription_subagents_max_tokens =>
+      'Input and output tokens of one subagent.';
+
+  @override
+  String get agentSettingLabel_subagents_max_cost => 'Max cost';
+
+  @override
+  String get agentSettingDescription_subagents_max_cost =>
+      'USD of one subagent; works only with known prices.';
+
+  @override
+  String get agentSettingLabel_subagents_max_duration => 'Max duration';
+
+  @override
+  String get agentSettingDescription_subagents_max_duration =>
+      'Time of one subagent without waiting for approvals.';
+
+  @override
+  String get agentSettingLabel_subagents_report_max_bytes => 'Report size';
+
+  @override
+  String get agentSettingDescription_subagents_report_max_bytes =>
+      'Largest report a subagent returns, in bytes.';
+
+  @override
+  String get agentSettingLabel_subagents_progress_interval =>
+      'Progress interval';
+
+  @override
+  String get agentSettingDescription_subagents_progress_interval =>
+      'Shortest pause between progress lines of a subagent call.';
+
+  @override
+  String get agentSettingLabel_subagents_heartbeat_interval =>
+      'Heartbeat interval';
+
+  @override
+  String get agentSettingDescription_subagents_heartbeat_interval =>
+      'Pause after which a silent subagent call reports that it is alive.';
+
+  @override
+  String get agentSettingLabel_subagents_cancel_grace => 'Cancel grace';
+
+  @override
+  String get agentSettingDescription_subagents_cancel_grace =>
+      'How long a call waits for subagents to stop after a cancel.';
+
+  @override
+  String get agentSettingLabel_compaction_enabled => 'Automatic compaction';
+
+  @override
+  String get agentSettingDescription_compaction_enabled =>
+      'Compact the context automatically when it grows.';
+
+  @override
+  String get agentSettingLabel_logging_level => 'Log level';
+
+  @override
+  String get agentSettingDescription_logging_level =>
+      'Verbosity of the agent log.';
+
+  @override
+  String get settingsGeneralAgentDefaultsTitle => 'Agent defaults';
+
+  @override
+  String get settingsGeneralAgentDefaultsCaption =>
+      'Changes are saved for all projects.';
+
+  @override
+  String settingsGeneralSharedInfo(String home) {
+    return 'Shared with the codelab CLI. Rows marked shared come from the agent\'s settings registry and are saved to $home/config.yaml; codelab /settings shows them too.';
+  }
+
+  @override
+  String get settingsGeneralTagShared => 'shared';
+
+  @override
+  String get settingsGeneralNotSet => 'Not set';
+
+  @override
+  String get settingsGeneralAppliesAfterRestart => '(applies after restart)';
+
+  @override
+  String settingsGeneralOverriddenBy(String source) {
+    return 'This project overrides it ($source).';
+  }
+
+  @override
+  String get settingsGeneralRefusalSecret =>
+      'Change it with codelab secret set.';
+
+  @override
+  String get settingsGeneralRefusalMasked =>
+      'This value contains a secret; change it in the config file.';
+
+  @override
+  String settingsGeneralRefusalExternal(String source) {
+    return 'Set by $source; it cannot be changed here.';
+  }
+
+  @override
+  String get settingsGeneralRefusalOther =>
+      'This setting cannot be changed here.';
+
+  @override
+  String settingsGeneralHintIntMin(String min) {
+    return 'Enter a whole number of $min or greater.';
+  }
+
+  @override
+  String settingsGeneralHintIntRange(String min, String max) {
+    return 'Enter a whole number from $min to $max.';
+  }
+
+  @override
+  String get settingsGeneralHintInt => 'Enter a whole number.';
+
+  @override
+  String get settingsGeneralHintNumber => 'Enter a number.';
+
+  @override
+  String get settingsGeneralHintDuration =>
+      'Enter a duration like 500ms, 30s, 2m or 1h.';
+
+  @override
+  String get settingsGeneralSaved => 'Saved.';
+
+  @override
+  String get settingsGeneralTailAfterRestart => 'Applies after Restart agent.';
+
+  @override
+  String get settingsGeneralTailWhenStarts => 'Applies when the agent starts.';
+
+  @override
+  String settingsGeneralSavedOverridden(String source, String effective) {
+    return 'Saved to all projects; $source overrides it: the agent uses $effective.';
+  }
+
+  @override
+  String settingsGeneralSavedUnverified(String home) {
+    return 'Saved to $home/config.yaml.';
+  }
+
+  @override
+  String get settingsGeneralConflict =>
+      'The config file changed on disk; the page was reloaded. Try again.';
+
+  @override
+  String get settingsGeneralRejected => 'The config was not saved.';
+
+  @override
+  String settingsGeneralReadOnlyRemote(String origin) {
+    return 'Read-only: this agent runs on $origin. Change its settings on that host: codelab config set.';
+  }
+
+  @override
+  String settingsGeneralReadOnlyManaged(String agent) {
+    return 'Agent settings are managed by $agent.';
+  }
+
+  @override
+  String get settingsGeneralUnreadable => 'The agent config cannot be read.';
+
+  @override
+  String get settingsGeneralSectionStartup => 'Startup and files';
+
+  @override
+  String get settingsGeneralReopenTitle =>
+      'Reopen the last project and its tabs';
+
+  @override
+  String get settingsGeneralReopenDescription =>
+      'On: open the last project and its open sessions. Off: start with recent projects in the sidebar. Applies at the next start.';
+
+  @override
+  String get settingsGeneralStartupSaveFailed =>
+      'Couldn\'t save this setting. The previous value applies at the next start.';
+
+  @override
+  String get settingsGeneralSectionAbout => 'About';
+
+  @override
+  String settingsGeneralAboutSubtitle(String platform, String agentVersion) {
+    return '$platform · embedded agent $agentVersion';
+  }
+
+  @override
+  String get settingsGeneralAboutLicense => 'License';
+
+  @override
+  String get settingsGeneralAboutConfigFolder => 'Config folder';
+
+  @override
+  String get settingsGeneralAboutCopyDiagnostics => 'Copy diagnostics';
+
+  @override
+  String get settingsGeneralAboutThirdParty => 'Third-party notices';
+
+  @override
+  String get settingsGeneralAboutReleaseNotes => 'Release notes';
+
+  @override
+  String get settingsGeneralAboutOpenLogs => 'Open log folder';
+
+  @override
+  String get settingsGeneralAboutUpdates =>
+      'Updates come from the installer or your package manager — the app does not update itself.';
+
+  @override
+  String get settingsGeneralAboutCopied => 'Diagnostics copied.';
+
+  @override
+  String get settingsGeneralAboutReleaseNotesFailed =>
+      'Couldn\'t open the release notes.';
+
+  @override
+  String get settingsGeneralAboutLogsFailed => 'Couldn\'t open the log folder.';
+
+  @override
+  String get settingsGeneralAboutPackageLicenses => 'Package licenses';
+
+  @override
+  String get settingsGeneralAboutClose => 'Close';
+
+  @override
+  String get settingsGeneralUnreadableCannotRead =>
+      'Cannot read the agent settings.';
+
+  @override
+  String get settingsGeneralUnreadableHome =>
+      'The CodeLab home folder is not available.';
+
+  @override
+  String get settingsGeneralUnreadableUserLayer =>
+      'The user config.yaml cannot be read.';
+
+  @override
+  String get settingsGeneralAboutCopyFailed =>
+      'Couldn\'t copy the diagnostics.';
+
+  @override
+  String get settingsGeneralAboutLoadFailed =>
+      'Couldn\'t load the About section.';
 
   @override
   String get settingsSearchKeywordsConnection =>

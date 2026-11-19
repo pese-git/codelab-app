@@ -19,6 +19,9 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../support/fake_provider_settings.dart';
 import '../../../support/real_config_session.dart';
 import '../../../support/recording_logger.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
+import '../../../support/app_strings.dart';
+import '../../../support/typed_messages.dart';
 
 const _home = '/home/u/.codelab';
 
@@ -94,6 +97,7 @@ void main() {
       forceDefault: forceDefault,
     );
     final cubit = ProviderWizardCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       flow: flow,
       access: session.access,
       backendId: store.backend.id,
@@ -134,7 +138,7 @@ void main() {
   group('steps and summary (D7 table)', () {
     test('every state maps to its step of the breadcrumb', () async {
       final cubit = await open();
-      expect(wizardStepLabels, [
+      expect(wizardStepLabelsOf(AppLocalizationsEn()), [
         'API type',
         'Base URL',
         'Key',
@@ -242,36 +246,49 @@ void main() {
       expect(
         checkFailureTitle(
           _failed(ProviderCheckFailureKind.unauthorized, status: 401),
+          l10n: AppLocalizationsEn(),
         ),
         'Key rejected (401)',
       );
       expect(
         checkFailureTitle(
           _failed(ProviderCheckFailureKind.unauthorized, status: 403),
+          l10n: AppLocalizationsEn(),
         ),
         'Key rejected (403)',
       );
       expect(
-        checkFailureTitle(_failed(ProviderCheckFailureKind.unreachable)),
+        checkFailureTitle(
+          _failed(ProviderCheckFailureKind.unreachable),
+          l10n: AppLocalizationsEn(),
+        ),
         'Server unreachable',
       );
       expect(
-        checkFailureTitle(_failed(ProviderCheckFailureKind.timeout)),
+        checkFailureTitle(
+          _failed(ProviderCheckFailureKind.timeout),
+          l10n: AppLocalizationsEn(),
+        ),
         'Timed out after 10 s',
       );
       expect(
-        checkFailureTitle(_failed(ProviderCheckFailureKind.tlsError)),
+        checkFailureTitle(
+          _failed(ProviderCheckFailureKind.tlsError),
+          l10n: AppLocalizationsEn(),
+        ),
         'TLS error',
       );
       expect(
         checkFailureTitle(
           _failed(ProviderCheckFailureKind.badResponse, status: 502),
+          l10n: AppLocalizationsEn(),
         ),
         'Unexpected response (502)',
       );
       expect(
         checkFailureTitle(
           _failed(ProviderCheckFailureKind.notFound, status: 404),
+          l10n: AppLocalizationsEn(),
         ),
         'Model list not found (404)',
       );
@@ -294,6 +311,7 @@ void main() {
       expect(
         checkFailureNote(
           _failed(ProviderCheckFailureKind.notFound, status: 404),
+          l10n: AppLocalizationsEn(),
         ),
         'The server answered, but GET /models does not exist. '
         'OpenAI-compatible servers usually live under /v1.',
@@ -301,6 +319,7 @@ void main() {
       expect(
         checkFailureNote(
           _failed(ProviderCheckFailureKind.unauthorized, status: 401),
+          l10n: AppLocalizationsEn(),
         ),
         isNull,
       );
@@ -323,7 +342,7 @@ void main() {
       await pumpEventQueue();
 
       final key = cubit.state.setup as ChoosingKey;
-      final options = wizardKeyOptions(key);
+      final options = wizardKeyOptions(key, l10n: AppLocalizationsEn());
       expect(options.map((o) => o.kind), [
         WizardKeyKind.environment,
         WizardKeyKind.none,
@@ -339,7 +358,10 @@ void main() {
       cubit.dispatch(const BaseUrlSubmitted('https://api.openai.com/v1'));
       await pumpEventQueue();
 
-      final options = wizardKeyOptions(cubit.state.setup as ChoosingKey);
+      final options = wizardKeyOptions(
+        cubit.state.setup as ChoosingKey,
+        l10n: AppLocalizationsEn(),
+      );
       expect(options.map((o) => o.label), [
         'Store in file as "codelab/openai"',
         'Read from environment variable (OPENAI_API_KEY)',
@@ -359,14 +381,23 @@ void main() {
 
         final key = cubit.state.setup as ChoosingKey;
         expect(key.existingSecret, 'codelab/llm-example');
-        expect(wizardKeyOptions(key).map((o) => o.kind), [
-          WizardKeyKind.keepStored,
-          WizardKeyKind.replace,
-          WizardKeyKind.environment,
-          WizardKeyKind.none,
-        ]);
-        expect(wizardKeyOptions(key).first.label, 'Use the stored key');
-        expect(wizardKeyOptions(key)[1].label, 'Replace it');
+        expect(
+          wizardKeyOptions(key, l10n: AppLocalizationsEn()).map((o) => o.kind),
+          [
+            WizardKeyKind.keepStored,
+            WizardKeyKind.replace,
+            WizardKeyKind.environment,
+            WizardKeyKind.none,
+          ],
+        );
+        expect(
+          wizardKeyOptions(key, l10n: AppLocalizationsEn()).first.label,
+          'Use the stored key',
+        );
+        expect(
+          wizardKeyOptions(key, l10n: AppLocalizationsEn())[1].label,
+          'Replace it',
+        );
       },
     );
   });
@@ -634,7 +665,10 @@ void main() {
         final failed = cubit.state.setup as SaveFailed;
         expect(failed.failure.errorType, 'StateError');
         expect(cubit.state.reviewNotice, isNull);
-        expect(wizardSaveFailureText(failed), isNot(contains(leakMarker)));
+        expect(
+          wizardSaveFailureText(failed, l10n: AppLocalizationsEn()),
+          isNot(contains(leakMarker)),
+        );
       },
     );
   });
@@ -782,6 +816,7 @@ void main() {
       final before = await real.config.snapshot(cwd: '${root.path}/project');
       final flow = await real.openWizard(editing: entry);
       final cubit = ProviderWizardCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         flow: flow,
         access: real.access,
         backendId: 'file',
@@ -908,6 +943,7 @@ $realHomeConfig
       final hintLog = RecordingLogger();
       final before = await real.config.snapshot(cwd: '${root.path}/project');
       final cubit = ProviderWizardCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         flow: await real.openWizard(),
         access: real.access,
         backendId: 'file',
@@ -945,6 +981,7 @@ $realHomeConfig
       )).firstWhere((e) => e.id == 'llm-example');
       final flow = await real.openWizard(editing: entry);
       final second = ProviderWizardCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         flow: flow,
         access: real.access,
         backendId: 'file',
@@ -984,6 +1021,7 @@ $realHomeConfig
       Future<ProviderWizardCubit> open(Duration timeout) async {
         final flow = await real.openWizard();
         final cubit = ProviderWizardCubit(
+          strings: FixedAppStrings(AppLocalizationsEn()),
           flow: flow,
           access: real.access,
           backendId: 'file',

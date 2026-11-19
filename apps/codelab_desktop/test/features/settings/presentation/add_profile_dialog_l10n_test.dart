@@ -39,6 +39,7 @@ import '../../../support/fake_profile_secrets.dart';
 import '../../../support/in_memory_profile_store.dart';
 import '../../../support/l10n_mix.dart';
 import '../../../support/test_app_scope.dart';
+import '../../../support/no_text_leak.dart';
 
 Finder _key(String key) => find.byKey(ValueKey(key));
 
@@ -551,7 +552,7 @@ void main() {
       expect(find.text('Профиль сохранён'), findsOneWidget);
       expect(
         find.textContaining(
-          'Добавлен в profiles.json как box',
+          'Добавлен в profiles.json как «box»',
           findRichText: true,
         ),
         findsOneWidget,
@@ -620,7 +621,12 @@ void main() {
         find.text('Не удалось сохранить токен. Повторите попытку.'),
         findsOneWidget,
       );
-      expect(find.textContaining('sk-test-leak-0123456789'), findsNothing);
+      // Скрытое поле ввода остаётся на экране, а `find.textContaining` видит и
+      // `EditableText`; значения нет ни в одном `Text` (как в en-тестах).
+      expect(
+        findVisibleTextContaining('sk-test-leak-0123456789'),
+        findsNothing,
+      );
       await tester.tap(_key('add-profile-cancel'));
       await tester.pumpAndSettle();
       await tearDownApp(tester);
@@ -660,7 +666,12 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.textContaining('sk-test-leak-0123456789'), findsNothing);
+      // Скрытое поле ввода остаётся на экране, а `find.textContaining` видит и
+      // `EditableText`; значения нет ни в одном `Text` (как в en-тестах).
+      expect(
+        findVisibleTextContaining('sk-test-leak-0123456789'),
+        findsNothing,
+      );
       await tester.tap(_key('add-profile-cancel'));
       await tester.pumpAndSettle();
       await tearDownApp(tester);

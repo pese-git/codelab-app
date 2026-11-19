@@ -5,10 +5,13 @@ import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/language/app_language_cubit.dart' show AppStrings;
+import '../../../l10n/app_localizations.dart';
+import 'provider_messages.dart';
 import 'provider_settings_state.dart'
     show ProviderBanner, ProviderBannerAction, ProviderBannerKind;
 import 'provider_wizard_view.dart';
 
+export 'provider_messages.dart';
 export 'provider_settings_state.dart'
     show ProviderBanner, ProviderBannerAction, ProviderBannerKind;
 export 'provider_wizard_view.dart';
@@ -41,13 +44,15 @@ final class ProviderWizardState {
   /// Состояние автомата моста.
   final ProviderSetupState setup;
 
-  /// Индекс текущего шага в [wizardStepLabels].
+  /// Индекс текущего шага в `wizardStepLabelsOf`.
   final int stepIndex;
 
-  /// Сводка пройденных шагов (см. `wizardSummaryOf`).
+  /// Сводка пройденных шагов (см. `wizardSummaryOf`); текст — функция
+  /// «(состояние автомата, язык)», пересобирается при смене языка (D5).
   final List<WizardSummaryRow> summary;
 
-  /// Баннер «Review» после конфликта записи; `null` — баннера нет.
+  /// Уведомление «Review» после конфликта записи на текущем языке; `null` —
+  /// уведомления нет.
   final String? reviewNotice;
 
   @override
@@ -89,17 +94,31 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
     this.logger,
     this.editingId,
     this.forceDefault = false,
-    // ЗАГЛУШКА задачи 4.1 change `add-desktop-localization` (D5): порт языка
-    // принят, но Cubit на него не подписывается; поведение — задача 4.2.
-    AppStrings? strings,
-  }) : _flow = flow,
+    required AppStrings strings,
+  }) : _strings = strings,
+       _flow = flow,
        _access = access,
        _backendId = backendId,
        _isAgentConnected = isAgentConnected,
        _startFailed = startFailed ?? (() => false),
-       super(_stateOf(flow.current, backendId, access, conflict: false)) {
+       super(
+         _stateOf(
+           flow.current,
+           backendId,
+           access,
+           strings.current,
+           conflict: false,
+         ),
+       ) {
     _subscription = _flow.states.listen(_onSetup);
+    // Одна подписка на язык на весь срок жизни Cubit (D5 п. 3, R3):
+    // пересобирает сводку и уведомление из последнего состояния автомата,
+    // самого автомата не трогает; отменяется в `close()`.
+    _languageSubscription = strings.changes.listen(_handleLanguage);
   }
+
+  final AppStrings _strings;
+  late final StreamSubscription<AppLocalizations> _languageSubscription;
 
   final ProviderSetupFlow _flow;
   final EditableSettings _access;
@@ -140,8 +159,13 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
   /// Правка существующего провайдера.
   bool get editing => editingId != null;
 
-  /// Заголовок диалога: `Add provider` или `Edit provider <id>`.
-  String get title => editing ? 'Edit provider $editingId' : 'Add provider';
+  /// Заголовок диалога: `Add provider` или `Edit provider <id>` на текущем
+  /// языке. Геттер читает язык в момент вызова: заголовок — функция
+  /// «(режим, язык)» и не хранится (D5).
+  String get title {
+    final l10n = _strings.current;
+    return editing ? l10n.wizardTitleEdit(editingId!) : l10n.wizardTitleAdd;
+  }
 
   /// Цель записи «This project only»: слой `projectLocal` из доступа сессии
   /// (D5); `null` — папки проекта нет.
@@ -204,7 +228,24 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
       unawaited(_finishDone(setup));
       return;
     }
-    emit(_stateOf(setup, _backendId, _access, conflict: _conflict));
+    emit(
+      _stateOf(
+        setup,
+        _backendId,
+        _access,
+        _strings.current,
+        conflict: _conflict,
+      ),
+    );
+  }
+
+  /// Смена языка: пересобирает сводку и уведомление из последнего состояния
+  /// автомата. Автомат, план и ввод не меняются; после `close` — игнорируется.
+  void _handleLanguage(AppLocalizations l10n) {
+    if (isClosed) {
+      return;
+    }
+    emit(_stateOf(state.setup, _backendId, _access, l10n, conflict: _conflict));
   }
 
   /// Публикует `Done` после расчёта подсказки «Restart agent».
@@ -222,7 +263,15 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
       return;
     }
     _savedBanner = _bannerFor(done, needsRestart: needsRestart);
-    emit(_stateOf(done, _backendId, _access, conflict: _conflict));
+    emit(
+      _stateOf(
+        done,
+        _backendId,
+        _access,
+        _strings.current,
+        conflict: _conflict,
+      ),
+    );
   }
 
   /// Называет ли мост провайдера [id] по снимкам до и после записи; любой сбой
@@ -249,14 +298,20 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
   static ProviderWizardState _stateOf(
     ProviderSetupState setup,
     String backendId,
-    EditableSettings access, {
+    EditableSettings access,
+    AppLocalizations l10n, {
     required bool conflict,
   }) => ProviderWizardState(
     setup: setup,
     stepIndex: wizardStepIndex(setup),
-    summary: wizardSummaryOf(setup, backendId: backendId, access: access),
+    summary: wizardSummaryOf(
+      setup,
+      backendId: backendId,
+      access: access,
+      l10n: l10n,
+    ),
     reviewNotice: conflict && setup is Reviewing
-        ? 'Config changed on disk — review and save again'
+        ? l10n.wizardReviewConflict
         : null,
   );
 
@@ -267,29 +322,34 @@ class ProviderWizardCubit extends Cubit<ProviderWizardState> {
   /// называет провайдера ([needsRestart], правило ядра `planConfigReload`) —
   /// модели появятся после «Restart agent»; иначе — простой итог (правка
   /// моделей и провайдер без ключа применяются сразу).
+  ///
+  /// Баннер — разовое сообщение: хранится типизированным ([WizardSavedMessage]),
+  /// текст строит страница на своём языке (D5).
   ProviderBanner _bannerFor(Done done, {required bool needsRestart}) {
+    final id = done.plan.providerId;
     if (!_isAgentConnected()) {
       return ProviderBanner(
         ProviderBannerKind.saved,
-        'Saved. The agent uses it the next time it starts.',
+        WizardSavedMessage(id, WizardSavedKind.nextStart),
         action: _startFailed() ? ProviderBannerAction.retry : null,
       );
     }
-    final id = done.plan.providerId;
     return ProviderBanner(
       ProviderBannerKind.saved,
-      done.committed.keyReplaced
-          ? 'Provider $id saved. The new key is used after Restart agent '
-                '(Settings › Connection).'
-          : needsRestart
-          ? 'Provider $id saved. Its models are available after Restart '
-                'agent (Settings › Connection).'
-          : 'Provider $id saved.',
+      WizardSavedMessage(
+        id,
+        done.committed.keyReplaced
+            ? WizardSavedKind.keyReplaced
+            : needsRestart
+            ? WizardSavedKind.needsRestart
+            : WizardSavedKind.plain,
+      ),
     );
   }
 
   @override
   Future<void> close() async {
+    await _languageSubscription.cancel();
     await _subscription.cancel();
     // `dispose` отменяет проверку и сбрасывает ссылку на значение ключа.
     await _flow.dispose();

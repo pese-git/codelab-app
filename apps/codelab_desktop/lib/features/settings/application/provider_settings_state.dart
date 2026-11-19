@@ -1,3 +1,10 @@
+import 'package:codelab_setup/codelab_setup.dart' show ProviderCheckFailureKind;
+
+import '../../../l10n/app_localizations.dart';
+import 'provider_messages.dart';
+
+export 'provider_messages.dart';
+
 /// Состояние страницы «Providers» (design.md change `add-provider-setup-ui`,
 /// D10, D21; spec app-settings «Страница «Providers»»).
 ///
@@ -73,11 +80,14 @@ enum ProviderBannerAction {
 }
 
 /// Баннер результата записи (ключ `providers-banner`).
+///
+/// Хранит типизированное [message] (D5), а не текст: текст строит
+/// presentation через `providerMessageText` на текущем языке.
 final class ProviderBanner {
-  const ProviderBanner(this.kind, this.text, {this.action});
+  const ProviderBanner(this.kind, this.message, {this.action});
 
   final ProviderBannerKind kind;
-  final String text;
+  final ProviderMessage message;
 
   /// Кнопка баннера (`providers-banner-retry`); `null` — без кнопки.
   final ProviderBannerAction? action;
@@ -89,48 +99,98 @@ final class ProviderBanner {
 /// Вид итога проверки для цвета тега.
 enum ProviderCheckKind { notChecked, running, ok, failed, keyMissing }
 
+/// Данные итога проверки провайдера: вход проекции [ProviderCheckView].
+///
+/// Почему данные, а не готовая строка: итог хранится за жизнь страницы, а
+/// язык может смениться между проверкой и показом. Cubit держит вид, число
+/// моделей, статус и время, а подписи собирает [ProviderCheckView.of] на
+/// текущем языке (`add-desktop-localization`, D5, правило 1).
+sealed class ProviderCheckOutcome {
+  const ProviderCheckOutcome();
+}
+
+/// Проверок за жизнь страницы не было.
+final class CheckNotRun extends ProviderCheckOutcome {
+  const CheckNotRun();
+}
+
+/// Запрос идёт.
+final class CheckInProgress extends ProviderCheckOutcome {
+  const CheckInProgress();
+}
+
+/// Успех: [models] моделей за [durationMs] мс в момент [at].
+final class CheckSucceeded extends ProviderCheckOutcome {
+  const CheckSucceeded({
+    required this.models,
+    required this.durationMs,
+    required this.at,
+  });
+
+  final int models;
+  final int durationMs;
+  final DateTime at;
+}
+
+/// Отказ вида [reason] (с кодом HTTP [status], если он был) в момент [at].
+final class CheckRejected extends ProviderCheckOutcome {
+  const CheckRejected({required this.reason, required this.at, this.status});
+
+  final ProviderCheckFailureKind reason;
+  final int? status;
+  final DateTime at;
+}
+
+/// Ключ не найден: запрос не отправлялся.
+final class CheckKeyMissing extends ProviderCheckOutcome {
+  const CheckKeyMissing();
+}
+
 /// Итог последней проверки провайдера: UI-состояние страницы, в файл не
 /// пишется (D10).
+///
+/// Подписи — функция «(данные итога, язык)»: [of] собирает их по
+/// [ProviderCheckOutcome] и каталогу текущего языка.
 final class ProviderCheckView {
   const ProviderCheckView._(this.kind, this.label, this.detail);
 
-  /// «Not checked» — проверок за жизнь страницы не было.
-  const ProviderCheckView.notChecked()
-    : this._(ProviderCheckKind.notChecked, 'not checked', 'Not checked yet');
-
-  /// Запрос идёт.
-  const ProviderCheckView.running()
-    : this._(ProviderCheckKind.running, 'checking…', 'Checking…');
-
-  /// `ok, <n> models`; [detail] — `14:01 · 12 models · 184 ms`.
-  factory ProviderCheckView.ok({
-    required int models,
-    required int durationMs,
-    required DateTime at,
-  }) => ProviderCheckView._(
-    ProviderCheckKind.ok,
-    'ok, ${_models(models)}',
-    '${_clock(at)} · ${_models(models)} · $durationMs ms',
-  );
-
-  /// Отказ с тегом [label] (`unauthorized`, `timeout`…); [status] — код HTTP.
-  factory ProviderCheckView.failed({
-    required String label,
-    required DateTime at,
-    int? status,
-  }) => ProviderCheckView._(
-    ProviderCheckKind.failed,
-    label,
-    '${_clock(at)} · $label${status == null ? '' : ' (HTTP $status)'}',
-  );
-
-  /// Ключ не найден: запрос не отправлялся.
-  const ProviderCheckView.keyMissing()
-    : this._(
-        ProviderCheckKind.keyMissing,
-        'Key: missing',
-        'Not checked: the key is missing',
+  /// Подписи итога [outcome] на языке [l10n].
+  factory ProviderCheckView.of(
+    ProviderCheckOutcome outcome,
+    AppLocalizations l10n,
+  ) => switch (outcome) {
+    CheckNotRun() => ProviderCheckView._(
+      ProviderCheckKind.notChecked,
+      l10n.providersCheckNotChecked,
+      l10n.providersCheckNotCheckedYet,
+    ),
+    CheckInProgress() => ProviderCheckView._(
+      ProviderCheckKind.running,
+      l10n.providersCheckRunning,
+      l10n.providersCheckRunningDetail,
+    ),
+    CheckSucceeded(:final models, :final durationMs, :final at) =>
+      ProviderCheckView._(
+        ProviderCheckKind.ok,
+        l10n.providersCheckOkLabel(models),
+        l10n.providersCheckOkDetail(_clock(at), models, durationMs),
+      ),
+    CheckRejected(:final reason, :final status, :final at) => () {
+      final label = _failureLabel(l10n, reason);
+      return ProviderCheckView._(
+        ProviderCheckKind.failed,
+        label,
+        status == null
+            ? l10n.providersCheckFailedDetail(_clock(at), label)
+            : l10n.providersCheckFailedDetailStatus(_clock(at), label, status),
       );
+    }(),
+    CheckKeyMissing() => ProviderCheckView._(
+      ProviderCheckKind.keyMissing,
+      l10n.providersCheckKeyMissing,
+      l10n.providersCheckKeyMissingDetail,
+    ),
+  };
 
   final ProviderCheckKind kind;
 
@@ -140,7 +200,17 @@ final class ProviderCheckView {
   /// Текст строки «Last check» раскрытой карточки.
   final String detail;
 
-  static String _models(int n) => n == 1 ? '1 model' : '$n models';
+  static String _failureLabel(
+    AppLocalizations l10n,
+    ProviderCheckFailureKind kind,
+  ) => switch (kind) {
+    ProviderCheckFailureKind.unauthorized => l10n.providersCheckUnauthorized,
+    ProviderCheckFailureKind.notFound => l10n.providersCheckNotFound,
+    ProviderCheckFailureKind.unreachable => l10n.providersCheckUnreachable,
+    ProviderCheckFailureKind.timeout => l10n.providersCheckTimeout,
+    ProviderCheckFailureKind.tlsError => l10n.providersCheckTlsError,
+    ProviderCheckFailureKind.badResponse => l10n.providersCheckBadResponse,
+  };
 
   static String _clock(DateTime at) =>
       '${at.hour.toString().padLeft(2, '0')}:'
@@ -158,6 +228,7 @@ final class ProviderRow {
     required this.keyLabel,
     required this.keyText,
     this.keyMono,
+    this.keyTail = '',
     required this.source,
     required this.isDefault,
     required this.editable,
@@ -183,6 +254,9 @@ final class ProviderRow {
   /// Строка «Key» раскрытой карточки: текст и моноширинная часть.
   final String keyText;
   final String? keyMono;
+
+  /// Обычный текст после [keyMono] в той же фразе (закрывающая кавычка).
+  final String keyTail;
 
   /// Строка «Source» раскрытой карточки.
   final String source;
@@ -230,6 +304,7 @@ final class ProviderRow {
     keyLabel: keyLabel,
     keyText: keyText,
     keyMono: keyMono,
+    keyTail: keyTail,
     source: source,
     isDefault: isDefault,
     editable: editable,

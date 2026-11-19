@@ -86,6 +86,7 @@ final class ProviderSetupFlow {
       var base =
           view.baseUrl ?? defaultProviderBaseUrl(view.kind ?? '')?.toString();
       String? initialError;
+      ProviderSetupErrorCode? initialCode;
       // В конфиге мог остаться адрес с userinfo (запись вне мастера): в
       // черновик и поле он не попадает, query сохраняется, а шаг просит
       // убрать имя и пароль (Q11, SETUP-1).
@@ -93,13 +94,18 @@ final class ProviderSetupFlow {
       if (parsed != null && parsed.userInfo.isNotEmpty) {
         base = parsed.replace(userInfo: '').toString();
         initialError = _userinfoError;
+        initialCode = ProviderSetupErrorCode.addressHasUserinfo;
       }
       _draft = ProviderDraft(
         providerId: view.id,
         kind: view.kind ?? 'openai-compatible',
         baseUrl: base,
       );
-      _state = EnteringBaseUrl(_draft!, error: initialError);
+      _state = EnteringBaseUrl(
+        _draft!,
+        error: initialError,
+        errorCode: initialCode,
+      );
     } else {
       _state = ChoosingPreset(List.unmodifiable(presets));
     }
@@ -235,7 +241,7 @@ final class ProviderSetupFlow {
         'provider_wizard.address_rejected',
         fields: {'reason': parsed.reason},
       );
-      _emit(EnteringBaseUrl(draft, error: error));
+      _emit(EnteringBaseUrl(draft, error: error, errorCode: parsed.code));
       return;
     }
     final uri = parsed.uri!;
@@ -279,12 +285,12 @@ final class ProviderSetupFlow {
   }
 
   /// Шаг ключа: до ответа порта `stored` шаг не принимает `KeySubmitted`.
-  void _enterKey(ProviderDraft draft, {String? error}) {
+  void _enterKey(ProviderDraft draft) {
     _draft = draft.copyWith(clearKey: true);
     final base = _draft!;
     final name = _secretNameOf(base.providerId);
     final epoch = ++_epoch;
-    _emit(_keyState(base, ready: false, existing: null, error: error));
+    _emit(_keyState(base, ready: false, existing: null));
     unawaited(() async {
       bool exists;
       try {
@@ -300,14 +306,7 @@ final class ProviderSetupFlow {
       if (_disposed || epoch != _epoch) {
         return;
       }
-      _emit(
-        _keyState(
-          base,
-          ready: true,
-          existing: exists ? name : null,
-          error: error,
-        ),
-      );
+      _emit(_keyState(base, ready: true, existing: exists ? name : null));
     }());
   }
 
@@ -316,6 +315,7 @@ final class ProviderSetupFlow {
     required bool ready,
     required String? existing,
     String? error,
+    ProviderSetupErrorCode? errorCode,
   }) {
     final editing = _editing;
     final literal = editing?.key is KeyLiteralInConfig;
@@ -331,6 +331,8 @@ final class ProviderSetupFlow {
       readOnlyHint: _keys.backend.writable ? null : _keys.readOnlyHint,
       existingSecret: existing,
       error: error,
+      errorCode: errorCode,
+      literalKeyInConfig: literal,
       notice: literal
           ? 'The key is written in config.yaml. Choose where to keep it instead.'
           : null,
@@ -343,6 +345,7 @@ final class ProviderSetupFlow {
     final choice = event.choice;
     final name = _secretNameOf(draft.providerId);
     String? error;
+    ProviderSetupErrorCode? code;
     switch (choice) {
       case StoreSecret(:final value):
         if (!state.canStoreSecret) {
@@ -350,20 +353,25 @@ final class ProviderSetupFlow {
               state.readOnlyHint ??
               state.backend.unavailableReason ??
               'The secret store is read-only.';
+          code = ProviderSetupErrorCode.secretStoreReadOnly;
         } else if (value.isEmpty) {
           error = 'Enter the API key.';
+          code = ProviderSetupErrorCode.keyEmpty;
         } else if (state.existingSecret != null && !event.replaceExisting) {
           error =
               'A stored key ${state.existingSecret} already exists in '
               '${state.backend.id}.';
+          code = ProviderSetupErrorCode.keyAlreadyStored;
         }
       case KeepStoredSecret():
         if (!state.canKeepStored) {
           error = 'There is no stored key to keep.';
+          code = ProviderSetupErrorCode.nothingToKeep;
         }
       case UseEnvVar(:final name):
         if (name.trim().isEmpty) {
           error = 'Enter the environment variable name.';
+          code = ProviderSetupErrorCode.envVarEmpty;
         }
       case NoKey():
         break;
@@ -375,6 +383,7 @@ final class ProviderSetupFlow {
           ready: true,
           existing: state.existingSecret,
           error: error,
+          errorCode: code,
         ),
       );
       return;
@@ -590,10 +599,13 @@ final class ProviderSetupFlow {
 
   void _onDetails(EnteringModelDetails state, ModelDetailsSubmitted event) {
     String? error;
+    ProviderSetupErrorCode? code;
     if (event.contextWindow <= 0) {
       error = 'Context window must be a positive number.';
+      code = ProviderSetupErrorCode.contextWindowInvalid;
     } else if (event.maxOutputTokens != null && event.maxOutputTokens! <= 0) {
       error = 'Max output tokens must be a positive number.';
+      code = ProviderSetupErrorCode.maxOutputInvalid;
     }
     if (error != null) {
       _emit(
@@ -602,6 +614,7 @@ final class ProviderSetupFlow {
           state.modelId,
           state.suggestedContextWindow,
           error: error,
+          errorCode: code,
         ),
       );
       return;
@@ -652,9 +665,14 @@ final class ProviderSetupFlow {
     ProviderSetupPlan plan,
     ProviderDraft draft, {
     String? error,
-  }) => Reviewing(plan, [
-    if (draft.notVerified case final kind?) 'Not verified: $kind',
-  ], error: error);
+    ProviderSetupErrorCode? errorCode,
+  }) => Reviewing(
+    plan,
+    [if (draft.notVerified case final kind?) 'Not verified: $kind'],
+    error: error,
+    errorCode: errorCode,
+    notVerified: draft.notVerified,
+  );
 
   ProviderSetupPlan _buildPlan(ProviderDraft draft) {
     final editing = _editing;
@@ -712,11 +730,13 @@ final class ProviderSetupFlow {
   void _onReviewEdited(Reviewing state, ReviewEdited event) {
     var plan = state.plan;
     String? error;
+    ProviderSetupErrorCode? code;
     if (event.providerId case final id? when _editing == null) {
       if (!RegExp(r'^[a-z0-9_-]+$').hasMatch(id) ||
           providerIdsOf(_snapshot).contains(id) ||
           plan.key is KeepStoredSecret) {
         error = 'Provider id must be unused and match [a-z0-9_-]+.';
+        code = ProviderSetupErrorCode.providerIdInvalid;
       } else {
         // «Replace it» относился к прежнему имени секрета: на новом имени он не
         // выбирался, и существующий секрет не должен перезаписаться молча
@@ -743,9 +763,10 @@ final class ProviderSetupFlow {
         plan = plan.copyWith(target: target);
       } else {
         error = 'This target is not available.';
+        code = ProviderSetupErrorCode.targetUnavailable;
       }
     }
-    _emit(_reviewing(plan, _draft!, error: error));
+    _emit(_reviewing(plan, _draft!, error: error, errorCode: code));
   }
 
   void _onConfirmSave(Reviewing state) {
@@ -784,6 +805,7 @@ final class ProviderSetupFlow {
             _ => 'The config file cannot be read.',
           },
           refusal: refusal,
+          notVerified: state.notVerified,
         ),
       );
       return;
@@ -884,13 +906,22 @@ final class ProviderSetupFlow {
             ready: true,
             existing: name,
             error: 'A stored key $name already exists in ${_keys.backend.id}.',
+            errorCode: ProviderSetupErrorCode.keyAlreadyStored,
           ),
         );
       case ProviderKeyNotStored(:final reason):
         _logSaveFailed(plan, 'secret_failed');
         _draft = _draft!.copyWith(clearKey: true);
         _epoch++;
-        _emit(_keyState(_draft!, ready: true, existing: null, error: reason));
+        _emit(
+          _keyState(
+            _draft!,
+            ready: true,
+            existing: null,
+            error: reason,
+            errorCode: ProviderSetupErrorCode.keyNotStored,
+          ),
+        );
       case ProviderConfigNotSaved():
         _logSaveFailed(
           plan,
@@ -1091,9 +1122,14 @@ final class ProviderSetupFlow {
   /// Разбор адреса шага: `http`/`https`, хост обязателен, userinfo отклоняется
   /// (валидатор ядра секреты в `base_url` не проверяет — Q11), завершающий `/`
   /// убирается; query и fragment допустимы.
-  ({Uri? uri, String? normalized, String? error, String reason}) _parseAddress(
-    String text,
-  ) {
+  ({
+    Uri? uri,
+    String? normalized,
+    String? error,
+    ProviderSetupErrorCode? code,
+    String reason,
+  })
+  _parseAddress(String text) {
     final uri = Uri.tryParse(text.trim());
     if (uri == null ||
         !uri.hasScheme ||
@@ -1103,6 +1139,7 @@ final class ProviderSetupFlow {
         uri: null,
         normalized: null,
         error: 'Enter an http or https address.',
+        code: ProviderSetupErrorCode.addressInvalid,
         reason: 'invalid',
       );
     }
@@ -1111,6 +1148,7 @@ final class ProviderSetupFlow {
         uri: null,
         normalized: null,
         error: _userinfoError,
+        code: ProviderSetupErrorCode.addressHasUserinfo,
         reason: 'userinfo',
       );
     }
@@ -1123,6 +1161,7 @@ final class ProviderSetupFlow {
       uri: normalized,
       normalized: normalized.toString(),
       error: null,
+      code: null,
       reason: '',
     );
   }

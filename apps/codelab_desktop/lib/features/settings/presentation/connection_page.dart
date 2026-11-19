@@ -5,6 +5,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/app_scope.dart';
+import '../../../l10n/l10n.dart';
 import '../application/connection_settings_cubit.dart';
 import 'add_profile_dialog.dart';
 
@@ -112,20 +113,24 @@ class _ConnectionPageState extends State<ConnectionPage> {
   ) {
     final ready = state is ConnectionSettingsReady ? state : null;
     final rows = state.rows;
+    final l10n = context.l10n;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            const Expanded(
-              child: CodeLabText('Connection', role: CodeLabTextRole.title),
+            Expanded(
+              child: CodeLabText(
+                l10n.settingsPageConnectionTitle,
+                role: CodeLabTextRole.title,
+              ),
             ),
             // В CommandBar только «Add profile»: «Restart agent» стоит рядом
             // со своим объяснением в блоке «Behavior» (D9).
             CodeLabButton(
               key: const ValueKey('connection-add-profile'),
-              label: 'Add profile',
+              label: l10n.connectionAddProfile,
               icon: FluentIcons.add,
               emphasis: CodeLabButtonEmphasis.primary,
               onPressed: ready == null
@@ -139,48 +144,38 @@ class _ConnectionPageState extends State<ConnectionPage> {
           _bar(
             const ValueKey('connection-profiles-unreadable'),
             InfoBarSeverity.error,
-            switch (state.path) {
-              final path? =>
-                'Cannot read $path: ${state.reason}. Fix or remove the '
-                    'file; CodeLab will not overwrite it.',
-              null => 'Cannot use the profiles: ${state.reason}.',
-            },
+            _unreadableText(l10n, state),
           ),
         if (state.failure case final failure?)
           _bar(
             const ValueKey('connection-failure'),
             InfoBarSeverity.error,
-            failure,
+            _failureText(l10n, failure),
           ),
         if (state.showsReadOnlyNotice)
           _bar(
             const ValueKey('connection-remote-read-only'),
             InfoBarSeverity.warning,
-            'Read-only: this agent runs on ${state.remoteOrigin}',
-            content:
-                'Change providers and MCP on that host: codelab provider add, '
-                'codelab mcp add, codelab config set.',
+            l10n.connectionReadOnlyTitle(state.remoteOrigin ?? ''),
+            content: l10n.settingsRemoteHostHint,
           ),
         if (ready != null && ready.ignoredDefaultEntry)
           _bar(
             const ValueKey('connection-profiles-ignored-default'),
             InfoBarSeverity.warning,
-            'Profile "default" in profiles.json is ignored: default is the '
-            'built-in agent. Remove it with codelab profiles remove default.',
+            l10n.connectionIgnoredDefault,
             action: CodeLabButton(
-              label: 'Remove',
+              label: l10n.commonRemove,
               onPressed: () => unawaited(_removeIgnoredDefault(cubit)),
             ),
           ),
         CodeLabSettingsSection(
-          title: 'Profiles',
+          title: l10n.connectionSectionProfiles,
           children: [
-            const Padding(
-              padding: EdgeInsets.only(bottom: 4),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
               child: CodeLabText(
-                'Shared with codelab_cli through profiles.json in '
-                r'$CODELAB_HOME. The default profile is used when the '
-                'agent starts, until you choose another with Use.',
+                l10n.connectionProfilesHelp,
                 role: CodeLabTextRole.caption,
               ),
             ),
@@ -223,7 +218,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
         // «Behavior» не зависит от `profiles.json` и есть в любом состоянии
         // (D4).
         CodeLabSettingsSection(
-          title: 'Behavior',
+          title: l10n.connectionSectionBehavior,
           children: [_restartRow(cubit, state)],
         ),
         const SizedBox(height: 12),
@@ -232,17 +227,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
           // автотест раскрывает справку.
           headerKey: const ValueKey('connection-join-cli-help'),
           leading: const Icon(FluentIcons.command_prompt, size: 16),
-          title: const CodeLabText('Join a session started in the CLI'),
+          title: CodeLabText(l10n.connectionJoinCliTitle),
           expanded: _helpExpanded,
           onToggle: (value) => setState(() => _helpExpanded = value),
           // Справка без замка, режима «только чтение» и «Fork»: lease не
           // реализован (D10).
           body: _helpExpanded
-              ? const CodeLabText(
-                  'On the host run codelab-agent serve --ws <port>; the CLI '
-                  'connects with codelab -a <profile>. Choose the same '
-                  'WebSocket profile here; its sessions appear in the '
-                  'sidebar.',
+              ? CodeLabText(
+                  l10n.connectionJoinCliBody,
                   role: CodeLabTextRole.caption,
                 )
               : null,
@@ -250,6 +242,36 @@ class _ConnectionPageState extends State<ConnectionPage> {
       ],
     );
   }
+
+  /// Текст InfoBar нечитаемого `profiles.json` из типизированной причины
+  /// (D5, D6): рамка и причины приложения переводятся, причина composition
+  /// root — как есть.
+  static String _unreadableText(
+    AppLocalizations l10n,
+    ConnectionSettingsUnreadable state,
+  ) {
+    final reason = switch (state.reason) {
+      ProfilesUnsupportedFile() => l10n.connectionUnreadableUnsupported,
+      ProfilesNotAvailable(:final message) => message,
+      ProfilesCannotRead(:final errorType) =>
+        l10n.connectionUnreadableCannotRead(errorType),
+    };
+    return switch (state.path) {
+      final path? => l10n.connectionUnreadableWithPath(path, reason),
+      null => l10n.connectionUnreadableWithoutPath(reason),
+    };
+  }
+
+  /// Текст разового сообщения о сбое по его типу (D5).
+  static String _failureText(
+    AppLocalizations l10n,
+    ConnectionSettingsFailure failure,
+  ) => switch (failure) {
+    ProfileSaveFailure() => l10n.connectionFailureSaveFailed,
+    TokenNotDeleted(:final secretName) => l10n.connectionFailureTokenNotDeleted(
+      secretName,
+    ),
+  };
 
   Widget _restartRow(
     ConnectionSettingsCubit cubit,
@@ -330,10 +352,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
     ConnectionProfileRow row,
   ) async {
     final decision = await _confirmRemove(
-      title: 'Remove profile ${row.title}?',
-      details:
-          'The entry is deleted from profiles.json. Environment variables '
-          'and other settings are not touched.',
+      title: (l10n) => l10n.connectionRemoveTitle(row.title),
+      details: (l10n) => l10n.connectionRemoveDetails,
       // Флажок только у собственного секрета профиля; чужой секрет («Use
       // stored secret») не удаляется никогда (design.md change
       // `add-provider-setup-ui`, D14).
@@ -346,10 +366,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   Future<void> _removeIgnoredDefault(ConnectionSettingsCubit cubit) async {
     final decision = await _confirmRemove(
-      title: 'Remove the ignored "default" profile?',
-      details:
-          'Only the "default" entry is deleted from profiles.json; other '
-          'profiles stay.',
+      title: (l10n) => l10n.connectionIgnoredDefaultRemoveTitle,
+      details: (l10n) => l10n.connectionIgnoredDefaultRemoveDetails,
     );
     if (decision.confirmed && mounted) {
       await cubit.removeIgnoredDefault();
@@ -361,22 +379,26 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// token …», по умолчанию включённый (§12.4.9, шаг 8). Что с секретом
   /// делать и можно ли, решает `ProfileCommitter`, виджет передаёт только
   /// выбор пользователя.
+  ///
+  /// [title] и [details] — функции от каталога, а не готовые строки: текст
+  /// строится в `build` диалога по его `context`, поэтому открытый диалог
+  /// переводится вместе с деревом при смене языка (D5, п. 9).
   Future<({bool confirmed, bool deleteSecret})> _confirmRemove({
-    required String title,
-    required String details,
+    required String Function(AppLocalizations l10n) title,
+    required String Function(AppLocalizations l10n) details,
     String? ownSecret,
   }) async {
     var deleteSecret = ownSecret != null;
     final result = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => ContentDialog(
-        title: CodeLabDialogTitle(title),
+        title: CodeLabDialogTitle(title(dialogContext.l10n)),
         content: StatefulBuilder(
           builder: (context, setDialogState) => Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(details),
+              Text(details(context.l10n)),
               if (ownSecret != null) ...[
                 const SizedBox(height: 12),
                 Checkbox(
@@ -385,7 +407,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   onChanged: (value) =>
                       setDialogState(() => deleteSecret = value ?? false),
                   content: Flexible(
-                    child: Text('Also delete the stored token $ownSecret'),
+                    child: Text(
+                      context.l10n.connectionRemoveDeleteToken(ownSecret),
+                    ),
                   ),
                 ),
               ],
@@ -396,12 +420,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
           Button(
             key: const ValueKey('connection-remove-cancel'),
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(dialogContext.l10n.commonCancel),
           ),
           FilledButton(
             key: const ValueKey('connection-remove-confirm'),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Remove'),
+            child: Text(dialogContext.l10n.commonRemove),
           ),
         ],
       ),
@@ -440,6 +464,7 @@ class _ProfileRowCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final resources = FluentTheme.of(context).resources;
+    final l10n = context.l10n;
     final id = row.id;
     final token = row.token;
 
@@ -509,18 +534,18 @@ class _ProfileRowCard extends StatelessWidget {
                               ),
                             ),
                             if (row.isDefault)
-                              const CodeLabBadge(
-                                label: 'Default',
+                              CodeLabBadge(
+                                label: l10n.commonDefault,
                                 tone: CodeLabTone.accent,
                               ),
                             if (row.isCurrent)
-                              const CodeLabBadge(
-                                label: 'Current',
+                              CodeLabBadge(
+                                label: l10n.connectionBadgeCurrent,
                                 tone: CodeLabTone.success,
                               ),
                             if (row.isSelected)
-                              const CodeLabBadge(
-                                label: 'Selected',
+                              CodeLabBadge(
+                                label: l10n.connectionBadgeSelected,
                                 tone: CodeLabTone.accent,
                               ),
                             // Состояние соединения окна — без текста ошибки: её
@@ -529,7 +554,14 @@ class _ProfileRowCard extends StatelessWidget {
                               KeyedSubtree(
                                 key: ValueKey('connection-profile-status-$id'),
                                 child: CodeLabBadge(
-                                  label: status.label,
+                                  label: switch (status) {
+                                    ConnectionRowStatus.connecting =>
+                                      l10n.connectionStatusConnecting,
+                                    ConnectionRowStatus.connected =>
+                                      l10n.connectionStatusConnected,
+                                    ConnectionRowStatus.failed =>
+                                      l10n.connectionStatusFailed,
+                                  },
                                   tone: switch (status) {
                                     ConnectionRowStatus.connecting =>
                                       CodeLabTone.warning,
@@ -544,8 +576,8 @@ class _ProfileRowCard extends StatelessWidget {
                         ),
                       const SizedBox(height: 2),
                       if (row.isUnsaved)
-                        const CodeLabText(
-                          'Current connection (not saved)',
+                        CodeLabText(
+                          l10n.connectionRowNotSaved,
                           role: CodeLabTextRole.caption,
                         ),
                       CodeLabText(row.summary, role: CodeLabTextRole.caption),
@@ -553,7 +585,7 @@ class _ProfileRowCard extends StatelessWidget {
                         Column(
                           key: ValueKey('connection-profile-token-$id'),
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: _tokenTexts(token),
+                          children: _tokenTexts(l10n, token),
                         ),
                     ],
                   ),
@@ -571,17 +603,17 @@ class _ProfileRowCard extends StatelessWidget {
                 if (row.canUse)
                   CodeLabButton(
                     key: ValueKey('connection-profile-use-$id'),
-                    label: 'Use',
+                    label: l10n.connectionRowUse,
                     emphasis: CodeLabButtonEmphasis.primary,
                     onPressed: onUse,
                   ),
                 if (row.hasFileActions)
                   CodeLabButton(
                     key: ValueKey('connection-profile-rename-$id'),
-                    label: 'Rename',
+                    label: l10n.connectionRowRename,
                     onPressed: editable && !renaming ? onStartRename : null,
                   ),
-                if (row.hasFileActions) _removeButton(),
+                if (row.hasFileActions) _removeButton(l10n),
               ],
             ),
           ],
@@ -593,48 +625,56 @@ class _ProfileRowCard extends StatelessWidget {
   /// «Remove»: недоступна у текущего и выбранного профиля с подсказкой `Use
   /// another profile first.` (spec app-settings, D18); решение о доступности
   /// принимает Cubit (`canRemove`).
-  Widget _removeButton() {
+  Widget _removeButton(AppLocalizations l10n) {
     final button = CodeLabButton(
       key: ValueKey('connection-profile-remove-${row.id}'),
-      label: 'Remove',
+      label: l10n.commonRemove,
       onPressed: editable && row.canRemove ? onRemove : null,
     );
     return row.isCurrent || row.isSelected
-        ? Tooltip(message: 'Use another profile first.', child: button)
+        ? Tooltip(message: l10n.connectionRowUseAnotherFirst, child: button)
         : button;
   }
 
   /// Источник токена: только имя переменной или ссылки, без значения (D13).
-  static List<Widget> _tokenTexts(ProfileTokenView token) => switch (token) {
-    NoTokenView() => const [
-      CodeLabText('No token', role: CodeLabTextRole.caption),
+  static List<Widget> _tokenTexts(
+    AppLocalizations l10n,
+    ProfileTokenView token,
+  ) => switch (token) {
+    NoTokenView() => [
+      CodeLabText(l10n.connectionTokenNone, role: CodeLabTextRole.caption),
     ],
     EnvTokenView(:final name, :final isSet) => [
-      CodeLabText('From \$$name', role: CodeLabTextRole.caption),
+      CodeLabText(
+        l10n.connectionTokenFromEnv('\$$name'),
+        role: CodeLabTextRole.caption,
+      ),
       if (!isSet)
-        CodeLabText(
-          "$name is not set in CodeLab's environment.",
-          role: CodeLabTextRole.caption,
-        ),
+        CodeLabText(l10n.tokenEnvNotSet(name), role: CodeLabTextRole.caption),
     ],
     SecretTokenView(:final name, :final backend, :final isSet) => [
       // Имя секрета — текст, а не редактируемое поле: правки профиля в 1.0
       // нет (D24). Наличие определено без чтения значения.
-      CodeLabText('Token secret $name', role: CodeLabTextRole.caption),
+      CodeLabText(
+        l10n.connectionTokenSecret(name),
+        role: CodeLabTextRole.caption,
+      ),
       Padding(
         padding: const EdgeInsets.only(top: 2),
         child: Align(
           alignment: Alignment.centerLeft,
           child: CodeLabBadge(
-            label: '$backend · ${isSet ? 'set' : 'missing'}',
+            label: isSet
+                ? l10n.connectionTokenSecretSet(backend)
+                : l10n.connectionTokenSecretMissing(backend),
             tone: isSet ? CodeLabTone.success : CodeLabTone.warning,
           ),
         ),
       ),
     ],
-    UnsupportedTokenView() => const [
+    UnsupportedTokenView() => [
       CodeLabText(
-        'unrecognized token reference (not supported in this version)',
+        l10n.connectionTokenUnsupported,
         role: CodeLabTextRole.caption,
       ),
     ],
@@ -689,7 +729,7 @@ class _RenameEditorState extends State<_RenameEditor> {
             key: ValueKey('connection-profile-rename-field-${widget.id}'),
             controller: _controller,
             autofocus: true,
-            placeholder: 'Name',
+            placeholder: context.l10n.connectionRenameName,
             onChanged: (_) => setState(() {}),
             onSubmitted: (_) {
               if (name.isNotEmpty) {
@@ -701,14 +741,14 @@ class _RenameEditorState extends State<_RenameEditor> {
         const SizedBox(width: 8),
         CodeLabButton(
           key: ValueKey('connection-profile-rename-save-${widget.id}'),
-          label: 'Save',
+          label: context.l10n.commonSave,
           emphasis: CodeLabButtonEmphasis.primary,
           onPressed: name.isEmpty ? null : () => widget.onSave(name),
         ),
         const SizedBox(width: 8),
         CodeLabButton(
           key: ValueKey('connection-profile-rename-cancel-${widget.id}'),
-          label: 'Cancel',
+          label: context.l10n.commonCancel,
           onPressed: widget.onCancel,
         ),
       ],

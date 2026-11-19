@@ -10,6 +10,8 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         WebSocketProfile,
         profileOrigin;
 
+import '../../../l10n/app_localizations.dart';
+
 // Origin адреса профиля — формула kit; реэкспорт сохраняет прежний импорт
 // `profileOrigin` из этого файла у остальных файлов app.
 export 'package:codelab_client_core/codelab_client_core.dart'
@@ -29,14 +31,33 @@ String profileTitle(ConnectionProfile profile) {
   return text.isEmpty || fromAgentArgument ? profile.id : profile.label;
 }
 
+/// Заголовок профиля на языке интерфейса.
+///
+/// Почему: подпись профиля встроенного агента (`embeddedConnectionProfile`,
+/// `Embedded agent`) — текст app, а не профиль пользователя, поэтому её
+/// переводят (`add-desktop-localization`, D6). Сам профиль и его `id` не
+/// меняются: меняется только подпись, которую строит проекция. Профиль
+/// пользователя (`Dev`) не переводится никогда (D7).
+///
+/// Как использовать: вместо [profileTitle] везде, где подпись показывается
+/// пользователю; [l10n] — каталог текущего языка (вход проекции, D5).
+String localizedProfileTitle(
+  ConnectionProfile profile,
+  AppLocalizations l10n,
+) => profile is EmbeddedProfile
+    ? l10n.connectionEmbeddedAgentTitle
+    : profileTitle(profile);
+
 /// Сводка профиля для строки: команда или адрес, без аргументов, `env` и
 /// значения токена (spec app-settings «Список профилей на странице
-/// «Connection»»).
-String profileSummary(ConnectionProfile profile) => switch (profile) {
-  StdioProfile(:final command) => command,
-  WebSocketProfile(:final uri) => profileOrigin(uri),
-  EmbeddedProfile() => 'Runs inside CodeLab; no separate process.',
-};
+/// «Connection»»). Сводка встроенного агента — текст app, переводится по
+/// [l10n] (D6).
+String profileSummary(ConnectionProfile profile, AppLocalizations l10n) =>
+    switch (profile) {
+      StdioProfile(:final command) => command,
+      WebSocketProfile(:final uri) => profileOrigin(uri),
+      EmbeddedProfile() => l10n.connectionEmbeddedAgentSummary,
+    };
 
 /// Источник токена WebSocket-профиля для строки: только имя, не значение.
 ///

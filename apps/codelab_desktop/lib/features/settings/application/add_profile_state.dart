@@ -8,6 +8,8 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ProfileKind,
         StoredSecretToken;
 
+import '../../../l10n/app_localizations.dart';
+
 /// Вариант токена WebSocket-профиля, как его выбирает пользователь (D14).
 ///
 /// Почему отдельный enum, а не `ProfileTokenChoice` kit: у каждого варианта
@@ -152,12 +154,24 @@ final class Editing extends AddProfileInProgress {
 }
 
 /// `ws://` к другой машине: ждём «Save anyway» (SETUP-10).
+///
+/// Почему данные, а не текст: подтверждение — функция «(черновик, язык)», а
+/// строить текст из готовой английской строки нельзя (D5, п. 1, п. 5).
+/// Presentation собирает фразу по [origin] и [hasToken] и перестраивает её
+/// при смене языка (`add-desktop-localization`).
 final class ConfirmingPlaintext extends AddProfileInProgress {
-  const ConfirmingPlaintext(super.form, {required this.message});
+  const ConfirmingPlaintext(
+    super.form, {
+    required this.origin,
+    required this.hasToken,
+  });
 
-  /// Текст подтверждения: адрес показан как `scheme://host:port`, без
-  /// `userinfo`, пути и query (D17).
-  final String message;
+  /// Адрес как `scheme://host:port`, без `userinfo`, пути и query (D17).
+  final String origin;
+
+  /// Выбран любой вариант токена, кроме «No token»: в подтверждении говорится
+  /// про токен, иначе — про промпты и файлы.
+  final bool hasToken;
 }
 
 /// Профиль записывается.
@@ -167,10 +181,54 @@ final class Saving extends AddProfileInProgress {
 
 /// Запись не удалась; черновик сохранён, можно повторить.
 final class SaveFailed extends AddProfileInProgress {
-  const SaveFailed(super.form, {required this.message});
+  const SaveFailed(super.form, {required this.failure});
 
-  /// Общий текст без `toString()` исключения (D17).
-  final String message;
+  /// Типизированный исход без `toString()` исключения (D17): текст строит
+  /// presentation на текущем языке (D5, вид «разовое сообщение»).
+  final AddProfileFailure failure;
+}
+
+/// Исход неудачной записи профиля для диалога «Add connection profile».
+///
+/// Почему закрытая иерархия: исход — разовое сообщение, которое не
+/// пересобрать из входов (D5). Тип и его аргументы хранятся в состоянии, а
+/// текст собирает presentation по `context.l10n`. Причина хранилища секретов
+/// ([SecretStoreReadOnlyFailure.reason]) — текст бэкенда без типа и
+/// показывается как есть (D6, D7). Значений токена и текстов исключений здесь
+/// нет (SETUP-19).
+sealed class AddProfileFailure {
+  const AddProfileFailure();
+}
+
+/// Запись самого профиля не удалась (или `profiles.json` не прочитан).
+final class ProfileWriteFailed extends AddProfileFailure {
+  const ProfileWriteFailed();
+}
+
+/// Запись секрета токена не удалась.
+final class SecretWriteFailed extends AddProfileFailure {
+  const SecretWriteFailed();
+}
+
+/// Профиль не записан, а созданный секрет [secretName] остался в [backendId]:
+/// диалог называет команду `codelab secret delete` (SETUP-24).
+final class OrphanedTokenFailure extends AddProfileFailure {
+  const OrphanedTokenFailure({
+    required this.backendId,
+    required this.secretName,
+  });
+
+  final String backendId;
+  final String secretName;
+}
+
+/// Хранилище секретов только для чтения. [reason] — причина, которую назвало
+/// само хранилище (показывается как есть); `null` — причины нет, текст
+/// «хранилище только для чтения» даёт app (`ProfileSaveFailed.storeReason`).
+final class SecretStoreReadOnlyFailure extends AddProfileFailure {
+  const SecretStoreReadOnlyFailure(this.reason);
+
+  final String? reason;
 }
 
 /// Id профиля, записанного за жизнь диалога.
@@ -198,3 +256,30 @@ final class Saved extends AddProfileState {
   /// Профиль стал профилем по умолчанию.
   final bool useByDefault;
 }
+
+/// Текст отказа записи по типу на языке [l10n] (D5): причину хранилища
+/// секретов показывает как есть, остальное переводит; значений токена и
+/// текстов исключений нет. Команда `codelab secret delete` и имя секрета —
+/// плейсхолдеры (D7).
+String addProfileFailureText(
+  AppLocalizations l10n,
+  AddProfileFailure failure,
+) => switch (failure) {
+  ProfileWriteFailed() => l10n.addProfileFailureProfile,
+  SecretWriteFailed() => l10n.addProfileFailureSecret,
+  OrphanedTokenFailure(:final backendId, :final secretName) =>
+    l10n.addProfileFailureOrphanedToken(backendId, secretName),
+  SecretStoreReadOnlyFailure(:final reason) =>
+    reason ?? l10n.secretStoreReadOnly,
+};
+
+/// Текст подтверждения `ws://` перед записью: про токен, если он выбран,
+/// иначе про промпты и файлы. Адрес [origin] — `scheme://host:port` без
+/// `userinfo`, пути и query (D17).
+String addProfilePlaintextText(
+  AppLocalizations l10n, {
+  required String origin,
+  required bool hasToken,
+}) => hasToken
+    ? l10n.addProfilePlaintextWithToken(origin)
+    : l10n.addProfilePlaintextWithoutToken(origin);

@@ -24,6 +24,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../support/fake_profile_secrets.dart';
 import '../../../support/recording_logger.dart';
+import 'package:codelab_desktop/l10n/app_localizations_en.dart';
+import '../../../support/app_strings.dart';
 
 const _defaultKey = 'codelab.connection.default_profile';
 const _connectOnStartKey = 'codelab.connection.connect_on_start';
@@ -208,6 +210,7 @@ void main() {
     ProfileStore? store,
   }) {
     final cubit = ConnectionSettingsCubit(
+      strings: FixedAppStrings(AppLocalizationsEn()),
       store: store ?? JsonFileProfileStore(profilesFile.path),
       openSecrets: () async => secrets,
       preferences: const SharedPreferencesConnectionPreferences(),
@@ -502,7 +505,8 @@ void main() {
       final state = cubit.state as ConnectionSettingsUnreadable;
       expect([for (final row in state.rows) row.id], ['embedded']);
       expect(state.path, profilesFile.path);
-      expect(state.reason, isNotEmpty);
+      // Причина — тип, а не текст: фразу строит presentation (D5, D6).
+      expect(state.reason, isA<ProfilesUnsupportedFile>());
       expect(await profilesFile.readAsString(), broken);
     });
 
@@ -711,6 +715,7 @@ void main() {
       final gate = Completer<void>();
       await profilesFile.writeAsString(withSecrets);
       final cubit = ConnectionSettingsCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         store: JsonFileProfileStore(profilesFile.path),
         openSecrets: () async {
           await gate.future;
@@ -739,6 +744,7 @@ void main() {
       var opened = 0;
       ConnectionSettingsCubit page() {
         final cubit = ConnectionSettingsCubit(
+          strings: FixedAppStrings(AppLocalizationsEn()),
           store: JsonFileProfileStore(profilesFile.path),
           openSecrets: () async {
             opened++;
@@ -818,10 +824,15 @@ void main() {
 
       final stored = await JsonFileProfileStore(profilesFile.path).load();
       expect(stored.any((p) => p.id == 'devbox'), isFalse);
+      // Разовое сообщение — типизированное (D5): имя секрета в состоянии,
+      // фраза и команда `codelab secret delete` — в presentation.
       expect(
         (cubit.state as ConnectionSettingsReady).failure,
-        'The profile was removed, but the stored token $ownName was not '
-        'deleted. Remove it with codelab secret delete $ownName.',
+        isA<TokenNotDeleted>().having(
+          (f) => f.secretName,
+          'secretName',
+          ownName,
+        ),
       );
       expect(
         logger.entries.singleWhere(
@@ -1156,6 +1167,7 @@ void main() {
         const SharedPreferencesConnectionPreferences(),
       );
       final cubit = ConnectionSettingsCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
         store: JsonFileProfileStore(profilesFile.path),
         openSecrets: () async => secrets,
         preferences: preferences,

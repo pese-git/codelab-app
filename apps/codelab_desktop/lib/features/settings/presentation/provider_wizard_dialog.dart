@@ -4,6 +4,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../l10n/l10n.dart';
 import '../application/provider_wizard_cubit.dart';
 
 /// Открывает мастер провайдера поверх [context] и возвращает будущее, которое
@@ -121,6 +122,7 @@ class _Frame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<ProviderWizardCubit>();
+    final stepLabels = wizardStepLabelsOf(context.l10n);
     final entries = [
       for (final row in state.summary)
         CodeLabKeyValueEntry(
@@ -149,12 +151,12 @@ class _Frame extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 CodeLabStepBreadcrumb(
-                  steps: wizardStepLabels,
+                  steps: stepLabels,
                   current: state.stepIndex,
                 ),
                 const SizedBox(height: 8),
                 ProgressBar(
-                  value: (state.stepIndex + 1) / wizardStepLabels.length * 100,
+                  value: (state.stepIndex + 1) / stepLabels.length * 100,
                 ),
                 if (showSummary && entries.isNotEmpty) ...[
                   const SizedBox(height: 12),
@@ -191,13 +193,13 @@ CodeLabButton _button(
 /// Кнопка «Cancel» (закрывает мастер, кроме `Saving`).
 Widget _cancel(BuildContext context, {bool enabled = true}) => _button(
   'provider-wizard-cancel',
-  'Cancel',
+  context.l10n.commonCancel,
   enabled ? context.read<ProviderWizardCubit>().cancel : null,
 );
 
 Widget _back(BuildContext context, {bool enabled = true}) => _button(
   'provider-wizard-back',
-  'Back',
+  context.l10n.commonBack,
   enabled
       ? () => context.read<ProviderWizardCubit>().dispatch(const Back())
       : null,
@@ -236,13 +238,14 @@ class _PresetStepState extends State<_PresetStep> {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<ProviderWizardCubit>();
+    final l10n = context.l10n;
     return _Frame(
       state: widget.state,
       bodyKey: const ValueKey('provider-wizard-type'),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _label('API type'),
+          _label(l10n.wizardStepApiType),
           RadioGroup<String>(
             groupValue: _selected,
             onChanged: (id) => setState(() => _selected = id ?? _selected),
@@ -255,7 +258,9 @@ class _PresetStepState extends State<_PresetStep> {
                     child: RadioButton<String>(
                       key: ValueKey('provider-wizard-preset-${preset.id}'),
                       value: preset.id,
-                      content: Text(preset.label),
+                      // Подпись пресета — по `id`, а не по английской строке
+                      // моста (D5 п. 5, D6).
+                      content: Text(wizardPresetLabel(l10n, preset)),
                     ),
                   ),
               ],
@@ -266,7 +271,7 @@ class _PresetStepState extends State<_PresetStep> {
       actions: [
         _button(
           'provider-wizard-next',
-          'Next',
+          l10n.commonNext,
           () => cubit.dispatch(PresetChosen(_selected)),
           primary: true,
         ),
@@ -302,6 +307,7 @@ class _BaseUrlStepState extends State<_BaseUrlStep> {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<ProviderWizardCubit>();
+    final l10n = context.l10n;
     final insecure = widget.setup.insecureHost;
     return _Frame(
       state: widget.state,
@@ -309,25 +315,26 @@ class _BaseUrlStepState extends State<_BaseUrlStep> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _label('Base URL'),
+          _label(l10n.wizardStepBaseUrl),
           TextBox(
             key: const ValueKey('provider-wizard-base-url-field'),
             controller: _controller,
             autofocus: true,
             onSubmitted: (text) => cubit.dispatch(BaseUrlSubmitted(text)),
           ),
-          if (widget.setup.error case final error?) _error(error),
+          if (wizardErrorText(widget.setup, l10n) case final error?)
+            _error(error),
           if (insecure != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: InfoBar(
                 key: const ValueKey('provider-wizard-insecure'),
-                title: Text('The key is sent unencrypted to $insecure.'),
+                title: Text(l10n.settingsKeyUnencryptedToHost(insecure)),
                 severity: InfoBarSeverity.warning,
                 isLong: true,
                 action: _button(
                   'provider-wizard-insecure-confirm',
-                  'Use http anyway',
+                  l10n.wizardInsecureConfirm,
                   () => cubit.dispatch(
                     InsecureAddressConfirmed(_controller.text),
                   ),
@@ -339,7 +346,7 @@ class _BaseUrlStepState extends State<_BaseUrlStep> {
       actions: [
         _button(
           'provider-wizard-next',
-          'Next',
+          l10n.commonNext,
           () => cubit.dispatch(BaseUrlSubmitted(_controller.text)),
           primary: true,
         ),
@@ -408,15 +415,21 @@ class _KeyStepState extends State<_KeyStep> {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<ProviderWizardCubit>();
+    final l10n = context.l10n;
     final setup = widget.setup;
-    final options = wizardKeyOptions(setup);
+    final options = wizardKeyOptions(setup, l10n: l10n);
     final selected = options.any((o) => o.kind == _selected)
         ? _selected!
         : _defaultKind(options);
+    // Подпись существующего ключа и ошибка `keyAlreadyStored` строятся из
+    // одного сообщения; дубль скрывается по типу, а не сравнением строк
+    // (D5 п. 5, D6 «Дедупликация в диалоге»).
     final existingNote = setup.existingSecret == null
         ? null
-        : 'A stored key ${setup.existingSecret} already exists in '
-              '${setup.backend.id}.';
+        : l10n.wizardErrorKeyAlreadyStored(
+            setup.existingSecret!,
+            setup.backend.id,
+          );
     final readOnly = setup.canStoreSecret
         ? null
         : setup.readOnlyHint ?? setup.backend.unavailableReason;
@@ -426,8 +439,8 @@ class _KeyStepState extends State<_KeyStep> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _label('API key source'),
-          if (setup.notice case final notice?)
+          _label(l10n.wizardKeySourceLabel),
+          if (wizardKeyNotice(setup, l10n) case final notice?)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: InfoBar(
@@ -476,7 +489,7 @@ class _KeyStepState extends State<_KeyStep> {
           if (selected == WizardKeyKind.store ||
               selected == WizardKeyKind.replace) ...[
             const SizedBox(height: 4),
-            _label('API key'),
+            _label(l10n.wizardKeyFieldLabel),
             PasswordBox(
               key: const ValueKey('provider-wizard-key-field'),
               controller: _secret,
@@ -486,14 +499,14 @@ class _KeyStepState extends State<_KeyStep> {
           ],
           if (selected == WizardKeyKind.environment) ...[
             const SizedBox(height: 4),
-            _label('Variable name'),
+            _label(l10n.wizardKeyEnvFieldLabel),
             TextBox(
               key: const ValueKey('provider-wizard-env-field'),
               controller: _env,
             ),
           ],
-          if (setup.error case final error? when error != existingNote)
-            _error(error),
+          if (!isKeyAlreadyStoredError(setup))
+            if (wizardErrorText(setup, l10n) case final error?) _error(error),
           if (!setup.ready)
             const Padding(
               padding: EdgeInsets.only(top: 8),
@@ -504,7 +517,7 @@ class _KeyStepState extends State<_KeyStep> {
       actions: [
         _button(
           'provider-wizard-next',
-          'Next',
+          l10n.commonNext,
           setup.ready ? () => cubit.dispatch(_submission(selected)) : null,
           primary: true,
         ),
@@ -542,6 +555,7 @@ class _CheckStepState extends State<_CheckStep> {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<ProviderWizardCubit>();
+    final l10n = context.l10n;
     final setup = widget.state.setup;
     if (setup is Checking) {
       return _Frame(
@@ -550,11 +564,11 @@ class _CheckStepState extends State<_CheckStep> {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                SizedBox.square(dimension: 16, child: ProgressRing()),
-                SizedBox(width: 10),
-                CodeLabText('Checking the address and the key…'),
+                const SizedBox.square(dimension: 16, child: ProgressRing()),
+                const SizedBox(width: 10),
+                CodeLabText(l10n.wizardChecking),
               ],
             ),
             const SizedBox(height: 8),
@@ -567,7 +581,7 @@ class _CheckStepState extends State<_CheckStep> {
     final failed = setup as CheckFailed;
     final choice = _choice ?? (failed.canUseV1 ? _Continue.useV1 : null);
     final base = failed.draft.displayBaseUrl ?? '';
-    final note = checkFailureNote(failed);
+    final note = checkFailureNote(failed, l10n: l10n);
     final notFound = failed.failure.kind == ProviderCheckFailureKind.notFound;
     return _Frame(
       state: widget.state,
@@ -577,7 +591,7 @@ class _CheckStepState extends State<_CheckStep> {
         children: [
           InfoBar(
             key: const ValueKey('provider-wizard-check-failure'),
-            title: Text(checkFailureTitle(failed)),
+            title: Text(checkFailureTitle(failed, l10n: l10n)),
             content: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -593,7 +607,7 @@ class _CheckStepState extends State<_CheckStep> {
           ),
           if (notFound) ...[
             const SizedBox(height: 12),
-            _label('How do you want to continue?'),
+            _label(l10n.wizardContinueQuestion),
             RadioGroup<_Continue>(
               groupValue: choice,
               onChanged: (value) => setState(() => _choice = value),
@@ -606,15 +620,15 @@ class _CheckStepState extends State<_CheckStep> {
                       child: RadioButton<_Continue>(
                         key: const ValueKey('provider-wizard-use-v1'),
                         value: _Continue.useV1,
-                        content: Text('Use $base/v1'),
+                        content: Text(l10n.wizardUseAddress('$base/v1')),
                       ),
                     ),
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: RadioButton<_Continue>(
-                      key: ValueKey('provider-wizard-manual-model'),
+                      key: const ValueKey('provider-wizard-manual-model'),
                       value: _Continue.manual,
-                      content: Text('Enter the model manually'),
+                      content: Text(l10n.wizardEnterModelManually),
                     ),
                   ),
                 ],
@@ -624,7 +638,7 @@ class _CheckStepState extends State<_CheckStep> {
               TextBox(
                 key: const ValueKey('provider-wizard-manual-model-field'),
                 controller: _model,
-                placeholder: 'Model id',
+                placeholder: l10n.wizardModelId,
               ),
           ],
           if (_confirmSkip)
@@ -632,15 +646,12 @@ class _CheckStepState extends State<_CheckStep> {
               padding: const EdgeInsets.only(top: 12),
               child: InfoBar(
                 key: const ValueKey('provider-wizard-skip-warning'),
-                title: const Text(
-                  'The address and the key are not verified, and the model '
-                  'list is not available. You will enter the model yourself.',
-                ),
+                title: Text(l10n.wizardSkipWarning),
                 severity: InfoBarSeverity.warning,
                 isLong: true,
                 action: _button(
                   'provider-wizard-skip-confirm',
-                  'Continue without check',
+                  l10n.wizardSkipConfirm,
                   () => cubit.dispatch(const SkipCheck(confirmed: true)),
                 ),
               ),
@@ -651,14 +662,14 @@ class _CheckStepState extends State<_CheckStep> {
         if (notFound && choice == _Continue.manual)
           _button(
             'provider-wizard-next',
-            'Continue',
+            l10n.commonContinue,
             () => cubit.dispatch(ModelEnteredManually(_model.text)),
             primary: true,
           )
         else
           _button(
             'provider-wizard-retry',
-            'Retry',
+            l10n.commonRetry,
             () => cubit.dispatch(
               choice == _Continue.useV1 && failed.canUseV1
                   ? const UseV1Address()
@@ -669,7 +680,7 @@ class _CheckStepState extends State<_CheckStep> {
         if (failed.canSkip && !_confirmSkip)
           _button(
             'provider-wizard-skip-check',
-            'Save without check',
+            l10n.wizardSaveWithoutCheck,
             () => setState(() => _confirmSkip = true),
           ),
         _back(context),
@@ -712,6 +723,7 @@ class _ModelStepState extends State<_ModelStep> {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<ProviderWizardCubit>();
+    final l10n = context.l10n;
     final needle = _filter.text.trim().toLowerCase();
     final models = [
       for (final model in widget.setup.models)
@@ -724,15 +736,15 @@ class _ModelStepState extends State<_ModelStep> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (!widget.setup.checked)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
               child: CodeLabText(
-                'The model list was not checked: enter the model id.',
+                l10n.wizardModelNotChecked,
                 role: CodeLabTextRole.caption,
               ),
             ),
           if (widget.setup.models.isNotEmpty) ...[
-            _label('Model (type to filter)'),
+            _label(l10n.wizardModelFilter),
             TextBox(
               key: const ValueKey('provider-wizard-model-filter'),
               controller: _filter,
@@ -760,7 +772,7 @@ class _ModelStepState extends State<_ModelStep> {
                     ),
                   ListTile(
                     key: const ValueKey('provider-wizard-model-manual'),
-                    title: const Text('Enter model id manually'),
+                    title: Text(l10n.wizardModelManual),
                     onPressed: () => setState(() => _manualMode = true),
                   ),
                 ],
@@ -769,11 +781,11 @@ class _ModelStepState extends State<_ModelStep> {
           ],
           if (_manualMode) ...[
             const SizedBox(height: 8),
-            if (widget.setup.models.isEmpty) _label('Model id'),
+            if (widget.setup.models.isEmpty) _label(l10n.wizardModelId),
             TextBox(
               key: const ValueKey('provider-wizard-model-manual-field'),
               controller: _manual,
-              placeholder: 'Model id',
+              placeholder: l10n.wizardModelId,
             ),
           ],
         ],
@@ -782,7 +794,7 @@ class _ModelStepState extends State<_ModelStep> {
         if (_manualMode)
           _button(
             'provider-wizard-next',
-            'Next',
+            l10n.commonNext,
             () => cubit.dispatch(ModelEnteredManually(_manual.text)),
             primary: true,
           ),
@@ -819,6 +831,7 @@ class _DetailsStepState extends State<_DetailsStep> {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<ProviderWizardCubit>();
+    final l10n = context.l10n;
     return _Frame(
       state: widget.state,
       bodyKey: const ValueKey('provider-wizard-model'),
@@ -826,11 +839,11 @@ class _DetailsStepState extends State<_DetailsStep> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           CodeLabText(
-            'Limits of ${widget.setup.modelId}',
+            l10n.wizardLimitsOf(widget.setup.modelId),
             role: CodeLabTextRole.strong,
           ),
           const SizedBox(height: 8),
-          _label('Context window'),
+          _label(l10n.wizardContextWindow),
           TextBox(
             key: const ValueKey('provider-wizard-context-window'),
             controller: _window,
@@ -838,20 +851,21 @@ class _DetailsStepState extends State<_DetailsStep> {
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           ),
           const SizedBox(height: 8),
-          _label('Max output tokens (optional)'),
+          _label(l10n.wizardMaxOutputTokens),
           TextBox(
             key: const ValueKey('provider-wizard-max-output'),
             controller: _output,
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           ),
-          if (widget.setup.error case final error?) _error(error),
+          if (wizardErrorText(widget.setup, l10n) case final error?)
+            _error(error),
         ],
       ),
       actions: [
         _button(
           'provider-wizard-next',
-          'Next',
+          l10n.commonNext,
           () => cubit.dispatch(
             ModelDetailsSubmitted(
               contextWindow: int.tryParse(_window.text) ?? 0,
@@ -877,6 +891,7 @@ class _ReviewStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<ProviderWizardCubit>();
+    final l10n = context.l10n;
     final setup = state.setup;
     final saving = setup is Saving;
     final plan = switch (setup) {
@@ -904,7 +919,12 @@ class _ReviewStep extends StatelessWidget {
                 ),
             ],
           ),
-          for (final warning in reviewing?.warnings ?? const <String>[])
+          // `Reviewing.warnings` моста на экран не выводятся: предупреждение
+          // строится по `notVerified` (D6).
+          for (final warning
+              in reviewing == null
+                  ? const <String>[]
+                  : wizardReviewWarnings(reviewing, l10n))
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: InfoBar(
@@ -923,18 +943,20 @@ class _ReviewStep extends StatelessWidget {
                 isLong: true,
               ),
             ),
-          // Текст отказа даёт автомат (`Reviewing.error`) — единственное место
-          // строк; типизированный `refusal` лишь помечает блок и гасит «Save».
-          if (reviewing?.error case final error?)
-            _error(
-              error,
-              key: reviewing?.refusal == null
-                  ? null
-                  : const ValueKey('provider-wizard-refusal'),
-            ),
+          // Текст строится по `errorCode` (правка) или `refusal` (отказ записи
+          // плана), а не по `Reviewing.error` (D5 п. 5, D6); `refusal` ещё
+          // помечает блок и гасит «Save».
+          if (reviewing != null)
+            if (wizardErrorText(reviewing, l10n) case final error?)
+              _error(
+                error,
+                key: reviewing.refusal == null
+                    ? null
+                    : const ValueKey('provider-wizard-refusal'),
+              ),
           if (setup is SaveFailed)
             _error(
-              wizardSaveFailureText(setup),
+              wizardSaveFailureText(setup, l10n: l10n),
               key: const ValueKey('provider-wizard-save-failed'),
             ),
           if (plan != null) ...[
@@ -942,7 +964,7 @@ class _ReviewStep extends StatelessWidget {
             Checkbox(
               key: const ValueKey('provider-wizard-make-default'),
               checked: plan.makeDefault,
-              content: const Text('Make default model'),
+              content: Flexible(child: Text(l10n.wizardMakeDefault)),
               onChanged: reviewing == null || cubit.forceDefault
                   ? null
                   : (value) => cubit.dispatch(
@@ -954,7 +976,7 @@ class _ReviewStep extends StatelessWidget {
               Checkbox(
                 key: const ValueKey('provider-wizard-project-only'),
                 checked: plan.target.layer == ConfigLayer.projectLocal,
-                content: const Text('This project only'),
+                content: Flexible(child: Text(l10n.wizardProjectOnly)),
                 onChanged: reviewing == null
                     ? null
                     : (value) => cubit.dispatch(
@@ -968,13 +990,13 @@ class _ReviewStep extends StatelessWidget {
             ],
           ],
           if (saving)
-            const Padding(
-              padding: EdgeInsets.only(top: 12),
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
               child: Row(
                 children: [
-                  SizedBox.square(dimension: 16, child: ProgressRing()),
-                  SizedBox(width: 10),
-                  CodeLabText('Saving…'),
+                  const SizedBox.square(dimension: 16, child: ProgressRing()),
+                  const SizedBox(width: 10),
+                  CodeLabText(l10n.wizardSaving),
                 ],
               ),
             ),
@@ -983,7 +1005,7 @@ class _ReviewStep extends StatelessWidget {
       actions: [
         _button(
           'provider-wizard-save',
-          'Save',
+          l10n.commonSave,
           // Отказ записи плана (`refusal`) делает «Save» неактивной.
           reviewing == null || reviewing.refusal != null
               ? null
