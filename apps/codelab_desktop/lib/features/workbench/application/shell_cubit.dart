@@ -29,6 +29,7 @@ import '../../../core/platform/external_link_opener.dart';
 import '../../../core/platform/limited_network_image.dart';
 import '../../../core/platform/link_policy.dart';
 import '../../../core/platform/project_folder_picker.dart';
+import '../../../core/platform/startup_preferences.dart';
 import '../../../core/platform/usage_csv_saver.dart';
 import '../../settings/application/default_profile_resolver.dart';
 import 'agents_pane_data.dart' show AgentsShowTarget;
@@ -107,6 +108,8 @@ final class CodeLabShellParts {
     required UsageCsvSaver usageCsvSaver,
     required AppStrings strings,
     Logger? usageLogger,
+    StartupPreferences? startupPreferences,
+    Logger? appLogger,
   }) {
     final changes = ShellChanges();
     final diagnostics = ShellDiagnostics(logger: logger);
@@ -117,6 +120,8 @@ final class CodeLabShellParts {
       projectFolderPicker: projectFolderPicker,
       recentProjectsStore: recentProjectsStore,
       directoryExists: directoryExists,
+      startupPreferences: startupPreferences,
+      appLogger: appLogger,
     );
     final activeSession = ActiveSessionCubit(
       changes: changes,

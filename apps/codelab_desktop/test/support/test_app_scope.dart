@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/language/app_language_start.dart';
+import 'package:codelab_desktop/core/platform/local_folder_opener.dart';
+import 'package:codelab_desktop/core/platform/startup_preferences.dart';
+import 'package:codelab_desktop/features/settings/application/about_diagnostics.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart'
     show AppLanguagePreference, AppLanguagePreferences;
 import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snapshot_store.dart'
@@ -118,6 +121,12 @@ final class CodeLabTestBinding {
     // Порт хранения языка: тесты сбоя записи подставляют двойник; без него
     // запись идёт в `shared_preferences` (мок в памяти).
     AppLanguagePreferences? languagePreferences,
+    // Порт настроек запуска (D9): тесты сбоя чтения и записи подставляют
+    // двойник; без него — `shared_preferences` (мок в памяти).
+    StartupPreferences? startupPreferences,
+    // Данные раздела «About» (D11): тесты задают версии и пути сами.
+    AboutInfo? aboutInfo,
+    LocalFolderOpener? localFolderOpener,
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
     // а у плагина в тестах нет реализации канала: без моков каждая загрузка
@@ -139,6 +148,9 @@ final class CodeLabTestBinding {
     });
     scope = createCodeLabRootScope(
       languagePreferences: languagePreferences,
+      startupPreferences: startupPreferences,
+      aboutInfo: aboutInfo,
+      localFolderOpener: localFolderOpener,
       language:
           languageStart ??
           AppLanguageStart(preference: languagePreference, locale: locale),

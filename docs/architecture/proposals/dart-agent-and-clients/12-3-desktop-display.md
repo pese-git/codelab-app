@@ -652,6 +652,11 @@ sequenceDiagram
   `agentCapabilities._meta.codelab.steering` вторая часть кнопки скрыта. Настройка
   app `codelab.input.enter_while_running` (`queue` | `steer`, `shared_preferences`, §12.6.1;
   не ключ `cli.yaml`) меняет действия местами.
+  Строка этой настройки на странице «Settings › General» (§12.4.9) появится с change steering
+  (C-03): до него Enter во время хода только ставит сообщение в очередь, и строка с одним
+  вариантом ничего бы не меняла (change
+  [`add-app-general-page`](../../../../openspec/changes/add-app-general-page/design.md), D8;
+  решение пользователя Q1, 2026-11-19).
 * Панель очереди (R-18): у каждой строки рядом с «Отправить сейчас» (отмена хода) — «Направить»
   (без отмены), `PromptQueue.steer(id)`.
 * Ожидающее steering (`SessionView.pendingSteers`) — полупрозрачный пузырь над композером с фазой

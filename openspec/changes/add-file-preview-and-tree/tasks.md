@@ -124,7 +124,7 @@
 - [ ] 3.1 `[client]` Красный: `packages/dart/codelab_client_core/test/files/gitignore_matcher_test.dart` — таблица правил: `#`, `!`, якорь `/` в начале и конце, `*`, `?`, `**`, классы `[…]`, `\#`, `\!`, порядок файлов `IgnoreStack` (требование «Игнорируемые записи по `.gitignore`», сценарий «Отрицание правила»). Источник семантики — документация git; сторонний код не копируется (AGENTS.md §5).
 - [ ] 3.2 `[client]` Реализация `GitIgnoreMatcher` и `IgnoreStack`.
 - [ ] 3.3 `[client]` Красный: `io_project_files_test.dart` — `list` с `IgnoreStack`: поле `ignored`, загрузка `.gitignore` папки и `.git/info/exclude`, файл правил больше 256 КиБ пропускается. Реализация в `IoProjectFiles`.
-- [ ] 3.4 `[desktop]` Красный: `project_files_pane_test.dart` — сценарий «`build/` скрыт по `.gitignore`», переключатель `file-tree-show-ignored` и его сохранение в `codelab.file_browser.show_ignored`. Реализация в Cubit, панели и порте настроек app.
+- [ ] 3.4 `[desktop]` Красный: `project_files_pane_test.dart` — сценарии «`build/` скрыт по `.gitignore`» и «Одно значение на панель и «General»», переключатель `file-tree-show-ignored` и его сохранение в `codelab.file_browser.show_ignored`. Реализация: порт `FileBrowserPreferences` в `lib/core/platform/` (`load` не бросает, сбой — `false`; образец — `AppLanguagePreferences`), владелец значения — `ShowIgnoredFilesCubit` в root scope (образец — `AppLanguageCubit`), `ProjectFilesCubit` получает поток значения, переключатель панели вызывает `set` владельца. Строка «Show ignored files» страницы «General» пишет то же значение через того же владельца (change `add-app-general-page`, D10, итерация 4); второго ключа и порта нет.
 
 ## 4. Итерация 4 — наблюдение
 

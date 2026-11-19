@@ -69,3 +69,10 @@ dev_dependencies:
 flutter:
   generate: true
   uses-material-design: true
+  # Копии корневых LICENSE и THIRD_PARTY_NOTICES.md для раздела «About»
+  # (change `add-app-general-page`, D13): Flutter не принимает ресурсы вне
+  # каталога пакета; побайтное равенство с корнем проверяет
+  # `test/app/legal_assets_test.dart`.
+  assets:
+    - assets/legal/LICENSE
+    - assets/legal/THIRD_PARTY_NOTICES.md

@@ -1559,4 +1559,79 @@ void main() {
       );
     },
   );
+
+  // Задача 5.5 change `add-app-general-page` (D1): архитектуру процесса даёт
+  // `Abi.current()` из `dart:ffi`, и платформенный код app изолирован
+  // (AGENTS.md §11): `dart:ffi` в `apps/codelab_desktop/lib` разрешён только
+  // файлу `core/platform/build_info.dart`. Красный тест: правила в
+  // `rules.dart` ещё нет, оно появится в задаче 5.6.
+  group('dart:ffi в apps/codelab_desktop/lib (add-app-general-page, D1)', () {
+    List<String> scanDesktop(Map<String, String> files) {
+      final tmp = Directory.systemTemp.createTempSync('guard_ffi_');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      files.forEach((path, content) {
+        File(p.join(tmp.path, 'lib', path))
+          ..createSync(recursive: true)
+          ..writeAsStringSync(content);
+      });
+      return [
+        for (final rule in rules.where(
+          (r) => r.dir == 'apps/codelab_desktop/lib',
+        ))
+          ...scan(
+            tmp.path,
+            PackageRule(
+              'lib',
+              forbidden: rule.forbidden,
+              exclude: rule.exclude,
+              sealExclude: rule.sealExclude,
+            ),
+          ),
+      ];
+    }
+
+    test('в rules.dart есть правило для dart:ffi с исключением build_info', () {
+      final ffiRules = [
+        for (final rule in rules)
+          if (rule.dir == 'apps/codelab_desktop/lib' &&
+              rule.forbidden.contains('dart:ffi'))
+            rule,
+      ];
+
+      expect(ffiRules, hasLength(1));
+      expect(ffiRules.single.exclude, ['core/platform/build_info.dart']);
+    });
+
+    test('reports dart:ffi outside core/platform/build_info.dart', () {
+      final violations = scanDesktop({
+        'core/platform/build_info.dart': "import 'dart:ffi';\n",
+        'core/platform/other_port.dart': "import 'dart:ffi';\n",
+        'features/settings/application/about.dart':
+            "import 'dart:ffi' show Abi;\n",
+        'app/app_scope.dart': "import 'dart:ffi';\n",
+      });
+
+      expect(
+        violations,
+        unorderedEquals([
+          endsWith('lib/core/platform/other_port.dart:1 -> dart:ffi'),
+          endsWith(
+            'lib/features/settings/application/about.dart:1 -> dart:ffi',
+          ),
+          endsWith('lib/app/app_scope.dart:1 -> dart:ffi'),
+        ]),
+      );
+    });
+
+    test('other files may use BuildInfo: the exclusion is not sealed', () {
+      final violations = scanDesktop({
+        'core/platform/build_info.dart': "import 'dart:ffi';\n",
+        'app/app_scope.dart': "import '../core/platform/build_info.dart';\n",
+        'features/settings/application/about.dart':
+            "import '../../../core/platform/build_info.dart';\n",
+      });
+
+      expect(violations, isEmpty, reason: violations.join('\n'));
+    });
+  });
 }

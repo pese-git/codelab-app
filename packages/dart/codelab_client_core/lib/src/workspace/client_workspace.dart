@@ -184,6 +184,18 @@ abstract interface class ClientWorkspace {
   /// уведомлением `NoticeKind.reconnected` (design D6).
   Future<String?> restoreProject();
 
+  /// Старт без восстановления (D9 change `add-app-general-page`): альтернатива
+  /// [restoreProject], когда хост не хочет открывать проект прошлого запуска.
+  ///
+  /// Снимок не читается, проект не выбирается, первое подключение не
+  /// добавляет сессии снимка и не шлёт `session/load`. Запись снимка при этом
+  /// разрешена: первая запись заменяет снимок прошлого запуска текущим.
+  ///
+  /// Хост вызывает при старте ровно один из двух методов; повторный вызов,
+  /// вызов после [restoreProject] и [restoreProject] после него — пустая
+  /// операция (последний возвращает `null`). Без хранилища снимка — пусто.
+  void startWithoutRestore();
+
   /// Выбирает папку проекта: `WorkspaceState.projectDirectory` и снимок.
   ///
   /// При `Connected` и другой папке сбрасывает список и курсор и запрашивает
@@ -1082,6 +1094,9 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
   @override
   Future<String?> restoreProject() async => await _restorer?.readProject();
+
+  @override
+  void startWithoutRestore() => _restorer?.skip();
 
   @override
   void selectProject(String path) {

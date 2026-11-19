@@ -1,13 +1,14 @@
 import 'dart:async';
 
 import 'package:codelab_client_acp/codelab_client_acp.dart'
-    show DiagnosticSeverity;
+    show DiagnosticSeverity, Logger;
 import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:codelab_client_core/codelab_client_core.dart'
     show ClientWorkspace, RecentProjectsStore;
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabRecentProject;
 
 import '../../../core/platform/project_folder_picker.dart';
+import '../../../core/platform/startup_preferences.dart';
 import 'project_paths.dart';
 import 'shell_part.dart';
 import 'ui_mappers.dart';
@@ -64,8 +65,12 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
     DirectoryExists? directoryExists,
+    StartupPreferences? startupPreferences,
+    Logger? appLogger,
     this.projectRestoreTimeout = const Duration(seconds: 2),
   }) : _workspace = workspace,
+       _startupPreferences = startupPreferences,
+       _appLogger = appLogger,
        _diagnostics = diagnostics,
        _projectFolderPicker = projectFolderPicker,
        _recentProjectsStore = recentProjectsStore,
@@ -136,6 +141,13 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   final ShellDiagnostics _diagnostics;
   final ProjectFolderPicker _projectFolderPicker;
   final RecentProjectsStore _recentProjectsStore;
+
+  /// Порт настройки «Reopen the last project and its tabs» (D9); `null` —
+  /// настройка не читается, проект прошлого запуска открывается всегда.
+  final StartupPreferences? _startupPreferences;
+
+  /// Логгер компонента `app` для событий `app.reopen_last_project_*` (D9).
+  final Logger? _appLogger;
 
   /// `null` — папка проекта не проверяется (тесты с вымышленными путями).
   final DirectoryExists? _directoryExists;
@@ -225,6 +237,18 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   /// проекта; он тоже не выбирается, а сессии такого снимка убирает правило
   /// kit «выбор другого проекта отменяет восстановление» (D10).
   Future<void> _restoreProject() async {
+    // Настройка читается до восстановления (D9): при выключенной проект и
+    // сессии снимка не поднимаются, а снимок этого запуска пишется как обычно
+    // (`startWithoutRestore`), поэтому включение настройки откроет проект
+    // последнего запуска, а не двухдневной давности.
+    if (!await _reopenLastProject()) {
+      if (isClosed) {
+        return;
+      }
+      _appLogger?.info('app.reopen_last_project_skipped');
+      _workspace.startWithoutRestore();
+      return;
+    }
     final project = await _workspace.restoreProject();
     if (isClosed || project == null || state.selectedProjectPath != null) {
       return;
@@ -255,6 +279,36 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     }
     emit(state._copyWith(selectedProjectPath: project));
     _workspace.selectProject(project);
+  }
+
+  /// Включено ли открытие проекта прошлого запуска. Нечитаемое значение —
+  /// «включено» с предупреждением без текста ошибки и значения (CFG-10); ключ
+  /// не перезаписывается.
+  Future<bool> _reopenLastProject() async {
+    final port = _startupPreferences;
+    if (port == null) {
+      return true;
+    }
+    final StartupLoad load;
+    try {
+      load = await port.load();
+    } on Object catch (error) {
+      // Порт обязан не бросать, но адаптер может нарушить контракт: без
+      // защиты не вызвались бы ни `restoreProject`, ни `startWithoutRestore`,
+      // и снимок этого запуска не писался бы вовсе (приоритет 3: данные).
+      _appLogger?.warning(
+        'app.reopen_last_project_unreadable',
+        context: {'error_class': error.runtimeType.toString()},
+      );
+      return true;
+    }
+    if (load.storedValueInvalid || load.readFailure != null) {
+      _appLogger?.warning(
+        'app.reopen_last_project_unreadable',
+        context: {'error_class': ?load.readFailure},
+      );
+    }
+    return load.reopenLastProject;
   }
 
   /// Сбой хранилища не мешает работать: остаются прежние недавние проекты.

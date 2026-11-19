@@ -70,6 +70,321 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsLanguageSaveRetry => 'Повторить';
 
   @override
+  String get agentSettingLabel_budget_max_steps => 'Лимит шагов';
+
+  @override
+  String get agentSettingDescription_budget_max_steps =>
+      'Запросов к модели за ход.';
+
+  @override
+  String get agentSettingLabel_budget_max_tokens => 'Лимит токенов';
+
+  @override
+  String get agentSettingDescription_budget_max_tokens =>
+      'Сумма входных и выходных токенов за ход.';
+
+  @override
+  String get agentSettingLabel_budget_max_cost => 'Лимит стоимости';
+
+  @override
+  String get agentSettingDescription_budget_max_cost =>
+      'USD за ход; работает только при известных ценах.';
+
+  @override
+  String get agentSettingLabel_budget_max_duration => 'Лимит длительности';
+
+  @override
+  String get agentSettingDescription_budget_max_duration =>
+      'Время хода без ожидания одобрений.';
+
+  @override
+  String get agentSettingLabel_subagents_enabled => 'Субагенты';
+
+  @override
+  String get agentSettingDescription_subagents_enabled =>
+      'Разрешить агенту запускать субагентов (только новые сессии).';
+
+  @override
+  String get agentSettingLabel_subagents_max_depth => 'Лимит глубины';
+
+  @override
+  String get agentSettingDescription_subagents_max_depth =>
+      'Насколько глубоко могут вкладываться субагенты (только новые сессии).';
+
+  @override
+  String get agentSettingLabel_subagents_max_concurrent =>
+      'Лимит одновременных';
+
+  @override
+  String get agentSettingDescription_subagents_max_concurrent =>
+      'Субагентов, работающих одновременно в одном дереве сессии.';
+
+  @override
+  String get agentSettingLabel_subagents_max_per_turn => 'Лимит за ход';
+
+  @override
+  String get agentSettingDescription_subagents_max_per_turn =>
+      'Субагентов, запущенных за ход сессии.';
+
+  @override
+  String get agentSettingLabel_subagents_max_steps => 'Лимит шагов';
+
+  @override
+  String get agentSettingDescription_subagents_max_steps =>
+      'Запросов к модели одного субагента.';
+
+  @override
+  String get agentSettingLabel_subagents_max_tokens => 'Лимит токенов';
+
+  @override
+  String get agentSettingDescription_subagents_max_tokens =>
+      'Входных и выходных токенов одного субагента.';
+
+  @override
+  String get agentSettingLabel_subagents_max_cost => 'Лимит стоимости';
+
+  @override
+  String get agentSettingDescription_subagents_max_cost =>
+      'USD одного субагента; работает только при известных ценах.';
+
+  @override
+  String get agentSettingLabel_subagents_max_duration => 'Лимит длительности';
+
+  @override
+  String get agentSettingDescription_subagents_max_duration =>
+      'Время одного субагента без ожидания одобрений.';
+
+  @override
+  String get agentSettingLabel_subagents_report_max_bytes => 'Размер отчёта';
+
+  @override
+  String get agentSettingDescription_subagents_report_max_bytes =>
+      'Наибольший отчёт субагента в байтах.';
+
+  @override
+  String get agentSettingLabel_subagents_progress_interval =>
+      'Интервал прогресса';
+
+  @override
+  String get agentSettingDescription_subagents_progress_interval =>
+      'Наименьшая пауза между строками прогресса вызова субагента.';
+
+  @override
+  String get agentSettingLabel_subagents_heartbeat_interval =>
+      'Интервал сигнала';
+
+  @override
+  String get agentSettingDescription_subagents_heartbeat_interval =>
+      'Пауза, после которой молчащий вызов субагента сообщает, что он жив.';
+
+  @override
+  String get agentSettingLabel_subagents_cancel_grace => 'Время на отмену';
+
+  @override
+  String get agentSettingDescription_subagents_cancel_grace =>
+      'Сколько вызов ждёт остановки субагентов после отмены.';
+
+  @override
+  String get agentSettingLabel_compaction_enabled => 'Автоматическое сжатие';
+
+  @override
+  String get agentSettingDescription_compaction_enabled =>
+      'Автоматически сжимать контекст, когда он разрастается.';
+
+  @override
+  String get agentSettingLabel_logging_level => 'Уровень журнала';
+
+  @override
+  String get agentSettingDescription_logging_level =>
+      'Подробность журнала агента.';
+
+  @override
+  String get settingsGeneralAgentDefaultsTitle => 'Умолчания агента';
+
+  @override
+  String get settingsGeneralAgentDefaultsCaption =>
+      'Изменения сохраняются для всех проектов.';
+
+  @override
+  String settingsGeneralSharedInfo(String home) {
+    return 'Общие с CLI codelab. Строки с тегом «Общая» берутся из реестра настроек агента и сохраняются в $home/config.yaml; их показывает и codelab /settings.';
+  }
+
+  @override
+  String get settingsGeneralTagShared => 'Общая';
+
+  @override
+  String get settingsGeneralNotSet => 'Не задано';
+
+  @override
+  String get settingsGeneralAppliesAfterRestart =>
+      '(применится после перезапуска)';
+
+  @override
+  String settingsGeneralOverriddenBy(String source) {
+    return 'Этот проект переопределяет значение ($source).';
+  }
+
+  @override
+  String get settingsGeneralRefusalSecret =>
+      'Измените командой codelab secret set.';
+
+  @override
+  String get settingsGeneralRefusalMasked =>
+      'Значение содержит секрет; измените его в файле конфигурации.';
+
+  @override
+  String settingsGeneralRefusalExternal(String source) {
+    return 'Задано источником $source; изменить здесь нельзя.';
+  }
+
+  @override
+  String get settingsGeneralRefusalOther =>
+      'Эту настройку здесь изменить нельзя.';
+
+  @override
+  String settingsGeneralHintIntMin(String min) {
+    return 'Введите целое число не меньше $min.';
+  }
+
+  @override
+  String settingsGeneralHintIntRange(String min, String max) {
+    return 'Введите целое число от $min до $max.';
+  }
+
+  @override
+  String get settingsGeneralHintInt => 'Введите целое число.';
+
+  @override
+  String get settingsGeneralHintNumber => 'Введите число.';
+
+  @override
+  String get settingsGeneralHintDuration =>
+      'Введите длительность, например 500ms, 30s, 2m или 1h.';
+
+  @override
+  String get settingsGeneralSaved => 'Сохранено.';
+
+  @override
+  String get settingsGeneralTailAfterRestart =>
+      'Применится после «Перезапустить агента».';
+
+  @override
+  String get settingsGeneralTailWhenStarts => 'Применится при запуске агента.';
+
+  @override
+  String settingsGeneralSavedOverridden(String source, String effective) {
+    return 'Сохранено для всех проектов; $source переопределяет значение: агент использует $effective.';
+  }
+
+  @override
+  String settingsGeneralSavedUnverified(String home) {
+    return 'Сохранено в $home/config.yaml.';
+  }
+
+  @override
+  String get settingsGeneralConflict =>
+      'Файл конфигурации изменился на диске; страница перечитана. Повторите правку.';
+
+  @override
+  String get settingsGeneralRejected => 'Конфигурация не сохранена.';
+
+  @override
+  String settingsGeneralReadOnlyRemote(String origin) {
+    return 'Только чтение: агент работает на $origin. Измените его настройки на том хосте: codelab config set.';
+  }
+
+  @override
+  String settingsGeneralReadOnlyManaged(String agent) {
+    return 'Настройками агента управляет $agent.';
+  }
+
+  @override
+  String get settingsGeneralUnreadable =>
+      'Не удаётся прочитать конфигурацию агента.';
+
+  @override
+  String get settingsGeneralSectionStartup => 'Запуск и файлы';
+
+  @override
+  String get settingsGeneralReopenTitle =>
+      'Открывать последний проект и его вкладки';
+
+  @override
+  String get settingsGeneralReopenDescription =>
+      'Включено: открывать последний проект и его открытые сессии. Выключено: начинать с недавних проектов в боковой панели. Применится при следующем запуске.';
+
+  @override
+  String get settingsGeneralStartupSaveFailed =>
+      'Не удалось сохранить настройку. При следующем запуске применится прежнее значение.';
+
+  @override
+  String get settingsGeneralSectionAbout => 'О программе';
+
+  @override
+  String settingsGeneralAboutSubtitle(String platform, String agentVersion) {
+    return '$platform · встроенный агент $agentVersion';
+  }
+
+  @override
+  String get settingsGeneralAboutLicense => 'Лицензия';
+
+  @override
+  String get settingsGeneralAboutConfigFolder => 'Папка настроек';
+
+  @override
+  String get settingsGeneralAboutCopyDiagnostics => 'Копировать диагностику';
+
+  @override
+  String get settingsGeneralAboutThirdParty => 'Сторонние уведомления';
+
+  @override
+  String get settingsGeneralAboutReleaseNotes => 'Заметки о выпуске';
+
+  @override
+  String get settingsGeneralAboutOpenLogs => 'Открыть папку журналов';
+
+  @override
+  String get settingsGeneralAboutUpdates =>
+      'Обновления приходят из установщика или менеджера пакетов — приложение само не обновляется.';
+
+  @override
+  String get settingsGeneralAboutCopied => 'Диагностика скопирована.';
+
+  @override
+  String get settingsGeneralAboutReleaseNotesFailed =>
+      'Не удалось открыть заметки о выпуске.';
+
+  @override
+  String get settingsGeneralAboutLogsFailed =>
+      'Не удалось открыть папку журналов.';
+
+  @override
+  String get settingsGeneralAboutPackageLicenses => 'Лицензии пакетов';
+
+  @override
+  String get settingsGeneralAboutClose => 'Закрыть';
+
+  @override
+  String get settingsGeneralUnreadableCannotRead =>
+      'Не удаётся прочитать настройки агента.';
+
+  @override
+  String get settingsGeneralUnreadableHome => 'Папка CodeLab недоступна.';
+
+  @override
+  String get settingsGeneralUnreadableUserLayer =>
+      'Пользовательский config.yaml не читается.';
+
+  @override
+  String get settingsGeneralAboutCopyFailed =>
+      'Не удалось скопировать диагностику.';
+
+  @override
+  String get settingsGeneralAboutLoadFailed =>
+      'Не удалось загрузить раздел «О программе».';
+
+  @override
   String get commonCancel => 'Отмена';
 
   @override
@@ -779,4 +1094,43 @@ class AppLocalizationsRu extends AppLocalizations {
   String workbenchTokenRequired(int status) {
     return 'Агент требует токен (HTTP $status).';
   }
+
+  @override
+  String get settingsSearchKeywordsConnection => 'профиль, токен, перезапуск';
+
+  @override
+  String get settingsSearchKeywordsProviders =>
+      'провайдер, модель, ключ api, хранилище ключей, базовый url';
+
+  @override
+  String get settingsSearchKeywordsMcpServers =>
+      'сервер, инструменты, заголовки';
+
+  @override
+  String get settingsSearchKeywordsAgentsAndModes =>
+      'режим, разрешение, план, рассуждение, определение, субагент';
+
+  @override
+  String get settingsSearchKeywordsSkillsAndExtensions =>
+      'навык, контекст, шаблон, промпт, расширение';
+
+  @override
+  String get settingsSearchKeywordsGeneral =>
+      'язык, бюджет, шаги, сжатие, субагент, уровень журнала, запуск, открывать, игнорируемые, о программе, версия, лицензия, диагностика';
+
+  @override
+  String get settingsGeneralGroupBudget => 'Бюджет';
+
+  @override
+  String get settingsGeneralGroupAgent => 'Агент';
+
+  @override
+  String get settingsGeneralGroupSubagents => 'Субагенты';
+
+  @override
+  String get settingsGeneralGroupLogging => 'Журнал агента';
+
+  @override
+  String get settingsGeneralAboutThirdPartyCaption =>
+      'Записи реестра сторонних уведомлений CodeLab в том виде, в каком они хранятся в репозитории.';
 }

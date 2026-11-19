@@ -4,7 +4,7 @@ import '../repl/picker_spec.dart';
 
 /// Строки `/settings`: ключи реестра со `scope: shared` (design.md change
 /// `add-provider-setup-ui`, D17, Q15). `trusted_projects` показывается, но не
-/// правится ([isTrustBoundary]).
+/// правится (`TrustBoundarySetting` моста, `settingKeyEditRefusalOf`).
 ///
 /// Почему отдельный файл без `dart_tui`: те же строки нужны REPL и экрану
 /// настроек TUI (4b), а выбор слоя записи и отказы — общие правила.
@@ -44,15 +44,10 @@ List<SettingFieldView> settingRowsOf(AgentConfigSnapshot snapshot) {
   return out;
 }
 
-/// Граница доверия: клиент её показывает и не меняет (решение пользователя).
-bool isTrustBoundary(String key) => key == 'trusted_projects';
-
-const trustBoundaryLine =
-    'trusted_projects is a trust boundary; it cannot be changed here.';
-
 /// Дескриптор ключа реестра со `scope: shared`; `null` — ключа нет в реестре
 /// или он не `shared` («Unknown setting»). `trusted_projects` дескриптор
-/// имеет, но команда его не правит ([isTrustBoundary]).
+/// имеет, но команда его не правит (`settingKeyEditRefusalOf` →
+/// `TrustBoundarySetting`).
 SettingDescriptor? editableDescriptorOf(String key) {
   final descriptor = SettingsRegistry.lookup(key);
   if (descriptor == null || descriptor.scope != SettingScope.shared) {
@@ -60,16 +55,6 @@ SettingDescriptor? editableDescriptorOf(String key) {
   }
   return descriptor;
 }
-
-/// Ключ хранит имя секрета: правка — только `codelab secret set`.
-bool isSecretKey(SettingDescriptor descriptor) =>
-    descriptor.secret || descriptor.type == SettingType.secretName;
-
-/// Источник, который клиент не переписывает: `--config` и окружение.
-bool isExternalSource(SettingFieldView? row) =>
-    row != null &&
-    (row.source?.kind == ConfigSourceKind.extraFile ||
-        row.source?.kind == ConfigSourceKind.environment);
 
 /// Формат значения [descriptor] для подсказки: текст `ConfigValueException`
 /// на заведомо неверном вводе; `null`, если пустая строка допустима.
@@ -84,18 +69,12 @@ String? expectedFormatOf(SettingDescriptor descriptor) {
 
 /// Отказ по самому ключу (до чтения слоёв): неизвестный или не `shared`,
 /// граница доверия, секретный ключ; `null` — ключ можно менять.
+///
+/// Причину определяет мост (`settingKeyEditRefusalOf`, D6 change
+/// `add-app-general-page`), здесь — только тексты CLI, неизменные побайтно.
 String? settingKeyRefusal(String key) {
-  final descriptor = editableDescriptorOf(key);
-  if (descriptor == null) {
-    return 'Unknown setting $key. Run /settings to list them.';
-  }
-  if (isTrustBoundary(key)) {
-    return trustBoundaryLine;
-  }
-  if (isSecretKey(descriptor)) {
-    return 'Use codelab secret set <name>';
-  }
-  return null;
+  final refusal = settingKeyEditRefusalOf(key);
+  return refusal == null ? null : _refusalText(refusal);
 }
 
 /// Отказ по строке [row] (до записи): ключ ([settingKeyRefusal]), источник
@@ -105,17 +84,29 @@ String? settingKeyRefusal(String key) {
 /// значение (литеральный секрет, в том числе элемент списка) нельзя ни
 /// переписать, ни сбросить вслепую (D17, D20).
 String? settingRowRefusal(SettingFieldView row) {
-  if (settingKeyRefusal(row.key) case final refusal?) {
-    return refusal;
-  }
-  if (isExternalSource(row)) {
-    return '${row.key} is set by ${row.sourceName}; it cannot be changed here.';
-  }
-  if (row.masked) {
-    return 'Use codelab secret set <name>';
-  }
-  return null;
+  final refusal = settingEditRefusalOf(row);
+  return refusal == null
+      ? null
+      : _refusalText(refusal, sourceName: row.sourceName);
 }
+
+/// Текст отказа CLI для ветки моста. `switch` без `default`: новая ветка
+/// `SettingEditRefusal` не пройдёт мимо CLI.
+///
+/// [sourceName] — колонка `source` строки (`config`/`env`, `row.sourceName`):
+/// `ConfigSourceView.label` в ветке моста — путь файла, а текст CLI называет
+/// источник по виду, поэтому `refusal.source` здесь не подходит. Для отказов по
+/// одному ключу источника нет и ветка `ExternalSourceSetting` недостижима.
+String _refusalText(SettingEditRefusal refusal, {String sourceName = ''}) =>
+    switch (refusal) {
+      UnknownSetting(:final key) =>
+        'Unknown setting $key. Run /settings to list them.',
+      TrustBoundarySetting() =>
+        'trusted_projects is a trust boundary; it cannot be changed here.',
+      SecretSetting() || MaskedSetting() => 'Use codelab secret set <name>',
+      ExternalSourceSetting(:final key) =>
+        '$key is set by $sourceName; it cannot be changed here.',
+    };
 
 /// Записывает или сбрасывает [key] в слое [layer] и возвращает строку исхода
 /// (design.md change `add-provider-setup-ui`, D17, Q15).

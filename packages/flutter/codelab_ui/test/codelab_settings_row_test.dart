@@ -103,4 +103,79 @@ void main() {
       260,
     );
   });
+
+  // Перенос описаний на узком окне (задача 7.5 change `add-app-general-page`,
+  // D17): страница «General» не должна обрезать смысл строки многоточием, а
+  // остальные страницы остаются на двух строках.
+  group('descriptionMaxLines', () {
+    const long =
+        'Включено: открывать последний проект и его открытые сессии. '
+        'Выключено: начинать с недавних проектов в боковой панели. '
+        'Применится при следующем запуске, когда окно уже закрыто и открыто.';
+
+    CodeLabText descriptionOf(WidgetTester tester) =>
+        tester.widget<CodeLabText>(
+          find.byWidgetPredicate((w) => w is CodeLabText && w.data == long),
+        );
+
+    testWidgets('по умолчанию — две строки с многоточием, как у прочих '
+        'страниц', (tester) async {
+      await pumpRow(
+        tester,
+        const CodeLabSettingsRow(title: 'Title', description: long),
+      );
+
+      final text = descriptionOf(tester);
+      expect(text.maxLines, 2);
+      expect(text.overflow, TextOverflow.ellipsis);
+    });
+
+    testWidgets('null — без ограничения и без многоточия', (tester) async {
+      await pumpRow(
+        tester,
+        const CodeLabSettingsRow(
+          title: 'Title',
+          description: long,
+          descriptionMaxLines: null,
+        ),
+      );
+
+      final text = descriptionOf(tester);
+      expect(text.maxLines, isNull);
+      expect(text.overflow, isNot(TextOverflow.ellipsis));
+    });
+
+    testWidgets('null: описание показано целиком, высота больше двух '
+        'строк', (tester) async {
+      await pumpRow(
+        tester,
+        const CodeLabSettingsRow(title: 'Title', description: long),
+      );
+      final clamped = tester.getSize(find.byType(CodeLabSettingsRow)).height;
+      await pumpRow(
+        tester,
+        const CodeLabSettingsRow(
+          title: 'Title',
+          description: long,
+          descriptionMaxLines: null,
+        ),
+      );
+      final full = tester.getSize(find.byType(CodeLabSettingsRow)).height;
+
+      expect(full, greaterThan(clamped));
+    });
+
+    testWidgets('явное число строк применяется', (tester) async {
+      await pumpRow(
+        tester,
+        const CodeLabSettingsRow(
+          title: 'Title',
+          description: long,
+          descriptionMaxLines: 3,
+        ),
+      );
+
+      expect(descriptionOf(tester).maxLines, 3);
+    });
+  });
 }

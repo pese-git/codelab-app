@@ -2,6 +2,7 @@
 // `add-session-list-and-reload`; spec acp-client-kit «Восстановление после
 // перезапуска»; design D6).
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
@@ -222,6 +223,44 @@ void main() {
     expect(sentMethods(), [initializeMethod]);
   });
 
+  // Чтение снимка ещё идёт, а пользователь уже выбрал папку и подключился:
+  // первое подключение прошло без восстановления, и снимок, дочитанный позже,
+  // не должен сработать при reconnect — иначе `session/load` уйдёт без
+  // действия пользователя (AGENTS.md §9, §10).
+  test('подключение до завершения readProject: после reconnect нет '
+      'session/load', () async {
+    final gate = Completer<void>();
+    final slow = _GatedStore(_snapshot(), gate.future);
+    agent = KitAgent(capabilities: _withLoad, snapshots: slow);
+
+    final reading = agent.workspace.restoreProject();
+    agent.workspace.selectProject('/work');
+    await agent.start();
+    gate.complete();
+    // Проект возвращается хосту, даже если читался позже подключения.
+    expect(await reading, '/work');
+
+    agent.restartAgent(capabilities: _withLoad);
+    await agent.workspace.connect(
+      const StdioProfile(id: 'agent', label: 'Agent', command: 'agent'),
+      projectDirectory: '/work',
+    );
+
+    await agent.workspace.flushSnapshot();
+
+    expect(sentMethods(), [initializeMethod]);
+    expect(agent.workspace.current.sessions, isEmpty);
+    // Сессии позднего снимка не попали и в запись: ни открытые, ни активная.
+    expect(slow.written, isNotNull);
+    final window = (jsonDecode(slow.written!)['windows'] as Map)['main'] as Map;
+    expect(window['projectDirectory'], '/work');
+    final ids = [
+      for (final s in window['openSessions'] as List) (s as Map)['id'],
+    ];
+    expect(ids, isNot(contains('s-42')));
+    expect(window['activeSessionId'], isNot('s-42'));
+  });
+
   // Пользователь открыл другую папку до первого подключения: снимок описывает
   // прошлый проект, и его сессии не должны ни появиться в новом проекте, ни
   // дать `session/new` в старой папке.
@@ -269,4 +308,102 @@ void main() {
     expect(sentMethods(), [initializeMethod, sessionLoadMethod]);
     expect(agent.transport.sentMessages.whereType<JsonRpcResponse>(), isEmpty);
   });
+
+  // Старт без восстановления (задача 3.1 change `add-app-general-page`; spec
+  // acp-client-kit «Старт без восстановления рабочего пространства», D9).
+  group('startWithoutRestore', () {
+    test('снимок не восстанавливается: нет session/load, сессий снимка нет в '
+        'списке', () async {
+      store = InMemoryWorkspaceSnapshotStore(_snapshot());
+      agent = KitAgent(capabilities: _withLoad, snapshots: store);
+
+      agent.workspace.startWithoutRestore();
+      agent.workspace.selectProject('/work');
+      // Агент отвечает на session/load, если запрос придёт, чтобы красный тест
+      // падал по ассерту, а не по таймауту.
+      unawaited(
+        agent
+            .next(sessionLoadMethod)
+            .then<void>(
+              (request) => agent.respond(request, const <String, Object?>{}),
+              // Поток закрывается при dispose, если session/load не пришёл —
+              // это и есть ожидаемое поведение.
+              onError: (Object _) {},
+            ),
+      );
+      await agent.start();
+
+      expect(sentMethods(), [initializeMethod]);
+      expect(agent.workspace.current.sessions, isEmpty);
+      expect(agent.workspace.current.activeSessionId, isNull);
+    });
+
+    test('снимок пишется по ходу работы: проект нового запуска, без сессий '
+        'прошлого снимка', () async {
+      store = InMemoryWorkspaceSnapshotStore(_snapshot());
+      agent = KitAgent(capabilities: _withLoad, snapshots: store);
+
+      agent.workspace.startWithoutRestore();
+      agent.workspace.selectProject('/work/other');
+      await agent.workspace.flushSnapshot();
+      // Подключение после записи: сессии прошлого снимка не возвращаются ни в
+      // `session/load`, ни в следующую запись (иначе тест проходил бы и на
+      // обычном восстановлении, которое «чужой» проект тоже отменяет).
+      await agent.start(projectDirectory: '/work/other');
+      await agent.workspace.flushSnapshot();
+
+      expect(sentMethods(), [initializeMethod]);
+      expect(_savedWindow(store)['projectDirectory'], '/work/other');
+      expect(_savedWindow(store)['openSessions'], isEmpty);
+      expect(_savedWindow(store)['activeSessionId'], isNull);
+    });
+
+    test('тот же проект, что в снимке: сессии снимка не сохраняются как '
+        'ожидающие', () async {
+      store = InMemoryWorkspaceSnapshotStore(_snapshot());
+      agent = KitAgent(capabilities: _withLoad, snapshots: store);
+
+      agent.workspace.startWithoutRestore();
+      agent.workspace.selectProject('/work');
+      // Даём незавершённому чтению снимка (на заглушке) шанс отработать до
+      // записи: пустая операция должна переживать и это.
+      await Future<void>.value();
+      await agent.workspace.flushSnapshot();
+      await agent.start();
+      await agent.workspace.flushSnapshot();
+
+      expect(sentMethods(), [initializeMethod]);
+      expect(_savedWindow(store)['projectDirectory'], '/work');
+      expect(_savedWindow(store)['openSessions'], isEmpty);
+      expect(_savedWindow(store)['activeSessionId'], isNull);
+    });
+  });
+}
+
+Map<Object?, Object?> _savedWindow(InMemoryWorkspaceSnapshotStore store) {
+  final saved = jsonDecode(store.value!) as Map<String, Object?>;
+  return (saved['windows']! as Map)['main'] as Map;
+}
+
+/// Хранилище, чьё чтение ждёт [gate]: моделирует долгое чтение снимка.
+final class _GatedStore implements WorkspaceSnapshotStore {
+  _GatedStore(this.value, this.gate);
+
+  final String? value;
+  final Future<void> gate;
+
+  @override
+  Future<String?> read() async {
+    await gate;
+    return value;
+  }
+
+  @override
+  Future<void> write(String snapshot) async => written = snapshot;
+
+  /// Последняя записанная строка снимка; `null` — записи не было.
+  String? written;
+
+  @override
+  Future<void> clear() async {}
 }
