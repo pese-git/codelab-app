@@ -72,6 +72,7 @@ final w = [
   ),
   Tip(label: 'Save', tooltip: 'Close it'),
   Info(title: 'T', message: 'Failed', placeholder: 'Type', content: Text('C')),
+  Cmd(description: 'Opens it'),
 ];
 ''',
       });
@@ -85,6 +86,7 @@ final w = [
         'Failed',
         'Type',
         'C',
+        'Opens it',
       ]);
     });
 
@@ -123,5 +125,12 @@ b.dart | Bar |
 
     expect(parsed.keys, {'a.dart|Foo'});
     expect(parsed.withoutReason, ['b.dart | Bar |']);
+  });
+
+  test('parseAllowlist: литерал с | склеивается обратно', () {
+    final parsed = parseAllowlist('a.dart | a | b | причина\n');
+
+    expect(parsed.keys, {'a.dart|a | b'});
+    expect(parsed.withoutReason, isEmpty);
   });
 }

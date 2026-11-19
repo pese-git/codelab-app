@@ -12,8 +12,8 @@
 /// Как использовать: `scanUiLiterals(root)` обходит каталоги [uiLiteralDirs].
 /// Это эвристика по регулярным выражениям, а не разбор AST: позиции узкие
 /// (`Text('…')`, `CodeLabText('…')`, `label:`, `tooltip:`, `placeholder:`,
-/// `title:`, `message:`, `content:`), литерал считается интерфейсным, если
-/// начинается с буквы. Литералы в `application/` проверяет ревью.
+/// `title:`, `message:`, `content:`, `description:`), литерал считается
+/// интерфейсным, если начинается с буквы. Литералы в `application/` проверяет ревью.
 library;
 
 import 'dart:io';
@@ -41,13 +41,13 @@ final _widgetPosition = RegExp(
   r'\b(?:CodeLabText|Text)\(\s*(?:const\s+)?' + _str,
 );
 final _namedPosition = RegExp(
-  r'\b(?:label|tooltip|placeholder|title|message|content)\s*:\s*(?:const\s+)?' +
+  r'\b(?:label|tooltip|placeholder|title|message|content|description)\s*:\s*(?:const\s+)?' +
       _str,
 );
 
 /// Найденные литералы под [root]; пути — от [root] со слешами `/`.
 List<UiLiteral> scanUiLiterals(String root, {List<String>? dirs}) {
-  final found = <UiLiteral>[];
+  final found = <(UiLiteral, int)>[];
   for (final rel in dirs ?? uiLiteralDirs) {
     final dir = Directory(p.join(root, rel));
     if (!dir.existsSync()) continue;
@@ -67,19 +67,19 @@ List<UiLiteral> scanUiLiterals(String root, {List<String>? dirs}) {
           final line = '\n'.allMatches(text.substring(0, m.start)).length + 1;
           if (_inComment(text, m.start)) continue;
           found.add((
-            file: path,
-            line: line,
-            literal: m.group(1) ?? m.group(2)!,
+            (file: path, line: line, literal: m.group(1) ?? m.group(2)!),
+            m.start,
           ));
         }
       }
     }
   }
+  // Порядок: файл, затем позиция в файле (две позиции бывают на одной строке).
   found.sort((a, b) {
-    final c = a.file.compareTo(b.file);
-    return c != 0 ? c : a.line.compareTo(b.line);
+    final c = a.$1.file.compareTo(b.$1.file);
+    return c != 0 ? c : a.$2.compareTo(b.$2);
   });
-  return found;
+  return [for (final f in found) f.$1];
 }
 
 /// Каталоги сообщений и превью — не интерфейс (D10).
@@ -104,12 +104,15 @@ bool _inComment(String text, int offset) {
   for (final raw in source.split('\n')) {
     final line = raw.trim();
     if (line.isEmpty || line.startsWith('#')) continue;
-    final parts = line.split('|').map((s) => s.trim()).toList();
-    if (parts.length < 3 || parts[2].isEmpty) {
+    // Разделитель полей — ` | ` с пробелами. Первое поле — путь, последнее —
+    // причина; середина — литерал как есть, он сам может содержать `|`.
+    final parts = line.split(' | ');
+    if (parts.length < 3 || parts.last.trim().isEmpty) {
       withoutReason.add(line);
       continue;
     }
-    keys.add('${parts[0]}|${parts[1]}');
+    final literal = parts.sublist(1, parts.length - 1).join(' | ').trim();
+    keys.add('${parts.first.trim()}|$literal');
   }
   return (keys: keys, withoutReason: withoutReason);
 }

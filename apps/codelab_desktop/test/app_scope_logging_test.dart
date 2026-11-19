@@ -58,7 +58,8 @@ void main() {
 
       final cubit = binding.scope.resolve<AppLanguageCubit>();
       expect(cubit.state.preference, AppLanguagePreference.system);
-      expect(cubit.state.locale, const Locale('en'));
+      // `system` при первом языке системы `ru` даёт `ru` (D2, Q5 (а)).
+      expect(cubit.state.locale, const Locale('ru'));
       final failed = languageEvents(
         binding,
       ).singleWhere((e) => e['event'] == 'app.language_preference_read_failed');

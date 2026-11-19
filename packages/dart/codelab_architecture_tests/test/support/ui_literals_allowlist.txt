@@ -7,3 +7,34 @@
 #
 # Сюда попадает только то, что не язык интерфейса: идентификатор, имя
 # собственное, значение для разработчика. Перевод в ARB сюда не переносится.
+
+apps/codelab_desktop/lib/app/codelab_app_widget.dart | CodeLab | название продукта, не переводится
+apps/codelab_desktop/lib/features/workbench/presentation/workbench_shell.dart | CodeLab | название продукта, не переводится
+apps/codelab_desktop/lib/features/settings/presentation/about_section.dart | CodeLab ${about.version} | название продукта и версия, не переводятся
+apps/codelab_desktop/lib/features/settings/presentation/provider_wizard_dialog.dart | GET ${setup.probeUrl} | HTTP-метод и URL запроса проверки, не переводятся
+apps/codelab_desktop/lib/features/settings/presentation/add_profile_dialog.dart | WebSocket | название протокола, не переводится (D7)
+apps/codelab_desktop/lib/features/settings/presentation/add_profile_dialog.dart | URL | термин не переводится (глоссарий)
+apps/codelab_desktop/lib/features/settings/presentation/add_profile_dialog.dart | id | имя поля профиля в файле, не переводится
+apps/codelab_desktop/lib/features/settings/presentation/add_profile_dialog.dart | codelab-agent | пример значения поля (имя исполняемого файла)
+apps/codelab_desktop/lib/features/settings/presentation/add_profile_dialog.dart | serve --stdio | пример значения поля (аргументы командной строки)
+apps/codelab_desktop/lib/features/settings/presentation/add_profile_dialog.dart | RUST_LOG=info | пример значения поля (переменная окружения)
+apps/codelab_desktop/lib/features/settings/presentation/add_profile_dialog.dart | wss://host:7420 | пример значения поля (адрес)
+apps/codelab_desktop/lib/features/settings/presentation/add_profile_dialog.dart | profile-id | пример значения поля (идентификатор профиля)
+apps/codelab_desktop/lib/features/settings/presentation/agents_modes_page.dart | autopilot | значение режима из конфигурации агента, показывается как есть
+apps/codelab_desktop/lib/features/settings/presentation/agents_modes_page.dart | low | значение effort из конфигурации агента, показывается как есть
+apps/codelab_desktop/lib/features/settings/presentation/agents_modes_page.dart | medium | значение effort из конфигурации агента, показывается как есть
+apps/codelab_desktop/lib/features/settings/presentation/agents_modes_page.dart | high | значение effort из конфигурации агента, показывается как есть
+apps/codelab_desktop/lib/features/settings/presentation/mcp_page.dart | stdio | значение транспорта MCP из конфигурации, показывается как есть
+apps/codelab_desktop/lib/features/settings/presentation/mcp_page.dart | http | значение транспорта MCP из конфигурации, показывается как есть
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | New session | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | Start a fresh ACP session. | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | Plan mode | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | Switch the prompt turn into planning. | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | Permissions | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | Open permission mode controls. | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | Logs | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | Open protocol and diagnostic logs. | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | Compact transcript | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | Prepare the transcript for compaction. | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | Reconnect | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
+packages/flutter/codelab_ui/lib/src/molecules/codelab_command_action.dart | Retry the current agent connection. | эталон кита для превью и тестов; app подменяет подпись и описание по id каталогом app (ui_mappers), на экран не выходит
