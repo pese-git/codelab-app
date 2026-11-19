@@ -81,6 +81,7 @@ final class SkillRootView {
     required this.scope,
     required this.label,
     required this.path,
+    this.extraEntry,
   });
 
   final ExtensionScope scope;
@@ -93,6 +94,10 @@ final class SkillRootView {
 
   /// Абсолютный путь корня на диске (для «Open»).
   final String path;
+
+  /// ЗАГЛУШКА (5.1a): элемент `extra_roots` у известного корня `extra`;
+  /// пока всегда `null`. Поведение — задача 5.1b.
+  final String? extraEntry;
 
   @override
   String toString() => 'SkillRootView($label)';
@@ -229,11 +234,16 @@ final class SkillEntryView {
     required this.overridesLabel,
     required this.warnings,
     required this.toggle,
+    this.overridesScope,
   });
 
   final String name;
   final String description;
   final String? argumentHint;
+
+  /// ЗАГЛУШКА (5.1a): область, которую называет `overridesLabel`; пока всегда
+  /// `null`. Поведение — задача 5.1b.
+  final ExtensionScope? overridesScope;
 
   /// `/skill:<name>[ <hint>]`; `null` — у навыка нет команды (`Model only`).
   final String? invokeAs;

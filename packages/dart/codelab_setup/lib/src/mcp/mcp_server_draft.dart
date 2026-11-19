@@ -74,12 +74,48 @@ final class McpStoredSecret extends McpValueDraft {
 /// Поле формы, к которому относится проблема.
 enum McpDraftField { name, command, url, env, headers }
 
+/// Код проблемы черновика: закрытый набор, по которому клиент строит текст на
+/// своём языке (`add-desktop-localization`, D6 «Тексты моста настроек
+/// (итерация 5)»; по образцу `ProviderSetupErrorCode`).
+///
+/// ЗАГЛУШКА сигнатуры (задача 5.1a): значения есть, поведения нет — их
+/// заполняет 5.1b.
+enum McpDraftProblemCode {
+  nameInvalid,
+  renameNotAllowed,
+  nameTaken,
+  commandEmpty,
+  urlInvalid,
+  urlHasUserinfo,
+  keyHasSpaces,
+  keyDuplicate,
+  keyEmpty,
+  secretValueEmpty,
+  secretNameCollision,
+}
+
 /// Проблема черновика до записи: [message] — готовый текст без значений.
+///
+/// ЗАГЛУШКА (5.1a): [code] и [argument] пока не заполняются, фабрика [of] не
+/// строит ни код, ни текст. Поведение — задача 5.1b.
 final class McpDraftProblem {
-  const McpDraftProblem(this.field, this.message);
+  const McpDraftProblem(this.field, this.message, {this.code, this.argument});
+
+  /// Строит проблему с кодом и прежним английским текстом (заглушка).
+  factory McpDraftProblem.of(
+    McpDraftProblemCode code,
+    McpDraftField field, {
+    String? argument,
+  }) => McpDraftProblem(field, '');
 
   final McpDraftField field;
   final String message;
+
+  /// Код проблемы; `null` — проблема чужого источника.
+  final McpDraftProblemCode? code;
+
+  /// Имя ключа у кодов о ключе, иначе `null`.
+  final String? argument;
 
   @override
   String toString() => 'McpDraftProblem(${field.name}: $message)';
