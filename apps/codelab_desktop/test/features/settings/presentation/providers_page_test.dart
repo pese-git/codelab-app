@@ -320,6 +320,14 @@ void main() {
         find.textContaining('OS key stores are not available yet'),
         findsOneWidget,
       );
+      // Заголовок — переведённое сообщение, текст хранилища — под ним.
+      expect(
+        find.descendant(
+          of: _key('providers-store-unavailable'),
+          matching: find.text('The secret store is read-only.'),
+        ),
+        findsOneWidget,
+      );
       await tearDownApp(tester);
     });
 

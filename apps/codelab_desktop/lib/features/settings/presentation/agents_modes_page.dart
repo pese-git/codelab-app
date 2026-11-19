@@ -358,7 +358,7 @@ class AgentsModesPage extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
+              constraints: const BoxConstraints(maxWidth: 480),
               child: CodeLabText(
                 l10n.agentsDefinitionsCaption,
                 role: CodeLabTextRole.caption,
@@ -422,7 +422,11 @@ class AgentsModesPage extends StatelessWidget {
                   l10n.agentsColStatus,
                 ],
                 // Длинный путь источника переносится, а не съедает статус.
-                columnFlex: const [2, 3, 3, 2, 2, 2, 7],
+                // В таблице нет действий, поэтому колонка действий не резервируется
+                // (`actionWidth: 0`), а веса дают «Доступен в» и «Инструменты»
+                // место под заголовок целиком при колонке ~880 pt (ru и en).
+                actionWidth: 0,
+                columnFlex: const [2, 3, 3, 3, 3, 2, 5],
                 rows: [
                   for (final (index, row) in definitions.rows.indexed)
                     CodeLabStatusTableRow(
@@ -677,6 +681,10 @@ class AgentsModesPage extends StatelessWidget {
               autofocus: true,
               child: ContentDialog(
                 key: const ValueKey('agents-modes-bypass-confirm'),
+                // Шире стандартных 368 pt: при них русская кнопка «Использовать
+                // bypass» (~140 pt настоящим шрифтом) не помещается в свою
+                // половину и переносится на две строки.
+                constraints: const BoxConstraints(maxWidth: 480),
                 title: CodeLabDialogTitle(dialogContext.l10n.agentsBypassTitle),
                 content: Text(dialogContext.l10n.agentsBypassBody),
                 actions: [

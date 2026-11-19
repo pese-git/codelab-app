@@ -318,6 +318,15 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Использовать bypass'), findsOneWidget);
+      // Диалог шире стандартных 368 pt, чтобы кнопка «Использовать bypass» не
+      // переносилась (тестовый шрифт Ahem вдвое шире, высоту строки в нём не
+      // проверить, поэтому проверяется ширина диалога).
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('agents-modes-bypass-confirm')))
+            .width,
+        greaterThanOrEqualTo(480),
+      );
       expectNoEnglish(const [
         'Use bypass',
         'Only critical commands',

@@ -2339,9 +2339,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get mcpStoreReadOnly => 'The secret store is read-only.';
-
-  @override
   String get mcpReplaceTitle => 'A secret with this name is already stored';
 
   @override

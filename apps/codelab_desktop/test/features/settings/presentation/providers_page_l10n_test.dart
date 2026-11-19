@@ -515,9 +515,34 @@ void main() {
 
       expect(find.text('Хранилище ключей: env'), findsOneWidget);
       expect(find.text('только чтение'), findsOneWidget);
+      // Заголовок InfoBar переведён, текст хранилища — как есть под ним в
+      // `content`, а не жирным заголовком (правило 4.5, D6).
+      final bar = _key('providers-store-unavailable');
       expect(
-        find.textContaining('OS key stores are not available yet'),
+        find.descendant(
+          of: bar,
+          matching: find.text('Хранилище секретов доступно только для чтения.'),
+        ),
         findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: bar,
+          matching: find.text('OS key stores are not available yet'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .getTopLeft(
+              find.text('Хранилище секретов доступно только для чтения.'),
+            )
+            .dy,
+        lessThan(
+          tester
+              .getTopLeft(find.text('OS key stores are not available yet'))
+              .dy,
+        ),
       );
       await tearDownApp(tester);
     });

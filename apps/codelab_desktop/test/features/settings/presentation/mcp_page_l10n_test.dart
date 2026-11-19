@@ -290,6 +290,27 @@ void main() {
       });
     }
 
+    testWidgets('ru: подписи «Вкл» и «Выкл» переключателя не переносятся', (
+      tester,
+    ) async {
+      store.user = _layer([
+        _github(),
+        {..._postgres(), 'enabled': false},
+      ]);
+      await openPage(tester, locale: const Locale('ru'));
+
+      for (final word in const ['Вкл', 'Выкл']) {
+        final label = find.text(word);
+        expect(label, findsOneWidget, reason: word);
+        // Одна строка текста 14 pt ниже 26 pt, две — выше.
+        expect(
+          tester.getSize(label).height,
+          lessThan(26),
+          reason: 'подпись «$word» разорвана',
+        );
+      }
+    });
+
     testWidgets('ru: пустой список и карточка нового сервера', (tester) async {
       store.user = _layer(const []);
       await openPage(tester, locale: const Locale('ru'));
