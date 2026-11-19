@@ -141,7 +141,7 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
           'not_managed',
         );
       case final EditableSettings access:
-        await _loadEditable(attempt, access);
+        await _loadEditable(attempt, access, profile);
     }
   }
 
@@ -206,12 +206,24 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
     _saved = null;
   }
 
-  Future<void> _loadEditable(int attempt, EditableSettings access) async {
+  /// Читает снимок конфига для [access]; [profile] — профиль, по которому он
+  /// решён: подключённый, а без подключения — профиль по умолчанию.
+  ///
+  /// Почему окружение берётся из [profile], а не из `_accessProfile`: без
+  /// подключения `_accessProfile` пуст, `env` stdio-профиля по умолчанию терялся
+  /// бы, и store строил бы слой `env` снимка без него: ключ из `env` выглядел бы
+  /// редактируемым без `ExternalSourceSetting`, а баннер «Saved» не сказал бы о
+  /// перекрытии. Окружение сессии — переменные app, дополненные `env` профиля,
+  /// как у Providers, MCP и Skills (spec app-settings).
+  Future<void> _loadEditable(
+    int attempt,
+    EditableSettings access,
+    ConnectionProfile profile,
+  ) async {
     if (access.paths.codelabHome.isEmpty) {
       _setUnreadable(AgentDefaultsUnreadableReason.homeUnavailable);
       return;
     }
-    final profile = _accessProfile;
     final environment = {
       ..._environment,
       if (profile is StdioProfile) ...profile.env,

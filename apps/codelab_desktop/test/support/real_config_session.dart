@@ -50,9 +50,16 @@ final class RealConfigSession implements ProviderSettingsSession {
     required String home,
     required String project,
     String config = realHomeConfig,
+    Map<String, String> extraEnvironment = const {},
   }) async {
     File('$home/config.yaml').writeAsStringSync(config);
-    final environment = {'HOME': home, 'CODELAB_HOME': home};
+    // `extraEnvironment` — окружение, которое сессии передаёт страница
+    // (переменные app и `env` профиля): по нему store строит слой `env`.
+    final environment = {
+      'HOME': home,
+      'CODELAB_HOME': home,
+      ...extraEnvironment,
+    };
     final access = await setup.ClientSecretAccess.open(
       codelabHome: home,
       environment: environment,

@@ -26,6 +26,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/fake_provider_settings.dart' show FakeWorkspace;
 import '../../../support/modes_fixture.dart';
+import '../../../support/real_config_session.dart';
 import '../../../support/recording_logger.dart';
 
 final _remote = ConnectionProfile.webSocket(
@@ -924,6 +925,51 @@ void main() {
       final state = unreadable(cubit);
       expect(state.reason, AgentDefaultsUnreadableReason.userLayerUnreadable);
       expect(state.problems, isEmpty);
+    });
+  });
+
+  // Окружение сессии настроек — переменные app, дополненные `env` профиля,
+  // по которому решён доступ (подключённого, а без подключения — профиля по
+  // умолчанию), как у Providers/MCP/Skills (spec app-settings): store строит
+  // слой `env` снимка из этого окружения.
+  group('Окружение профиля по умолчанию без подключения', () {
+    test('env stdio-профиля по умолчанию попадает в снимок: ключ из env — '
+        'ExternalSourceSetting, значение в журнал не идёт', () async {
+      final fx = await fixture();
+      const profile = ConnectionProfile.stdio(
+        id: 'dflt',
+        label: 'Default',
+        command: '/opt/bin/codelab-agent',
+        args: ['serve', '--stdio'],
+        env: {'CODELAB_MAX_STEPS': '7351'},
+      );
+      final cubit = AgentDefaultsCubit(
+        workspace: workspace,
+        defaultProfile: () async => profile,
+        open: (access, env) async {
+          final session = await RealConfigSession.open(
+            home: fx.home,
+            project: fx.project,
+            config: File('${fx.home}/config.yaml').readAsStringSync(),
+            extraEnvironment: env,
+          );
+          return ModesSession(ControlledConfigStore(session.config));
+        },
+        environment: {'HOME': fx.home},
+        codelabHome: fx.home,
+        projectDirectory: () => fx.project,
+        logger: logger,
+      );
+      cubits.add(cubit);
+
+      final state = await ready(cubit);
+
+      final steps = [
+        for (final g in state.groups) ...g.rows,
+      ].singleWhere((r) => r.field.key == 'budget.max_steps');
+      expect(steps.field.sourceName, 'env');
+      expect(steps.refusal, isA<ExternalSourceSetting>());
+      expect(logger.entries.toString(), isNot(contains('7351')));
     });
   });
 }
