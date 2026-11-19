@@ -26,7 +26,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
 
 ## 1. Итерация 1 — одобрение не берёт фокус само (безопасность)
 
-- [ ] 1.1 `[desktop]` Красный, кит: `packages/flutter/codelab_ui/test/codelab_approval_focus_test.dart` (D1; spec agent-workbench-ui «Одобрение получает клавиатурный фокус только по действию пользователя»). Для `CodeLabApprovalPrompt` с `shortcutsEnabled: true` и для `CodeLabApprovalOptionGroup` проверяет:
+- [x] 1.1 `[desktop]` Красный, кит: `packages/flutter/codelab_ui/test/codelab_approval_focus_test.dart` (D1; spec agent-workbench-ui «Одобрение получает клавиатурный фокус только по действию пользователя»). Для `CodeLabApprovalPrompt` с `shortcutsEnabled: true` и для `CodeLabApprovalOptionGroup` проверяет:
   - после `pump` при пустом фокусе `primaryFocus` не внутри полосы;
   - Cmd/Ctrl+Enter, Cmd/Ctrl+Alt+Enter, Cmd/Ctrl+Backspace и Cmd/Ctrl+Alt+Backspace, каждое в вариантах `control` и `meta`, не вызывают `onOptionSelected`;
   - перестроение полосы с новыми вариантами не переносит фокус;
@@ -34,8 +34,8 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - у полосы с `shortcutsEnabled: false` (не самое раннее одобрение) после Tab до кнопки сочетания ничего не выбирают, а Enter на кнопке выбирает её вариант.
 
   Прежние сценарии одобрения в `codelab_molecules_test.dart`, `codelab_organisms_test.dart` и `codelab_shortcut_bindings_test.dart` получают явный шаг фокуса.
-- [ ] 1.2 `[desktop]` Реализация 1.1: убрать `autofocus` в `organisms/codelab_approval_prompt.dart` и `molecules/codelab_approval_option_group.dart`. Doc-комментарии обоих виджетов и `CodeLabApprovalShortcuts` объясняют, почему полоса не берёт фокус сама (D1, D2; `AGENTS.md` §15). 1.1 и прежние тесты кита зелёные.
-- [ ] 1.3 `[desktop]` Красный, app: `apps/codelab_desktop/test/features/workbench/presentation/approval_focus_test.dart`. Дерево `CodeLabApp` с фейковым транспортом, ответ на `session/request_permission` наблюдается на проводе. Сценарии:
+- [x] 1.2 `[desktop]` Реализация 1.1: убрать `autofocus` в `organisms/codelab_approval_prompt.dart` и `molecules/codelab_approval_option_group.dart`. Doc-комментарии обоих виджетов и `CodeLabApprovalShortcuts` объясняют, почему полоса не берёт фокус сама (D1, D2; `AGENTS.md` §15). 1.1 и прежние тесты кита зелёные.
+- [x] 1.3 `[desktop]` Красный, app: `apps/codelab_desktop/test/features/workbench/presentation/approval_focus_test.dart`. Дерево `CodeLabApp` с фейковым транспортом, ответ на `session/request_permission` наблюдается на проводе. Сценарии:
   - agent-workbench-ui «Одобрение появилось без фокуса — Cmd/Ctrl+Enter не отвечает»;
   - «Одобрение появилось без фокуса — остальные сочетания одобрения не отвечают»;
   - «Одобрение появилось после закрытия палитры»;
@@ -49,7 +49,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - `widget_test.dart`;
   - `settings_pending_approval_test.dart`;
   - `keyboard_bindings_test.dart` — «Отправка и одобрение на одной клавише».
-- [ ] 1.4 `[desktop]` Реализация 1.3. Код app не должен меняться: поведение даёт 1.2. Если тест красный из-за чужого `autofocus` или из-за того, что фокус по ошибке оказывается в полосе, исправить там и описать причину в комментарии. 1.3 зелёный.
+- [x] 1.4 `[desktop]` Реализация 1.3. Код app не должен меняться: поведение даёт 1.2. Если тест красный из-за чужого `autofocus` или из-за того, что фокус по ошибке оказывается в полосе, исправить там и описать причину в комментарии. 1.3 зелёный.
 
 ## 2. Итерация 2 — переход «Go to approval»
 

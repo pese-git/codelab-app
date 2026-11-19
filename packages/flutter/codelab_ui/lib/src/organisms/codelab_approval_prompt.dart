@@ -88,6 +88,13 @@ enum _Scope { once, always }
 /// одобрение ждёт решения. [shortcutsEnabled] — одобрение в фокусе: только
 /// у него действуют сочетания и видны подсказки. Охват — черновик решения в
 /// `State` полосы: каждое новое одобрение начинается с охвата по умолчанию.
+///
+/// Фокус: полоса НЕ берёт клавиатурный фокус сама (change
+/// `fix-approval-focus`, D1, D2). Прежний `Focus(autofocus: true)` ловил
+/// фокус, когда он был потерян (клик по пустой ленте, закрытая палитра), и
+/// Cmd/Ctrl+Enter отвечал `allow_once` на запрос разрешения без явного
+/// действия пользователя (AGENTS.md §10). Теперь сочетания действуют, только
+/// когда пользователь сам довёл фокус до полосы или её кнопок: клик или Tab.
 class CodeLabApprovalPrompt extends StatefulWidget {
   const CodeLabApprovalPrompt({
     required this.options,
@@ -295,7 +302,8 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
     }
     return CallbackShortcuts(
       bindings: shortcuts.bindings(_select),
-      child: Focus(autofocus: true, child: content),
+      // Без `autofocus`: полоса не берёт фокус сама (`fix-approval-focus`, D1).
+      child: Focus(child: content),
     );
   }
 

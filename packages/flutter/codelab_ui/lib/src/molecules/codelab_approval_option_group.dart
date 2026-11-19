@@ -50,6 +50,19 @@ class CodeLabApprovalOption {
   final CodeLabTone tone;
 }
 
+/// Группа вариантов одобрения со всеми четырьмя сочетаниями по виду.
+///
+/// Почему: публичная молекула кита; сочетания привязаны к ней так же, как к
+/// полосе решения. Прежний `autofocus` давал любому потребителю тот же риск:
+/// ответ на запрос разрешения без явного действия пользователя
+/// (`fix-approval-focus`, D1; AGENTS.md §10).
+///
+/// Для чего: показать варианты и выбрать один кнопкой или сочетанием.
+///
+/// Как использовать: группа НЕ берёт клавиатурный фокус сама. Сочетания
+/// действуют при `shortcutsEnabled`, только когда пользователь довёл фокус
+/// до группы или её кнопок (клик, Tab); владелец не должен ставить фокус
+/// программно без действия пользователя.
 class CodeLabApprovalOptionGroup extends StatelessWidget {
   const CodeLabApprovalOptionGroup({
     required this.options,
@@ -100,7 +113,8 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
 
     return CallbackShortcuts(
       bindings: shortcuts.bindings(_selectIfEnabled),
-      child: Focus(autofocus: true, child: body),
+      // Без `autofocus`: группа не берёт фокус сама (`fix-approval-focus`, D1).
+      child: Focus(child: body),
     );
   }
 
@@ -114,6 +128,11 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
 }
 
 /// Сочетания клавиш вариантов одобрения по их виду.
+///
+/// Сами привязки ничего не фокусируют: виджеты, которые их ставят
+/// (`CodeLabApprovalPrompt`, `CodeLabApprovalOptionGroup`), не берут фокус
+/// сами, поэтому сочетание срабатывает только после явного действия
+/// пользователя (`fix-approval-focus`, D1, D2).
 ///
 /// Почему: сочетание выбирается по `PermissionOptionKind`, а не по подписи
 /// агента (требование «Approval options are rendered and bound to shortcuts
