@@ -19,7 +19,7 @@ const _options = [
   ),
 ];
 
-ResolvedApprovalView _project({
+AcpSession _session0({
   required ApprovalStatus status,
   PermissionOptionId? selected,
 }) {
@@ -40,10 +40,19 @@ ResolvedApprovalView _project({
     toolCalls: {_call: approval.toolCall},
     approvals: {approval.id: approval},
   );
+  return AcpSession(id: _session, cwd: '/work', turns: [turn]);
+}
+
+ResolvedApprovalView _approvalOf(List<TranscriptItem> items) =>
+    items.whereType<ToolCallItem>().single.approval! as ResolvedApprovalView;
+
+ResolvedApprovalView _project({
+  required ApprovalStatus status,
+  PermissionOptionId? selected,
+}) {
   final projector = TranscriptProjector()
-    ..apply(AcpSession(id: _session, cwd: '/work', turns: [turn]));
-  return projector.items.whereType<ToolCallItem>().single.approval!
-      as ResolvedApprovalView;
+    ..apply(_session0(status: status, selected: selected));
+  return _approvalOf(projector.items);
 }
 
 void main() {
@@ -77,5 +86,29 @@ void main() {
       expect(view.agentLabel, 'custom-7');
       expect(view.label, 'custom-7');
     });
+  });
+
+  // Спека: инкрементальная проекция и пересчёт с нуля дают равный agentLabel.
+  group('incremental projection and projectTranscript agree', () {
+    for (final (name, status, selected) in [
+      ('selected', ApprovalStatus.selected, 'allow-once'),
+      ('unknown id', ApprovalStatus.selected, 'custom-7'),
+      ('no option', ApprovalStatus.selected, null),
+      ('cancelled', ApprovalStatus.cancelled, null),
+    ]) {
+      test(name, () {
+        final session = _session0(
+          status: status,
+          selected: selected == null ? null : PermissionOptionId(selected),
+        );
+        final incremental = (TranscriptProjector()..apply(session)).items;
+        final rebuilt = projectTranscript(session);
+
+        expect(
+          _approvalOf(incremental).agentLabel,
+          _approvalOf(rebuilt).agentLabel,
+        );
+      });
+    }
   });
 }
