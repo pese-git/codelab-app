@@ -25,6 +25,7 @@
 // Размер файла — 1024-ичный, одна цифра после точки (`4.8 KB`, `6.1 KB`).
 
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_desktop/l10n/app_localizations.dart';
 import 'package:codelab_desktop/core/platform/local_folder_opener.dart';
 import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
 import 'package:codelab_desktop/features/settings/application/skills_settings_cubit.dart';
@@ -36,6 +37,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:async';
 
+import '../../../support/l10n_app.dart';
 import '../../../support/fake_agent_extensions.dart';
 import '../../../support/fake_local_folder_opener.dart';
 import '../../../support/fake_provider_settings.dart';
@@ -110,6 +112,8 @@ void main() {
     await cubit.reload();
     await tester.pumpWidget(
       FluentApp(
+        localizationsDelegates: l10nTestDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: ScaffoldPage(
           content: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(40, 28, 40, 40),

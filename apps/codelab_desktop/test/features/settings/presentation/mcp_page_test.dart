@@ -22,6 +22,7 @@ import 'dart:io';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart'
     show AgentMessageChunk, SessionId, TextContent;
 import 'package:codelab_client_core/codelab_client_core.dart';
+import 'package:codelab_desktop/l10n/app_localizations.dart';
 import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
 import 'package:codelab_desktop/features/settings/application/mcp_settings_cubit.dart';
 import 'package:codelab_desktop/features/settings/presentation/mcp_page.dart';
@@ -33,6 +34,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../../support/l10n_app.dart';
 import '../../../support/fake_mcp_status.dart';
 import '../../../support/fake_provider_settings.dart';
 import '../../../support/real_config_session.dart';
@@ -150,6 +152,8 @@ void main() {
     }
     await tester.pumpWidget(
       FluentApp(
+        localizationsDelegates: l10nTestDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: ScaffoldPage(
           content: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(40, 28, 40, 40),

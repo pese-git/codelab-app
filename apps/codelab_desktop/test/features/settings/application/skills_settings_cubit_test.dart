@@ -214,12 +214,8 @@ void main() {
       await cubit.reload();
 
       final state = cubit.state as SkillsSettingsReadOnly;
-      expect(state.notice, 'Read-only: this agent runs on wss://devbox:7420.');
-      expect(
-        state.hint,
-        'Its skills, context files and prompt templates are read on that '
-        'host: codelab-agent config check.',
-      );
+      // Причина — тип с адресом; InfoBar и подсказку строит presentation (D5).
+      expect(state.reason, const RemoteAgentReadOnly('wss://devbox:7420'));
       expect(state.toString(), isNot(contains(leakMarker)));
       expect(opened, isEmpty);
       expect(session.extensionsCalls, isEmpty);
@@ -235,8 +231,7 @@ void main() {
       await cubit.reload();
 
       final state = cubit.state as SkillsSettingsReadOnly;
-      expect(state.notice, 'Skills are managed by python.');
-      expect(state.hint, isNull);
+      expect(state.reason, const ForeignAgentReadOnly('python'));
       expect(opened, isEmpty);
       expect(session.extensionsCalls, isEmpty);
       expect(event('skills_settings.read_only')['access'], 'not_managed');
@@ -302,8 +297,12 @@ void main() {
       await cubit.reload();
 
       final state = cubit.state as SkillsSettingsUnreadable;
-      expect(state.problems, hasLength(1));
-      expect(state.problems.single, contains('skills.max_skills'));
+      expect(state.issues, hasLength(1));
+      // Текст загрузчика — как есть, под переведённым заголовком (D6).
+      expect(
+        (state.issues.single as LoaderSettingsProblem).text,
+        contains('skills.max_skills'),
+      );
       expect(session.extensionsCalls, isEmpty);
       expect(event('skills_settings.unreadable')['issues'], 1);
     });
@@ -598,7 +597,7 @@ void main() {
 
       final banner = ready(cubit).banner!;
       expect(banner.kind, SkillsBannerKind.openFailed);
-      expect(banner.text, 'Could not open /work/app.');
+      expect((banner.message as SkillsOpenFailedMessage).path, '/work/app');
       final entry = event('skills_settings.open_failed');
       expect(entry['target'], 'file_dir');
       expect(logger.entries.toString(), isNot(contains('/work')));
@@ -611,7 +610,7 @@ void main() {
 
       await cubit.openCodelabFolder();
 
-      expect(ready(cubit).banner!.text, startsWith('Could not open /'));
+      expect(ready(cubit).banner!.message, isA<SkillsOpenFailedMessage>());
       expect(event('skills_settings.open_failed')['target'], 'codelab_folder');
     });
 
@@ -679,7 +678,9 @@ void main() {
       await cubit.reload();
 
       final state = cubit.state as SkillsSettingsUnreadable;
-      expect(state.problems, ['The CodeLab home folder is not available.']);
+      expect(state.issues, const [
+        AppSettingsProblem(AppSettingsProblemKind.homeUnavailable),
+      ]);
       expect(session.extensionsCalls, isEmpty);
       expect(store.snapshots, 0);
     });
@@ -756,7 +757,9 @@ void main() {
         await cubit.reload();
 
         final state = cubit.state as SkillsSettingsUnreadable;
-        expect(state.problems, ['Cannot read the agent settings.']);
+        expect(state.issues, const [
+          AppSettingsProblem(AppSettingsProblemKind.cannotReadSettings),
+        ]);
         expect(
           event('skills_settings.unreadable')['error_type'],
           'FormatException',
@@ -851,9 +854,6 @@ void main() {
   //   {root_kind: project_relative|home, enabled, layer}` — только после
   //   `ConfigSaved`; `save_failed {outcome: conflict|rejected|<тип>}`.
   group('writing skills.disabled (D5, D9, D14; Fake store)', () {
-    const savedText =
-        'Saved. New sessions use it; open sessions keep their skills.';
-
     Future<SkillsSettingsCubit> loaded() async {
       final cubit = make();
       await cubit.reload();
@@ -877,7 +877,7 @@ void main() {
         expect(setValue(0).key, 'skills.disabled');
         expect(setValue(0).value, ['code-review']);
         expect(ready(cubit).banner!.kind, SkillsBannerKind.saved);
-        expect(ready(cubit).banner!.text, savedText);
+        expect(ready(cubit).banner!.message, isA<SkillsSavedMessage>());
         expect(ready(cubit).saving, isFalse);
         expect(session.extensionsCalls.length, reads + 1);
       },
@@ -959,9 +959,12 @@ void main() {
       expect(store.applied, isEmpty);
       final banner = ready(cubit).banner!;
       expect(banner.kind, SkillsBannerKind.error);
+      // Баннер хранит отказ моста, а не готовую фразу (D5); подсказка
+      // переключателя строится той же функцией presentation.
+      final refused = banner.message as SkillsRefusedMessage;
       expect(
-        banner.text,
-        'Set in ${FakeAgentConfigStore.projectPath}; edit that file.',
+        (refused.refusal as SkillsListNotEditable).source,
+        FakeAgentConfigStore.projectPath,
       );
     });
 
@@ -978,7 +981,7 @@ void main() {
 
         expect(store.applied, hasLength(1));
         expect(ready(cubit).banner!.kind, SkillsBannerKind.conflict);
-        expect(ready(cubit).banner!.text, contains('changed on disk'));
+        expect(ready(cubit).banner!.message, isA<SkillsConflictMessage>());
         expect(session.extensionsCalls.length, reads + 1);
         expect(event('skills_settings.save_failed')['outcome'], 'conflict');
         expect(events(), isNot(contains('skills_settings.skill_toggled')));
@@ -1001,8 +1004,10 @@ void main() {
 
       final banner = ready(cubit).banner!;
       expect(banner.kind, SkillsBannerKind.error);
-      expect(banner.text, contains('skills.disabled'));
-      expect(banner.text, contains('must be a list of names'));
+      // Тексты проверки ядра — аргумент как есть (D6).
+      final rejected = banner.message as SkillsRejectedMessage;
+      expect(rejected.issues, contains('skills.disabled'));
+      expect(rejected.issues, contains('must be a list of names'));
       expect(event('skills_settings.save_failed')['outcome'], 'rejected');
       // Текст проблемы — в баннере для пользователя, но не в журнале.
       expect(logger.entries.toString(), isNot(contains('must be a list')));
@@ -1016,7 +1021,8 @@ void main() {
       await cubit.setSkillEnabled('a', enabled: false);
 
       expect(ready(cubit).banner!.kind, SkillsBannerKind.error);
-      expect(ready(cubit).banner!.text, isNot(contains(leakMarker)));
+      expect(ready(cubit).banner!.message, isA<SkillsNotSavedMessage>());
+      expect(ready(cubit).banner.toString(), isNot(contains(leakMarker)));
       expect(ready(cubit).saving, isFalse);
       expect(event('skills_settings.save_failed')['outcome'], 'StateError');
       expect(logger.entries.toString(), isNot(contains(leakMarker)));
@@ -1189,10 +1195,9 @@ void main() {
 
       expect(file(real.userConfig), before);
       expect(ready(cubit).banner!.kind, SkillsBannerKind.error);
-      expect(
-        ready(cubit).banner!.text,
-        'Trust this project to read .claude/skills.',
-      );
+      final refused = ready(cubit).banner!.message as SkillsRefusedMessage;
+      expect(refused.refusal, isA<SkillsListUntrustedProject>());
+      expect(refused.element, '.claude/skills');
     });
 
     test('a name disabled by the project config of an untrusted project '
@@ -1211,8 +1216,11 @@ void main() {
       expect(file(real.userConfig), before);
       final banner = ready(cubit).banner!;
       expect(banner.kind, SkillsBannerKind.error);
-      expect(banner.text, startsWith('Disabled by the project config ('));
-      expect(banner.text, contains('config.yaml'));
+      final refused = banner.message as SkillsRefusedMessage;
+      expect(
+        (refused.refusal as SkillsListDisabledByProject).source,
+        contains('config.yaml'),
+      );
     });
 
     test('turning off with the key unset writes the user config and keeps '
@@ -1266,8 +1274,10 @@ void main() {
 
       final banner = ready(cubit).banner!;
       expect(banner.kind, SkillsBannerKind.error);
-      expect(banner.text, contains('literal secret'));
-      expect(banner.text, contains('skills.disabled'));
+      expect(
+        (banner.message as SkillsInlineSecretMessage).key,
+        'skills.disabled',
+      );
       expect(event('skills_settings.save_failed')['outcome'], 'inline_secret');
     });
 

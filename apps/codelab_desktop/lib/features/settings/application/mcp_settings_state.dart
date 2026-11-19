@@ -1,6 +1,12 @@
 import 'package:codelab_embedded/codelab_embedded.dart' show McpServerState;
 import 'package:codelab_setup/codelab_setup.dart';
 
+import 'mcp_messages.dart';
+import 'settings_notices.dart';
+
+export 'mcp_messages.dart';
+export 'settings_notices.dart';
+
 /// Состояние страницы «MCP servers» (design.md change
 /// `add-provider-setup-ui`, D11, D12, D21; spec app-settings «Страница «MCP
 /// servers»», «Панель «Agent status» страницы MCP servers»).
@@ -37,12 +43,18 @@ sealed class McpSettingsLoaded extends McpSettingsState {
 /// Агент не наш или удалённый: настройки не читаются и не пишутся (SETUP-2).
 final class McpSettingsReadOnly extends McpSettingsLoaded {
   const McpSettingsReadOnly({
-    required this.notice,
+    this.reason,
+    this.notice = '',
     this.hint,
     required super.agentStatus,
   });
 
-  /// Заголовок InfoBar `mcp-read-only`.
+  /// Причина «только чтение»: чей агент (D5, «Уточнение итерации 5»). Текст
+  /// InfoBar строит presentation. Заглушка задачи 5.1c: Cubit пока оставляет
+  /// `null`, [notice] и [hint] остаются до задачи 5.2.
+  final ReadOnlyReason? reason;
+
+  /// Прежний готовый текст InfoBar `mcp-read-only`; удаляется в задаче 5.2.
   final String notice;
 
   /// Команды для хоста агента; у стороннего агента `null`.
@@ -50,7 +62,12 @@ final class McpSettingsReadOnly extends McpSettingsLoaded {
 
   @override
   McpSettingsReadOnly withAgentStatus(McpAgentStatus status) =>
-      McpSettingsReadOnly(notice: notice, hint: hint, agentStatus: status);
+      McpSettingsReadOnly(
+        reason: reason,
+        notice: notice,
+        hint: hint,
+        agentStatus: status,
+      );
 
   @override
   String toString() => 'McpSettingsReadOnly($notice)';
@@ -61,15 +78,25 @@ final class McpSettingsReadOnly extends McpSettingsLoaded {
 final class McpSettingsUnreadable extends McpSettingsLoaded {
   const McpSettingsUnreadable({
     required this.problems,
+    this.issues = const [],
     required super.agentStatus,
   });
 
-  /// Проблемы загрузчика с путём ключа, по строке на проблему.
+  /// Прежние проблемы строками (фразы app смешаны с текстами загрузчика);
+  /// удаляется в задаче 5.2.
   final List<String> problems;
+
+  /// Проблемы закрытого типа: фраза app (переводится) или текст загрузчика как
+  /// есть (D5, «Уточнение итерации 5»). Заглушка задачи 5.1c: пусто.
+  final List<SettingsProblem> issues;
 
   @override
   McpSettingsUnreadable withAgentStatus(McpAgentStatus status) =>
-      McpSettingsUnreadable(problems: problems, agentStatus: status);
+      McpSettingsUnreadable(
+        problems: problems,
+        issues: issues,
+        agentStatus: status,
+      );
 
   @override
   String toString() => 'McpSettingsUnreadable(${problems.length})';
@@ -81,25 +108,45 @@ enum McpBannerKind { saved, conflict, error }
 /// Баннер итога: первая строка — итог, остальные — подробности (оставшиеся
 /// секреты, предупреждения записи).
 final class McpBanner {
-  const McpBanner(this.kind, this.lines);
+  const McpBanner(this.kind, this.lines, {this.message});
 
   final McpBannerKind kind;
+
+  /// Прежние готовые строки; удаляются в задаче 5.2.
   final List<String> lines;
+
+  /// Типизированное сообщение, по которому presentation строит текст (D5,
+  /// «Уточнение итерации 5»). Заглушка задачи 5.1c: Cubit пока оставляет
+  /// `null`.
+  final McpMessage? message;
 
   @override
   String toString() => 'McpBanner(${kind.name}, ${lines.length} lines)';
 }
 
+/// Когда агент отклонил конфиг: от этого зависит заголовок InfoBar.
+enum McpRejectedKind {
+  /// После своей записи: `Saved, but the agent rejected the new config`.
+  afterSave,
+
+  /// При открытии страницы: `The agent rejects the current config`.
+  onOpen,
+}
+
 /// Содержимое InfoBar `mcp-rejected`: агент отклоняет конфиг (решение Q26).
 final class McpRejectedConfig {
   const McpRejectedConfig({
-    required this.title,
+    this.kind,
+    this.title = '',
     required this.problems,
     this.editServer,
   });
 
-  /// `Saved, but the agent rejected the new config` после своей записи,
-  /// `The agent rejects the current config` при открытии страницы.
+  /// Вид заголовка (D5, «Уточнение итерации 5»). Заглушка задачи 5.1c: Cubit
+  /// пока оставляет `null`.
+  final McpRejectedKind? kind;
+
+  /// Прежний готовый заголовок; удаляется в задаче 5.2.
   final String title;
 
   /// Строки `<путь ключа>: <проблема>`; значений в них нет.
@@ -149,12 +196,24 @@ final class McpSecretStorage {
   final String? unavailableReason;
 }
 
+/// Пояснение строки сервера вместо редактора (Q25 (5)).
+enum McpRowNoteKind {
+  /// Сервер из проектного файла: править и удалять нельзя, есть «Disable here».
+  projectFile,
+
+  /// Сервер отключён в `.codelab/config.local.yaml`: «Enable here» снимает.
+  disabledHere,
+}
+
 /// Строка списка серверов.
 final class McpServerRow {
   const McpServerRow({
     required this.name,
     required this.entry,
-    required this.sourceLabel,
+    this.sourceLabel = '',
+    this.source,
+    this.sourceFile,
+    this.noteKind,
     required this.layer,
     required this.enabled,
     required this.canToggle,
@@ -171,8 +230,19 @@ final class McpServerRow {
   /// Вид из моста: тип, цель, значения `args`/`env`/`headers` уже очищены.
   final McpServerEntryView entry;
 
-  /// `user`, `this project` или `defined in <file>`.
+  /// Прежняя готовая подпись источника; удаляется в задаче 5.2.
   final String sourceLabel;
+
+  /// Вид источника: подпись `user`, `this project` или `defined in <file>`
+  /// строит presentation (D7). Заглушка задачи 5.1c: Cubit пока оставляет
+  /// `null`.
+  final ConfigSourceKind? source;
+
+  /// Путь файла с `~` вместо домашнего каталога для `defined in <file>`.
+  final String? sourceFile;
+
+  /// Вид пояснения вместо готового [note]; `null` — пояснения нет.
+  final McpRowNoteKind? noteKind;
 
   /// Слой сервера: показывает неизменяемая цель «Save to» (Q27).
   final ConfigLayer layer;
@@ -274,22 +344,36 @@ final class McpStatusRow {
   const McpStatusRow({
     required this.name,
     required this.state,
-    required this.stateLabel,
-    required this.tools,
-    required this.lastError,
+    this.stateLabel = '',
+    this.retryIn,
+    this.tools = '',
+    this.toolCount,
+    this.lastError = '',
+    this.errorText,
     required this.canReconnect,
   });
+
+  /// Через сколько агент повторит подключение (`failed`); `null` — не ждёт.
+  /// Подпись `failed · retry in 24 s` строит presentation (D5, D8).
+  final Duration? retryIn;
+
+  /// Число инструментов; `null` — не определено (у `disabled`), прочерк рисует
+  /// presentation. Заглушка задачи 5.1c: Cubit пока оставляет `null`.
+  final int? toolCount;
+
+  /// Текст последней ошибки сервера как есть; `null` — ошибки нет.
+  final String? errorText;
 
   final String name;
   final McpServerState state;
 
-  /// `connected`, `failed · retry in 24 s`, `disabled`…
+  /// Прежняя готовая подпись состояния; удаляется в задаче 5.2.
   final String stateLabel;
 
-  /// Число инструментов; у `disabled` — `—`.
+  /// Прежнее число строкой или `—`; удаляется в задаче 5.2 вместе с [toolCount].
   final String tools;
 
-  /// Причина последней ошибки или `—`.
+  /// Прежняя ошибка или `—`; удаляется в задаче 5.2 вместе с [errorText].
   final String lastError;
 
   /// У выключенного сервера «Reconnect» нет.
@@ -316,7 +400,13 @@ final class McpAgentStatusText extends McpAgentStatus {
     this.sending = false,
     required this.canSend,
     this.notice,
+    this.listFailed = false,
   });
+
+  /// Последний `/mcp list` не завершился: presentation показывает переведённое
+  /// `/mcp list did not complete. Try Refresh again.` над прежним текстом.
+  /// Заглушка задачи 5.1c: Cubit пока оставляет `false`.
+  final bool listFailed;
 
   /// Текст последнего ответа; `null` — ещё не запрашивали.
   final String? text;
@@ -327,7 +417,7 @@ final class McpAgentStatusText extends McpAgentStatus {
   /// Кнопки активны: `Connected`, свободная сессия, пустая очередь.
   final bool canSend;
 
-  /// `/mcp list did not complete. Try Refresh again.` над прежним текстом.
+  /// Прежний готовый текст; удаляется в задаче 5.2.
   final String? notice;
 
   // Текст ответа может быть любым: в строку состояния он не попадает.

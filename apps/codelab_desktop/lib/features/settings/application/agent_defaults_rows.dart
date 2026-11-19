@@ -28,6 +28,7 @@ final class AgentDefaultsRow {
     required this.field,
     this.refusal,
     this.overriddenBy,
+    this.overriddenByKind,
   });
 
   /// Строка реестра: ключ, значение, источник, дескриптор.
@@ -36,9 +37,14 @@ final class AgentDefaultsRow {
   /// Причина, по которой редактора нет; `null` — строка редактируется.
   final SettingEditRefusal? refusal;
 
-  /// `project` или `local`, если значение пришло из проектного слоя
-  /// (подпись `This project overrides it (<source>).`); иначе `null`.
+  /// Прежняя готовая подпись (`project` или `local`); удаляется в задаче 5.2.
   final String? overriddenBy;
+
+  /// Вид проектного слоя (`project` или `projectLocal`), из которого пришло
+  /// значение; иначе `null`. Подпись `This project overrides it ({source})`
+  /// строит страница одной функцией по `ConfigSourceKind` (D7, решение
+  /// пользователя 2026-11-19 В1). Заглушка задачи 5.1c: пока `null`.
+  final ConfigSourceKind? overriddenByKind;
 }
 
 /// Группа строк одного раздела реестра.
