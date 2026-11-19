@@ -234,6 +234,10 @@ enum CodeLabShortcut {
   commandMenuClose(CodeLabShortcutGroup.composer, [
     CodeLabKeyCombo(LogicalKeyboardKey.escape),
   ]),
+  // ЗАГЛУШКА задачи 2.1 change `fix-approval-focus` (D3, D7): запись есть,
+  // комбинаций нет — Cmd/Ctrl+Shift+A добавляет задача 2.2. Красные тесты
+  // каталога и сторожа 2 держатся на пустом списке.
+  goToApproval(CodeLabShortcutGroup.approvals, []),
   allowOnce(CodeLabShortcutGroup.approvals, [
     CodeLabKeyCombo(LogicalKeyboardKey.enter, primary: true),
   ]),

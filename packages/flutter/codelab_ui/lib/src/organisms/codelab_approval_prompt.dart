@@ -115,6 +115,14 @@ class CodeLabApprovalPrompt extends StatefulWidget {
   static const viewRawInputKey = ValueKey('approval-view-raw-input');
   static const rawInputKey = ValueKey('approval-raw-input');
 
+  /// Ключ содержимого полосы внутри её `Focus`: `Focus.of(element)` даёт узел
+  /// полосы (для тестов и автоматизации; change `fix-approval-focus`, D4).
+  static const barKey = ValueKey('approval-bar');
+
+  /// Ключ рамки фокуса: есть, пока фокус на полосе или внутри неё (D4, п. 3).
+  /// ЗАГЛУШКА задачи 2.1: рамки пока нет — её рисует задача 2.2.
+  static const focusFrameKey = ValueKey('approval-focus-frame');
+
   /// Английский эталон подсказки недоступной кнопки, когда у агента нет
   /// варианта для выбранного охвата.
   ///
@@ -303,7 +311,9 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
     return CallbackShortcuts(
       bindings: shortcuts.bindings(_select),
       // Без `autofocus`: полоса не берёт фокус сама (`fix-approval-focus`, D1).
-      child: Focus(child: content),
+      child: Focus(
+        child: KeyedSubtree(key: CodeLabApprovalPrompt.barKey, child: content),
+      ),
     );
   }
 

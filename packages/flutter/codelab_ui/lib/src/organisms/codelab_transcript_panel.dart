@@ -128,11 +128,17 @@ final class CodeLabTranscriptShowRequest {
     required this.rowId,
     required this.targetId,
     required this.serial,
+    this.focusApproval = false,
   });
 
   final String rowId;
   final String targetId;
   final int serial;
+
+  /// После показа поставить клавиатурный фокус на полосу решения цели
+  /// (change `fix-approval-focus`, D4). ЗАГЛУШКА задачи 2.1: признак есть, но
+  /// лента его не читает — поведение добавляет задача 2.2.
+  final bool focusApproval;
 }
 
 /// Состояние ленты: владеет `ScrollController` и решает, когда двигать

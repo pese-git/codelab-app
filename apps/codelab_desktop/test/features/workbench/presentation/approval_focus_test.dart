@@ -22,7 +22,10 @@ import 'dart:async';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_client_acp/codelab_client_acp.dart'
+    show ApprovalRequestId;
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
+import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -86,6 +89,7 @@ void main() {
   Future<void> pumpConnected(
     WidgetTester tester, {
     FakeProjectFiles? projectFiles,
+    SettingsPages? settingsPages,
   }) async {
     agent = FakeAcpTransport();
     final binding = CodeLabTestBinding(
@@ -93,6 +97,7 @@ void main() {
       transport: FakeAcpTransport(),
       stdioTransportFactory: (_) => agent,
       projectFiles: projectFiles,
+      settingsPages: settingsPages,
     );
     await tester.pumpWidget(
       binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
@@ -174,26 +179,27 @@ void main() {
     expect(focusInApproval(), isFalse);
   }
 
+  /// Фокус Flutter сейчас на элементе внутри [finder] (или на нём самом).
+  bool focusIn(Finder finder) {
+    final target = finder.evaluate().firstOrNull;
+    final context = FocusManager.instance.primaryFocus?.context;
+    if (target == null || context == null) return false;
+    if (identical(context, target)) return true;
+    var found = false;
+    context.visitAncestorElements((element) {
+      if (identical(element, target)) found = true;
+      return !found;
+    });
+    return found;
+  }
+
   /// Tab, пока фокус не окажется внутри [finder] (с верхней границей).
   Future<void> tabTo(WidgetTester tester, Finder finder) async {
-    final target = finder.evaluate().first;
-    bool inside() {
-      final context = FocusManager.instance.primaryFocus?.context;
-      if (context == null) return false;
-      if (identical(context, target)) return true;
-      var found = false;
-      context.visitAncestorElements((element) {
-        if (identical(element, target)) found = true;
-        return !found;
-      });
-      return found;
-    }
-
-    for (var i = 0; i < 60 && !inside(); i++) {
+    for (var i = 0; i < 60 && !focusIn(finder); i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
     }
-    expect(inside(), isTrue, reason: 'Tab не довёл фокус до $finder');
+    expect(focusIn(finder), isTrue, reason: 'Tab не довёл фокус до $finder');
   }
 
   /// Четыре сочетания одобрения из каталога в обоих вариантах модификатора.
@@ -477,6 +483,487 @@ void main() {
       expect(given, hasLength(1));
       expect(given.single.id, const JsonRpcId.integer(821));
       expect(chosenOption(given.single), 'allow-once');
+      await tearDownApp(tester);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Переход «Go to approval» (задача 2.3 change `fix-approval-focus`;
+  // design.md D3, D4, Risks; spec agent-workbench-ui «Переход к ожидающему
+  // одобрению с клавиатуры»).
+  //
+  // Сочетание нажимается литералами Cmd/Ctrl+Shift+A (как в спецификации), а
+  // не записью каталога: до задачи 2.2 у записи нет комбинаций, и каждый
+  // сценарий падал бы на пустом каталоге, а не на отсутствии поведения.
+  // Каталог проверяют `codelab_shortcuts_test.dart` и сторож 2 кита.
+  group('переход к одобрению Cmd/Ctrl+Shift+A', () {
+    Future<void> pressGoTo(WidgetTester tester, {bool meta = false}) async {
+      final primary = meta
+          ? LogicalKeyboardKey.metaLeft
+          : LogicalKeyboardKey.controlLeft;
+      await tester.sendKeyDownEvent(primary);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(primary);
+      await tester.pump(const Duration(milliseconds: 100));
+      await settle(tester);
+      await shortFrames(tester);
+    }
+
+    final composerField = find
+        .descendant(
+          of: find.byType(CodeLabPromptComposer),
+          matching: find.byType(EditableText),
+        )
+        .last;
+    final prompts = find.byType(CodeLabApprovalPrompt);
+    final frame = find.byKey(CodeLabApprovalPrompt.focusFrameKey);
+
+    /// Сессия с идущим ходом и фокусом в поле композера.
+    Future<void> turnWithComposerFocus(WidgetTester tester) async {
+      await createSession(tester, 'session-1');
+      await startTurn(tester);
+      await tester.tap(composerField);
+      await tester.pump();
+      expect(focusInside<CodeLabPromptComposer>(), isTrue);
+    }
+
+    /// Кадры `session/update` активной сессии.
+    Future<void> frames(
+      WidgetTester tester,
+      Iterable<Map<String, Object?>> updates,
+    ) async {
+      for (final update in updates) {
+        agent.emitInbound(
+          JsonRpcMessage.notification(
+            method: sessionUpdateMethod,
+            params: {'sessionId': 'session-1', 'update': update},
+          ),
+        );
+      }
+      await settle(tester);
+    }
+
+    for (final meta in const [false, true]) {
+      final modifier = meta ? 'Cmd' : 'Ctrl';
+
+      testWidgets('$modifier: с клавиатуры доходит до одобрения и отвечает', (
+        tester,
+      ) async {
+        await pumpConnected(tester);
+        await turnWithComposerFocus(tester);
+        ask('session-1', 901);
+        await settle(tester);
+        await shortFrames(tester);
+
+        await pressGoTo(tester, meta: meta);
+
+        expect(focusInApproval(), isTrue, reason: 'фокус на полосе');
+        expect(frame, findsOneWidget, reason: 'рамка фокуса');
+        expect(answers(), isEmpty, reason: 'переход не отвечает');
+
+        await pressShortcut(tester, CodeLabShortcut.allowOnce, useMeta: meta);
+        await settle(tester);
+
+        final given = answers();
+        expect(given, hasLength(1));
+        expect(given.single.id, const JsonRpcId.integer(901));
+        expect(chosenOption(given.single), 'allow-once');
+        await tearDownApp(tester);
+      });
+    }
+
+    testWidgets('переход и остальные сочетания: Alt+Backspace — '
+        'reject_always', (tester) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 902);
+      await settle(tester);
+      await shortFrames(tester);
+
+      await pressGoTo(tester);
+      await pressShortcut(tester, CodeLabShortcut.rejectAlways);
+      await settle(tester);
+
+      final given = answers();
+      expect(given, hasLength(1));
+      expect(chosenOption(given.single), 'reject-always');
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Enter и Space на полосе ничего не выбирают', (tester) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 903);
+      await settle(tester);
+      await shortFrames(tester);
+      await pressGoTo(tester);
+      expect(focusInApproval(), isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump(const Duration(milliseconds: 300));
+      await settle(tester);
+
+      expect(answers(), isEmpty);
+      expect(prompts, findsOneWidget);
+      expect(focusInApproval(), isTrue, reason: 'полоса осталась в фокусе');
+      await tearDownApp(tester);
+    });
+
+    testWidgets('с клавиатуры через Tab: Reject и Enter — reject_once', (
+      tester,
+    ) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 904);
+      await settle(tester);
+      await shortFrames(tester);
+      await pressGoTo(tester);
+      expect(focusInApproval(), isTrue);
+
+      await tabTo(tester, find.byKey(CodeLabApprovalPrompt.rejectKey));
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump(const Duration(milliseconds: 300));
+      await settle(tester);
+
+      final given = answers();
+      expect(given, hasLength(1));
+      expect(chosenOption(given.single), 'reject-once');
+      await tearDownApp(tester);
+    });
+
+    testWidgets('несколько одобрений — переход к самому раннему', (
+      tester,
+    ) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 911);
+      await settle(tester);
+      ask('session-1', 912);
+      await settle(tester);
+      await shortFrames(tester);
+      expect(prompts, findsNWidgets(2));
+
+      await pressGoTo(tester);
+      expect(
+        focusIn(prompts.first),
+        isTrue,
+        reason: 'фокус в полосе самого раннего одобрения',
+      );
+      expect(focusIn(prompts.last), isFalse);
+
+      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await settle(tester);
+
+      final given = answers();
+      expect(given, hasLength(1));
+      expect(given.single.id, const JsonRpcId.integer(911));
+      expect(chosenOption(given.single), 'allow-once');
+      expect(prompts, findsOneWidget, reason: 'позднее одобрение ждёт');
+      expect(focusIn(prompts), isFalse, reason: 'и фокус не получило');
+      await tearDownApp(tester);
+    });
+
+    testWidgets('одобрение субагента: блок под свёрнутой строкой agent '
+        'получает фокус', (tester) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      Map<String, Object?> agentCall(
+        String id,
+        String type,
+        String subagentId, {
+        String? parent,
+      }) => {
+        'sessionUpdate': 'tool_call',
+        'toolCallId': id,
+        'title': 'Subagent $type: Find auth code',
+        'kind': 'think',
+        'status': 'in_progress',
+        'rawInput': {'type': type, 'description': 'Find auth code'},
+        '_meta': {
+          'codelab': {
+            'parentToolCallId': ?parent,
+            'subagent': {'id': subagentId, 'type': type},
+          },
+        },
+      };
+      await frames(tester, [
+        agentCall('call_1', 'review', 'sub_a1'),
+        agentCall('call_1/call_2', 'explore', 'sub_b2', parent: 'call_1'),
+        {
+          'sessionUpdate': 'tool_call',
+          'toolCallId': 'call_1/call_2/call_3',
+          'title': 'Run git diff --stat',
+          'kind': 'execute',
+          'status': 'pending',
+          'rawInput': {'command': 'git diff --stat'},
+          '_meta': {
+            'codelab': {'parentToolCallId': 'call_1/call_2'},
+          },
+        },
+        // Строки после вопроса уводят блок из видимой части ленты.
+        for (var i = 0; i < 60; i++)
+          {
+            'sessionUpdate': 'tool_call',
+            'toolCallId': 'filler$i',
+            'title': 'Read filler$i',
+            'kind': 'read',
+            'status': 'completed',
+            'rawInput': {'path': '/workspace/filler$i.dart'},
+          },
+      ]);
+      agent.emitInbound(
+        JsonRpcMessage.request(
+          id: const JsonRpcId.integer(921),
+          method: sessionRequestPermissionMethod,
+          params: RequestPermissionRequest(
+            sessionId: const SessionId('session-1'),
+            toolCall: ToolCallUpdate(
+              toolCallId: const ToolCallId('call_1/call_2/call_3'),
+              title: 'Run git diff --stat',
+              kind: ToolKind.execute,
+              status: ToolCallStatus.pending,
+              rawInput: const {'command': 'git diff --stat'},
+              meta: const {
+                'codelab': {
+                  'subagent': {
+                    'id': 'sub_b2',
+                    'type': 'explore',
+                    'description': 'Find callers',
+                    'depth': 2,
+                    'path': <String>[],
+                    'parentToolCallId': 'call_1',
+                  },
+                },
+              },
+            ),
+            options: fourOptions,
+          ).toJson(),
+        ),
+      );
+      await settle(tester);
+      await shortFrames(tester);
+      // Лента ленивая: блок уведён за край и не построен, пока к нему не
+      // перешли (поэтому `prompts` до перехода пуст).
+
+      await pressGoTo(tester);
+
+      expect(prompts, findsOneWidget, reason: 'лента дошла до блока');
+      expect(focusInApproval(), isTrue);
+      final panel = tester.getRect(find.byType(CodeLabTranscriptPanel));
+      final bar = tester.getRect(prompts);
+      expect(
+        panel.overlaps(bar),
+        isTrue,
+        reason: 'лента прокручена: полоса в видимой части',
+      );
+      expect(
+        cubit.state.transcriptExpansion.values,
+        everyElement(isNot(isTrue)),
+        reason: 'строка agent корня не раскрыта',
+      );
+      await tearDownApp(tester);
+    });
+
+    testWidgets('ожидающего одобрения нет: фокус и сессия прежние', (
+      tester,
+    ) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+
+      await pressGoTo(tester);
+
+      expect(focusInside<CodeLabPromptComposer>(), isTrue);
+      expect(answers(), isEmpty);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('цель ушла до фокуса: другое одобрение фокус не получает', (
+      tester,
+    ) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 931);
+      await settle(tester);
+      await shortFrames(tester);
+
+      // Нажатие и ответ на цель до того, как лента довела фокус; потом
+      // приходит другое одобрение.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.runAsync(
+        () => cubit.respondToApproval(
+          approvalId: const ApprovalRequestId('permission-931'),
+          sessionId: const SessionId('session-1'),
+          optionId: 'reject-once',
+        ),
+      );
+      ask('session-1', 932);
+      await settle(tester);
+      await shortFrames(tester);
+      await shortFrames(tester);
+
+      expect(prompts, findsOneWidget);
+      expect(
+        focusIn(prompts),
+        isFalse,
+        reason: 'позднее одобрение фокус не получило',
+      );
+      await tearDownApp(tester);
+    });
+
+    testWidgets('из настроек сочетание не действует', (tester) async {
+      await pumpConnected(
+        tester,
+        settingsPages: const SettingsPages(
+          available: {SettingsPage.connection},
+        ),
+      );
+      await createSession(tester, 'session-1');
+      await startTurn(tester);
+      ask('session-1', 941);
+      await settle(tester);
+      await pressShortcut(tester, CodeLabShortcut.openSettings);
+      await shortFrames(tester);
+      final nav = find.byKey(const ValueKey('settings-nav-connection'));
+      expect(nav, findsOneWidget);
+
+      await pressGoTo(tester);
+
+      expect(nav, findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('settings-pending-approval')),
+        findsOneWidget,
+      );
+      expect(focusInApproval(), isFalse);
+      expect(answers(), isEmpty);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('палитра команд открыта: полоса фокус не получает', (
+      tester,
+    ) async {
+      await pumpConnected(tester);
+      await createSession(tester, 'session-1');
+      await startTurn(tester);
+      ask('session-1', 951);
+      await settle(tester);
+      await shortFrames(tester);
+      await pressShortcut(tester, CodeLabShortcut.commandPalette);
+      await shortFrames(tester);
+      expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
+
+      await pressGoTo(tester);
+
+      expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
+      expect(
+        focusIn(find.byKey(CodeLabCommandPaletteSurface.queryFieldKey)),
+        isTrue,
+        reason: 'фокус в поле поиска палитры',
+      );
+      expect(focusInApproval(), isFalse);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('macOS: подсказка ⇧⌘A, после перехода её нет', (tester) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 961);
+      await settle(tester);
+      await shortFrames(tester);
+      const hint = 'Press ⇧⌘A to answer from the keyboard';
+      expect(find.text(hint), findsOneWidget);
+
+      await pressGoTo(tester, meta: true);
+
+      expect(find.text(hint), findsNothing);
+      await tearDownApp(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets('Linux: подсказка Ctrl+Shift+A, после перехода её нет', (
+      tester,
+    ) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 962);
+      await settle(tester);
+      await shortFrames(tester);
+      const hint = 'Press Ctrl+Shift+A to answer from the keyboard';
+      expect(find.text(hint), findsOneWidget);
+
+      await pressGoTo(tester);
+
+      expect(find.text(hint), findsNothing);
+      await tearDownApp(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+    testWidgets('чтение с экрана на macOS: Awaiting approval и сочетания '
+        'словами', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 971);
+      await settle(tester);
+      await shortFrames(tester);
+
+      await pressGoTo(tester, meta: true);
+
+      final data = tester
+          .getSemantics(find.bySemanticsLabel('Awaiting approval'))
+          .getSemanticsData();
+      expect(data.hint, contains('Allow once: Cmd+Enter'));
+      expect(data.hint, contains('Reject: Cmd+Backspace'));
+      expect(data.hint, isNot(contains('⌘')));
+      handle.dispose();
+      await tearDownApp(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    // Риск design.md «Активное одобрение сменилось при фокусе в полосе»:
+    // фокус на полосе `B` поставил пользователь, и когда `A` решена другим
+    // путём, сочетания на `B` начинают действовать, а фокус не переходит.
+    testWidgets('A решена, пока фокус на кнопке B: сочетания на B '
+        'действуют, фокус остаётся', (tester) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 981);
+      await settle(tester);
+      ask('session-1', 982);
+      await settle(tester);
+      await shortFrames(tester);
+      final allowOfB = find.byKey(CodeLabApprovalPrompt.allowKey).last;
+      await tabTo(tester, allowOfB);
+
+      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await settle(tester);
+      expect(answers(), isEmpty, reason: 'B пока не активна');
+
+      await tester.runAsync(
+        () => cubit.respondToApproval(
+          approvalId: const ApprovalRequestId('permission-981'),
+          sessionId: const SessionId('session-1'),
+          optionId: 'reject-once',
+        ),
+      );
+      await settle(tester);
+      await shortFrames(tester);
+      expect(
+        focusIn(prompts),
+        isTrue,
+        reason: 'фокус остался в полосе B, никуда не перешёл',
+      );
+
+      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await settle(tester);
+
+      final given = answers();
+      expect(given, hasLength(2));
+      expect(given.last.id, const JsonRpcId.integer(982));
+      expect(chosenOption(given.last), 'allow-once');
       await tearDownApp(tester);
     });
   });

@@ -127,6 +127,12 @@ final _table = <(CodeLabShortcut, String, CodeLabShortcutGroup, List<_Combo>)>[
     [_c(LogicalKeyboardKey.escape)],
   ),
   (
+    CodeLabShortcut.goToApproval,
+    'go-to-approval',
+    CodeLabShortcutGroup.approvals,
+    [_c(LogicalKeyboardKey.keyA, primary: true, shift: true)],
+  ),
+  (
     CodeLabShortcut.allowOnce,
     'allow-once',
     CodeLabShortcutGroup.approvals,
@@ -162,7 +168,7 @@ void main() {
   tearDown(() => debugDefaultTargetPlatformOverride = null);
 
   group('записи по таблице D1', () {
-    test('19 записей по порядку и группам', () {
+    test('20 записей по порядку и группам', () {
       expect(CodeLabShortcut.values, [for (final row in _table) row.$1]);
       expect(CodeLabShortcut.values.map((s) => s.group).toList(), [
         for (final row in _table) row.$3,
@@ -305,6 +311,8 @@ void main() {
       (CodeLabShortcut.rejectOnce, '⌘⌫', 'Ctrl+⌫'),
       (CodeLabShortcut.rejectAlways, '⌥⌘⌫', 'Ctrl+Alt+⌫'),
       (CodeLabShortcut.toggleFiles, '⇧⌘E', 'Ctrl+Shift+E'),
+      // Задача 2.1 `fix-approval-focus` (D3): подпись перехода к одобрению.
+      (CodeLabShortcut.goToApproval, '⇧⌘A', 'Ctrl+Shift+A'),
     ];
 
     test('macOS', () {
@@ -324,6 +332,46 @@ void main() {
             reason: '${shortcut.name} $platform',
           );
         }
+      }
+    });
+  });
+
+  group('goToApproval (change `fix-approval-focus`, D3, D7)', () {
+    test('первая запись группы approvals', () {
+      final approvals = CodeLabShortcut.values
+          .where((s) => s.group == CodeLabShortcutGroup.approvals)
+          .toList();
+      expect(approvals.first, CodeLabShortcut.goToApproval);
+      expect(CodeLabShortcut.goToApproval.id, 'go-to-approval');
+    });
+
+    test('активаторы: control и meta, оба с Shift, без Alt', () {
+      final activators = _combo(CodeLabShortcut.goToApproval).activators;
+      expect(activators, hasLength(2));
+      expect(activators.map((a) => (a.control, a.meta)).toSet(), {
+        (true, false),
+        (false, true),
+      });
+      for (final a in activators) {
+        expect(a.trigger, LogicalKeyboardKey.keyA);
+        expect(a.shift, isTrue);
+        expect(a.alt, isFalse);
+      }
+    });
+
+    test('capsFor: ⇧ ⌘ A на macOS и Ctrl Shift A на остальных', () {
+      final combo = _combo(CodeLabShortcut.goToApproval);
+      expect(combo.capsFor(_macOS), ['⇧', '⌘', 'A']);
+      for (final platform in _others) {
+        expect(combo.capsFor(platform), ['Ctrl', 'Shift', 'A']);
+      }
+    });
+
+    test('spokenFor: Shift+Cmd+A и Ctrl+Shift+A', () {
+      final combo = _combo(CodeLabShortcut.goToApproval);
+      expect(combo.spokenFor(_macOS), 'Shift+Cmd+A');
+      for (final platform in _others) {
+        expect(combo.spokenFor(platform), 'Ctrl+Shift+A');
       }
     });
   });

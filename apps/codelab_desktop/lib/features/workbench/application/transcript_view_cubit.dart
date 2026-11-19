@@ -12,12 +12,18 @@ final class TranscriptShowRequest {
     required this.rowId,
     required this.targetId,
     required this.serial,
+    this.focusApproval = false,
   });
 
   final String sessionId;
   final String rowId;
   final String targetId;
   final int serial;
+
+  /// После показа поставить фокус на полосу решения цели (change
+  /// `fix-approval-focus`, D4). ЗАГЛУШКА задачи 2.3: поле есть, но
+  /// `requestShow` его не заполняет — поведение добавляет задача 2.4.
+  final bool focusApproval;
 }
 
 /// Ручное раскрытие строк ленты, показанные изображения, выбранная строка
@@ -162,6 +168,9 @@ final class TranscriptViewCubit extends ShellPartCubit<TranscriptViewState> {
   void requestShow({
     required String sessionId,
     required AgentsShowTarget target,
+    // ЗАГЛУШКА задачи 2.3 (`fix-approval-focus`, D4): параметр принят, но
+    // в запрос пока не попадает; поведение добавляет задача 2.4.
+    bool focusApproval = false,
   }) {
     final session = {
       ...state.overridesFor(sessionId),

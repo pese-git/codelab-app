@@ -9,6 +9,8 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/approval_focus.dart';
+
 List<CodeLabTranscriptRow> _rows(String prefix, {int count = 60}) => [
   CodeLabToolCallRow(
     id: 'tool-1',
@@ -264,5 +266,204 @@ void main() {
         expect(done, [7]);
       },
     );
+  });
+
+  // Запрос показа с `focusApproval` (задача 2.1 change `fix-approval-focus`;
+  // design.md D4, п. 2; spec «Переход к ожидающему одобрению с клавиатуры»).
+  group('focusApproval', () {
+    const options = [
+      CodeLabApprovalOption(
+        id: 'ao',
+        label: 'Allow once',
+        kind: CodeLabApprovalOptionKind.allowOnce,
+      ),
+      CodeLabApprovalOption(
+        id: 'ro',
+        label: 'Reject',
+        kind: CodeLabApprovalOptionKind.rejectOnce,
+      ),
+    ];
+
+    CodeLabTranscriptApproval pending(String targetId) =>
+        CodeLabTranscriptApproval.pending(
+          risk: CodeLabApprovalRisk.shell,
+          options: options,
+          onOptionSelected: (_) {},
+          targetId: targetId,
+        );
+
+    // Одобрение корня: цель — сама строка (как `AgentsPaneData`).
+    List<CodeLabTranscriptRow> ownRows() => [
+      CodeLabToolCallRow(
+        id: 'tool-1',
+        status: CodeLabToolCallStatus.running,
+        label: 'Run echo',
+        approval: pending('perm-1'),
+      ),
+      for (var i = 0; i < 60; i++)
+        CodeLabAgentTextRow(id: 'text-$i', text: 'Answer $i'),
+    ];
+
+    // Одобрение потомка: блок под строкой `agent`, цель — id запроса.
+    List<CodeLabTranscriptRow> childRows() => [
+      CodeLabToolCallRow(
+        id: 'tool-1',
+        status: CodeLabToolCallStatus.running,
+        label: 'Subagent review: x',
+        subagent: const CodeLabSubagentCall(),
+        childApprovals: [pending('perm-9')],
+      ),
+      for (var i = 0; i < 60; i++)
+        CodeLabAgentTextRow(id: 'text-$i', text: 'Answer $i'),
+    ];
+
+    late FocusNode outside;
+    setUp(() {
+      outside = FocusNode(debugLabel: 'outside');
+      addTearDown(outside.dispose);
+    });
+
+    Widget host(
+      List<CodeLabTranscriptRow> rows, {
+      CodeLabTranscriptShowRequest? request,
+      ValueChanged<int>? onDone,
+      Key? panelKey,
+    }) => FluentApp(
+      home: Column(
+        children: [
+          // Узел «вне полосы»: от него видно, переносит ли лента фокус.
+          Focus(focusNode: outside, child: const SizedBox(height: 20)),
+          SizedBox(
+            width: 700,
+            height: 400,
+            child: CodeLabTranscriptPanel(
+              key: panelKey,
+              rows: rows,
+              showRequest: request,
+              onShowRequestDone: onDone,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    CodeLabTranscriptShowRequest req(
+      String targetId, {
+      int serial = 5,
+      bool focus = true,
+    }) => CodeLabTranscriptShowRequest(
+      rowId: 'tool-1',
+      targetId: targetId,
+      serial: serial,
+      focusApproval: focus,
+    );
+
+    final prompt = find.byType(CodeLabApprovalPrompt);
+
+    Future<void> start(
+      WidgetTester tester,
+      List<CodeLabTranscriptRow> rows,
+    ) async {
+      await tester.pumpWidget(host(rows));
+      await _toBottom(tester);
+      outside.requestFocus();
+      await tester.pump();
+      expect(outside.hasPrimaryFocus, isTrue);
+    }
+
+    testWidgets('scrolls to the target and focuses its bar', (tester) async {
+      await start(tester, ownRows());
+
+      await tester.pumpWidget(host(ownRows(), request: req('tool-1')));
+      await _frames(tester);
+
+      expect(focusIsInside(tester, prompt), isTrue);
+      expect(
+        focusIsInside(tester, find.byKey(CodeLabApprovalPrompt.allowKey)),
+        isFalse,
+        reason: 'фокус на самой полосе, а не на кнопке',
+      );
+    });
+
+    testWidgets('focuses the bar of a descendant approval under the agent '
+        'row', (tester) async {
+      await start(tester, childRows());
+
+      await tester.pumpWidget(host(childRows(), request: req('perm-9')));
+      await _frames(tester);
+
+      expect(focusIsInside(tester, prompt), isTrue);
+    });
+
+    testWidgets('a request without the flag leaves the focus alone', (
+      tester,
+    ) async {
+      await start(tester, ownRows());
+
+      await tester.pumpWidget(
+        host(ownRows(), request: req('tool-1', focus: false)),
+      );
+      await _frames(tester);
+
+      expect(outside.hasPrimaryFocus, isTrue);
+    });
+
+    testWidgets('a target that was not built keeps the focus and reports '
+        'done', (tester) async {
+      final done = <int>[];
+      await start(tester, ownRows());
+
+      await tester.pumpWidget(
+        host(ownRows(), request: req('tool-1/missing'), onDone: done.add),
+      );
+      for (var i = 0; i < 60; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+
+      expect(outside.hasPrimaryFocus, isTrue);
+      expect(done, [5]);
+    });
+
+    testWidgets('a stale request does not move the focus: only the newer '
+        'serial is reported', (tester) async {
+      final done = <int>[];
+      await start(tester, ownRows());
+
+      await tester.pumpWidget(
+        host(ownRows(), request: req('tool-1'), onDone: done.add),
+      );
+      // Запрос сменился на более новый, без признака, до кадров прежнего.
+      await tester.pumpWidget(
+        host(
+          ownRows(),
+          request: req('tool-1', serial: 6, focus: false),
+          onDone: done.add,
+        ),
+      );
+      await _frames(tester);
+
+      expect(outside.hasPrimaryFocus, isTrue);
+      expect(done, [6]);
+    });
+
+    testWidgets('the same request after null does not focus again', (
+      tester,
+    ) async {
+      await start(tester, ownRows());
+      await tester.pumpWidget(host(ownRows(), request: req('tool-1')));
+      await _frames(tester);
+      expect(focusIsInside(tester, prompt), isTrue);
+
+      // Пользователь ушёл с полосы; хост погасил запрос и показал снова тот
+      // же номер (возврат в сессию): повторного фокуса нет.
+      outside.requestFocus();
+      await tester.pump();
+      await tester.pumpWidget(host(ownRows()));
+      await _toBottom(tester);
+      await tester.pumpWidget(host(ownRows(), request: req('tool-1')));
+      await _frames(tester);
+
+      expect(outside.hasPrimaryFocus, isTrue);
+    });
   });
 }

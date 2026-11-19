@@ -207,4 +207,226 @@ void main() {
       );
     });
   }
+
+  // -------------------------------------------------------------------------
+  // Переход к одобрению: фокус на самой полосе (задача 2.1 change
+  // `fix-approval-focus`; design.md D4; spec agent-workbench-ui «Переход к
+  // ожидающему одобрению с клавиатуры»). Узел полосы берётся через
+  // `Focus.of` от `CodeLabApprovalPrompt.barKey`: так тест не зависит от
+  // того, где реализация хранит `FocusNode`.
+  group('фокус на самой полосе (D4)', () {
+    const english = [
+      CodeLabApprovalOption(
+        id: 'ao',
+        label: 'Allow once',
+        kind: CodeLabApprovalOptionKind.allowOnce,
+      ),
+      CodeLabApprovalOption(
+        id: 'ro',
+        label: 'Reject',
+        kind: CodeLabApprovalOptionKind.rejectOnce,
+      ),
+    ];
+
+    // Кнопка перед полосой: от неё Tab должен вести к «Allow» без остановки
+    // на самой полосе (`skipTraversal`).
+    late FocusNode beforeNode;
+    setUp(() {
+      beforeNode = FocusNode(debugLabel: 'before');
+      addTearDown(beforeNode.dispose);
+    });
+
+    Widget host(
+      List<String> selected, {
+      bool shortcutsEnabled = true,
+      Key? promptKey,
+      Locale? locale,
+    }) => FluentApp(
+      locale: locale,
+      localizationsDelegates: locale == null
+          ? null
+          : CodeLabLocalizations.localizationsDelegates,
+      supportedLocales: locale == null
+          ? const [Locale('en')]
+          : CodeLabLocalizations.supportedLocales,
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: 720,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Button(
+                focusNode: beforeNode,
+                onPressed: () {},
+                child: const Text('before'),
+              ),
+              CodeLabApprovalPrompt(
+                key: promptKey,
+                options: english,
+                shortcutsEnabled: shortcutsEnabled,
+                onOptionSelected: selected.add,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    FocusNode barNode(WidgetTester tester) =>
+        Focus.of(tester.element(find.byKey(CodeLabApprovalPrompt.barKey)));
+
+    final allow = find.byKey(CodeLabApprovalPrompt.allowKey);
+    final frame = find.byKey(CodeLabApprovalPrompt.focusFrameKey);
+    final prompt = find.byType(CodeLabApprovalPrompt);
+
+    testWidgets('requestFocus of the bar node focuses the bar, not a button', (
+      tester,
+    ) async {
+      await tester.pumpWidget(host(<String>[]));
+      final node = barNode(tester);
+
+      node.requestFocus();
+      await tester.pump();
+
+      expect(FocusManager.instance.primaryFocus, same(node));
+      expect(focusIsInside(tester, allow), isFalse);
+    });
+
+    testWidgets('the bar node skips traversal: Tab from the element before '
+        'leads straight to Allow', (tester) async {
+      await tester.pumpWidget(host(<String>[]));
+      beforeNode.requestFocus();
+      await tester.pump();
+      expect(beforeNode.hasPrimaryFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+
+      expect(
+        focusIsInside(tester, allow),
+        isTrue,
+        reason: 'одного Tab достаточно: на самой полосе остановки нет',
+      );
+    });
+
+    testWidgets('Enter and Space on the bar do not select an option', (
+      tester,
+    ) async {
+      final selected = <String>[];
+      await tester.pumpWidget(host(selected));
+      barNode(tester).requestFocus();
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(selected, isEmpty);
+      expect(FocusManager.instance.primaryFocus, same(barNode(tester)));
+    });
+
+    testWidgets('the focus frame shows while focus is on or inside the bar '
+        'and not without focus', (tester) async {
+      await tester.pumpWidget(host(<String>[]));
+      await tester.pump();
+      expect(frame, findsNothing);
+
+      barNode(tester).requestFocus();
+      await tester.pump();
+      expect(frame, findsOneWidget);
+
+      // Рамка — не только заливка: толщина 2 px цветом темы Fluent.
+      final box = tester.widget<DecoratedBox>(frame);
+      final border = (box.decoration as BoxDecoration).border! as Border;
+      final theme = FluentTheme.of(tester.element(frame));
+      expect(border.top.width, 2);
+      expect(border.top.color, theme.resources.focusStrokeColorOuter);
+
+      await tabTo(tester, allow);
+      expect(frame, findsOneWidget, reason: 'фокус внутри полосы');
+
+      beforeNode.requestFocus();
+      await tester.pump();
+      expect(frame, findsNothing);
+    });
+
+    testWidgets('semantics: Awaiting approval and the spoken shortcuts on '
+        'macOS', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(host(<String>[]));
+      barNode(tester).requestFocus();
+      await tester.pump();
+
+      final data = tester
+          .getSemantics(find.bySemanticsLabel('Awaiting approval'))
+          .getSemanticsData();
+      expect(data.label, contains('Awaiting approval'));
+      expect(data.hint, contains('Allow once: Cmd+Enter'));
+      expect(data.hint, contains('Reject: Cmd+Backspace'));
+      expect(data.hint, isNot(contains('⌘')));
+      expect(data.hint, isNot(contains('⏎')));
+      handle.dispose();
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets('macOS: the hint names ⇧⌘A while focus is outside the bar', (
+      tester,
+    ) async {
+      await tester.pumpWidget(host(<String>[]));
+      await tester.pump();
+      expect(
+        find.text('Press ⇧⌘A to answer from the keyboard'),
+        findsOneWidget,
+      );
+
+      barNode(tester).requestFocus();
+      await tester.pump();
+      expect(find.text('Press ⇧⌘A to answer from the keyboard'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets('Linux: the hint names Ctrl+Shift+A and disappears with '
+        'focus', (tester) async {
+      await tester.pumpWidget(host(<String>[]));
+      await tester.pump();
+      const text = 'Press Ctrl+Shift+A to answer from the keyboard';
+      expect(find.text(text), findsOneWidget);
+
+      await tabTo(tester, allow);
+      expect(find.text(text), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+    testWidgets('a bar of an inactive approval has no hint', (tester) async {
+      await tester.pumpWidget(host(<String>[], shortcutsEnabled: false));
+      await tester.pump();
+
+      expect(find.textContaining('to answer from the keyboard'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+    testWidgets('ru: the hint is translated', (tester) async {
+      await tester.pumpWidget(host(<String>[], locale: const Locale('ru')));
+      await tester.pump();
+
+      expect(
+        find.text('Нажмите Ctrl+Shift+A, чтобы ответить с клавиатуры'),
+        findsOneWidget,
+      );
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+    testWidgets('a new request key gives a bar without focus', (tester) async {
+      await tester.pumpWidget(
+        host(<String>[], promptKey: const ValueKey('r1')),
+      );
+      barNode(tester).requestFocus();
+      await tester.pump();
+      expect(focusIsInside(tester, prompt), isTrue);
+
+      await tester.pumpWidget(
+        host(<String>[], promptKey: const ValueKey('r2')),
+      );
+      await tester.pump();
+
+      expect(focusIsInside(tester, prompt), isFalse);
+      expect(frame, findsNothing);
+    });
+  });
 }

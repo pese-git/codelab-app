@@ -64,6 +64,7 @@ _Check _checkOf(CodeLabShortcut shortcut) => switch (shortcut) {
   CodeLabShortcut.commandMenuMove => const _InKit(_commandMenuMove),
   CodeLabShortcut.commandMenuRun => const _InKit(_commandMenuRun),
   CodeLabShortcut.commandMenuClose => const _InKit(_commandMenuClose),
+  CodeLabShortcut.goToApproval => const _InKit(_workbenchShortcut),
   CodeLabShortcut.allowOnce => const _InKit(_approval),
   CodeLabShortcut.allowAlways => const _InKit(_approval),
   CodeLabShortcut.rejectOnce => const _InKit(_approval),
@@ -71,8 +72,8 @@ _Check _checkOf(CodeLabShortcut shortcut) => switch (shortcut) {
 };
 
 void main() {
-  test('в каталоге 19 записей, а запись без сценария не компилируется', () {
-    expect(CodeLabShortcut.values, hasLength(19));
+  test('в каталоге 20 записей, а запись без сценария не компилируется', () {
+    expect(CodeLabShortcut.values, hasLength(20));
     for (final shortcut in CodeLabShortcut.values) {
       expect(_checkOf(shortcut), isA<_Check>(), reason: shortcut.name);
     }
@@ -145,6 +146,9 @@ Future<void> _workbenchShortcut(
         onOpenSettings: shortcut == CodeLabShortcut.openSettings ? hit : null,
         onToggleSidebar: shortcut == CodeLabShortcut.toggleSidebar ? hit : null,
         onToggleFiles: shortcut == CodeLabShortcut.toggleFiles ? hit : null,
+        // Задача 2.1 `fix-approval-focus`: Cmd/Ctrl+Shift+A вызывает
+        // `onGoToApproval` в обоих вариантах основного модификатора.
+        onGoToApproval: shortcut == CodeLabShortcut.goToApproval ? hit : null,
         child: const SizedBox(width: 320, height: 200),
       ),
     ),

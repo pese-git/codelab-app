@@ -35,7 +35,9 @@ List<KeyboardShortcutEntry> _entries({
   Map<String, String> translated = const {},
 }) => [
   for (final shortcut in CodeLabShortcut.values)
-    _entry(shortcut, translated: translated),
+    // Записи без комбинаций (`goToApproval` до задачи 2.2 `fix-approval-focus`)
+    // страница не показывает; условие и эталон строки уходят с задачей 4.1.
+    if (shortcut.combos.isNotEmpty) _entry(shortcut, translated: translated),
 ];
 
 List<String> _ids(List<KeyboardShortcutEntry> found) => [

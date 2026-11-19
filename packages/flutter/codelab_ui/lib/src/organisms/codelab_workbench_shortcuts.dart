@@ -24,6 +24,7 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
     this.onToggleSidebar,
     this.onOpenSettings,
     this.onToggleFiles,
+    this.onGoToApproval,
     this.enabled = true,
     super.key,
   });
@@ -54,6 +55,11 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
   /// передаёт колбэк, только когда панель доступна; без колбэка сочетание не
   /// привязано (Cmd/Ctrl+` терминала — другое сочетание).
   final VoidCallback? onToggleFiles;
+
+  /// Cmd/Ctrl+Shift+A — перейти к ожидающему одобрению (change
+  /// `fix-approval-focus`, D3, D4). ЗАГЛУШКА задачи 2.1: параметр есть, но
+  /// не привязан — привязку добавляет задача 2.2.
+  final VoidCallback? onGoToApproval;
   final bool enabled;
 
   @override
