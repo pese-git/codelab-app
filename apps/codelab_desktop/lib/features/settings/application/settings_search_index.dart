@@ -130,6 +130,9 @@ final class SettingsSearchIndex {
     Iterable<SettingsPage> visible,
     String query, {
     required Iterable<String> Function(SettingsPage page) titlesOf,
+    // Заглушка красных тестов 6.4: параметр принят, слова пока из `keywords`
+    // (решение пользователя 2026-11-19, задача 6.5).
+    Iterable<String> Function(SettingsPage page)? localizedKeywordsOf,
   }) {
     final needle = query.trim().toLowerCase();
     if (needle.isEmpty) {
@@ -140,9 +143,10 @@ final class SettingsSearchIndex {
         if (titlesOf(
               page,
             ).any((title) => title.toLowerCase().contains(needle)) ||
-            (keywords[page] ?? const []).any(
-              (word) => word.toLowerCase().contains(needle),
-            ))
+            [
+              ...?keywords[page],
+              ...?localizedKeywordsOf?.call(page),
+            ].any((word) => word.toLowerCase().contains(needle)))
           page,
     ];
   }
