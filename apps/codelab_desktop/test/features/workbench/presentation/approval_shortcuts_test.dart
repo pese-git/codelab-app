@@ -1001,6 +1001,83 @@ void main() {
   // ---------------------------------------------------------------------
   // Где сочетание не действует.
 
+  // ---------------------------------------------------------------------
+  // Фокус на самом скоупе рабочего места (клик по тексту ленты).
+
+  group('фокус на самом скоупе рабочего места', () {
+    /// Узел-скоуп рабочего места (`_workbenchScope` хоста).
+    FocusScopeNode workbenchScope() => FocusManager
+        .instance
+        .rootScope
+        .descendants
+        .whereType<FocusScopeNode>()
+        .firstWhere((n) => n.debugLabel == 'Workbench');
+
+    /// Ставит фокус на скоуп так, как это делает клик по ленте: журнал
+    /// настоящей macOS показал `primaryFocus` == скоуп `Workbench` (unfocus со
+    /// скоупом очищает `focusedChild`, и фокус остаётся на самом скоупе).
+    Future<void> focusScopeItself(WidgetTester tester) async {
+      FocusManager.instance.primaryFocus?.unfocus(
+        disposition: UnfocusDisposition.scope,
+      );
+      await tester.pump();
+    }
+
+    testWidgets('⌘K открывает палитру, ⌘Y отвечает на одобрение: сочетания '
+        'рабочего места не зависят от того, что фокус на скоупе', (
+      tester,
+    ) async {
+      await pumpConnected(tester);
+      await sessionWithApproval(tester, 861);
+      await afterSettling(tester);
+      await focusScopeItself(tester);
+
+      await pressShortcut(tester, CodeLabShortcut.commandPalette);
+      await shortFrames(tester);
+      expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
+      await pressKey(tester, LogicalKeyboardKey.escape);
+      await shortFrames(tester);
+      expect(find.byType(CodeLabCommandPaletteSurface), findsNothing);
+
+      await focusScopeItself(tester);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
+      await settle(tester);
+
+      final given = answers();
+      expect(given, hasLength(1));
+      expect(chosenOption(given.single), 'allow-once');
+      await tearDownApp(tester);
+    }, variant: macOS);
+
+    testWidgets('из настроек фокус скоупа не оживляет сочетания: ⌘Y и ⌘K '
+        'не действуют', (tester) async {
+      await pumpConnected(
+        tester,
+        settingsPages: const SettingsPages(
+          available: {SettingsPage.connection},
+        ),
+      );
+      await sessionWithApproval(tester, 862);
+      await afterSettling(tester);
+      await pressShortcut(tester, CodeLabShortcut.openSettings);
+      await shortFrames(tester);
+      expect(
+        find.byKey(const ValueKey('settings-nav-connection')),
+        findsOneWidget,
+      );
+      workbenchScope().requestFocus();
+      await tester.pump();
+
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressShortcut(tester, CodeLabShortcut.commandPalette);
+      await settle(tester);
+
+      expect(answers(), isEmpty);
+      expect(find.byType(CodeLabCommandPaletteSurface), findsNothing);
+      await tearDownApp(tester);
+    }, variant: macOS);
+  });
+
   group('вне рабочего места сочетание не действует', () {
     testWidgets('экран настроек: ⌘Y не отвечает', (tester) async {
       await pumpConnected(
