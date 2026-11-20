@@ -1458,6 +1458,14 @@
    "w": 1440,
    "x": 1520,
    "y": 19100
+  },
+  "NavOnboarding.dc.html": {
+   "h": 900,
+   "page": "nav",
+   "title": "Onboarding flow — codelab_app first run",
+   "w": 2160,
+   "x": 0,
+   "y": 3680
   }
  },
  "createdOnFiles": {
@@ -2337,7 +2345,8 @@
   "OnboardingWelcome.dc.html",
   "OnboardingModel.dc.html",
   "OnboardingWelcome-dark.dc.html",
-  "OnboardingModel-dark.dc.html"
+  "OnboardingModel-dark.dc.html",
+  "NavOnboarding.dc.html"
  ],
  "pages": [
   {
