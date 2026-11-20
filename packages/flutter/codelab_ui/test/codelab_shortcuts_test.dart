@@ -13,8 +13,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'support/layout_keys.dart';
-
 /// Ожидаемая комбинация записи по таблице D1.
 typedef _Combo = ({
   LogicalKeyboardKey key,
@@ -743,80 +741,10 @@ void main() {
       expect(combo.accepts(up, HardwareKeyboard.instance), isFalse);
     });
 
-    // Итерация 8 `fix-approval-focus` (задача 8.1, D16; spec agent-workbench-ui
-    // «Сочетания app не зависят от раскладки ввода»). Красные до задачи 8.2:
-    // каталог сравнивает только логическую клавишу.
-    group('раскладка ввода (D16)', () {
-      final russianK = russianKeyFor(LogicalKeyboardKey.keyK);
-
-      testWidgets('русская «л» на физической K с Ctrl и ⌘ — это ⌘K', (
-        tester,
-      ) async {
-        final combo = _combo(CodeLabShortcut.commandPalette);
-        final event = down(russianK.logical, russianK.physical);
-        for (final modifier in const [
-          LogicalKeyboardKey.controlLeft,
-          LogicalKeyboardKey.metaLeft,
-        ]) {
-          await tester.sendKeyDownEvent(modifier);
-          expect(combo.accepts(event, HardwareKeyboard.instance), isTrue);
-          await tester.sendKeyUpEvent(modifier);
-        }
-      });
-
-      testWidgets('кириллица на позиции знака: «б» на физической «,»', (
-        tester,
-      ) async {
-        final combo = _combo(CodeLabShortcut.openSettings);
-        final comma = russianKeyFor(LogicalKeyboardKey.comma);
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
-        expect(
-          combo.accepts(
-            down(comma.logical, comma.physical),
-            HardwareKeyboard.instance,
-          ),
-          isTrue,
-        );
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
-      });
-
-      testWidgets('кириллица на чужой позиции не совпадает: «л» на физической '
-          'L — не ⌘K', (tester) async {
-        final combo = _combo(CodeLabShortcut.commandPalette);
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
-        expect(
-          combo.accepts(
-            down(russianK.logical, PhysicalKeyboardKey.keyL),
-            HardwareKeyboard.instance,
-          ),
-          isFalse,
-        );
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
-      });
-
-      testWidgets('кириллица без модификатора не совпадает', (tester) async {
-        final combo = _combo(CodeLabShortcut.commandPalette);
-        expect(
-          combo.accepts(
-            down(russianK.logical, russianK.physical),
-            HardwareKeyboard.instance,
-          ),
-          isFalse,
-        );
-        // Лишний Shift: модификаторы по-прежнему точные.
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-        expect(
-          combo.accepts(
-            down(russianK.logical, russianK.physical),
-            HardwareKeyboard.instance,
-          ),
-          isFalse,
-        );
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
-      });
-
+    // Раскладка ввода: каталог сравнивает логическую клавишу (D16 отклонён —
+    // на настоящей macOS Flutter отдаёт латинскую логическую клавишу и при
+    // русской раскладке). Защитные проверки.
+    group('раскладка ввода', () {
       testWidgets('AZERTY: логическая z на физической W — это ⌥⌘Z, логическая '
           'w на физической Z — нет', (tester) async {
         final combo = CodeLabShortcut.rejectOnce
@@ -838,8 +766,8 @@ void main() {
         await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
       });
 
-      testWidgets('латинская буква другой позиции по позиции не совпадает: '
-          'логическая q на физической K — не ⌘K', (tester) async {
+      testWidgets('латинская буква на чужой позиции: логическая q на '
+          'физической K — не ⌘K', (tester) async {
         final combo = _combo(CodeLabShortcut.commandPalette);
         await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
         expect(
@@ -852,14 +780,20 @@ void main() {
         await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
       });
 
-      testWidgets('Esc, Enter и стрелки от раскладки не зависят: кириллица на '
-          'их позиции не совпадает', (tester) async {
-        final enter = _combo(CodeLabShortcut.send);
+      testWidgets('кириллица без модификатора не совпадает', (tester) async {
+        final combo = _combo(CodeLabShortcut.commandPalette);
+        expect(
+          combo.accepts(
+            down(LogicalKeyboardKey(0x043b), PhysicalKeyboardKey.keyK),
+            HardwareKeyboard.instance,
+          ),
+          isFalse,
+        );
+      });
+
+      testWidgets('Esc и стрелки совпадают по своей клавише', (tester) async {
         final up = CodeLabShortcut.fileTreeMove.combos.first;
         final escape = _combo(CodeLabShortcut.cancelTurn);
-        final cyrillic = russianK.logical;
-
-        // Свои клавиши по-прежнему совпадают.
         expect(
           escape.accepts(
             down(LogicalKeyboardKey.escape, PhysicalKeyboardKey.escape),
@@ -874,37 +808,6 @@ void main() {
           ),
           isTrue,
         );
-        // Нелатинский символ на их физической позиции — нет.
-        expect(
-          escape.accepts(
-            down(cyrillic, PhysicalKeyboardKey.escape),
-            HardwareKeyboard.instance,
-          ),
-          isFalse,
-        );
-        expect(
-          up.accepts(
-            down(cyrillic, PhysicalKeyboardKey.arrowUp),
-            HardwareKeyboard.instance,
-          ),
-          isFalse,
-        );
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
-        expect(
-          enter.accepts(
-            down(LogicalKeyboardKey.enter, PhysicalKeyboardKey.enter),
-            HardwareKeyboard.instance,
-          ),
-          isTrue,
-        );
-        expect(
-          enter.accepts(
-            down(cyrillic, PhysicalKeyboardKey.enter),
-            HardwareKeyboard.instance,
-          ),
-          isFalse,
-        );
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
       });
     });
   });

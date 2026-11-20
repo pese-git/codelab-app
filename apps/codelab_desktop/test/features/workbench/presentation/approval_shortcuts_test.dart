@@ -42,7 +42,6 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 import 'package:xterm2/ui.dart' show TerminalView;
 
 import '../../../support/fake_user_shell_launcher.dart';
-import '../../../support/layout_keys.dart';
 import '../../../support/press_shortcut.dart';
 import '../../../support/start_agent.dart';
 import '../../../support/test_app_scope.dart';
@@ -780,118 +779,43 @@ void main() {
   });
 
   // ---------------------------------------------------------------------
-  // Раскладка ввода (итерация 8, задача 8.3; design.md D16; spec
-  // agent-workbench-ui «Сочетания app не зависят от раскладки ввода»).
-  // Красные до реализации 8.2, кроме «кириллица без модификаторов» — он
-  // закрепляет границу и защищает от лишнего ответа после 8.2.
+  // Раскладка ввода: сочетания сравниваются по логической клавише (на
+  // настоящей macOS Flutter отдаёт латинскую логическую клавишу и при
+  // русской раскладке; правило D16 отклонено, решение пользователя
+  // 2026-11-20). Защитный сценарий AZERTY.
 
-  group('раскладка ввода (D16)', () {
-    testWidgets('Русская раскладка macOS: ⌘«н» выбирает allow_once', (
-      tester,
-    ) async {
-      await pumpConnected(tester);
-      await sessionWithApproval(tester, 861);
-      await focusComposer(tester);
-      await afterSettling(tester);
-
-      await pressLayoutKey(
-        tester,
-        russianKey(LogicalKeyboardKey.keyY),
-        meta: true,
-      );
-      await settle(tester);
-
-      final given = answers();
-      expect(given, hasLength(1));
-      expect(chosenOption(given.single), 'allow-once');
-      expect(journal(_answerEvent).single['source'], 'shortcut');
-      await tearDownApp(tester);
-    }, variant: macOS);
-
-    for (final entry in {'Linux': linux, 'Windows': windows}.entries) {
-      testWidgets('Русская раскладка (${entry.key}): Alt+Shift+«н» — удержание '
-          'по-прежнему нужно', (tester) async {
-        await pumpConnected(tester);
-        await sessionWithApproval(tester, 862);
-        await focusComposer(tester);
-        await afterSettling(tester);
-        final y = russianKey(LogicalKeyboardKey.keyY);
-
-        // Через 50 мс после модификаторов: ответа нет.
-        await pressLayoutKey(
-          tester,
-          y,
-          alt: true,
-          shift: true,
-          afterModifiers: () => now = now.add(const Duration(milliseconds: 50)),
-        );
-        await settle(tester);
-        expect(answers(), isEmpty);
-        final skipped = journal(_skippedEvent);
-        expect(skipped, hasLength(1));
-        expect(skipped.single['reason'], 'modifiers_not_held');
-
-        // Через 200 мс: allow_once.
-        await pressLayoutKey(
-          tester,
-          y,
-          alt: true,
-          shift: true,
-          afterModifiers: () =>
-              now = now.add(const Duration(milliseconds: 200)),
-        );
-        await settle(tester);
-        final given = answers();
-        expect(given, hasLength(1));
-        expect(chosenOption(given.single), 'allow-once');
-        await tearDownApp(tester);
-      }, variant: entry.value);
-    }
-
-    testWidgets('AZERTY (macOS): ⌥⌘ и напечатанная Z — reject_once, физическая '
-        'Z с логической w — нет', (tester) async {
+  group('раскладка ввода', () {
+    testWidgets('AZERTY (macOS): ⌥⌘ и напечатанная Z — reject_once, логическая '
+        'w на физической Z — нет', (tester) async {
       await pumpConnected(tester);
       await sessionWithApproval(tester, 863);
       await focusComposer(tester);
       await afterSettling(tester);
 
-      await pressLayoutKey(tester, azertyW, meta: true, alt: true);
+      Future<void> press(
+        LogicalKeyboardKey logical,
+        PhysicalKeyboardKey physical,
+      ) async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+        await tester.sendKeyDownEvent(logical, physicalKey: physical);
+        await tester.sendKeyUpEvent(logical, physicalKey: physical);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      await press(LogicalKeyboardKey.keyW, PhysicalKeyboardKey.keyZ);
       await settle(tester);
       expect(answers(), isEmpty, reason: 'логическая w — не Z');
 
-      await pressLayoutKey(tester, azertyZ, meta: true, alt: true);
+      await press(LogicalKeyboardKey.keyZ, PhysicalKeyboardKey.keyW);
       await settle(tester);
       final given = answers();
       expect(given, hasLength(1));
       expect(chosenOption(given.single), 'reject-once');
       await tearDownApp(tester);
     }, variant: macOS);
-
-    for (final entry in {'macOS': macOS, 'Windows': windows}.entries) {
-      testWidgets('Кириллица без модификаторов не отвечает (${entry.key}): '
-          '«нйлф»', (tester) async {
-        await pumpConnected(tester);
-        await sessionWithApproval(tester, 864);
-        await focusComposer(tester);
-        await afterSettling(tester);
-
-        for (final latin in const [
-          LogicalKeyboardKey.keyY,
-          LogicalKeyboardKey.keyQ,
-          LogicalKeyboardKey.keyK,
-          LogicalKeyboardKey.keyA,
-        ]) {
-          await pressLayoutKey(tester, russianKey(latin));
-        }
-        await settle(tester);
-
-        expect(answers(), isEmpty);
-        expect(find.byType(CodeLabCommandPaletteSurface), findsNothing);
-        expect(prompts, findsOneWidget);
-        expect(focusInside<CodeLabPromptComposer>(), isTrue);
-        await tearDownApp(tester);
-      }, variant: entry.value);
-    }
   });
 
   // ---------------------------------------------------------------------

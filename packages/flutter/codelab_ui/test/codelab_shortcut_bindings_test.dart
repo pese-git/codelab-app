@@ -22,8 +22,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'support/layout_keys.dart';
-
 /// Нажатие комбинации; [useMeta] выбирает ⌘ вместо Ctrl для основного
 /// модификатора, [key] подменяет клавишу (numpad Enter из `alsoKeys`).
 typedef _Press =
@@ -86,8 +84,6 @@ _Check _checkOf(CodeLabShortcut shortcut) => switch (shortcut) {
 };
 
 void main() {
-  _russianLayoutBindings();
-
   test('в каталоге 20 записей, а запись без сценария не компилируется', () {
     expect(CodeLabShortcut.values, hasLength(20));
     for (final shortcut in CodeLabShortcut.values) {
@@ -151,106 +147,6 @@ void main() {
       }
     });
   }
-}
-
-// ---------------------------------------------------------------------------
-// Русская раскладка (задача 8.1 `fix-approval-focus`, D16): сторож 2 для
-// каждой записи с буквой или знаком нажимает клавиши так, как их отдаёт
-// русская раскладка: физическая клавиша на месте латинской, логическая —
-// кириллица. Красный до задачи 8.2.
-
-void _russianLayoutBindings() {
-  group('русская раскладка (D16)', () {
-    for (final shortcut in CodeLabShortcut.values) {
-      testWidgets('${shortcut.name}: клавиши русской раскладки действуют', (
-        tester,
-      ) async {
-        try {
-          var checked = 0;
-          for (final platform in const [
-            TargetPlatform.macOS,
-            TargetPlatform.linux,
-          ]) {
-            debugDefaultTargetPlatformOverride = platform;
-            for (final combo in shortcut.combosFor(platform)) {
-              if (!isLayoutDependent(combo.key)) continue;
-              checked++;
-              final hits = <Object>[];
-              await tester.pumpWidget(const SizedBox.shrink());
-              await tester.pumpWidget(
-                FluentApp(
-                  home: CodeLabWorkbenchShortcuts(
-                    onOpenCommandPalette: () =>
-                        hits.add(CodeLabShortcut.commandPalette),
-                    onNewSession: () => hits.add(CodeLabShortcut.newSession),
-                    onOpenSettings: () =>
-                        hits.add(CodeLabShortcut.openSettings),
-                    onToggleSidebar: () =>
-                        hits.add(CodeLabShortcut.toggleSidebar),
-                    onToggleFiles: () => hits.add(CodeLabShortcut.toggleFiles),
-                    onGoToApproval: () =>
-                        hits.add(CodeLabShortcut.goToApproval),
-                    onAnswerApproval: (kind, _) => hits.add(kind),
-                    child: const SizedBox(width: 320, height: 200),
-                  ),
-                ),
-              );
-              await tester.pump();
-
-              // Основной модификатор — ⌘ на macOS и Ctrl на остальных ОС.
-              final modifiers = <LogicalKeyboardKey>[
-                if (combo.meta ||
-                    (combo.primary && platform == TargetPlatform.macOS))
-                  LogicalKeyboardKey.metaLeft,
-                if (combo.primary && platform != TargetPlatform.macOS)
-                  LogicalKeyboardKey.controlLeft,
-                if (combo.alt) LogicalKeyboardKey.altLeft,
-                if (combo.shift) LogicalKeyboardKey.shiftLeft,
-              ];
-              for (final modifier in modifiers) {
-                await tester.sendKeyDownEvent(modifier);
-              }
-              await simulateLayoutKey(tester, russianKeyFor(combo.key));
-              for (final modifier in modifiers.reversed) {
-                await tester.sendKeyUpEvent(modifier);
-              }
-              await tester.pump(const Duration(milliseconds: 100));
-
-              final expected = switch (shortcut) {
-                CodeLabShortcut.allowOnce ||
-                CodeLabShortcut.allowAlways ||
-                CodeLabShortcut.rejectOnce ||
-                CodeLabShortcut.rejectAlways => _kindOf(shortcut),
-                _ => shortcut,
-              };
-              expect(hits, [
-                expected,
-              ], reason: '${shortcut.name} $platform: русская раскладка');
-
-              // Без модификаторов кириллица ничего не вызывает.
-              hits.clear();
-              await simulateLayoutKey(tester, russianKeyFor(combo.key));
-              await tester.pump(const Duration(milliseconds: 100));
-              expect(
-                hits,
-                isEmpty,
-                reason: '${shortcut.name}: без модификаторов',
-              );
-            }
-          }
-          // Записи без клавиши-буквы (Esc, Enter, стрелки) не проверяются.
-          if (checked == 0) {
-            expect(
-              shortcut.combos.every((c) => !isLayoutDependent(c.key)),
-              isTrue,
-            );
-          }
-        } finally {
-          debugDefaultTargetPlatformOverride = null;
-        }
-      });
-    }
-  });
 }
 
 // ---------------------------------------------------------------------------

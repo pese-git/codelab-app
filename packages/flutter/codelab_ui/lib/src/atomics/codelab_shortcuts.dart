@@ -22,134 +22,6 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/services.dart';
 
-/// Позиции клавиш раскладки US для правила D16 (change `fix-approval-focus`).
-///
-/// Почему: при русской раскладке физическая клавиша K приходит логической
-/// «л», и сравнение только логической клавиши не срабатывало. Нативные
-/// приложения распознают Cmd/Ctrl+буква по латинскому эквиваленту клавиши.
-///
-/// Для чего: таблица «латинская клавиша комбинации → физическая позиция US»;
-/// есть только у букв, цифр и знаков, у Esc, Enter, Backspace и стрелок записей
-/// нет — они от раскладки не зависят. Физические клавиши живут только здесь
-/// (сторож 1, D3). Как использовать: через [_layoutKeyMatches].
-final Map<LogicalKeyboardKey, PhysicalKeyboardKey> _usPosition = {
-  LogicalKeyboardKey.keyA: PhysicalKeyboardKey.keyA,
-  LogicalKeyboardKey.keyB: PhysicalKeyboardKey.keyB,
-  LogicalKeyboardKey.keyC: PhysicalKeyboardKey.keyC,
-  LogicalKeyboardKey.keyD: PhysicalKeyboardKey.keyD,
-  LogicalKeyboardKey.keyE: PhysicalKeyboardKey.keyE,
-  LogicalKeyboardKey.keyF: PhysicalKeyboardKey.keyF,
-  LogicalKeyboardKey.keyG: PhysicalKeyboardKey.keyG,
-  LogicalKeyboardKey.keyH: PhysicalKeyboardKey.keyH,
-  LogicalKeyboardKey.keyI: PhysicalKeyboardKey.keyI,
-  LogicalKeyboardKey.keyJ: PhysicalKeyboardKey.keyJ,
-  LogicalKeyboardKey.keyK: PhysicalKeyboardKey.keyK,
-  LogicalKeyboardKey.keyL: PhysicalKeyboardKey.keyL,
-  LogicalKeyboardKey.keyM: PhysicalKeyboardKey.keyM,
-  LogicalKeyboardKey.keyN: PhysicalKeyboardKey.keyN,
-  LogicalKeyboardKey.keyO: PhysicalKeyboardKey.keyO,
-  LogicalKeyboardKey.keyP: PhysicalKeyboardKey.keyP,
-  LogicalKeyboardKey.keyQ: PhysicalKeyboardKey.keyQ,
-  LogicalKeyboardKey.keyR: PhysicalKeyboardKey.keyR,
-  LogicalKeyboardKey.keyS: PhysicalKeyboardKey.keyS,
-  LogicalKeyboardKey.keyT: PhysicalKeyboardKey.keyT,
-  LogicalKeyboardKey.keyU: PhysicalKeyboardKey.keyU,
-  LogicalKeyboardKey.keyV: PhysicalKeyboardKey.keyV,
-  LogicalKeyboardKey.keyW: PhysicalKeyboardKey.keyW,
-  LogicalKeyboardKey.keyX: PhysicalKeyboardKey.keyX,
-  LogicalKeyboardKey.keyY: PhysicalKeyboardKey.keyY,
-  LogicalKeyboardKey.keyZ: PhysicalKeyboardKey.keyZ,
-  LogicalKeyboardKey.digit0: PhysicalKeyboardKey.digit0,
-  LogicalKeyboardKey.digit1: PhysicalKeyboardKey.digit1,
-  LogicalKeyboardKey.digit2: PhysicalKeyboardKey.digit2,
-  LogicalKeyboardKey.digit3: PhysicalKeyboardKey.digit3,
-  LogicalKeyboardKey.digit4: PhysicalKeyboardKey.digit4,
-  LogicalKeyboardKey.digit5: PhysicalKeyboardKey.digit5,
-  LogicalKeyboardKey.digit6: PhysicalKeyboardKey.digit6,
-  LogicalKeyboardKey.digit7: PhysicalKeyboardKey.digit7,
-  LogicalKeyboardKey.digit8: PhysicalKeyboardKey.digit8,
-  LogicalKeyboardKey.digit9: PhysicalKeyboardKey.digit9,
-  LogicalKeyboardKey.comma: PhysicalKeyboardKey.comma,
-  LogicalKeyboardKey.period: PhysicalKeyboardKey.period,
-  LogicalKeyboardKey.slash: PhysicalKeyboardKey.slash,
-  LogicalKeyboardKey.minus: PhysicalKeyboardKey.minus,
-  LogicalKeyboardKey.equal: PhysicalKeyboardKey.equal,
-};
-
-/// Правило совпадения клавиши события с клавишей комбинации [key] (D16,
-/// spec agent-workbench-ui «Сочетания app не зависят от раскладки ввода»):
-/// 1. логическая клавиша события равна [key] — совпадение (латинские
-///    раскладки, включая AZERTY, QWERTZ и Dvorak, — по напечатанной букве);
-/// 2. иначе, если [key] зависит от раскладки (есть в [_usPosition]) и
-///    логическая клавиша события — символ вне ASCII (кириллица и т. п.),
-///    сравнивается физическая клавиша события с позицией [key] на US;
-/// 3. иначе — нет: латинская буква другой позиции по позиции не
-///    сравнивается, иначе на AZERTY одна клавиша давала бы два сочетания.
-/// Модификаторы здесь не проверяются.
-bool _layoutKeyMatches(KeyEvent event, LogicalKeyboardKey key) {
-  final logical = event.logicalKey;
-  if (logical == key) {
-    return true;
-  }
-  final position = _usPosition[key];
-  if (position == null) {
-    return false;
-  }
-  // Печатный символ вне ASCII: keyId — кодовая точка Unicode (плоскость 0);
-  // управляющие и функциональные клавиши лежат выше `0x100000000`.
-  final id = logical.keyId;
-  final nonAscii = id > 0x7f && id < 0x100000000;
-  return nonAscii && event.physicalKey == position;
-}
-
-/// Активатор клавиши каталога с правилом раскладки D16.
-///
-/// Почему: `SingleActivator` сравнивает только логическую клавишу, поэтому
-/// при русской раскладке ни одно сочетание с буквой не срабатывало.
-///
-/// Для чего: заменяет `SingleActivator` в [CodeLabKeyCombo.activators];
-/// модификаторы, автоповтор и тип события проверяет родитель, клавишу — правило
-/// [_layoutKeyMatches]. Как использовать: только через каталог (`bind`,
-/// `activators`); для `CallbackShortcuts`, который опрашивает `accepts` у всех
-/// привязок.
-final class CodeLabLayoutActivator extends SingleActivator {
-  const CodeLabLayoutActivator(
-    super.trigger, {
-    super.control,
-    super.shift,
-    super.alt,
-    super.meta,
-    super.includeRepeats,
-  });
-
-  @override
-  bool accepts(KeyEvent event, HardwareKeyboard state) {
-    if (super.accepts(event, state)) {
-      return true;
-    }
-    if (event.logicalKey == trigger || !_layoutKeyMatches(event, trigger)) {
-      return false;
-    }
-    // Событие совпало по позиции: остальные условия (тип, автоповтор,
-    // модификаторы) проверяет родитель на событии с логической клавишей
-    // комбинации.
-    final aligned = switch (event) {
-      KeyDownEvent() => KeyDownEvent(
-        physicalKey: event.physicalKey,
-        logicalKey: trigger,
-        timeStamp: event.timeStamp,
-      ),
-      KeyRepeatEvent() => KeyRepeatEvent(
-        physicalKey: event.physicalKey,
-        logicalKey: trigger,
-        timeStamp: event.timeStamp,
-      ),
-      _ => null,
-    };
-    return aligned != null && super.accepts(aligned, state);
-  }
-}
-
 /// Группа строк страницы «Keyboard» (D1) в порядке показа.
 enum CodeLabShortcutGroup {
   global,
@@ -214,14 +86,14 @@ final class CodeLabKeyCombo {
   List<SingleActivator> activatorsWith({bool includeRepeats = true}) => [
     for (final k in _keys)
       if (primary) ...[
-        CodeLabLayoutActivator(
+        SingleActivator(
           k,
           control: true,
           alt: alt,
           shift: shift,
           includeRepeats: includeRepeats,
         ),
-        CodeLabLayoutActivator(
+        SingleActivator(
           k,
           meta: true,
           alt: alt,
@@ -229,7 +101,7 @@ final class CodeLabKeyCombo {
           includeRepeats: includeRepeats,
         ),
       ] else
-        CodeLabLayoutActivator(
+        SingleActivator(
           k,
           meta: meta,
           alt: alt,
@@ -240,11 +112,9 @@ final class CodeLabKeyCombo {
 
   /// Подходит ли нажатие [event] комбинации при текущих модификаторах
   /// [keyboard]. Отпускание не подходит; модификаторы сверяются точно, как у
-  /// `SingleActivator`. Клавиша сверяется по правилу раскладки D16
-  /// (`fix-approval-focus`): логическая клавиша, а для нелатинской
-  /// раскладки — физическая позиция US (см. [CodeLabLayoutActivator]).
+  /// `SingleActivator`.
   bool accepts(KeyEvent event, HardwareKeyboard keyboard) {
-    if (event is KeyUpEvent || !_keys.any((k) => _layoutKeyMatches(event, k))) {
+    if (event is KeyUpEvent || !_keys.contains(event.logicalKey)) {
       return false;
     }
     final control = keyboard.isControlPressed;
