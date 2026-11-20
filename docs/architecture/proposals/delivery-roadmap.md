@@ -532,7 +532,7 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 | 07 | onboarding | — | — | — | D-11 (отдельный change после `add-app-navigation-shell`; решение Q3 change `add-provider-setup-ui`) |
 | 08 | сторож запуска | D-15 | — | — | — |
 | 09 | узкий макет | — | — | — | D-21 (этап 10) |
-| 10 | Appearance | — | — | — | D-20 |
+| 10 | Appearance | — | — | — | D-20 (change [`add-app-appearance-page`](../../../openspec/changes/add-app-appearance-page/proposal.md): режим и «Match system», системный акцент, встроенные и пользовательские темы из `$CODELAB_HOME/themes/*.json` с предупреждениями и проверкой контраста; формат файла — общий с CLI U-18, spec `client-themes`) |
 | 11 | выбор проекта | R-22 | U-06 (встроенный профиль) | — | — |
 | 12 | палитра | R-20 | R-08 (команды агента) | — | U-26, S-21 |
 | 13 | меню композера | U-05 (R-05, R-06), L-16, R-18 | E-07 | P-06, U-27, E-06 (команды `skill:<name>` из `available_commands_update`) | D-12, C-03, C-04, U-31 |

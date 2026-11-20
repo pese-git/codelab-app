@@ -45,6 +45,7 @@
 | Markdown ответа агента в ленте (`codelab_ui`, только `lib/src/rendering/`) | `gpt_markdown` (change [`add-desktop-markdown`](../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md), D1; без Material-предка, свои builder'ы) |
 | Подсветка кода (`codelab_ui`, только `lib/src/rendering/`) | `val_highlight` (change `add-desktop-markdown`, D4) |
 | Открытие внешних ссылок (`codelab_desktop`, только `lib/core/platform/`) | `url_launcher` (change `add-desktop-markdown`, D5) |
+| Системный цвет акцента (`codelab_desktop`, только `lib/core/platform/`) | `system_theme` (change [`add-app-appearance-page`](../../openspec/changes/add-app-appearance-page/design.md), D7; §20з) |
 | Локализация интерфейса (`codelab_desktop`, `codelab_ui`) | `flutter_localizations`, `gen-l10n` (ARB), `intl` для сгенерированного кода (change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md), D1; §20ж) |
 | Сайт-визитка (`site/`, вне pub workspace и Melos) | Astro на Node, пакетный менеджер npm (ADR-0003, §28) |
 
@@ -949,6 +950,34 @@ Architectural dependency rules важнее технической доступ�
 6. **Заменяет ли существующую технологию.** Нет. **Альтернативы** — `easy_localization`, `slang`, рукописные таблицы — отклонены (D1). **ADR** — нет: технология не меняет архитектуру приложения, а входит в Flutter SDK.
 
 Правила слоёв для текста (где собирается текст и как он пересобирается при смене языка) — `layers-and-dependencies.md`, раздел «Текст интерфейса и локализация»; термины перевода — `l10n-glossary.md`.
+
+---
+
+## 20з. `codelab_desktop`: системный цвет акцента — `system_theme`
+
+**Статус: утверждено** решением пользователя 2026-11-20 (Q5 (б) change [`add-app-appearance-page`](../../openspec/changes/add-app-appearance-page/design.md), D7). Добавляется в `pubspec.yaml` app задачей 4.10 change.
+
+Технология: [`system_theme`](https://pub.dev/packages/system_theme) **3.3.0** (опубликован 2026-05-26; BSD-3-Clause; publisher `bdlukaa.dev` — тот же автор, что у `fluent_ui`). Требует Dart `^3.12.0` и Flutter `>=3.44.0`; проект на Flutter 3.47.0 (`.fvmrc`) — совместимо. Транзитивно добавляется `system_theme_web` 0.0.5 (BSD-3-Clause, тот же publisher; зависит от `web` — уже в lock — и SDK `flutter_web_plugins`). Пин — точная версия `3.3.0`, как у `url_launcher` (§20е).
+
+Проверка по §24–§25:
+
+1. **Почему не своими силами.** Flutter не отдаёт системный акцент на десктопе (`dart:ui` `SystemColor` — только web). Альтернатива — свой нативный канал на каждой платформе (D7 change, отклонена пользователем).
+2. **Платформы.** Пакет объявляет Android, iOS, web, Windows, macOS, Linux. Получение цвета:
+   * macOS — `NSColor.controlAccentColor` в sRGB, смены — уведомление `NSSystemColorsDidChangeNotification` (с 3.2.0);
+   * Windows — цвета акцента системы, смены — событие системы;
+   * Linux — цвет GTK-темы `theme_selected_bg_color`; **смен нет**: поток `onChange` на Linux выдаёт одно текущее значение.
+
+   Уведомления о смене — только macOS и Windows (`supportsListeningToAccentColorChanges`).
+3. **Нативная конфигурация.** Плагин регистрируется генератором плагинов Flutter (macOS — Swift Package Manager / CocoaPods, Linux — GTK, Windows — C++). Ручной настройки раннера и entitlements не требуется. Плагин только читает цвет, сети и файлов не трогает.
+4. **Особенности API, которые закрывает адаптер.**
+   * при недоступном плагине `load()` молча оставляет запасной цвет (`MissingPluginException` → `debugPrint`). Адаптер создаёт свой `SystemAccentColor` с запасным цветом-маркером `Color(0x00000000)` (прозрачный цвет не бывает акцентом) и считает акцент недоступным, если после `load()` остался маркер;
+   * статический `SystemTheme.accentColor` загружается при первом обращении без `await`, и его исключение было бы потеряно (`AGENTS.md` §12). Адаптер его не использует;
+   * `SystemAccentColor.load()` подписывается на `onChange` и не отписывается. Адаптер создаёт объект один раз за процесс, поэтому такая подписка одна; подписку для приложения держит `AppAppearanceCubit` и отменяет в `close()` (`concurrency.md` §47б).
+5. **Где.** Только адаптер `SystemThemeAccentSource` порта `SystemAccentSource` в `apps/codelab_desktop/lib/core/platform/system_accent_source.dart`; импорт `package:system_theme/` в остальном `lib` app запрещён сторожем (по образцу `url_launcher`). Feature-код видит только порт.
+6. **Тестирование.** Cubit и страница тестируются на `FakeSystemAccentSource`; адаптер — на подменённом обработчике канала `system_theme` в `TestDefaultBinaryMessenger`.
+7. **Безопасность.** Плагин не принимает данных от пользователя и агента; цвет из системы используется только как роль `accent`.
+8. **Лицензии.** BSD-3-Clause совместима с MIT; зависимости pub.dev в `THIRD_PARTY_NOTICES.md` не вносятся (его вводная часть), шрифтов и ресурсов пакет в сборку не кладёт.
+9. **Заменяет ли существующую технологию.** Нет. **ADR** — нет: узкая платформенная зависимость за портом, архитектуру не меняет (прецедент §20е).
 
 ---
 
