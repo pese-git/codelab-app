@@ -4,14 +4,16 @@ import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show ConnectionProfile, ProfileSecrets, parseShellWords;
+    show ConnectionProfile, ProfileSecrets, ThemeLibrary, parseShellWords;
 import 'package:codelab_client_io/codelab_client_io.dart'
     show JsonFileProfileStore;
 import 'package:codelab_desktop/app/app_scope.dart';
+import 'package:codelab_desktop/app/appearance/app_appearance_start.dart';
 import 'package:codelab_desktop/app/client_profile_secrets.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/connection_environment.dart';
 import 'package:codelab_desktop/app/embedded_logger.dart';
+import 'package:codelab_desktop/core/platform/theme_file_picker.dart';
 import 'package:codelab_desktop/core/platform/usage_csv_saver.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_embedded/codelab_embedded.dart'
@@ -211,10 +213,24 @@ void main() {
   /// [usageCsvSaver] — шов порта сохранения CSV панели Usage (change
   /// `add-desktop-usage-pane`, задача 3.5): без него приёмка открыла бы
   /// системный диалог, который тест не закроет.
+  ///
+  /// [appearance], [themeLibrary] и [themeFilePicker] — швы страницы
+  /// «Appearance» (change `add-app-appearance-page`, задача 5.7): настоящий
+  /// выбор файла открыл бы системный диалог, а перезапуск app в тесте должен
+  /// получить оформление, прочитанное так же, как в `main`.
   Widget bootstrap({
     ProfileSecrets? profileSecrets,
     UsageCsvSaver? usageCsvSaver,
-  }) => _bootstrap(profileSecrets, usageCsvSaver);
+    AppAppearanceStart? appearance,
+    ThemeLibrary? themeLibrary,
+    ThemeFilePicker? themeFilePicker,
+  }) => _bootstrap(
+    profileSecrets,
+    usageCsvSaver,
+    appearance,
+    themeLibrary,
+    themeFilePicker,
+  );
 
   /// Окружение app теста: временный `CODELAB_HOME` и токен WebSocket-агента.
   Map<String, String> get _environment => {
@@ -251,12 +267,18 @@ void main() {
   Widget _bootstrap(
     ProfileSecrets? profileSecrets,
     UsageCsvSaver? usageCsvSaver,
+    AppAppearanceStart? appearance,
+    ThemeLibrary? themeLibrary,
+    ThemeFilePicker? themeFilePicker,
   ) => CodeLabBootstrap(
     scope: createCodeLabRootScope(
       embeddedOpener: kind == E2eAgentKind.embedded ? _embeddedOpener : null,
       environment: _environment,
       profileSecrets: profileSecrets,
       usageCsvSaver: usageCsvSaver,
+      appearance: appearance,
+      themeLibrary: themeLibrary,
+      themeFilePicker: themeFilePicker,
     ),
     child: const CodeLabApp(),
   );
