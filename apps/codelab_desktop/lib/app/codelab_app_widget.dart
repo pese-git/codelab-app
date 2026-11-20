@@ -1,7 +1,11 @@
 import 'dart:async';
 
 import 'package:codelab_ui/codelab_ui.dart'
-    show CodeLabApprovalPrompt, CodeLabApprovalVisibility, CodeLabLocalizations;
+    show
+        CodeLabApprovalPrompt,
+        CodeLabApprovalVisibility,
+        CodeLabLocalizations,
+        CodeLabSessionSidebar;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -85,8 +89,8 @@ class CodeLabApp extends StatelessWidget {
 /// где запоминается фокус рабочего места. Как использовать: `home`
 /// приложения; логики перехода здесь нет — только чтение состояния и
 /// передача колбэков в `NavigationCubit`. Фокус при уходе запоминается, при
-/// возврате восстанавливается в тот же узел, а если его уже нет — в первый
-/// фокусируемый узел рабочего места (композер).
+/// возврате восстанавливается в тот же узел, а если его уже нет (или это кнопка
+/// сайдбара, открывшая настройки) — в композер, без композера — в рабочее место.
 class _CodeLabHome extends StatefulWidget {
   const _CodeLabHome({required this.startOnLaunch});
 
@@ -192,6 +196,15 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
     }
   }
 
+  /// Узел-хозяин сочетаний рабочего места: `Focus(autofocus: true)` в
+  /// `CodeLabWorkbenchShortcuts`. Фокус на нём означает «никто не выбран», а не
+  /// выбранный пользователем элемент, поэтому как «элемент до ухода» он не
+  /// запоминается (spec app-settings «Переход в настройки и обратно»).
+  bool _isShortcutHost(FocusNode node) {
+    final widget = node.context?.widget;
+    return widget is Focus && widget.autofocus;
+  }
+
   void _onNavigation(AppDestination current) {
     final previous = _previous;
     _previous = current;
@@ -208,10 +221,29 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
         if (!mounted) {
           return;
         }
-        if (saved != null && saved.context != null && saved.canRequestFocus) {
+        // Восстанавливается только узел, который действительно лежит в
+        // рабочем месте (композер, элемент ленты, полоса одобрения). Кнопка
+        // «Настройки» сайдбара при клике мышью сама берёт фокус и стала бы
+        // «элементом до ухода», как и корневой узел-хозяин сочетаний
+        // (`Focus(autofocus)`, на нём фокус оказывается, когда никто не выбран);
+        // узел вне рабочего места (корневой, исчезнувший
+        // или не принимающий фокус) тоже не подходит: после «Назад» фокус там
+        // оставлял пользователя без сочетаний рабочего места (spec
+        // app-settings «Переход в настройки и обратно»). Запасной путь по
+        // спецификации — композер активной сессии, без него — рабочее место.
+        final restorable =
+            saved != null &&
+            saved.context != null &&
+            saved.canRequestFocus &&
+            saved.ancestors.contains(_workbenchScope) &&
+            !_isShortcutHost(saved) &&
+            saved.context!
+                    .findAncestorWidgetOfExactType<CodeLabSessionSidebar>() ==
+                null;
+        if (restorable) {
           saved.requestFocus();
         } else {
-          _workbenchScope.requestFocus();
+          _returnApprovalFocus(focusTaken: false);
         }
       });
     }
