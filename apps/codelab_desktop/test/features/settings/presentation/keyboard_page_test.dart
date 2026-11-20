@@ -250,14 +250,14 @@ void main() {
       }
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-    testWidgets('полный список на Linux: пять групп и 19 строк по порядку, '
+    testWidgets('полный список на Linux: пять групп и 20 строк по порядку, '
         'тексты символ в символ', (tester) async {
       await _pumpPage(tester);
 
       expect(_rowKeysOnScreen(tester).toSet(), {
         for (final row in keyboardRows) row.id,
       });
-      expect(_rowKeysOnScreen(tester), hasLength(19));
+      expect(_rowKeysOnScreen(tester), hasLength(20));
       for (final group in keyboardGroups) {
         expect(_group(group.slug), findsOneWidget, reason: group.slug);
         expect(
@@ -299,10 +299,52 @@ void main() {
       }
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
+    testWidgets('строка «Go to approval» (D7): первая в группе Approvals, '
+        'кейкапы ⇧ ⌘ A, место и новое место строк решения', (tester) async {
+      await _pumpPage(tester);
+
+      final row = _row('go-to-approval');
+      expect(row, findsOneWidget);
+      expect(
+        find.descendant(of: row, matching: find.text('Go to approval')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: row,
+          matching: find.text('Workbench, while an approval is pending'),
+        ),
+        findsOneWidget,
+      );
+      expect(_caps(tester, row), ['⇧', '⌘', 'A']);
+      // Первая строка группы: выше всех строк решения, ниже заголовка.
+      final top = tester.getTopLeft(row).dy;
+      expect(top, greaterThan(tester.getTopLeft(_group('approvals')).dy));
+      for (final id in const [
+        'allow-once',
+        'allow-always',
+        'reject-once',
+        'reject-always',
+      ]) {
+        expect(top, lessThan(tester.getTopLeft(_row(id)).dy), reason: id);
+        expect(
+          find.descendant(
+            of: _row(id),
+            matching: find.text(
+              'Pending approval with keyboard focus, when the agent offers '
+              'this option',
+            ),
+          ),
+          findsOneWidget,
+          reason: id,
+        );
+      }
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
     testWidgets('сочетаний без поведения нет', (tester) async {
       await _pumpPage(tester);
 
-      expect(_rowKeysOnScreen(tester), hasLength(19));
+      expect(_rowKeysOnScreen(tester), hasLength(20));
       for (final id in _rowKeysOnScreen(tester)) {
         final caps = _caps(tester, _row(id));
         for (final forbidden in const ['/', 'I', 'F', r'\', 'D', 'O', '`']) {
@@ -420,6 +462,24 @@ void main() {
       expect(_caps(tester, _row('command-palette')), ['Ctrl', 'K']);
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
+    testWidgets('поиск строки перехода: «ctrl shift a» — только группа '
+        'Approvals со строкой go-to-approval', (tester) async {
+      await _pumpPage(tester);
+
+      await _type(tester, 'ctrl shift a');
+
+      expect(_rowKeysOnScreen(tester), ['go-to-approval']);
+      expect(_group('approvals'), findsOneWidget);
+      for (final slug in const [
+        'global',
+        'navigation',
+        'transcript',
+        'composer',
+      ]) {
+        expect(_group(slug), findsNothing, reason: slug);
+      }
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
     testWidgets('«ctrl shift e» — только toggle-files', (tester) async {
       await _pumpPage(tester);
 
@@ -431,7 +491,7 @@ void main() {
     testWidgets('«zzz»: ни таблицы, ни групп, строка пустого результата, '
         'footer на месте', (tester) async {
       await _pumpPage(tester);
-      expect(_rowKeysOnScreen(tester), hasLength(19));
+      expect(_rowKeysOnScreen(tester), hasLength(20));
 
       await _type(tester, 'zzz');
 
@@ -446,7 +506,7 @@ void main() {
 
     testWidgets('«Where» в поиске не участвует: «files tree»', (tester) async {
       await _pumpPage(tester);
-      expect(_rowKeysOnScreen(tester), hasLength(19));
+      expect(_rowKeysOnScreen(tester), hasLength(20));
 
       await _type(tester, 'files tree');
 
@@ -463,7 +523,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await _pumpPage(tester);
 
-      expect(_rowKeysOnScreen(tester), hasLength(19));
+      expect(_rowKeysOnScreen(tester), hasLength(20));
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
   });
 

@@ -35,10 +35,7 @@ List<KeyboardShortcutEntry> _entries({
   Map<String, String> translated = const {},
 }) => [
   for (final shortcut in CodeLabShortcut.values)
-    // Временно (change `fix-approval-focus`): строка «Go to approval» на
-    // страницу попадёт с задачей 4.1/4.2, тогда пропуск и эталон строки уйдут.
-    if (shortcut != CodeLabShortcut.goToApproval)
-      _entry(shortcut, translated: translated),
+    _entry(shortcut, translated: translated),
 ];
 
 List<String> _ids(List<KeyboardShortcutEntry> found) => [
@@ -135,12 +132,22 @@ void main() {
   test('ничего не найдено: «zzz» даёт пустой список, а «» — все записи', () {
     // Первая проверка отличает пустой результат от «функция ничего не
     // отбирает».
-    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(19));
+    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(20));
     expect(filterKeyboardShortcuts(_entries(), 'zzz'), isEmpty);
   });
 
+  test('«ctrl shift a», «⇧⌘A» и «Shift+Cmd+A» находят только go-to-approval '
+      '(change `fix-approval-focus`, D7; spec app-settings «Поиск строки '
+      'перехода»)', () {
+    for (final query in const ['ctrl shift a', '⇧⌘A', 'Shift+Cmd+A']) {
+      expect(_ids(filterKeyboardShortcuts(_entries(), query)), [
+        'go-to-approval',
+      ], reason: query);
+    }
+  });
+
   test('поиск не идёт по «Where»: «files tree» ничего не находит', () {
-    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(19));
+    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(20));
     // «Files tree» — текст «Where» строк дерева, но не их действия.
     expect(filterKeyboardShortcuts(_entries(), 'files tree'), isEmpty);
   });

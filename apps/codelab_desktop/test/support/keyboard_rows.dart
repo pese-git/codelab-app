@@ -40,10 +40,12 @@ const keyboardGroups = [
   (slug: 'approvals', title: 'Approvals'),
 ];
 
+/// Место строк решения (change `fix-approval-focus`, D7): «with keyboard
+/// focus» — клавиатурный фокус в полосе решения, а не признак модели.
 const _approvalWhere =
-    'Pending approval in focus, when the agent offers this option';
+    'Pending approval with keyboard focus, when the agent offers this option';
 
-/// 19 строк в порядке спецификации.
+/// 20 строк в порядке спецификации.
 final keyboardRows = <KeyboardRow>[
   _r(
     'command-palette',
@@ -164,6 +166,14 @@ final keyboardRows = <KeyboardRow>[
     ['Esc'],
     ['Esc'],
     'Command menu after /',
+  ),
+  _r(
+    'go-to-approval',
+    'approvals',
+    'Go to approval',
+    ['Ctrl', 'Shift', 'A'],
+    ['⇧', '⌘', 'A'],
+    'Workbench, while an approval is pending',
   ),
   _r(
     'allow-once',
