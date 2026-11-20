@@ -202,7 +202,7 @@
 ### Requirement: Страница «Legal»: документы на языке интерфейса
 Вкладки «Privacy policy» и «Terms of use» SHALL показывать редакцию документа на языке интерфейса app (spec app-settings «Язык интерфейса app»): при русском — `assets/legal/PRIVACY.ru.md` и `assets/legal/TERMS.ru.md`, при любом другом — `assets/legal/PRIVACY.md` и `assets/legal/TERMS.md` (design.md, D2). Смена языка при открытой странице SHALL показывать редакцию нового языка без перезапуска; выбранная вкладка и запрос поиска при этом SHALL сохраняться.
 
-Документ SHALL показываться как есть, без сокращений и правок, как markdown (`CodeLabMarkdown` кита) с выделением текста.
+Документ SHALL показываться как есть, без сокращений и правок, как markdown (`CodeLabMarkdown` кита) с выделением текста. Таблицы документа SHALL переносить текст ячеек по ширине: все столбцы видны без горизонтальной прокрутки (design.md, D6).
 
 Если ресурс документа не читается, на месте документа SHALL показываться InfoBar уровня `warning` `settings-legal-load-failed`: `Couldn't load this document.`. Остальные вкладки SHALL работать. Путь и текст исключения в InfoBar НЕ SHALL попадать.
 
@@ -217,6 +217,10 @@
 #### Scenario: Смена языка при открытой странице
 - **WHEN** открыта вкладка «Privacy policy» на английском, и пользователь переключает язык интерфейса на русский
 - **THEN** показан текст `assets/legal/PRIVACY.ru.md`, выбрана та же вкладка
+
+#### Scenario: Широкая таблица переносится
+- **WHEN** пользователь открывает документ с таблицей из четырёх столбцов в окне шириной 800 px
+- **THEN** все четыре столбца видны без горизонтальной прокрутки, текст ячеек перенесён по ширине, переполнения раскладки нет
 
 #### Scenario: Документ не прочитался
 - **WHEN** ресурс `assets/legal/TERMS.md` не читается, и пользователь открывает вкладку «Terms of use» на английском
@@ -243,7 +247,7 @@
 ### Requirement: Страница «Legal»: вкладка «License»
 Вкладка «License» SHALL показывать:
 1. краткое содержание MIT (`settings-legal-license-summary`) из трёх строк: «Allowed» — `Use, copy, modify, merge, publish, distribute, sublicense and sell copies`, «Condition» — `Keep the copyright and license notice in copies or substantial portions`, «No warranty» — `Provided “as is”; the authors are not liable for damages`, и под ними — `This summary is not the license. The full text below is what applies.`;
-2. абзац «Third-party components»: `Open-source packages bundled with CodeLab keep their own licenses. They are listed in Third-party notices.` со ссылкой `settings-legal-license-notices-link`, которая выбирает вкладку «Third-party notices»;
+2. абзац «Third-party components»: `Open-source packages bundled with CodeLab keep their own licenses. They are listed in Third-party notices.` со ссылкой `settings-legal-license-notices-link` внутри строки текста, которая выбирает вкладку «Third-party notices». Ссылка SHALL объявляться ссылкой для программ чтения с экрана, получать фокус и срабатывать по Enter и Space; кавычки вокруг неё НЕ SHALL отрываться от неё при переносе строки (design.md, D6);
 3. полный текст `assets/legal/LICENSE` (`settings-legal-license-text`) как есть, моноширинно, с выделением.
 
 Краткое содержание SHALL быть сообщениями ARB `en` и `ru`; полный текст `LICENSE` НЕ SHALL переводиться.

@@ -223,7 +223,7 @@ class _MarkdownBody extends StatelessWidget {
   Widget build(BuildContext context) => _DocumentView(
     load: state.documents[state.shownAsset],
     loaded: (raw) => _LinkScope(
-      child: CodeLabMarkdown(id: id, text: text(raw)),
+      child: CodeLabMarkdown(id: id, text: text(raw), wrapTables: true),
     ),
   );
 }
@@ -306,19 +306,13 @@ class _LicenseBody extends StatelessWidget {
           role: CodeLabTextRole.strong,
         ),
         const SizedBox(height: 4),
-        Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            if (parts.first.isNotEmpty) CodeLabText(parts.first),
-            HyperlinkButton(
-              key: const ValueKey('settings-legal-license-notices-link'),
-              onPressed: () =>
-                  unawaited(cubit.selectTab(LegalTab.thirdPartyNotices)),
-              child: Text(l10n.settingsLegalTabNotices),
-            ),
-            if (parts.length > 1 && parts.last.isNotEmpty)
-              CodeLabText(parts.last),
-          ],
+        _InlineLinkParagraph(
+          before: parts.first,
+          after: parts.length > 1 ? parts.last : '',
+          link: l10n.settingsLegalTabNotices,
+          linkKey: const ValueKey('settings-legal-license-notices-link'),
+          onPressed: () =>
+              unawaited(cubit.selectTab(LegalTab.thirdPartyNotices)),
         ),
         const SizedBox(height: 16),
         _DocumentView(
@@ -634,4 +628,135 @@ class _PackageRowState extends State<_PackageRow> {
     }
     return TextSpan(children: spans);
   }
+}
+
+/// Абзац со ссылкой внутри текста: ссылка — `WidgetSpan` в том же `RichText`,
+/// а не кнопка в `Wrap`.
+///
+/// Почему: у `HyperlinkButton` свои отступы, из-за чего вокруг ссылки
+/// появлялись лишние пробелы, а открывающая « оставалась в конце строки
+/// отдельно от неё (ручная проверка macOS, change `add-app-legal-page`).
+/// `WidgetSpan` вместо `TextSpan` с `recognizer`: нужны фокус с клавиатуры,
+/// Enter/Space и роль ссылки, а их даёт только виджет (`_InlineLink`;
+/// `CodeLabPressable` кита наружу не экспортируется).
+///
+/// Как использовать: [before] и [after] — текст вокруг ссылки из ARB;
+/// [linkKey] ставится на узел семантики ссылки (его находят тесты). Цвет
+/// ссылки — роль `info` палитры, как у ссылок `CodeLabMarkdown`.
+class _InlineLinkParagraph extends StatelessWidget {
+  const _InlineLinkParagraph({
+    required this.before,
+    required this.after,
+    required this.link,
+    required this.linkKey,
+    required this.onPressed,
+  });
+
+  final String before;
+  final String after;
+  final String link;
+  final Key linkKey;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    final info = CodeLabPalette.of(theme).info;
+    final color = info is AccentColor
+        ? info.defaultBrushFor(theme.brightness)
+        : info;
+    final base = CodeLabText.styleOf(context, CodeLabTextRole.body);
+    // Знаки, прилегающие к ссылке без пробела («…» перед ней и «».» после),
+    // входят в тот же неделимый `WidgetSpan`: после него разрешён перенос, и
+    // закрывающая кавычка с точкой уезжали бы на новую строку одни. Фокус и
+    // семантика остаются только у самой ссылки (ручная проверка macOS).
+    final lead = RegExp(r'\S+$').firstMatch(before)?.group(0) ?? '';
+    final trail = RegExp(r'^\S+').firstMatch(after)?.group(0) ?? '';
+    final head = before.substring(0, before.length - lead.length);
+    final tail = after.substring(trail.length);
+    return Text.rich(
+      TextSpan(
+        style: base,
+        children: [
+          if (head.isNotEmpty) TextSpan(text: head),
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                if (lead.isNotEmpty) Text(lead, style: base),
+                Semantics(
+                  key: linkKey,
+                  link: true,
+                  child: _InlineLink(
+                    label: link,
+                    style: base,
+                    color: color,
+                    onPressed: onPressed,
+                  ),
+                ),
+                if (trail.isNotEmpty) Text(trail, style: base),
+              ],
+            ),
+          ),
+          if (tail.isNotEmpty) TextSpan(text: tail),
+        ],
+      ),
+    );
+  }
+}
+
+/// Ссылка в строке текста: фокус, Enter/Space, курсор и подчёркивание при
+/// наведении или фокусе. Отступов кнопки нет — это часть строки абзаца.
+class _InlineLink extends StatefulWidget {
+  const _InlineLink({
+    required this.label,
+    required this.style,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final String label;
+  final TextStyle? style;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  State<_InlineLink> createState() => _InlineLinkState();
+}
+
+class _InlineLinkState extends State<_InlineLink> {
+  var _hovered = false;
+  var _focused = false;
+
+  @override
+  Widget build(BuildContext context) => FocusableActionDetector(
+    mouseCursor: SystemMouseCursors.click,
+    onShowHoverHighlight: (value) => setState(() => _hovered = value),
+    onShowFocusHighlight: (value) => setState(() => _focused = value),
+    actions: {
+      ActivateIntent: CallbackAction<ActivateIntent>(
+        onInvoke: (_) {
+          widget.onPressed();
+          return null;
+        },
+      ),
+    },
+    child: GestureDetector(
+      onTap: widget.onPressed,
+      child: Text(
+        widget.label,
+        style: widget.style?.copyWith(
+          color: widget.color,
+          decoration: _hovered || _focused
+              ? TextDecoration.underline
+              : TextDecoration.none,
+          decorationColor: widget.color,
+        ),
+      ),
+    ),
+  );
 }

@@ -28,7 +28,7 @@
 | Пакет (ADR-0002) | Что меняется | Исполнитель |
 |---|---|---|
 | `apps/codelab_desktop` | `features/settings/application/` (`legal_documents.dart`, `package_license_search.dart`, `legal_ports.dart`, `legal_page_state.dart`, `legal_page_cubit.dart`, `about_ports.dart`), `presentation/` (`legal_page.dart`, `general_page.dart`, `about_section.dart`, `settings_shell.dart`, `settings_titles.dart`), `lib/app/` (`navigation/*`, `legal_ports_factory.dart`, `about_ports_factory.dart`, сборка зависимостей), `assets/legal/`, `pubspec.yaml`, ARB | `[desktop]` |
-| `packages/flutter/codelab_ui` | `molecules/codelab_selector_bar.dart`, барель, превью, тест | `[desktop]` |
+| `packages/flutter/codelab_ui` | `molecules/codelab_selector_bar.dart`, барель, превью, тест; `rendering/codelab_markdown*.dart` (`wrapTables`, D6) и `test/codelab_markdown_tables_test.dart` | `[desktop]` |
 | `packages/dart/codelab_architecture_tests` | только тест `legal_documents_test.dart` | `[desktop]` |
 | корень репозитория | `PRIVACY.md`, `PRIVACY.ru.md`, `TERMS.md`, `TERMS.ru.md`, `README.md` | `[desktop]` (текст — `docs-writer`) |
 
@@ -142,7 +142,11 @@ Draft pending legal review. …       ← «Черновик до юридиче
 - **Поле** — Fluent `TextBox` с `prefix` (значок поиска) и `suffix`: `IconButton` очистки `settings-legal-packages-clear` с `Semantics(label: Clear search)`, только при непустом запросе. `TextEditingController` живёт в `State` поля и синхронизирован с `LegalPageCubit.state.query`: Cubit — источник истины, контроллер — механизм ввода, как в образце «Keyboard».
 - **Пустой блок** `settings-legal-packages-empty`: заголовок, текст с запросом через `escapeForDisplay` (запрос — недоверенный ввод, bidi-символы в нём перевернули бы строку) и `Button` `settings-legal-packages-empty-clear`.
 - **Счётчик** — ARB с ICU `plural`: `settingsLegalPackagesCount(count)` и `settingsLegalPackagesMatched(matched, total)`. В `ru` у «из N» формы `one{# пакета} few{# пакетов} many{# пакетов} other{# пакета}`.
-- **Документы** рисует `CodeLabMarkdown(id: 'legal-<slug>-<lang>', text: …)` под `CodeLabMarkdownScope` страницы (D8). Полный текст `LICENSE` — `CodeLabMonospaceBlock` (текст как есть, с переносом и выделением). Краткое содержание MIT — три строки `CodeLabKeyValueList` из ARB.
+- **Документы** рисует `CodeLabMarkdown(id: 'legal-<slug>-<lang>', text: …, wrapTables: true)` под `CodeLabMarkdownScope` страницы (D8). Полный текст `LICENSE` — `CodeLabMonospaceBlock` (текст как есть, с переносом и выделением). Краткое содержание MIT — три строки `CodeLabKeyValueList` из ARB.
+- **Таблицы документов переносят текст по ширине.** Почему: при ручной проверке на macOS таблица раздела 2 из четырёх столбцов прятала два столбца за горизонтальной прокруткой, и читатель мог не заметить половину таблицы. В кит добавлено публичное API: параметр `CodeLabMarkdown(wrapTables:)` и поле `CodeLabMarkdownConfig.wrapTables`, которое кит переводит в `TableStyle(overflow: TableOverflow.wrap)` `gpt_markdown`. По умолчанию `false`: лента агента сохраняет горизонтальную прокрутку (код и широкие таблицы вывода модели читаются без переноса), «Legal» передаёт `true`. Проверяет `packages/flutter/codelab_ui/test/codelab_markdown_tables_test.dart`.
+  - *перенос всегда* отклонён: меняет вид ленты агента без причины;
+  - *перестройка таблиц в документах* отклонена: документы общие с GitHub и сайтом, ограничение вида не повод менять текст.
+- **Ссылка абзаца «Third-party components»** (`settings-legal-license-notices-link`) — часть строки, а не кнопка: `Text.rich` с `WidgetSpan` и локальные `_InlineLinkParagraph`/`_InlineLink` в `presentation/legal_page.dart`. Почему: у `HyperlinkButton` свои отступы, и открывающая « отрывалась от ссылки; закрывающая «».» тоже НЕ ДОЛЖНА отрываться от ссылки при переносе строки. Ссылка — `Semantics(link: true)`, `FocusableActionDetector` с Enter/Space, цвет — роль `info`, как у ссылок markdown. Виджет локальный по правилу кита «новый атом — при втором употреблении» (AGENTS.md кита §3); при втором употреблении его переносят в кит на основе `CodeLabPressable`.
 
 ### D7. `LegalPageCubit`: состояние и время жизни
 
@@ -230,6 +234,7 @@ LegalPageState
 ### D13. Сторож, зависимости, граф
 
 - Новых зависимостей нет: markdown — `CodeLabMarkdown` (`gpt_markdown` уже в ките), вкладки — своя молекула на `fluent_ui`. AGENTS.md §4 не задет.
+- `wrapTables` (D6) зависимостей не меняет: `TableStyle(overflow: TableOverflow.wrap)` уже есть в `gpt_markdown` 1.4.1; ограничение версии в `pubspec.yaml` кита и `pubspec.lock` не тронуты.
 - Allowlist ядра (PKG-2) не затронут: ядро и `codelab_agent_*` не меняются. `desktopAllowlist` не меняется.
 - **Новое правило сторожа не нужно.** Пакетных импортов нет, `rootBundle` и `LicenseRegistry` — внутреннее дело app. Их место (`lib/app/legal_ports_factory.dart`) записывается в `apps/codelab_desktop/AGENTS.md` и проверяется ревью. Правило на один файл без второй точки нарушения — церемония (§13).
 - Граф пакетов в `README.md` не меняется: новых пакетов и рёбер нет. Веб-безопасные пакеты не меняются, `web-compile` не нужен.

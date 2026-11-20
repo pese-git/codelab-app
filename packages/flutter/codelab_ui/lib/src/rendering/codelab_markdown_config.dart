@@ -29,19 +29,22 @@ import 'codelab_markdown_media.dart';
 /// builder'ы читают из `CodeLabMarkdownScope` через `context` — её смена
 /// конфигурацию не пересоздаёт (D2).
 class CodeLabMarkdownConfig {
-  CodeLabMarkdownConfig(this.theme, {CodeLabCodeHighlighter? highlighter})
-    : style = (theme.typography.body ?? const TextStyle()).copyWith(
-        color: theme.resources.textFillColorPrimary,
-      ),
-      gptTheme = _gptThemeOf(theme),
-      highlighter = highlighter ?? CodeLabCodeHighlighter.shared,
-      codeBuilder = _codeBuilderOf(
-        highlighter ?? CodeLabCodeHighlighter.shared,
-      ),
-      headingBuilder = _buildHeading,
-      checkboxBuilder = _buildCheckbox,
-      imageBuilder = _buildImage,
-      inlineLinkBuilder = _buildLink;
+  CodeLabMarkdownConfig(
+    this.theme, {
+    CodeLabCodeHighlighter? highlighter,
+    this.wrapTables = false,
+  }) : style = (theme.typography.body ?? const TextStyle()).copyWith(
+         color: theme.resources.textFillColorPrimary,
+       ),
+       gptTheme = _gptThemeOf(theme, wrapTables: wrapTables),
+       highlighter = highlighter ?? CodeLabCodeHighlighter.shared,
+       codeBuilder = _codeBuilderOf(
+         highlighter ?? CodeLabCodeHighlighter.shared,
+       ),
+       headingBuilder = _buildHeading,
+       checkboxBuilder = _buildCheckbox,
+       imageBuilder = _buildImage,
+       inlineLinkBuilder = _buildLink;
 
   /// Тема Fluent, для которой собрана конфигурация.
   final FluentThemeData theme;
@@ -53,6 +56,12 @@ class CodeLabMarkdownConfig {
   /// ленту (D4).
   final CodeLabCodeHighlighter highlighter;
 
+  /// Таблицы переносят текст ячеек по ширине вместо горизонтальной
+  /// прокрутки (`TableOverflow.wrap`). Нужен документам, где важны все
+  /// столбцы сразу (правовые тексты Legal); лента агента остаётся с
+  /// прокруткой: широкая таблица ответа не должна сжиматься до нечитаемой.
+  final bool wrapTables;
+
   /// Тема пакета из ролей Fluent.
   final GptMarkdownThemeData gptTheme;
 
@@ -62,7 +71,10 @@ class CodeLabMarkdownConfig {
   final ImageBuilder imageBuilder;
   final InlineLinkBuilder inlineLinkBuilder;
 
-  static GptMarkdownThemeData _gptThemeOf(FluentThemeData t) {
+  static GptMarkdownThemeData _gptThemeOf(
+    FluentThemeData t, {
+    required bool wrapTables,
+  }) {
     final r = t.resources;
     final ty = t.typography;
     final text = r.textFillColorPrimary;
@@ -96,6 +108,7 @@ class CodeLabMarkdownConfig {
         table: TableStyle(
           borderColor: r.dividerStrokeColorDefault,
           headerBackground: r.cardBackgroundFillColorSecondary,
+          overflow: wrapTables ? TableOverflow.wrap : null,
         ),
       ),
     );

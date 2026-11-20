@@ -35,8 +35,11 @@ import 'package:codelab_desktop/app/navigation/navigation_cubit.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
 import 'package:codelab_desktop/core/platform/external_link_opener.dart';
 import 'package:codelab_desktop/features/settings/application/package_license_search.dart';
-import 'package:codelab_ui/codelab_ui.dart' show CodeLabImagePlaceholder;
+import 'package:codelab_ui/codelab_ui.dart'
+    show CodeLabImagePlaceholder, CodeLabMarkdown;
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -404,6 +407,49 @@ void main() {
     });
   });
 
+  // Ручная проверка macOS: таблица раздела 2 `PRIVACY*.md` обрезалась
+  // горизонтальной прокруткой. Документы Legal переносят текст таблиц.
+  group('таблицы в документах', () {
+    const table =
+        '| A | B | C | D |\n|---|---|---|---|\n'
+        '| table-cell-one | two | three | four-last-column |\n';
+
+    testWidgets('документ и записи реестра включают перенос таблиц, '
+        'горизонтальной прокрутки в документе нет', (tester) async {
+      final fixture = LegalFixture(
+        assets: {
+          ...legalFixtureAssets,
+          'assets/legal/PRIVACY.md': '# Privacy EN\n\n$table',
+        },
+      );
+      await openLegalPage(tester, fixture);
+
+      final markdown = tester.widget<CodeLabMarkdown>(
+        find.byType(CodeLabMarkdown),
+      );
+      expect(markdown.wrapTables, isTrue);
+      expect(_text('four-last-column'), findsWidgets);
+      expect(
+        tester
+            .widgetList<Scrollable>(
+              find.descendant(
+                of: find.byType(CodeLabMarkdown),
+                matching: find.byType(Scrollable),
+              ),
+            )
+            .where((s) => s.axis == Axis.horizontal),
+        isEmpty,
+      );
+      expect(tester.takeException(), isNull);
+
+      await _pick(tester, 'third-party-notices');
+      expect(
+        tester.widget<CodeLabMarkdown>(find.byType(CodeLabMarkdown)).wrapTables,
+        isTrue,
+      );
+    });
+  });
+
   group('вкладка «License»', () {
     testWidgets('краткое содержание MIT из трёх строк и оговорка', (
       tester,
@@ -478,6 +524,120 @@ void main() {
         findsWidgets,
       );
     });
+
+    // Ручная проверка macOS: ссылка была `HyperlinkButton` в `Wrap` с
+    // отступами кнопки, а открывающая « оставалась отдельно от неё. Ссылка —
+    // часть текста абзаца и переносится вместе с ним.
+    testWidgets('ссылка «Сторонние уведомления» — часть текста абзаца: '
+        'кавычки и ссылка в одном RichText', (tester) async {
+      await openLegalPage(tester, LegalFixture(), locale: const Locale('ru'));
+      await _pick(tester, 'license');
+
+      final link = _key('settings-legal-license-notices-link');
+      expect(link, findsOneWidget);
+      final paragraph = find.ancestor(
+        of: link,
+        matching: find.byType(RichText),
+      );
+      expect(paragraph, findsWidgets);
+      final plain = tester
+          .widget<RichText>(paragraph.first)
+          .text
+          .toPlainText(includePlaceholders: true);
+      // Ссылка стоит между кавычками внутри одного абзаца, без кнопки с
+      // собственными отступами.
+      expect(plain, contains('\uFFFC'));
+      // Кавычки при ссылке — в том же абзаце (внутри её неделимой группы).
+      for (final quote in ['«', '».']) {
+        expect(
+          find.ancestor(
+            of: find.text(quote),
+            matching: find.byWidget(tester.widget(paragraph.first)),
+          ),
+          findsOneWidget,
+          reason: 'знак «$quote» вне абзаца ссылки',
+        );
+      }
+      expect(find.byType(HyperlinkButton), findsNothing);
+      expect(find.text('Сторонние уведомления'), findsWidgets);
+    });
+
+    // Ручная проверка macOS (окно 900 px, ru): после `WidgetSpan` разрешён
+    // перенос, и закрывающая «».» уезжала на новую строку отдельно от ссылки.
+    testWidgets('«».» не отрывается от ссылки при любой ширине окна', (
+      tester,
+    ) async {
+      await openLegalPage(tester, LegalFixture(), locale: const Locale('ru'));
+      await _pick(tester, 'license');
+      final link = _key('settings-legal-license-notices-link');
+
+      for (var width = 800.0; width <= 1300; width += 6) {
+        tester.view.physicalSize = Size(width, 900);
+        await tester.pumpAndSettle();
+
+        final paragraphFinder = find
+            .ancestor(of: link, matching: find.byType(RichText))
+            .first;
+        final paragraph = tester.renderObject<RenderParagraph>(paragraphFinder);
+        final length = paragraph.text
+            .toPlainText(includePlaceholders: true)
+            .length;
+        // Последний знак абзаца: после исправления это сама группа «ссылка
+        // и знаки при ней», до него — «.» после ссылки.
+        final last = paragraph
+            .getBoxesForSelection(
+              TextSelection(baseOffset: length - 1, extentOffset: length),
+            )
+            .single
+            .toRect()
+            .shift(paragraph.localToGlobal(Offset.zero));
+        final linkRect = tester.getRect(link);
+        expect(
+          linkRect.center.dy,
+          inInclusiveRange(last.top, last.bottom),
+          reason: 'ширина $width: хвост абзаца и ссылка на разных строках',
+        );
+      }
+    });
+
+    for (final (name, activate) in [
+      ('Enter', LogicalKeyboardKey.enter),
+      ('Space', LogicalKeyboardKey.space),
+    ])
+      testWidgets('ссылка доступна как ссылка и открывается с клавиатуры '
+          '(Tab, $name)', (tester) async {
+        final handle = tester.ensureSemantics();
+        await openLegalPage(tester, LegalFixture());
+        await _pick(tester, 'license');
+        final link = _key('settings-legal-license-notices-link');
+        expect(tester.getSemantics(link).flagsCollection.isLink, isTrue);
+
+        bool focusInsideLink() {
+          final focus = FocusManager.instance.primaryFocus?.context;
+          if (focus == null) return false;
+          var inside = false;
+          focus.visitAncestorElements((e) {
+            if (e.widget.key ==
+                const ValueKey('settings-legal-license-notices-link')) {
+              inside = true;
+              return false;
+            }
+            return true;
+          });
+          return inside;
+        }
+
+        for (var i = 0; i < 40 && !focusInsideLink(); i++) {
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+        }
+        expect(focusInsideLink(), isTrue);
+        await tester.sendKeyEvent(activate);
+        await tester.pumpAndSettle();
+
+        expect(_selected(tester, 'third-party-notices'), isTrue);
+        handle.dispose();
+      });
 
     testWidgets('абзац «Third-party components» со ссылкой на вкладку '
         'уведомлений', (tester) async {

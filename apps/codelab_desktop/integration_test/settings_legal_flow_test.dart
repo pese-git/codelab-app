@@ -16,6 +16,8 @@
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart'
+    show LicenseEntryWithLineBreaks, LicenseRegistry;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -50,12 +52,6 @@ Future<void> _pickTab(WidgetTester tester, String slug) async {
   await _settle(tester);
 }
 
-/// Текст, подходящий под [pattern] (число пакетов на устройстве заранее
-/// неизвестно).
-Finder _textMatching(RegExp pattern) => find.byWidgetPredicate(
-  (w) => w is Text && w.data != null && pattern.hasMatch(w.data!),
-);
-
 Finder _source(String asset) => find.descendant(
   of: _key('settings-legal-source'),
   matching: find.textContaining(asset),
@@ -70,6 +66,15 @@ void main() {
     '${E2eAgent.current.skipStdioProcessNote}',
     skip: E2eAgent.current.skipStdioProcess,
     (tester) async {
+      // Тестовый биндинг сбрасывает `LicenseRegistry`: без своих записей список
+      // пакетов пуст, и поиск проверял бы только `0 of 0`.
+      for (final package in ['flutter', 'flutter_bloc', 'http']) {
+        LicenseRegistry.addLicense(
+          () => Stream.value(
+            LicenseEntryWithLineBreaks([package], 'license of $package'),
+          ),
+        );
+      }
       await tester.pumpWidget(E2eAgent.current.bootstrap());
       await _settle(tester);
 
@@ -94,7 +99,7 @@ void main() {
       expect(
         find.descendant(
           of: _key('settings-legal-packages-count'),
-          matching: _textMatching(RegExp(r'^\d+ of \d+ packages?$')),
+          matching: find.text('2 of 3 packages'),
         ),
         findsOneWidget,
       );
@@ -102,19 +107,25 @@ void main() {
       await _settle(tester);
       expect(_key('settings-legal-packages-empty'), findsOneWidget);
       expect(find.text('No packages match'), findsOneWidget);
+      // Окно приёмки низкое (900×536): кнопка пустого блока лежит ниже видимой
+      // области, и без прокрутки нажатие уходит мимо.
+      await tester.ensureVisible(_key('settings-legal-packages-empty-clear'));
       await tester.tap(_key('settings-legal-packages-empty-clear'));
       await _settle(tester);
       expect(_key('settings-legal-packages-empty'), findsNothing);
       expect(
         find.descendant(
           of: _key('settings-legal-packages-count'),
-          matching: _textMatching(RegExp(r'^\d+ packages?$')),
+          matching: find.text('3 packages'),
         ),
         findsOneWidget,
       );
 
       // Русский интерфейс: вкладка «Terms of use» показывает `TERMS.ru.md`.
-      await _openSettings(tester, 'general');
+      // Экран настроек уже открыт: возвращаемся на «General» пунктом
+      // навигации (кнопки сайдбара под настройками нет).
+      await tester.tap(_key('settings-nav-general'));
+      await _settle(tester);
       await tester.ensureVisible(_key('settings-language-ru'));
       await tester.tap(_key('settings-language-ru'));
       await _settle(tester);
