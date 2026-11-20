@@ -373,30 +373,23 @@ class _AccentRow extends StatelessWidget {
                       ),
                     );
                   }
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      CodeLabSettingsRow(
-                        title: l10n.appearanceAccentTitle,
-                        description: l10n.appearanceAccentDescription,
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-                        // Подпись переносится, а не сжимает строку: у
-                        // `ToggleSwitch` с `content` своя `Row` без гибкой
-                        // части и она переполняется в узкой области.
-                        child: Row(
-                          children: [
-                            ToggleSwitch(
-                              checked: state.systemAccent,
-                              onChanged: change,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(l10n.appearanceAccentToggle)),
-                          ],
+                  return CodeLabSettingsRow(
+                    title: l10n.appearanceAccentTitle,
+                    description: l10n.appearanceAccentDescription,
+                    // Внутри карточки строки, а не отдельным блоком под ней.
+                    // Подпись переносится, а не сжимает строку: у
+                    // `ToggleSwitch` с `content` своя `Row` без гибкой части, и
+                    // в узкой области она переполняется.
+                    footer: Row(
+                      children: [
+                        ToggleSwitch(
+                          checked: state.systemAccent,
+                          onChanged: change,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(l10n.appearanceAccentToggle)),
+                      ],
+                    ),
                   );
                 },
               ),

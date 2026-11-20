@@ -267,7 +267,7 @@ void codelabPreviewCancel() {}
 @Preview(
   name: 'Settings section with rows',
   group: codelabMoleculePreviewGroup,
-  size: Size(640, 220),
+  size: Size(640, 300),
 )
 Widget codelabSettingsSectionPreview() {
   return _AcpPreviewSurface(
@@ -285,6 +285,18 @@ Widget codelabSettingsSectionPreview() {
           title: 'Restart agent',
           description: 'Cancels running turns and reloads open sessions.',
           trailing: Button(onPressed: () {}, child: const Text('Restart')),
+        ),
+        // Элемент под описанием внутри карточки: узкая область, длинная подпись.
+        CodeLabSettingsRow(
+          title: 'Accent color',
+          description: 'Buttons, selection and focus use the system accent',
+          footer: Row(
+            children: [
+              ToggleSwitch(checked: false, onChanged: (_) {}),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Use system accent')),
+            ],
+          ),
         ),
       ],
     ),

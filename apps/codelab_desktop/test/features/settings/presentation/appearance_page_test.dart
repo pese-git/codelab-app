@@ -1021,6 +1021,25 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Использовать системный акцент'), findsOneWidget);
+      // Переключатель стоит внутри карточки строки, а не отдельным блоком под
+      // ней (ручная проверка macOS).
+      final card = find
+          .descendant(
+            of: key('-system-accent'),
+            matching: find.byType(CodeLabSettingsRow),
+          )
+          .first;
+      expect(
+        find.descendant(of: card, matching: find.byType(ToggleSwitch)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: card,
+          matching: find.text('Использовать системный акцент'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('«Mode» и действия по-русски при 360 px без переполнения', (
