@@ -1,10 +1,23 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
-/// ЗАГЛУШКА для красного теста 3.1 (change `add-app-appearance-page`, D4).
+import 'codelab_tone.dart';
+
+/// Цвета тонов и ролей кита, которые задаёт тема (`add-app-appearance-page`,
+/// D4; spec agent-workbench-ui «Цвета кита из палитры темы»).
 ///
-/// Только API, чтобы `test/codelab_palette_test.dart` компилировался: кит
-/// пока не читает палитру, поэтому тест падает по утверждениям. Настоящая
-/// реализация (`of` с выводом из Fluent, потребители в тегах, ссылках) — задача 3.2; эту заглушку она заменяет целиком.
+/// Почему: у Fluent нет ресурсов «цвет успеха текста» и «подсветка diff», а
+/// кит раньше зашивал `Colors.green` и `Colors.red`. Пользовательская тема
+/// (D-20) должна менять эти цвета, но кит не знает файлов тем и типов
+/// `codelab_client_core` (AGENTS.md кита §1): тему в палитру превращает app.
+///
+/// Для чего: одна точка правды для тонов `success`, `warning`, `danger`,
+/// `accent`, цвета ссылок ([info]), фонов diff и выделения ([selection]).
+/// Рамки блока одобрения здесь нет: роль `approval_border` app не применяет
+/// (решение Q8, `lighten-approval-block`).
+///
+/// Как использовать: app кладёт палитру в `FluentThemeData.extensions`; виджеты
+/// кита читают `CodeLabPalette.of(FluentTheme.of(context))`. Без расширения
+/// палитра выводится из Fluent и совпадает с цветами до этого change.
 class CodeLabPalette extends ThemeExtension<CodeLabPalette> {
   const CodeLabPalette({
     required this.success,
@@ -17,32 +30,61 @@ class CodeLabPalette extends ThemeExtension<CodeLabPalette> {
     required this.selection,
   });
 
+  /// Тон `success`.
   final Color success;
+
+  /// Тон `warning`.
   final Color warning;
+
+  /// Тон `danger`.
   final Color danger;
+
+  /// Тон `accent`.
   final Color accent;
+
+  /// Цвет ссылок markdown и просмотра файла; в Fluent-темах равен акценту.
   final Color info;
+
+  /// Фон добавленной строки diff.
   final Color diffAddBackground;
+
+  /// Фон удалённой строки diff.
   final Color diffRemoveBackground;
+
+  /// Фон выделенной строки списков и просмотра.
   final Color selection;
 
-  static const _unset = Color(0x00000000);
+  static final Expando<CodeLabPalette> _derived = Expando(
+    'derived codelab palettes',
+  );
 
-  /// Заглушка: зарегистрированная палитра или «пустая»; вывод из Fluent — 3.2.
+  /// Палитра темы [theme]: зарегистрированная в `extensions` или выведенная из
+  /// Fluent с прежними значениями (кешируется на объект темы).
   static CodeLabPalette of(FluentThemeData theme) {
     final registered = theme.extensions[CodeLabPalette];
     if (registered is CodeLabPalette) return registered;
-    return const CodeLabPalette(
-      success: _unset,
-      warning: _unset,
-      danger: _unset,
-      accent: _unset,
-      info: _unset,
-      diffAddBackground: _unset,
-      diffRemoveBackground: _unset,
-      selection: _unset,
-    );
+    return _derived[theme] ??= CodeLabPalette._derive(theme);
   }
+
+  factory CodeLabPalette._derive(FluentThemeData theme) => CodeLabPalette(
+    success: Colors.green,
+    warning: Colors.warningPrimaryColor,
+    danger: Colors.red,
+    accent: Colors.blue,
+    info: theme.accentColor,
+    diffAddBackground: Colors.green.withValues(alpha: 0.18),
+    diffRemoveBackground: Colors.red.withValues(alpha: 0.18),
+    selection: theme.accentColor.withValues(alpha: 0.18),
+  );
+
+  /// Цвет тона [tone]; `neutral` остаётся серым, смысл тона не только в цвете.
+  Color toneColor(CodeLabTone tone) => switch (tone) {
+    CodeLabTone.neutral => Colors.grey,
+    CodeLabTone.accent => accent,
+    CodeLabTone.success => success,
+    CodeLabTone.warning => warning,
+    CodeLabTone.danger => danger,
+  };
 
   @override
   CodeLabPalette copyWith({
@@ -66,5 +108,21 @@ class CodeLabPalette extends ThemeExtension<CodeLabPalette> {
   );
 
   @override
-  CodeLabPalette lerp(ThemeExtension<CodeLabPalette>? other, double t) => this;
+  CodeLabPalette lerp(ThemeExtension<CodeLabPalette>? other, double t) {
+    if (other is! CodeLabPalette) return this;
+    Color mix(Color a, Color b) => Color.lerp(a, b, t)!;
+    return CodeLabPalette(
+      success: mix(success, other.success),
+      warning: mix(warning, other.warning),
+      danger: mix(danger, other.danger),
+      accent: mix(accent, other.accent),
+      info: mix(info, other.info),
+      diffAddBackground: mix(diffAddBackground, other.diffAddBackground),
+      diffRemoveBackground: mix(
+        diffRemoveBackground,
+        other.diffRemoveBackground,
+      ),
+      selection: mix(selection, other.selection),
+    );
+  }
 }

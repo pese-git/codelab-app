@@ -34,39 +34,39 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 1. Итерация 1 — формат и разбор темы (`codelab_client_core`)
 
-- [ ] 1.1 `[client]` Красный: `packages/dart/codelab_client_core/test/themes/json_spans_test.dart` (D3):
+- [x] 1.1 `[client]` Красный: `packages/dart/codelab_client_core/test/themes/json_spans_test.dart` (D3):
   - позиции ключей и значений (строка, колонка с 1, UTF-16) для вложенных объектов;
   - повтор ключа в одном объекте;
   - escape-последовательности и суррогатные пары;
   - глубина больше 32 — ошибка;
   - сверка значений дерева с `jsonDecode` на наборе файлов.
-- [ ] 1.2 `[client]` Реализация 1.1: `lib/src/themes/json_spans.dart`. 1.1 зелёный.
-- [ ] 1.3 `[client]` Красный: `test/themes/theme_file_test.dart`. Spec client-themes, все сценарии требований «Формат файла пользовательской темы», «Роли цветов темы», «Нестрогий разбор темы в app»:
+- [x] 1.2 `[client]` Реализация 1.1: `lib/src/themes/json_spans.dart`. 1.1 зелёный.
+- [x] 1.3 `[client]` Красный: `test/themes/theme_file_test.dart`. Spec client-themes, все сценарии требований «Формат файла пользовательской темы», «Роли цветов темы», «Нестрогий разбор темы в app»:
   - «Минимальная тема», «Имя не совпадает с файлом», «Имя встроенной темы»;
   - «Палитра кода», «Роль, которой нет у клиента»;
   - «Неизвестный ключ с подсказкой» (позиция `6:5`, подсказка `accent`), «Ключ, не похожий на роль», «Справка о незаданных ролях», «Неверное значение цвета», «Битый JSON», «Терминальный цвет»;
   - каждый код ошибки из списка требования (`tooLarge`, `notUtf8`, `notAnObject`, `missingName`, `invalidName`, `invalidExtends`, `duplicateKey`);
   - подсказка: расстояние редактирования не больше 2, только роли той же области (`colors` или `colors.code`);
   - у результата нет английского текста проблемы (`ThemeIssue` — код, позиция, аргументы).
-- [ ] 1.4 `[client]` Реализация 1.3: `theme_role.dart`, `theme_color.dart`, `theme_issue.dart`, `theme_file.dart` (D2); экспорт из бареля `codelab_client_core`. 1.3 зелёный, `guard` зелёный.
-- [ ] 1.5 `[client]` Красный: `test/themes/theme_library_contract_test.dart` — контракт порта `ThemeLibrary` на `InMemoryThemeLibrary`: порядок по имени, запись с ошибкой чтения, результаты импорта `imported | replaced | unchanged | needsReplace | invalid | failed`.
-- [ ] 1.6 `[client]` Реализация 1.5: `theme_library.dart` — порт, `ThemeEntry`, `ThemeImportResult` и `InMemoryThemeLibrary` рядом с портом, как `InMemoryWorkspaceSnapshotStore`; экспорт из бареля. 1.5 зелёный.
+- [x] 1.4 `[client]` Реализация 1.3: `theme_role.dart`, `theme_color.dart`, `theme_issue.dart`, `theme_file.dart` (D2); экспорт из бареля `codelab_client_core`. 1.3 зелёный, `guard` зелёный.
+- [x] 1.5 `[client]` Красный: `test/themes/theme_library_contract_test.dart` — контракт порта `ThemeLibrary` на `InMemoryThemeLibrary`: порядок по имени, запись с ошибкой чтения, результаты импорта `imported | replaced | unchanged | needsReplace | invalid | failed`.
+- [x] 1.6 `[client]` Реализация 1.5: `theme_library.dart` — порт, `ThemeEntry`, `ThemeImportResult` и `InMemoryThemeLibrary` рядом с портом, как `InMemoryWorkspaceSnapshotStore`; экспорт из бареля. 1.5 зелёный.
 
 ## 2. Итерация 2 — каталог тем на диске (`codelab_client_io`)
 
-- [ ] 2.1 `[client]` Красный: `packages/dart/codelab_client_io/test/themes/io_theme_library_test.dart` на временной папке. Spec client-themes «Каталог пользовательских тем» и «Импорт файла темы», все сценарии:
+- [x] 2.1 `[client]` Красный: `packages/dart/codelab_client_io/test/themes/io_theme_library_test.dart` на временной папке. Spec client-themes «Каталог пользовательских тем» и «Импорт файла темы», все сценарии:
   - «Нет каталога тем», «Большой файл» (прочитано не больше 64 КиБ + 1 байт);
   - подкаталог и не `.json` не перечисляются; ссылка на файл читается; битая ссылка — запись с ошибкой;
   - «Импорт новой темы», «Битый файл не копируется», «Замена только с подтверждением» (временных файлов не осталось);
   - путь назначения не зависит от имени исходного файла (`../x.json`, имя с пробелами).
-- [ ] 2.2 `[client]` Реализация 2.1: `lib/src/themes/io_theme_library.dart` на `stores/json_file.dart`; экспорт; строка в `AGENTS.md` пакета §1. 2.1 зелёный.
+- [x] 2.2 `[client]` Реализация 2.1: `lib/src/themes/io_theme_library.dart` на `stores/json_file.dart`; экспорт; строка в `AGENTS.md` пакета §1. 2.1 зелёный.
 
 ## 3. Итерация 3 — палитра кита (`codelab_ui`)
 
-- [ ] 3.1 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_palette_test.dart` — widget-тест пользовательской темы (доказательство D-20). Spec agent-workbench-ui «Цвета кита из палитры темы» («Палитра из расширения», «Без расширения вид прежний») и MODIFIED «Блок кода в ответе агента» («Роль пользовательской темы с низким контрастом»): тег `Done`, `Failed`, ссылка markdown, комментарий в блоке кода `#3a3650`; у `CodeLabPalette` нет поля рамки одобрения, вид `CodeLabApprovalPrompt` от палитры не зависит (решение Q8).
-- [ ] 3.2 `[desktop]` Реализация 3.1: `atomics/codelab_palette.dart`, тоны `codelab_icon`, `codelab_badge`, `codelab_usage_pane`, ссылки `codelab_markdown_config` — через `CodeLabPalette.of` (D4); `CodeLabApprovalPrompt` не меняется. Пример в превью атомов. AGENTS.md кита §5 — строка о палитре. 3.1 зелёный, прежние тесты кита зелёные.
-- [ ] 3.3 `[desktop]` Красный: `test/codelab_file_preview_test.dart` — `warningLines` выделяет строки 6 и 9 тоном `warning`, `highlightLine` работает как раньше (D10).
-- [ ] 3.4 `[desktop]` Реализация 3.3: `CodeLabFilePreview.warningLines`. 3.3 зелёный.
+- [x] 3.1 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_palette_test.dart` — widget-тест пользовательской темы (доказательство D-20). Spec agent-workbench-ui «Цвета кита из палитры темы» («Палитра из расширения», «Без расширения вид прежний») и MODIFIED «Блок кода в ответе агента» («Роль пользовательской темы с низким контрастом»): тег `Done`, `Failed`, ссылка markdown, комментарий в блоке кода `#3a3650`; у `CodeLabPalette` нет поля рамки одобрения, вид `CodeLabApprovalPrompt` от палитры не зависит (решение Q8).
+- [x] 3.2 `[desktop]` Реализация 3.1: `atomics/codelab_palette.dart`, тоны `codelab_icon`, `codelab_badge`, `codelab_usage_pane`, ссылки `codelab_markdown_config` — через `CodeLabPalette.of` (D4); `CodeLabApprovalPrompt` не меняется. Пример в превью атомов. AGENTS.md кита §5 — строка о палитре. 3.1 зелёный, прежние тесты кита зелёные.
+- [x] 3.3 `[desktop]` Красный: `test/codelab_file_preview_test.dart` — `warningLines` выделяет строки 6 и 9 тоном `warning`, `highlightLine` работает как раньше (D10).
+- [x] 3.4 `[desktop]` Реализация 3.3: `CodeLabFilePreview.warningLines`. 3.3 зелёный.
 
 ## 4. Итерация 4 — оформление app
 

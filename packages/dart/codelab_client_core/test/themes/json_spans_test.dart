@@ -51,7 +51,7 @@ void main() {
       _expectAt(code.keyStart, 5, 5);
       final keyword = _member(code.value as JsonObjectNode, 'keyword');
       _expectAt(keyword.keyStart, 6, 7);
-      _expectAt(keyword.value.start, 6, 17);
+      _expectAt(keyword.value.start, 6, 18);
     });
 
     test('CRLF — один перевод строки', () {
@@ -80,13 +80,13 @@ void main() {
     });
 
     test('escape-последовательности занимают исходные символы', () {
-      // В тексте `é`, `\n` и `😀` — по 6, 2 и 12 символов.
-      const text = r'{"ké\n😀": "v\"w", "z": 2}';
+      // В тексте `\u00e9`, `\n` и `\ud83d\ude00` — по 6, 2 и 12 символов.
+      const text = r'{"k\u00e9\n\ud83d\ude00": "v\"w", "z": 2}';
       final root = _object(text);
-      expect(root.members.first.key, 'ké\n\u{1F600}');
+      expect(root.members.first.key, 'k\u00e9\n\u{1F600}');
       expect((root.members.first.value as JsonScalarNode).value, 'v"w');
-      // `{` + `"ké\n😀"` (24) + `: ` + `"v\"w"` (6) + `, `.
-      _expectAt(_member(root, 'z').keyStart, 1, 37);
+      // `{` + `"k\u00e9\n\ud83d\ude00"` (23) + `: ` + `"v\"w"` (6) + `, `.
+      _expectAt(_member(root, 'z').keyStart, 1, 35);
     });
   });
 

@@ -1,9 +1,14 @@
 /// Порт каталога пользовательских тем `<home>/themes` (spec `client-themes`,
 /// «Каталог пользовательских тем», «Импорт файла темы»).
 ///
-/// ЗАГЛУШКА красного теста 1.5: порт и память — задача 1.6.
+/// Почему: каталог тем читает `dart:io`-адаптер, а ядро клиента и виджеты
+/// файловой системы не касаются; порт даёт хостам и тестам один контракт.
+///
+/// Как использовать: хост получает [ThemeLibrary] из composition root
+/// (`IoThemeLibrary` в `codelab_client_io`), в тестах — [InMemoryThemeLibrary].
 library;
 
+import 'theme_file.dart';
 import 'theme_issue.dart';
 
 /// Почему файл не прочитан.
@@ -80,10 +85,35 @@ final class InMemoryThemeLibrary implements ThemeLibrary {
   final Map<String, String> sources;
 
   @override
-  Future<List<ThemeEntry>> list() =>
-      throw UnimplementedError('theme_library: задача 1.6');
+  Future<List<ThemeEntry>> list() async {
+    final entries = [
+      for (final e in files.entries) ThemeEntry.read(e.key, e.value),
+      for (final e in broken.entries)
+        if (!files.containsKey(e.key)) ThemeEntry.failed(e.key, e.value),
+    ]..sort((a, b) => a.name.compareTo(b.name));
+    return entries;
+  }
 
   @override
-  Future<ThemeImportResult> import(String sourcePath, {bool replace = false}) =>
-      throw UnimplementedError('theme_library: задача 1.6');
+  Future<ThemeImportResult> import(
+    String sourcePath, {
+    bool replace = false,
+  }) async {
+    final text = sources[sourcePath];
+    if (text == null) return const ThemeImportFailed();
+    // Без сверки с именем источника: импортируют файл с любым именем (D9).
+    final parsed = ThemeFile.parse(null, text);
+    if (parsed is ThemeRejected) return ThemeImportInvalid(parsed.issue);
+    final name = (parsed as ThemeLoaded).theme.name;
+    final existing = files[name];
+    if (existing == null) {
+      files[name] = text;
+      broken.remove(name);
+      return ThemeImportImported(name);
+    }
+    if (existing == text) return ThemeImportUnchanged(name);
+    if (!replace) return ThemeImportNeedsReplace(name);
+    files[name] = text;
+    return ThemeImportReplaced(name);
+  }
 }

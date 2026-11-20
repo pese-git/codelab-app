@@ -1,6 +1,11 @@
 /// Проблема разбора темы: код, позиция и аргументы без текста (D2).
 ///
-/// ЗАГЛУШКА красного теста 1.3: равенство значений — задача 1.4.
+/// Почему: ядро клиента языконезависимо (spec app-settings «Локализация
+/// интерфейса app»), поэтому проблема — данные, а текст строит клиент: app по
+/// ARB, CLI — своими строками.
+///
+/// Как использовать: [ThemeIssueCode.isWarning] отличает предупреждения
+/// (тема применяется) от ошибок (тема не загружается).
 library;
 
 enum ThemeIssueCode {
@@ -18,7 +23,10 @@ enum ThemeIssueCode {
   nameMismatch,
   reservedName,
   invalidExtends,
-  invalidValue,
+  invalidValue;
+
+  /// Предупреждение: тема применяется, проблема только сообщается.
+  bool get isWarning => index <= terminalColor.index;
 }
 
 final class ThemeIssue {
@@ -45,4 +53,22 @@ final class ThemeIssue {
 
   /// Подсказка: ближайшая роль области для `unknownKey` (`accent`).
   final String? hint;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ThemeIssue &&
+      other.code == code &&
+      other.line == line &&
+      other.column == column &&
+      other.key == key &&
+      other.value == value &&
+      other.hint == hint;
+
+  @override
+  int get hashCode => Object.hash(code, line, column, key, value, hint);
+
+  // Только для диагностики: человекочитаемый текст строит клиент (D2).
+  @override
+  String toString() =>
+      'ThemeIssue(${code.name} $line:$column key=$key value=$value hint=$hint)';
 }

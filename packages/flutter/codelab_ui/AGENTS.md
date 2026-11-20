@@ -42,6 +42,7 @@
 
 * Набор `CodeLabTone`: `neutral`, `accent`, `success`, `warning`, `danger`. Смысл не передаётся только цветом: тег с текстом рядом со значком.
 * `CodeLabApprovalRisk` (включая `unknown` → `Unknown risk`, тон `warning`, Q32) и `CodeLabToolCallStatus` — фиксированные пары «подпись — тон» внутри кита; какой риск и статус показать, решает app.
+* Цвета тонов `success`, `warning`, `danger`, `accent`, ссылок (`info`), фонов diff и выделения кит берёт из расширения `CodeLabPalette` (`atomics/codelab_palette.dart`; `CodeLabPalette.of(theme)`), без него — прежние `Colors.*`; палитру собирает app из темы, кит не читает файлы тем (`add-app-appearance-page`, D4). Рамки одобрения в палитре нет (Q8).
 * Тоны исхода одобрения такие же, как у тегов статуса: отмена — `warning`, отказ — `danger`.
 
 ## 6. Превью и тесты

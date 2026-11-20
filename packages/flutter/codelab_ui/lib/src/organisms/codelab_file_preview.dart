@@ -108,8 +108,8 @@ class CodeLabFilePreview extends StatefulWidget {
   final bool maybeSecret;
   final int? highlightLine;
 
-  /// ЗАГЛУШКА для красного теста 3.3: строки (с 1) с тоном `warning`; пока
-  /// не рисуются, реализация — задача 3.4 (design.md `add-app-appearance-page`, D10).
+  /// Строки (с 1), выделяемые тоном `warning`: предупреждения разбора файла
+  /// темы (`add-app-appearance-page`, D10). Выбор строк делает app.
   final Set<int> warningLines;
   final ValueChanged<String>? onCopyPath;
 
@@ -229,7 +229,9 @@ class _CodeLabFilePreviewState extends State<CodeLabFilePreview> {
     }
     final gutter = '${_lines.length}'.length;
     final mono = CodeLabText.styleOf(context, CodeLabTextRole.mono);
-    final highlight = theme.accentColor.withValues(alpha: 0.18);
+    final palette = CodeLabPalette.of(theme);
+    final highlight = palette.selection;
+    final warningFill = palette.warning.withValues(alpha: 0.18);
     final line = widget.highlightLine;
     return SelectionArea(
       child: ListView.builder(
@@ -269,6 +271,12 @@ class _CodeLabFilePreviewState extends State<CodeLabFilePreview> {
                 ? DecoratedBox(
                     key: const ValueKey('file-preview-highlighted-line'),
                     decoration: BoxDecoration(color: highlight),
+                    child: row,
+                  )
+                : widget.warningLines.contains(number)
+                ? DecoratedBox(
+                    key: const ValueKey('file-preview-warning-line'),
+                    decoration: BoxDecoration(color: warningFill),
                     child: row,
                   )
                 : row,

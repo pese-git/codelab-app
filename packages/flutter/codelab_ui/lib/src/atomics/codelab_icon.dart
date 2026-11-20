@@ -1,5 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
+import 'codelab_palette.dart';
 import 'codelab_tone.dart';
 
 class CodeLabIcon extends StatelessWidget {
@@ -16,16 +17,10 @@ class CodeLabIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Icon(icon, color: _colorForTone(tone), size: size);
+    return Icon(
+      icon,
+      color: CodeLabPalette.of(FluentTheme.of(context)).toneColor(tone),
+      size: size,
+    );
   }
-}
-
-Color _colorForTone(CodeLabTone tone) {
-  return switch (tone) {
-    CodeLabTone.neutral => Colors.grey,
-    CodeLabTone.accent => Colors.blue,
-    CodeLabTone.success => Colors.green,
-    CodeLabTone.warning => Colors.warningPrimaryColor,
-    CodeLabTone.danger => Colors.red,
-  };
 }

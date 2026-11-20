@@ -31,8 +31,9 @@ void main() {
   });
 
   Future<void> writeTheme(String file, String text) async {
-    await Directory(themes).create(recursive: true);
-    await File(p.join(themes, file)).writeAsString(text);
+    final target = File(p.join(themes, file));
+    await target.parent.create(recursive: true);
+    await target.writeAsString(text);
   }
 
   Future<String> source(String relative, String text) async {

@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
+import '../atomics/codelab_palette.dart';
 import '../l10n/strings.dart';
 import 'codelab_code_block.dart';
 import 'codelab_code_highlighter.dart';
@@ -67,7 +68,11 @@ class CodeLabMarkdownConfig {
     final text = r.textFillColorPrimary;
     TextStyle heading(TextStyle? s) =>
         (s ?? const TextStyle()).copyWith(color: text);
-    final accent = t.accentColor.defaultBrushFor(t.brightness);
+    // Ссылки — роль `info` палитры (D4); в Fluent-темах она равна акценту.
+    final info = CodeLabPalette.of(t).info;
+    final accent = info is AccentColor
+        ? info.defaultBrushFor(t.brightness)
+        : info;
     return GptMarkdownThemeData(
       brightness: t.brightness,
       h1: heading(ty.title),

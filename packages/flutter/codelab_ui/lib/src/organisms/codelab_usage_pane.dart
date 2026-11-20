@@ -379,7 +379,7 @@ class _BudgetRowView extends StatelessWidget {
     // не должна выходить за дорожку и ронять раскладку.
     final fill = row.fill.isNaN ? 0.0 : row.fill.clamp(0.0, 1.0);
     final barColor = switch (row.tone) {
-      CodeLabTone.danger => Colors.red,
+      CodeLabTone.danger => CodeLabPalette.of(theme).danger,
       CodeLabTone.warning => Colors.orange,
       _ => theme.accentColor,
     };

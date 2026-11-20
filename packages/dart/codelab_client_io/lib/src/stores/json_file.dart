@@ -29,16 +29,28 @@ Future<Map<String, Object?>?> readJsonObject(String path) async {
 /// последнего писателя целиком. Права доступа прежнего файла не переносятся:
 /// в `dart:io` нет API установки режима без запуска процесса. При сбое
 /// временный файл удаляется.
-Future<void> writeJsonObject(String path, Map<String, Object?> value) async {
+Future<void> writeJsonObject(String path, Map<String, Object?> value) =>
+    writeBytesAtomically(
+      path,
+      utf8.encode(const JsonEncoder.withIndent('  ').convert(value)),
+    );
+
+/// Записывает [bytes] в [path] тем же способом, что [writeJsonObject]:
+/// уникальный временный файл рядом, `flush`, затем `rename`.
+///
+/// Почему отдельно: файлы тем импортируются байт в байт (change
+/// `add-app-appearance-page`, D9), пересериализация JSON изменила бы файл
+/// пользователя и сдвинула позиции предупреждений.
+Future<void> writeBytesAtomically(String path, List<int> bytes) async {
   final file = File(path);
   await file.parent.create(recursive: true);
   final suffix = _random.nextInt(1 << 32).toRadixString(36);
   final temporary = File('$path.$pid.$suffix.tmp');
   try {
-    await temporary.writeAsString(
-      const JsonEncoder.withIndent('  ').convert(value),
+    await temporary.writeAsBytes(
+      bytes,
       // flush: данные дошли до диска до rename, иначе после сбоя питания
-      // на месте профилей может оказаться пустой файл.
+      // на месте файла может оказаться пустой.
       flush: true,
     );
     await temporary.rename(path);
