@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_io/codelab_client_io.dart'
@@ -118,7 +119,9 @@ import 'appearance/app_appearance_start.dart';
 import 'appearance/built_in_themes.dart' show kBuiltInThemeIds;
 import '../core/platform/app_appearance_preferences.dart';
 import '../core/platform/system_accent_source.dart';
+import '../core/platform/home_path_label.dart';
 import '../core/platform/theme_file_picker.dart';
+import '../features/settings/application/appearance_settings_cubit.dart';
 import 'language/app_language_cubit.dart' show AppLanguageCubit, AppStrings;
 import 'language/app_language_start.dart';
 import '../core/platform/app_language_preferences.dart';
@@ -139,8 +142,7 @@ Scope createCodeLabRootScope({
   AppAppearancePreferences? appearancePreferences,
   ThemeLibrary? themeLibrary,
   SystemAccentSource? systemAccentSource,
-  // Шов порта выбора файла темы страницы «Appearance» (D9). ЗАГЛУШКА для
-  // красных тестов 5.3/5.7: параметр принимается, проводка — задача 5.4.
+  // Шов порта выбора файла темы страницы «Appearance» (D9).
   ThemeFilePicker? themeFilePicker,
   // Шов порта настроек запуска (D9).
   StartupPreferences? startupPreferences,
@@ -212,6 +214,7 @@ Scope createCodeLabRootScope({
         localFolderOpener: localFolderOpener,
         projectFolderPicker: projectFolderPicker,
         usageCsvSaver: usageCsvSaver,
+        themeFilePicker: themeFilePicker,
         startupPreferences: startupPreferences,
       ),
       CodeLabConnectionModule(
@@ -595,6 +598,18 @@ final class CodeLabAppearanceModule extends Module {
     if (appearance.storedValueInvalid) {
       logger.warning('appearance.stored_value_invalid');
     }
+    // Почему выбранные при старте пользовательские темы не загрузились (D12).
+    for (final problem in appearance.themeProblems) {
+      logger.warning(
+        'appearance.theme_invalid',
+        context: {
+          'theme': 'custom',
+          'code': problem.code,
+          'line': problem.line,
+          'column': problem.column,
+        },
+      );
+    }
     final readFailure = appearance.readFailure;
     if (readFailure != null) {
       logger.warning(
@@ -602,11 +617,14 @@ final class CodeLabAppearanceModule extends Module {
         context: {'error_class': readFailure},
       );
     }
+    // Один каталог тем на Cubit оформления и Cubit страницы «Appearance».
+    final themes = library ?? InMemoryThemeLibrary();
+    bind<ThemeLibrary>().toInstance(themes);
     bind<AppAppearanceCubit>().toInstance(
       AppAppearanceCubit(
         preferences:
             preferences ?? const SharedPreferencesAppAppearancePreferences(),
-        library: library ?? InMemoryThemeLibrary(),
+        library: themes,
         accentSource: accentSource ?? const UnsupportedSystemAccentSource(),
         start: appearance,
         logger: logger,
@@ -623,8 +641,10 @@ final class CodeLabPlatformModule extends Module {
     LocalFolderOpener? localFolderOpener,
     this.projectFolderPicker,
     this.usageCsvSaver,
+    ThemeFilePicker? themeFilePicker,
     StartupPreferences? startupPreferences,
-  }) : _startupPreferences = startupPreferences,
+  }) : _themeFilePicker = themeFilePicker,
+       _startupPreferences = startupPreferences,
        _userShellLauncher = userShellLauncher,
        _externalLinkOpener = externalLinkOpener,
        _localFolderOpener = localFolderOpener;
@@ -643,6 +663,11 @@ final class CodeLabPlatformModule extends Module {
   /// (`createCodeLabRootScope(localFolderOpener:)`, change `add-app-skills-page`,
   /// D8): без него — адаптер на `url_launcher`.
   final LocalFolderOpener? _localFolderOpener;
+
+  /// Порт выбора файла темы страницы «Appearance»; шов тестов
+  /// (`createCodeLabRootScope(themeFilePicker:)`, D9): без него — адаптер на
+  /// `file_selector`.
+  final ThemeFilePicker? _themeFilePicker;
 
   /// Порт настройки «Reopen the last project and its tabs»; шов тестов
   /// (`createCodeLabRootScope(startupPreferences:)`, change
@@ -693,6 +718,9 @@ final class CodeLabPlatformModule extends Module {
     );
     bind<UsageCsvSaver>().toInstance(
       usageCsvSaver ?? const FileSelectorUsageCsvSaver(),
+    );
+    bind<ThemeFilePicker>().toInstance(
+      _themeFilePicker ?? const FileSelectorThemeFilePicker(),
     );
     bind<RecentProjectsStore>().toInstance(
       const SharedPreferencesRecentProjectsStore(),
@@ -1164,6 +1192,31 @@ final class CodeLabPresentationModule extends Module {
         logger: _settingsLogger(),
       );
     });
+    // Страница «Appearance» (change `add-app-appearance-page`, D13): новый Cubit
+    // на каждое открытие; применённое оформление — общий владелец, каталог и
+    // выбор файла — порты. Каталог тем — `<home>/themes`; без дома он
+    // недоступен (`themesDirectory == null`).
+    bind<AppearanceSettingsCubit>().toProvide(() {
+      final environment = currentScope.resolve<ConnectionEnvironment>();
+      final home = environment.codelabHome;
+      final directory = home == null ? null : p.join(home, 'themes');
+      return AppearanceSettingsCubit(
+        library: currentScope.resolve<ThemeLibrary>(),
+        appearance: currentScope.resolve<AppAppearanceCubit>(),
+        picker: currentScope.resolve<ThemeFilePicker>(),
+        folderOpener: currentScope.resolve<LocalFolderOpener>(),
+        systemBrightness: () => PlatformDispatcher.instance.platformBrightness,
+        themesDirectory: directory,
+        themesDirectoryLabel: directory == null
+            ? null
+            : homePathLabel(directory, environment.variables),
+        themesLabel: directory == null
+            ? null
+            : '${homePathLabel(directory, environment.variables)}'
+                  '${p.separator}*.json',
+        logger: _settingsLogger(),
+      );
+    });
     // Мастер из баннера «Встроенный агент без провайдера» (D26): сессия
     // настроек встроенного профиля — той же фабрикой, что у страницы
     // «Providers»; цель по умолчанию `user`, «Make default» не снимается.
@@ -1358,7 +1411,8 @@ final class CodeLabRootLifecycle implements Disposable {
     required NavigationCubit navigationCubit,
     required TerminalTabsCubit terminalTabsCubit,
     AppLanguageCubit? languageCubit,
-    // Владелец оформления (D13): шаг выхода `appearance` — задача 4.8.
+    // Владелец оформления (D13): `close()` ждёт идущую запись; шаг выхода
+    // `appearance` идёт параллельной веткой, как `language`.
     AppAppearanceCubit? appearanceCubit,
     Logger? logger,
   }) : _logger = logger ?? codeLabAppLogger(),
@@ -1588,6 +1642,7 @@ final class CodeLabDependencies {
     required this.createAgentsModesCubit,
     required this.createAgentDefaultsCubit,
     required this.createStartupSettingsCubit,
+    required this.createAppearanceSettingsCubit,
     required this.aboutPorts,
     required this.openEmbeddedWizard,
     this.projectFilesCubit,
@@ -1634,6 +1689,10 @@ final class CodeLabDependencies {
   /// Создаёт Cubit страницы «Skills & extensions»; страница владеет им и
   /// закрывает (change `add-app-skills-page`, D6).
   final SkillsSettingsCubit Function() createSkillsSettingsCubit;
+
+  /// Создаёт Cubit страницы «Appearance»; страница владеет им и закрывает
+  /// (change `add-app-appearance-page`, D13).
+  final AppearanceSettingsCubit Function() createAppearanceSettingsCubit;
 
   /// Создаёт Cubit страницы «Agents & modes»; страница владеет им и закрывает
   /// (design.md change `add-settings-agents-modes`, D11).
@@ -1769,6 +1828,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     createAgentsModesCubit: _scope.resolve<AgentsModesCubit>,
     createAgentDefaultsCubit: _scope.resolve<AgentDefaultsCubit>,
     createStartupSettingsCubit: _scope.resolve<StartupSettingsCubit>,
+    createAppearanceSettingsCubit: _scope.resolve<AppearanceSettingsCubit>,
     aboutPorts: _scope.resolve<AboutPorts>(),
     openEmbeddedWizard: _scope.resolve<EmbeddedWizardOpener>(),
     projectFilesCubit: _projectFilesCubitOf(_scope),

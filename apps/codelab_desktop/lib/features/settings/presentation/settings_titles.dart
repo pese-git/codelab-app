@@ -48,10 +48,10 @@ List<String> settingsPageKeywordsOf(AppLocalizations l10n, SettingsPage page) {
     SettingsPage.skillsAndExtensions =>
       l10n.settingsSearchKeywordsSkillsAndExtensions,
     SettingsPage.general => l10n.settingsSearchKeywordsGeneral,
+    SettingsPage.appearance => l10n.settingsSearchKeywordsAppearance,
     SettingsPage.permissionsAndTools ||
     SettingsPage.redaction ||
     SettingsPage.codeAndWeb ||
-    SettingsPage.appearance ||
     SettingsPage.keyboard => '',
   };
   return [

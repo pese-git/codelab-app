@@ -17,12 +17,10 @@ class CodeLabIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
     return Icon(
       icon,
-      color: (() {
-        final theme = FluentTheme.of(context);
-        return CodeLabPalette.of(theme).toneColor(tone, theme);
-      })(),
+      color: CodeLabPalette.of(theme).toneColor(tone, theme),
       size: size,
     );
   }

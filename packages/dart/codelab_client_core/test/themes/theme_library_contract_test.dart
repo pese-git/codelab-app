@@ -48,6 +48,70 @@ void main() {
     });
   });
 
+  group('сбой каталога', () {
+    test('list бросает ThemeCatalogException с причиной, без путей', () async {
+      final library = InMemoryThemeLibrary(themes: {'a': '{}'})
+        ..catalogFailure = ThemeCatalogFailure.notADirectory;
+      await expectLater(
+        library.list(),
+        throwsA(
+          isA<ThemeCatalogException>().having(
+            (e) => e.failure,
+            'failure',
+            ThemeCatalogFailure.notADirectory,
+          ),
+        ),
+      );
+      library.catalogFailure = null;
+      expect(await library.list(), hasLength(1));
+      expect(
+        const ThemeCatalogException(ThemeCatalogFailure.unreadable).toString(),
+        isNot(contains('/')),
+      );
+    });
+  });
+
+  group('import: expectedName', () {
+    test('replace с другим name в файле — sourceChanged, без записи', () async {
+      final library = InMemoryThemeLibrary(
+        themes: {'acme-night': _acme, 'other': '{"name": "other"}'},
+        sources: {'/s.json': '{"name": "other", "extends": "light"}'},
+      );
+      final result = await library.import(
+        '/s.json',
+        replace: true,
+        expectedName: 'acme-night',
+      );
+      expect(result, isA<ThemeImportSourceChanged>());
+      expect((result as ThemeImportSourceChanged).name, 'other');
+      expect(library.files['other'], '{"name": "other"}');
+      expect(library.files['acme-night'], _acme);
+    });
+
+    test('replace с тем же name — заменяет', () async {
+      final library = InMemoryThemeLibrary(
+        themes: {'acme-night': _acme},
+        sources: {'/s.json': _acmeV2},
+      );
+      expect(
+        await library.import(
+          '/s.json',
+          replace: true,
+          expectedName: 'acme-night',
+        ),
+        isA<ThemeImportReplaced>(),
+      );
+    });
+
+    test('без replace expectedName не учитывается', () async {
+      final library = InMemoryThemeLibrary(sources: {'/s.json': _acme});
+      expect(
+        await library.import('/s.json', expectedName: 'zzz'),
+        isA<ThemeImportImported>(),
+      );
+    });
+  });
+
   group('read: одна тема', () {
     test('есть файл — запись с текстом', () async {
       final library = InMemoryThemeLibrary(themes: {'acme-night': _acme});

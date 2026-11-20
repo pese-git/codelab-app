@@ -7,8 +7,10 @@
 ///
 /// Как использовать: composition root создаёт `IoThemeLibrary(home:)` с
 /// `resolveCodelabHome`; хост зовёт [list] и [import]. Исключений
-/// перечисления нет: сбой чтения — запись с ошибкой, сбой импорта —
-/// `ThemeImportFailed`.
+/// перечисления нет: сбой чтения файла — запись с ошибкой, сбой импорта —
+/// `ThemeImportFailed`; единственное исключение — [list], который бросает
+/// `ThemeCatalogException`, если `<home>/themes` существует, но не каталог или
+/// не перечисляется (нет каталога — пустой список).
 library;
 
 import 'dart:convert';
@@ -34,13 +36,19 @@ final class IoThemeLibrary implements ThemeLibrary {
 
   @override
   Future<List<ThemeEntry>> list() async {
-    final dir = Directory(_themesDir);
+    // Различаем «каталога нет» (пустой список) и «есть, но не каталог или не
+    // читается» (исключение): иначе страница показала бы пустой каталог вместо
+    // ошибки (spec app-settings, «Каталог тем не читается»).
+    final type = await FileSystemEntity.type(_themesDir);
+    if (type == FileSystemEntityType.notFound) return const [];
+    if (type != FileSystemEntityType.directory) {
+      throw const ThemeCatalogException(ThemeCatalogFailure.notADirectory);
+    }
     final List<FileSystemEntity> children;
     try {
-      if (!await dir.exists()) return const [];
-      children = await dir.list(followLinks: false).toList();
+      children = await Directory(_themesDir).list(followLinks: false).toList();
     } on FileSystemException {
-      return const [];
+      throw const ThemeCatalogException(ThemeCatalogFailure.unreadable);
     }
     final entries = <ThemeEntry>[];
     for (final child in children) {
@@ -88,6 +96,7 @@ final class IoThemeLibrary implements ThemeLibrary {
   Future<ThemeImportResult> import(
     String sourcePath, {
     bool replace = false,
+    String? expectedName,
   }) async {
     final bytes = await _readBounded(sourcePath);
     if (bytes == null) return const ThemeImportFailed();
@@ -97,6 +106,11 @@ final class IoThemeLibrary implements ThemeLibrary {
     // Путь назначения строится только из проверенного `name` (шаблон
     // `[a-z0-9-]{1,32}`): ни имя источника, ни разделители в него не попадут.
     final name = (parsed as ThemeLoaded).theme.name;
+    // Подтверждение относится к теме, которую показывали пользователю: если
+    // источник изменился и `name` другой, замена затёрла бы чужую тему.
+    if (replace && expectedName != null && expectedName != name) {
+      return ThemeImportSourceChanged(name);
+    }
     final target = p.join(_themesDir, '$name.json');
 
     final existing = await _readBounded(target);
@@ -131,6 +145,13 @@ final class IoThemeLibrary implements ThemeLibrary {
   Future<Uint8List?> _readBounded(String path) async {
     RandomAccessFile? file;
     try {
+      // `FileStat.stat` следует ссылкам. `open` именованного канала (FIFO,
+      // тип `pipe`) блокируется до появления писателя и повесил бы чтение
+      // каталога, поэтому открываем только обычный файл (тип `file`);
+      // символьные устройства вроде `/dev/zero` Dart к нему не относит, они
+      // отвергаются так же. Размер обычного файла ограничивает лимит ниже.
+      final stat = await FileStat.stat(path);
+      if (stat.type != FileSystemEntityType.file) return null;
       file = await File(path).open();
       final builder = BytesBuilder(copy: false);
       const limit = themeFileMaxBytes + 1;

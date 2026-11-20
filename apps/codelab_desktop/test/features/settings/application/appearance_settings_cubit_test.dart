@@ -17,6 +17,7 @@ import 'package:codelab_desktop/app/appearance/app_appearance_start.dart';
 import 'package:codelab_desktop/core/platform/app_appearance_preferences.dart';
 import 'package:codelab_desktop/core/platform/local_folder_opener.dart';
 import 'package:codelab_desktop/core/platform/system_accent_source.dart';
+import 'package:codelab_desktop/core/platform/theme_file_picker.dart';
 import 'package:codelab_desktop/features/settings/application/appearance_settings_cubit.dart';
 import 'package:fluent_ui/fluent_ui.dart' show Brightness;
 import 'package:flutter_test/flutter_test.dart';
@@ -54,8 +55,55 @@ final class _GatedLibrary implements ThemeLibrary {
   Future<ThemeEntry?> read(String name) => _inner.read(name);
 
   @override
-  Future<ThemeImportResult> import(String sourcePath, {bool replace = false}) =>
-      _inner.import(sourcePath, replace: replace);
+  Future<ThemeImportResult> import(
+    String sourcePath, {
+    bool replace = false,
+    String? expectedName,
+  }) => _inner.import(sourcePath, replace: replace, expectedName: expectedName);
+}
+
+/// Каталог, чьё перечисление бросает исключение порта.
+final class _ThrowingLibrary implements ThemeLibrary {
+  @override
+  Future<List<ThemeEntry>> list() => Future.error(StateError('/secret/path'));
+
+  @override
+  Future<ThemeEntry?> read(String name) => Future.error(StateError('x'));
+
+  @override
+  Future<ThemeImportResult> import(
+    String sourcePath, {
+    bool replace = false,
+    String? expectedName,
+  }) => Future.error(StateError('x'));
+}
+
+/// Каталог, который падает, пока `fail` истинно.
+final class _FlakyLibrary implements ThemeLibrary {
+  _FlakyLibrary(this._inner);
+
+  final InMemoryThemeLibrary _inner;
+  bool fail = true;
+
+  @override
+  Future<List<ThemeEntry>> list() =>
+      fail ? Future.error(StateError('/secret/path')) : _inner.list();
+
+  @override
+  Future<ThemeEntry?> read(String name) => _inner.read(name);
+
+  @override
+  Future<ThemeImportResult> import(
+    String sourcePath, {
+    bool replace = false,
+    String? expectedName,
+  }) => _inner.import(sourcePath, replace: replace, expectedName: expectedName);
+}
+
+/// Диалог выбора файла, который бросает исключение.
+final class _ThrowingPicker implements ThemeFilePicker {
+  @override
+  Future<String?> pickThemeFile() => Future.error(StateError('secret'));
 }
 
 /// Файл темы из артборда: ключи `acent` (строка 6) и `tab_bg` (строка 9).
@@ -164,9 +212,9 @@ void main() {
         'light',
         'dark',
         'high-contrast',
-        'acme-night',
-        'dim',
-        'huge',
+        'custom-acme-night',
+        'custom-dim',
+        'custom-huge',
       ]);
       expect(cubit.state.cards.take(3).map((c) => c.kind), [
         AppearanceThemeKind.builtInDefault,
@@ -191,9 +239,9 @@ void main() {
       expect(mode('light'), Brightness.light);
       expect(mode('dark'), Brightness.dark);
       expect(mode('high-contrast'), Brightness.dark);
-      expect(mode('acme-night'), Brightness.dark);
-      expect(mode('acme-day'), Brightness.light);
-      expect(mode('huge'), isNull);
+      expect(mode('custom-acme-night'), Brightness.dark);
+      expect(mode('custom-acme-day'), Brightness.light);
+      expect(mode('custom-huge'), isNull);
     });
 
     test('«Выбор по умолчанию — действующая тема»: Match system и светлая '
@@ -219,8 +267,8 @@ void main() {
 
         await cubit.load();
 
-        expect(cubit.state.selectedId, 'acme-night');
-        expect(cubit.state.selection?.card.id, 'acme-night');
+        expect(cubit.state.selectedId, 'custom-acme-night');
+        expect(cubit.state.selection?.card.id, 'custom-acme-night');
       },
     );
 
@@ -229,9 +277,9 @@ void main() {
       final cubit = build();
       await cubit.load();
 
-      await cubit.select('acme-night');
+      await cubit.select('custom-acme-night');
 
-      expect(cubit.state.selectedId, 'acme-night');
+      expect(cubit.state.selectedId, 'custom-acme-night');
       expect(appearance.state.darkTheme, 'dark');
       expect(appearance.state.lightTheme, 'light');
       expect(appearance.state.mode, AppearanceMode.system);
@@ -261,7 +309,7 @@ void main() {
           final cubit = build();
           await cubit.load();
 
-          await cubit.select('acme-night');
+          await cubit.select('custom-acme-night');
 
           final selection = cubit.state.selection!;
           expect(selection.card.loaded, isTrue);
@@ -290,7 +338,7 @@ void main() {
           final cubit = build();
           await cubit.load();
 
-          await cubit.select('acme-night');
+          await cubit.select('custom-acme-night');
 
           final unset = cubit.state.selection!.unsetRoles;
           expect(
@@ -314,7 +362,7 @@ void main() {
         final cubit = build();
         await cubit.load();
 
-        await cubit.select('broken');
+        await cubit.select('custom-broken');
 
         final selection = cubit.state.selection!;
         expect(selection.card.loaded, isFalse);
@@ -328,7 +376,7 @@ void main() {
         final cubit = build();
         await cubit.load();
 
-        await cubit.select('huge');
+        await cubit.select('custom-huge');
 
         final selection = cubit.state.selection!;
         expect(selection.card.loaded, isFalse);
@@ -341,7 +389,7 @@ void main() {
         final cubit = build();
         await cubit.load();
 
-        await cubit.select('dim');
+        await cubit.select('custom-dim');
 
         final selection = cubit.state.selection!;
         expect(selection.card.parseWarnings, 0);
@@ -388,7 +436,7 @@ void main() {
       gated.gates[0].complete();
       await first;
 
-      expect(cubit.state.cards.map((c) => c.id), contains('late'));
+      expect(cubit.state.cards.map((c) => c.id), contains('custom-late'));
       final discarded = events('appearance.catalog_discarded').single;
       expect(discarded['reason'], 'reload');
     });
@@ -435,6 +483,160 @@ void main() {
     });
   });
 
+  group('«Каталог тем не читается» (spec «Пользовательские темы на '
+      'странице»)', () {
+    test('исключение порта: встроенные карточки работают, флаг '
+        'catalogFailed, событие с error_class без пути', () async {
+      final cubit = build(themes: _ThrowingLibrary());
+
+      await cubit.load();
+
+      expect(cubit.state.loading, isFalse);
+      expect(cubit.state.catalogFailed, isTrue);
+      expect(cubit.state.cards.map((c) => c.id), [
+        'light',
+        'dark',
+        'high-contrast',
+      ]);
+      await cubit.select('high-contrast');
+      expect(cubit.state.selectedId, 'high-contrast');
+      final event = events('appearance.catalog_failed').single;
+      expect(event['error_class'], 'StateError');
+      expect(event.values.join(' '), isNot(contains('/secret')));
+      expect(event.values.join(' '), isNot(contains(_themesDirectory)));
+    });
+
+    test('«Reload» повторяет чтение и снимает флаг', () async {
+      final flaky = _FlakyLibrary(library);
+      final cubit = build(themes: flaky);
+      await cubit.load();
+      expect(cubit.state.catalogFailed, isTrue);
+
+      flaky.fail = false;
+      await cubit.reload();
+
+      expect(cubit.state.catalogFailed, isFalse);
+      expect(cubit.state.cards.map((c) => c.id), contains('custom-acme-night'));
+    });
+
+    test('обычное чтение флаг не ставит', () async {
+      final cubit = build();
+
+      await cubit.load();
+
+      expect(cubit.state.catalogFailed, isFalse);
+      expect(events('appearance.catalog_failed'), isEmpty);
+    });
+  });
+
+  group('имена файлов, совпавшие со встроенными темами (D9а)', () {
+    test('dark.json — отдельная карточка с ошибкой reservedName, '
+        'идентификаторы не пересекаются', () async {
+      library.files['dark'] = _theme('dark');
+      final cubit = build();
+
+      await cubit.load();
+
+      final ids = cubit.state.cards.map((c) => c.id).toList();
+      expect(ids.where((id) => id == 'dark'), hasLength(1));
+      expect(ids, contains('custom-dark'));
+      expect(ids.toSet(), hasLength(ids.length), reason: 'нет дублей id');
+      expect(cubit.state.loading, isFalse);
+      await cubit.select('custom-dark');
+      final selection = cubit.state.selection!;
+      expect(selection.card.loaded, isFalse);
+      expect(selection.card.name, 'dark');
+      expect(selection.error?.code, ThemeIssueCode.reservedName);
+      // Встроенная `dark` по-прежнему выбирается своей карточкой.
+      await cubit.select('dark');
+      expect(
+        cubit.state.selection?.card.kind,
+        AppearanceThemeKind.builtInDefault,
+      );
+    });
+
+    test('light.json и high-contrast.json тоже безопасны для load()', () async {
+      library.files['light'] = _theme('light', base: 'light');
+      library.files['high-contrast'] = _theme('high-contrast');
+      final cubit = build();
+
+      await cubit.load();
+
+      expect(cubit.state.loading, isFalse);
+      expect(
+        cubit.state.cards.map((c) => c.id),
+        containsAll([
+          'light',
+          'custom-light',
+          'high-contrast',
+          'custom-high-contrast',
+        ]),
+      );
+    });
+  });
+
+  group('выбор по умолчанию, когда тема режима не загрузилась', () {
+    test('светлый режим с удалённой темой — встроенная light', () async {
+      appearance = buildAppearance(
+        settings: const AppAppearanceSettings(
+          mode: AppearanceMode.light,
+          lightTheme: 'ghost',
+        ),
+      );
+      final cubit = build();
+
+      await cubit.load();
+
+      expect(cubit.state.selectedId, 'light');
+    });
+
+    test('тёмный режим с удалённой темой — встроенная dark', () async {
+      appearance = buildAppearance(
+        settings: const AppAppearanceSettings(
+          mode: AppearanceMode.dark,
+          darkTheme: 'ghost',
+        ),
+      );
+      final cubit = build();
+
+      await cubit.load();
+
+      expect(cubit.state.selectedId, 'dark');
+    });
+
+    test('Match system при светлой системе — light', () async {
+      appearance = buildAppearance(
+        settings: const AppAppearanceSettings(lightTheme: 'ghost'),
+      );
+      final cubit = build(system: Brightness.light);
+
+      await cubit.load();
+
+      expect(cubit.state.selectedId, 'light');
+    });
+  });
+
+  group('сбой каталога (spec «Каталог тем не читается»)', () {
+    test('ThemeCatalogException: флаг, событие с error_class и причиной без '
+        'пути', () async {
+      library.catalogFailure = ThemeCatalogFailure.notADirectory;
+      final cubit = build();
+
+      await cubit.load();
+
+      expect(cubit.state.catalogFailed, isTrue);
+      expect(cubit.state.cards.map((c) => c.id), [
+        'light',
+        'dark',
+        'high-contrast',
+      ]);
+      final event = events('appearance.catalog_failed').single;
+      expect(event['error_class'], 'ThemeCatalogException');
+      expect(event['failure'], 'notADirectory');
+      expect(event.values.join(' '), isNot(contains(_themesDirectory)));
+    });
+  });
+
   group('«Reload»', () {
     test('перечитывает каталог', () async {
       final cubit = build();
@@ -443,7 +645,7 @@ void main() {
 
       await cubit.reload();
 
-      expect(cubit.state.cards.map((c) => c.id), contains('new-one'));
+      expect(cubit.state.cards.map((c) => c.id), contains('custom-new-one'));
     });
 
     test('выбранная назначенная тема применяется заново из файла '
@@ -475,7 +677,7 @@ void main() {
       );
       final cubit = build(system: Brightness.light);
       await cubit.load();
-      await cubit.select('acme-night');
+      await cubit.select('custom-acme-night');
 
       await cubit.useSelected();
 
@@ -494,7 +696,7 @@ void main() {
       );
       final cubit = build();
       await cubit.load();
-      expect(cubit.state.selectedId, 'acme-night');
+      expect(cubit.state.selectedId, 'custom-acme-night');
 
       await cubit.resetSelected();
 
@@ -515,8 +717,8 @@ void main() {
 
       await cubit.importJson();
 
-      expect(cubit.state.cards.map((c) => c.id), contains('fresh'));
-      expect(cubit.state.selectedId, 'fresh');
+      expect(cubit.state.cards.map((c) => c.id), contains('custom-fresh'));
+      expect(cubit.state.selectedId, 'custom-fresh');
       expect(cubit.state.import.status, AppearanceImportStatus.idle);
       expect(appearance.state.darkTheme, 'dark');
       expect(appearance.state.lightTheme, 'light');
@@ -536,7 +738,7 @@ void main() {
 
         await cubit.importJson();
 
-        expect(cubit.state.selection?.card.id, 'twin');
+        expect(cubit.state.selection?.card.id, 'custom-twin');
         expect(cubit.state.selection?.warningLines, {6, 9});
       },
     );
@@ -574,7 +776,7 @@ void main() {
 
       expect(library.files['acme-night'], replacement);
       expect(cubit.state.import.status, AppearanceImportStatus.idle);
-      expect(cubit.state.selectedId, 'acme-night');
+      expect(cubit.state.selectedId, 'custom-acme-night');
       expect(events('appearance.theme_imported').last['outcome'], 'replaced');
     });
 
@@ -586,7 +788,7 @@ void main() {
 
       await cubit.importJson();
 
-      expect(cubit.state.selectedId, 'acme-night');
+      expect(cubit.state.selectedId, 'custom-acme-night');
       expect(cubit.state.import.status, AppearanceImportStatus.idle);
       expect(
         events('appearance.theme_imported').single['outcome'],
@@ -625,6 +827,53 @@ void main() {
       final event = events('appearance.theme_imported').single;
       expect(event['outcome'], 'failed');
       expect(event.values.join(' '), isNot(contains('missing.json')));
+    });
+
+    test('исключение диалога выбора файла — отдельный исход без текста '
+        'записи', () async {
+      final cubit = AppearanceSettingsCubit(
+        library: library,
+        appearance: appearance,
+        picker: _ThrowingPicker(),
+        folderOpener: opener,
+        systemBrightness: () => Brightness.dark,
+        themesDirectory: _themesDirectory,
+        logger: logger,
+      );
+      addTearDown(cubit.close);
+      await cubit.load();
+
+      await cubit.importJson();
+
+      expect(cubit.state.import.status, AppearanceImportStatus.failed);
+      expect(cubit.state.import.pickerFailed, isTrue);
+      expect(cubit.state.import.writeFailed, isFalse);
+      final event = events('appearance.theme_imported').single;
+      expect(event['outcome'], 'failed');
+      expect(event['error_class'], 'StateError');
+      expect(event.values.join(' '), isNot(contains('secret')));
+    });
+
+    test('«Replace» после смены источника: имя другое — замены нет, '
+        'sourceChanged', () async {
+      library.sources[source] = _theme('acme-night', accent: '#111111');
+      picker.next = source;
+      final cubit = build();
+      await cubit.load();
+      await cubit.importJson();
+      expect(cubit.state.import.status, AppearanceImportStatus.needsReplace);
+      library.sources[source] = _theme('other-theme');
+
+      await cubit.confirmReplace();
+
+      expect(cubit.state.import.status, AppearanceImportStatus.failed);
+      expect(cubit.state.import.sourceChanged, isTrue);
+      expect(library.files['acme-night'], _twoWarnings);
+      expect(library.files, isNot(contains('other-theme')));
+      expect(
+        events('appearance.theme_imported').last['outcome'],
+        'source_changed',
+      );
     });
 
     test('отмена диалога выбора файла ничего не меняет', () async {

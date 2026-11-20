@@ -92,7 +92,7 @@ AppearanceThemeCard _custom(
   final loaded = _parsed(id, text);
   final theme = buildFluentTheme(loaded.theme);
   return AppearanceThemeCard(
-    id: id,
+    id: 'custom-$id',
     kind: AppearanceThemeKind.custom,
     loaded: true,
     mode: loaded.theme.base == ThemeBase.light
@@ -106,7 +106,7 @@ AppearanceThemeCard _custom(
 }
 
 const _invalidCard = AppearanceThemeCard(
-  id: 'broken',
+  id: 'custom-broken',
   kind: AppearanceThemeKind.custom,
   loaded: false,
 );
@@ -134,6 +134,7 @@ AppearanceSettingsState _state({
   String selectedId = 'dark',
   AppearanceSelection? selection,
   bool loading = false,
+  bool catalogFailed = false,
   AppearanceImport import = const AppearanceImport(),
 }) {
   final cards = [
@@ -151,6 +152,8 @@ AppearanceSettingsState _state({
         AppearanceSelection(card: cards.singleWhere((c) => c.id == selectedId)),
     import: import,
     themesLabel: '~/.codelab/themes/*.json',
+    themesDirectoryLabel: '~/.codelab/themes',
+    catalogFailed: catalogFailed,
   );
 }
 
@@ -184,7 +187,7 @@ final class _FakeSettingsCubit extends AppearanceSettingsCubit {
     emit(
       state.copyWith(
         selectedId: id,
-        selection: id == 'acme-night'
+        selection: id == 'custom-acme-night'
             ? _twoWarningsSelection()
             : AppearanceSelection(card: card),
       ),
@@ -280,6 +283,8 @@ void main() {
     double width = 1200,
     AppAppearanceCubit? appearance,
     Brightness system = Brightness.light,
+    // Индикатор загрузки анимируется бесконечно: `pumpAndSettle` не вернётся.
+    bool settle = true,
   }) async {
     tester.view.physicalSize = Size(width, 900);
     tester.view.devicePixelRatio = 1;
@@ -305,7 +310,11 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+    }
   }
 
   Finder key(String name) => find.byKey(ValueKey('settings-appearance$name'));
@@ -320,7 +329,7 @@ void main() {
         tester,
         _state(
           custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)],
-          selectedId: 'acme-night',
+          selectedId: 'custom-acme-night',
           selection: _twoWarningsSelection(),
         ),
       );
@@ -363,7 +372,7 @@ void main() {
         tester,
         _state(
           custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)],
-          selectedId: 'acme-night',
+          selectedId: 'custom-acme-night',
           selection: _twoWarningsSelection(),
         ),
         width: 800,
@@ -541,11 +550,21 @@ void main() {
         _state(custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)]),
       );
 
-      for (final id in const ['light', 'dark', 'high-contrast', 'acme-night']) {
+      for (final id in const [
+        'light',
+        'dark',
+        'high-contrast',
+        'custom-acme-night',
+      ]) {
         expect(key('-theme-$id'), findsOneWidget, reason: id);
       }
       final order = [
-        for (final id in const ['light', 'dark', 'high-contrast', 'acme-night'])
+        for (final id in const [
+          'light',
+          'dark',
+          'high-contrast',
+          'custom-acme-night',
+        ])
           tester.getTopLeft(key('-theme-$id')),
       ];
       // Порядок слева направо и сверху вниз: каждая следующая не раньше.
@@ -574,9 +593,9 @@ void main() {
       expect(textIn('high-contrast'), contains('High contrast'));
       expect(textIn('high-contrast'), isNot(contains('default')));
       expect(textIn('high-contrast'), contains('Dark mode'));
-      expect(textIn('acme-night'), contains('acme-night'));
-      expect(textIn('acme-night'), contains('Custom · extends dark'));
-      expect(textIn('acme-night'), contains('Dark mode'));
+      expect(textIn('custom-acme-night'), contains('acme-night'));
+      expect(textIn('custom-acme-night'), contains('Custom · extends dark'));
+      expect(textIn('custom-acme-night'), contains('Dark mode'));
     });
 
     testWidgets('мини-превью кода показано на карточке', (tester) async {
@@ -612,14 +631,14 @@ void main() {
 
       expect(
         find.descendant(
-          of: key('-theme-acme-night-warnings'),
+          of: key('-theme-custom-acme-night-warnings'),
           matching: find.text('2 warnings'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
-          of: key('-theme-one-warnings'),
+          of: key('-theme-custom-one-warnings'),
           matching: find.text('1 warning'),
         ),
         findsOneWidget,
@@ -634,7 +653,7 @@ void main() {
         tester,
         _state(
           custom: [_invalidCard],
-          selectedId: 'broken',
+          selectedId: 'custom-broken',
           selection: const AppearanceSelection(
             card: _invalidCard,
             fileText: '{',
@@ -645,12 +664,12 @@ void main() {
 
       expect(
         find.descendant(
-          of: key('-theme-broken'),
+          of: key('-theme-custom-broken'),
           matching: find.text('Invalid'),
         ),
         findsOneWidget,
       );
-      expect(key('-theme-broken-warnings'), findsNothing);
+      expect(key('-theme-custom-broken-warnings'), findsNothing);
     });
 
     testWidgets('«Выбор карточки не применяет тему»: нажатие вызывает '
@@ -660,21 +679,200 @@ void main() {
         _state(custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)]),
       );
 
-      await tester.tap(key('-theme-acme-night'));
+      await tester.tap(key('-theme-custom-acme-night'));
       await tester.pumpAndSettle();
 
-      expect(settings.calls, contains('select:acme-night'));
+      expect(settings.calls, contains('select:custom-acme-night'));
       expect(app.state.darkTheme, 'dark');
       expect(find.text('Use acme-night'), findsOneWidget);
     });
 
     testWidgets('пока каталог читается, на месте пользовательских тем '
         'индикатор, встроенные карточки работают', (tester) async {
-      await pumpPage(tester, _state(loading: true));
+      await pumpPage(tester, _state(loading: true), settle: false);
 
       expect(key('-themes-loading'), findsOneWidget);
       expect(key('-theme-light'), findsOneWidget);
       expect(key('-theme-high-contrast'), findsOneWidget);
+    });
+  });
+
+  group('карточка файла с зарезервированным именем (D9а)', () {
+    testWidgets('dark.json — карточка custom-dark с Invalid, рядом встроенная '
+        'dark, ключи не дублируются', (tester) async {
+      const reserved = AppearanceThemeCard(
+        id: 'custom-dark',
+        kind: AppearanceThemeKind.custom,
+        loaded: false,
+      );
+      await pumpPage(
+        tester,
+        _state(
+          custom: [reserved],
+          selectedId: 'custom-dark',
+          selection: const AppearanceSelection(
+            card: reserved,
+            fileText: '{}',
+            error: ThemeIssue(ThemeIssueCode.reservedName, line: 2, column: 11),
+          ),
+        ),
+      );
+
+      expect(key('-theme-dark'), findsOneWidget);
+      expect(key('-theme-custom-dark'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: key('-theme-custom-dark'),
+          matching: find.text('Invalid'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text("dark couldn't be loaded"), findsOneWidget);
+      expect(find.textContaining('built-in theme'), findsWidgets);
+    });
+  });
+
+  group('предел панели проблем (D9а)', () {
+    testWidgets('первые 50 предупреждений и строка «… and 10 more warnings», '
+        'бейдж считает все', (tester) async {
+      final card = _custom('acme-night', _twoWarnings, parseWarnings: 60);
+      await pumpPage(
+        tester,
+        _state(
+          custom: [card],
+          selectedId: 'custom-acme-night',
+          selection: AppearanceSelection(
+            card: card,
+            fileText: _twoWarnings,
+            issues: [
+              for (var i = 0; i < 60; i++)
+                AppearanceParseIssue(
+                  ThemeIssue(
+                    ThemeIssueCode.unknownKey,
+                    line: 6,
+                    column: 5,
+                    key: 'k$i',
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+
+      expect(key('-issue-50'), findsOneWidget);
+      expect(key('-issue-51'), findsNothing);
+      expect(
+        find.descendant(
+          of: key('-issues-more'),
+          matching: find.text('… and 10 more warnings'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('acme-night loaded with 60 warnings'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: key('-theme-custom-acme-night-warnings'),
+          matching: find.text('60 warnings'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('до 50 предупреждений строки «ещё» нет', (tester) async {
+      await pumpPage(
+        tester,
+        _state(
+          custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)],
+          selectedId: 'custom-acme-night',
+          selection: _twoWarningsSelection(),
+        ),
+      );
+
+      expect(key('-issues-more'), findsNothing);
+    });
+  });
+
+  group('исходы импорта без записи', () {
+    testWidgets('сбой диалога выбора файла — своё сообщение', (tester) async {
+      await pumpPage(
+        tester,
+        _state(
+          import: const AppearanceImport(
+            status: AppearanceImportStatus.failed,
+            pickerFailed: true,
+          ),
+        ),
+      );
+
+      expect(find.text("Couldn't open the file dialog."), findsOneWidget);
+      expect(find.textContaining("Couldn't save the theme"), findsNothing);
+    });
+
+    testWidgets('источник изменился — просьба выбрать файл снова', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        _state(
+          import: const AppearanceImport(
+            status: AppearanceImportStatus.failed,
+            fileName: 'night.json',
+            sourceChanged: true,
+          ),
+        ),
+      );
+
+      expect(
+        find.text('The file changed after you chose it. Choose it again.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('диалог замены открывается и при смене состояния после '
+        'первого кадра', (tester) async {
+      await pumpPage(tester, _state());
+      expect(find.text('Replace the theme "acme-night"?'), findsNothing);
+
+      settings.set(
+        settings.state.copyWith(
+          import: const AppearanceImport(
+            status: AppearanceImportStatus.needsReplace,
+            name: 'acme-night',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Replace the theme "acme-night"?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(settings.calls, contains('cancel-replace'));
+    });
+  });
+
+  group('«Каталог тем не читается»', () {
+    testWidgets('InfoBar с путём каталога, встроенные карточки на месте, '
+        'Reload вызывает Cubit', (tester) async {
+      await pumpPage(tester, _state(catalogFailed: true));
+
+      expect(key('-catalog-failed'), findsOneWidget);
+      expect(
+        find.text(
+          "Couldn't read ~/.codelab/themes. Custom themes are not shown.",
+        ),
+        findsOneWidget,
+      );
+      expect(key('-theme-light'), findsOneWidget);
+      expect(key('-theme-high-contrast'), findsOneWidget);
+      await tester.tap(key('-catalog-reload'));
+      await tester.pumpAndSettle();
+      expect(settings.calls, contains('reload'));
+    });
+
+    testWidgets('без сбоя InfoBar нет', (tester) async {
+      await pumpPage(tester, _state());
+
+      expect(key('-catalog-failed'), findsNothing);
     });
   });
 
@@ -685,7 +883,7 @@ void main() {
       expect(find.text('~/.codelab/themes/*.json'), findsOneWidget);
       expect(find.text('Import JSON…'), findsOneWidget);
       await tester.tap(key('-import'));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(settings.calls, contains('import'));
     });
 
@@ -700,7 +898,7 @@ void main() {
       );
 
       await tester.tap(key('-import'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(settings.calls, isNot(contains('import')));
     });
@@ -728,7 +926,8 @@ void main() {
       expect(find.textContaining('3:7'), findsOneWidget);
     });
 
-    testWidgets('ошибка записи: без текста исключения', (tester) async {
+    testWidgets('источник не прочитан или не записан: нейтральное сообщение '
+        'без неверной причины и без текста исключения', (tester) async {
       await pumpPage(
         tester,
         _state(
@@ -740,8 +939,16 @@ void main() {
         ),
       );
 
-      expect(find.textContaining("Couldn't save the theme to"), findsOneWidget);
-      expect(find.textContaining('~/.codelab/themes'), findsWidgets);
+      // Порт не различает «не прочитан» и «не записан» (`ThemeImportFailed`),
+      // поэтому причина «не удалось сохранить в <каталог>» была бы неверной.
+      expect(
+        find.text(
+          "Couldn't import the theme. Check that the file is readable and "
+          'try again.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining("Couldn't save the theme"), findsNothing);
     });
 
     testWidgets('нужна замена: диалог, «Replace» и «Cancel»', (tester) async {
@@ -787,7 +994,7 @@ void main() {
           tester,
           _state(
             custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)],
-            selectedId: 'acme-night',
+            selectedId: 'custom-acme-night',
             selection: _twoWarningsSelection(text: text),
           ),
         );
@@ -864,9 +1071,70 @@ void main() {
       expect(find.text('Open file'), findsNothing);
       await tester.tap(key('-open-folder'));
       await tester.tap(key('-reload'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(settings.calls, containsAll(['open-folder', 'reload']));
+    });
+
+    testWidgets('«Экранирование не склеивает строки»: 13 строк, выделена '
+        'строка 6, символов \\u000a нет', (tester) async {
+      // Файл с CRLF: перевод строки и возврат каретки — разделители строк, а
+      // не символы для экранирования.
+      await pumpTwoWarnings(
+        tester,
+        text: _twoWarnings.replaceAll('\n', '\r\n'),
+      );
+
+      // Список строк виртуализирован: в видимой части — первые строки; число
+      // строк проверяет текст содержимого ниже.
+      for (var n = 1; n <= 8; n++) {
+        expect(
+          find.byKey(ValueKey('file-preview-line-$n')),
+          findsOneWidget,
+          reason: 'строка $n',
+        );
+      }
+      final preview = tester.widget<CodeLabFilePreview>(
+        find.byType(CodeLabFilePreview),
+      );
+      expect(preview.warningLines, {6, 9});
+      final shown = (preview.content as CodeLabFilePreviewText).text;
+      expect(shown.split('\n'), hasLength(13));
+      expect(shown, isNot(contains(r'\u000a')));
+      expect(shown, isNot(contains(r'\u000d')));
+    });
+
+    testWidgets('табуляция в файле показывается четырьмя пробелами, остальные '
+        'управляющие — escape-последовательностью', (tester) async {
+      await pumpTwoWarnings(
+        tester,
+        text: _twoWarnings.replaceFirst('"name"', '\t"name"\u0007'),
+      );
+
+      final preview = tester.widget<CodeLabFilePreview>(
+        find.byType(CodeLabFilePreview),
+      );
+      final shown = (preview.content as CodeLabFilePreviewText).text;
+      expect(shown, isNot(contains('\t')));
+      expect(shown, contains('    "name"'));
+      expect(shown, contains(r'\u0007'));
+    });
+
+    testWidgets('одиночный \\r экранируется, а не склеивает и не теряется', (
+      tester,
+    ) async {
+      await pumpTwoWarnings(
+        tester,
+        text: _twoWarnings.replaceFirst('"name"', '\r"name"'),
+      );
+
+      final preview = tester.widget<CodeLabFilePreview>(
+        find.byType(CodeLabFilePreview),
+      );
+      final shown = (preview.content as CodeLabFilePreviewText).text;
+      expect(shown.split('\n'), hasLength(13));
+      expect(shown, contains(r'\u000d'));
+      expect(shown, isNot(contains('\r')));
     });
 
     testWidgets(
@@ -893,7 +1161,7 @@ void main() {
         tester,
         _state(
           custom: [_invalidCard],
-          selectedId: 'broken',
+          selectedId: 'custom-broken',
           selection: const AppearanceSelection(
             card: _invalidCard,
             fileText: '{',
@@ -919,7 +1187,7 @@ void main() {
         tester,
         _state(
           custom: [card],
-          selectedId: 'quiet',
+          selectedId: 'custom-quiet',
           selection: AppearanceSelection(
             card: card,
             fileText: '{}',
@@ -956,7 +1224,7 @@ void main() {
         tester,
         _state(
           custom: [card],
-          selectedId: 'dim',
+          selectedId: 'custom-dim',
           selection: AppearanceSelection(
             card: card,
             fileText: '{}',
@@ -993,7 +1261,7 @@ void main() {
         tester,
         _state(
           custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)],
-          selectedId: 'acme-night',
+          selectedId: 'custom-acme-night',
           selection: _twoWarningsSelection(),
         ),
       );
@@ -1058,7 +1326,7 @@ void main() {
         tester,
         _state(
           custom: [card],
-          selectedId: 'acme-night',
+          selectedId: 'custom-acme-night',
           selection: AppearanceSelection(card: card, fileText: _twoWarnings),
         ),
       );
@@ -1111,14 +1379,14 @@ void main() {
           tester,
           _state(
             custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)],
-            selectedId: 'acme-night',
+            selectedId: 'custom-acme-night',
             selection: _twoWarningsSelection(),
           ),
         );
 
         expect(find.text('Use acme-night'), findsOneWidget);
         await tester.tap(key('-use'));
-        await tester.pump();
+        await tester.pumpAndSettle();
 
         expect(settings.calls, contains('use'));
       },
@@ -1138,13 +1406,13 @@ void main() {
         tester,
         _state(
           custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)],
-          selectedId: 'acme-night',
+          selectedId: 'custom-acme-night',
           selection: _twoWarningsSelection(),
         ),
       );
 
       await tester.tap(key('-use'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(settings.calls, isNot(contains('use')));
     });
@@ -1156,7 +1424,7 @@ void main() {
         tester,
         _state(
           custom: [_invalidCard],
-          selectedId: 'broken',
+          selectedId: 'custom-broken',
           selection: const AppearanceSelection(
             card: _invalidCard,
             fileText: '{',
@@ -1166,7 +1434,7 @@ void main() {
       );
 
       await tester.tap(key('-use'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(settings.calls, isNot(contains('use')));
     });
@@ -1176,7 +1444,7 @@ void main() {
       await pumpPage(tester, _state(selectedId: 'dark'));
 
       await tester.tap(key('-reset'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(settings.calls, isNot(contains('reset')));
     });
@@ -1195,13 +1463,13 @@ void main() {
         tester,
         _state(
           custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)],
-          selectedId: 'acme-night',
+          selectedId: 'custom-acme-night',
           selection: _twoWarningsSelection(),
         ),
       );
 
       await tester.tap(key('-reset'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(settings.calls, contains('reset'));
     });
@@ -1269,7 +1537,7 @@ void main() {
         tester,
         _state(
           custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)],
-          selectedId: 'acme-night',
+          selectedId: 'custom-acme-night',
           selection: _twoWarningsSelection(),
         ),
         locale: const Locale('ru'),
@@ -1309,7 +1577,7 @@ void main() {
       settings = _FakeSettingsCubit(
         _state(
           custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)],
-          selectedId: 'acme-night',
+          selectedId: 'custom-acme-night',
           selection: _twoWarningsSelection(),
         ),
         app,

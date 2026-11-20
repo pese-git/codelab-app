@@ -3158,4 +3158,347 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get agentsErrorFallbackOther => 'The definition cannot be loaded.';
+
+  @override
+  String get settingsSearchKeywordsAppearance =>
+      'theme, dark, light, mode, color, accent, contrast, json';
+
+  @override
+  String get appearanceModeTitle => 'Mode';
+
+  @override
+  String get appearanceModeDescription =>
+      'Light, dark, or follow the system setting';
+
+  @override
+  String get appearanceModeLight => 'Light';
+
+  @override
+  String get appearanceModeDark => 'Dark';
+
+  @override
+  String appearanceModeSystem(String current) {
+    return 'Match system ($current)';
+  }
+
+  @override
+  String get appearanceSystemLight => 'light';
+
+  @override
+  String get appearanceSystemDark => 'dark';
+
+  @override
+  String get appearanceAccentTitle => 'Accent color';
+
+  @override
+  String get appearanceAccentDescription =>
+      'Buttons, selection and focus use the system accent';
+
+  @override
+  String get appearanceAccentToggle => 'Use system accent';
+
+  @override
+  String get appearanceThemesTitle => 'Color theme';
+
+  @override
+  String get appearanceThemeFluentLight => 'Fluent Light';
+
+  @override
+  String get appearanceThemeFluentDark => 'Fluent Dark';
+
+  @override
+  String get appearanceThemeHighContrast => 'High contrast';
+
+  @override
+  String get appearanceKindBuiltInDefault => 'Built-in · default';
+
+  @override
+  String get appearanceKindBuiltIn => 'Built-in';
+
+  @override
+  String appearanceKindCustom(String base) {
+    return 'Custom · extends $base';
+  }
+
+  @override
+  String get appearanceKindCustomUnknown => 'Custom';
+
+  @override
+  String get appearanceTagLightMode => 'Light mode';
+
+  @override
+  String get appearanceTagDarkMode => 'Dark mode';
+
+  @override
+  String get appearanceTagInvalid => 'Invalid';
+
+  @override
+  String appearanceWarningsBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count warnings',
+      one: '$count warning',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appearanceCustomTitle => 'Custom themes';
+
+  @override
+  String get appearanceImportButton => 'Import JSON…';
+
+  @override
+  String appearanceIssuesSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count warnings',
+      one: '$count warning',
+    );
+    return '$name loaded with $_temp0';
+  }
+
+  @override
+  String appearanceIssuesHint(String base, String builtIn) {
+    return 'Unknown keys were ignored; the theme is applied. Missing roles come from extends: \"$base\" ($builtIn).';
+  }
+
+  @override
+  String appearanceIssuesError(String name) {
+    return '$name couldn\'t be loaded';
+  }
+
+  @override
+  String get appearanceOpenFolder => 'Open folder';
+
+  @override
+  String get appearanceReload => 'Reload';
+
+  @override
+  String appearanceIssueUnknownKey(
+    String file,
+    int line,
+    int column,
+    String key,
+  ) {
+    return '$file:$line:$column unknown key \"$key\"';
+  }
+
+  @override
+  String appearanceIssueUnknownKeyHint(String role) {
+    return 'Ignored. Did you mean \"$role\"?';
+  }
+
+  @override
+  String get appearanceIssueUnknownKeyNoHint => 'Ignored — not a theme role.';
+
+  @override
+  String appearanceIssueDuplicateKey(
+    String file,
+    int line,
+    int column,
+    String key,
+  ) {
+    return '$file:$line:$column duplicate key \"$key\"';
+  }
+
+  @override
+  String get appearanceIssueDuplicateKeyHint => 'The last value is used.';
+
+  @override
+  String appearanceIssueTerminalColor(
+    String file,
+    int line,
+    int column,
+    String value,
+  ) {
+    return '$file:$line:$column terminal color \"$value\"';
+  }
+
+  @override
+  String get appearanceIssueTerminalColorHint =>
+      'Terminal colors are not used by the app; the role comes from extends.';
+
+  @override
+  String appearanceIssueLowContrast(String role, String ratio) {
+    return 'Low contrast: $role, $ratio:1';
+  }
+
+  @override
+  String get appearanceIssueLowContrastHint =>
+      'Applied as set. Text roles need 4.5:1.';
+
+  @override
+  String get appearanceIssueTooLarge => 'The file is larger than 64 KiB.';
+
+  @override
+  String get appearanceIssueNotUtf8 => 'The file is not valid UTF-8.';
+
+  @override
+  String get appearanceIssueInvalidJson => 'The file is not valid JSON.';
+
+  @override
+  String get appearanceIssueNotAnObject =>
+      'The top level must be a JSON object.';
+
+  @override
+  String get appearanceIssueMissingName => 'The \"name\" key is missing.';
+
+  @override
+  String get appearanceIssueInvalidName =>
+      'The theme name must be 1–32 characters: a–z, 0–9 and hyphens.';
+
+  @override
+  String get appearanceIssueNameMismatch =>
+      'The \"name\" value must match the file name.';
+
+  @override
+  String get appearanceIssueReservedName =>
+      'The name is taken by a built-in theme.';
+
+  @override
+  String get appearanceIssueInvalidExtends =>
+      '\"extends\" must be light, dark or high-contrast.';
+
+  @override
+  String get appearanceIssueInvalidValue =>
+      'The color value is not valid: use #rrggbb, default, an ANSI color name or 256:n.';
+
+  @override
+  String get appearanceIssueUnreadable => 'The file could not be read.';
+
+  @override
+  String appearanceIssueWithPosition(
+    String file,
+    int line,
+    int column,
+    String problem,
+  ) {
+    return '$file:$line:$column $problem';
+  }
+
+  @override
+  String appearanceUnsetRoles(int count, String base) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count roles not set',
+      one: '$count role not set',
+    );
+    return '$_temp0 — taken from \"$base\"';
+  }
+
+  @override
+  String get appearanceUnsetRolesNote => 'For reference, not a warning';
+
+  @override
+  String get appearancePreviewTitle => 'Preview';
+
+  @override
+  String get appearancePreviewLink => 'Link';
+
+  @override
+  String get appearancePreviewDone => 'Done';
+
+  @override
+  String get appearancePreviewContext => '84% context';
+
+  @override
+  String get appearancePreviewFailed => 'Failed';
+
+  @override
+  String get appearanceContrastTitle => 'Contrast on code background';
+
+  @override
+  String get appearanceContrastText => 'Text';
+
+  @override
+  String get appearanceContrastComment => 'Comment';
+
+  @override
+  String get appearanceContrastKeyword => 'Keyword';
+
+  @override
+  String get appearanceContrastError => 'Error';
+
+  @override
+  String get appearanceContrastPass => 'AA';
+
+  @override
+  String get appearanceContrastLow => 'Low';
+
+  @override
+  String get appearanceContrastNote =>
+      'Text roles need 4.5:1. A role below that still applies, with a warning on its card.';
+
+  @override
+  String get appearanceReset => 'Reset';
+
+  @override
+  String appearanceUse(String name) {
+    return 'Use $name';
+  }
+
+  @override
+  String appearanceFallback(String name, String builtIn) {
+    return '\"$name\" couldn\'t be loaded. Using $builtIn until it is fixed.';
+  }
+
+  @override
+  String get appearanceSaveFailed =>
+      'Couldn\'t save the appearance. CodeLab will use the previous appearance after restart.';
+
+  @override
+  String get appearanceSaveRetry => 'Retry';
+
+  @override
+  String appearanceImportFailed(String file, String problem) {
+    return 'Couldn\'t import $file: $problem';
+  }
+
+  @override
+  String get appearanceImportFailedGeneric =>
+      'Couldn\'t import the theme. Check that the file is readable and try again.';
+
+  @override
+  String appearanceReplaceTitle(String name) {
+    return 'Replace the theme \"$name\"?';
+  }
+
+  @override
+  String get appearanceReplaceBody =>
+      'A theme with this name is already in the folder. Its file will be replaced.';
+
+  @override
+  String get appearanceReplaceConfirm => 'Replace';
+
+  @override
+  String appearanceIssuePosition(int line, int column, String problem) {
+    return '$line:$column $problem';
+  }
+
+  @override
+  String appearanceCatalogFailed(String path) {
+    return 'Couldn\'t read $path. Custom themes are not shown.';
+  }
+
+  @override
+  String appearanceIssuesMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '… and $count more warnings',
+      one: '… and $count more warning',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appearanceImportPickerFailed => 'Couldn\'t open the file dialog.';
+
+  @override
+  String get appearanceImportSourceChanged =>
+      'The file changed after you chose it. Choose it again.';
 }

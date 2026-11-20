@@ -380,7 +380,7 @@ class _BudgetRowView extends StatelessWidget {
     final fill = row.fill.isNaN ? 0.0 : row.fill.clamp(0.0, 1.0);
     final barColor = switch (row.tone) {
       CodeLabTone.danger => CodeLabPalette.of(theme).danger,
-      CodeLabTone.warning => Colors.orange,
+      CodeLabTone.warning => CodeLabPalette.of(theme).warning,
       _ => theme.accentColor,
     };
     final value = escapeForDisplay(row.value);

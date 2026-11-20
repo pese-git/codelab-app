@@ -88,10 +88,13 @@ final class AppAppearanceState {
 /// пишут документ. Записи идут по очереди, побеждает последний выбор: запись,
 /// которую обогнал более новый выбор, состояние не публикует. Сбой записи не
 /// откатывает оформление — ставится `saveFailed`, [retrySave] повторяет запись.
-/// Результат чтения файла темы защищён номером операции своего режима: поздний
-/// результат после нового [reloadTheme], [useTheme] или [resetTheme] того же
-/// режима отбрасывается. Тема, которая не загрузилась, заменяется встроенной
-/// темой режима, а выбор пользователя остаётся в документе.
+/// Пользовательская тема читается из файла асинхронно, поэтому результат
+/// защищён от устаревания. [useTheme] берёт номер выбора (`_choice`) в начале
+/// КАЖДОГО вызова, как [resetTheme] и [setMode]: чтение применяется, только если
+/// более нового выбора не было. [reloadTheme] защищён номером операции своего
+/// режима: поздний результат после нового [reloadTheme], [useTheme] или
+/// [resetTheme] того же режима отбрасывается. Тема, которая не загрузилась,
+/// заменяется встроенной темой режима, а выбор пользователя остаётся в документе.
 ///
 /// Как использовать: singleton root scope; начальное состояние приходит швом
 /// [AppAppearanceStart] из `main` без асинхронной загрузки (первый кадр уже в
@@ -152,6 +155,11 @@ final class AppAppearanceCubit extends Cubit<AppAppearanceState> {
   /// отбрасывается (D13).
   int _lightOp = 0;
   int _darkOp = 0;
+
+  /// Номер последнего «Use», «Reset» или смены режима: чтение файла
+  /// пользовательской темы применяется, только если с его начала не было
+  /// более нового выбора.
+  int _choice = 0;
 
   /// Номер последнего выбора: запись с меньшим номером обогнана.
   int _latest = 0;
@@ -234,6 +242,9 @@ final class AppAppearanceCubit extends Cubit<AppAppearanceState> {
   Future<void> setMode(AppearanceMode mode) {
     if (isClosed || _closing) return Future<void>.value();
     if (mode == state.mode && !state.saveFailed) return _tail;
+    // Новый выбор режима тоже отменяет ещё читающийся «Use»: иначе тот позже
+    // переписал бы режим и тему поверх выбора пользователя.
+    _choice++;
     final settings = state.settings.copyWith(mode: mode);
     _publish(settings, saveFailed: false);
     _logChanged('mode', mode.name);
@@ -248,23 +259,23 @@ final class AppAppearanceCubit extends Cubit<AppAppearanceState> {
   /// выбор был виден сразу; при `Match system` не меняется.
   Future<void> useTheme(String id) async {
     if (isClosed || _closing) return;
+    // Номер выбора берётся в начале КАЖДОГО вызова: пользовательская тема
+    // дочитывается из файла, и «Use A», «Use B» с первым дочитанным A иначе
+    // оставили бы A. Побеждает последний выбор (D13).
+    final choice = ++_choice;
     if (_isBuiltIn(id)) {
       _bumpOp(_builtInBrightness(id));
       return _assign(id, null);
     }
-    // Режим пользовательской темы известен только после разбора файла, поэтому
-    // номер берётся для обоих режимов: любой более новый выбор отбросит чтение.
-    final before = (_lightOp, _darkOp);
     final loaded = await _readLoaded(id);
     if (isClosed || _closing) return;
     if (loaded == null) return;
+    // Более новый выбор (или «Reset») начался, пока файл читался: результат
+    // устарел.
+    if (choice != _choice) return;
     final brightness = loaded.theme.base == ThemeBase.light
         ? Brightness.light
         : Brightness.dark;
-    final unchanged = brightness == Brightness.light
-        ? _lightOp == before.$1
-        : _darkOp == before.$2;
-    if (!unchanged) return;
     _bumpOp(brightness);
     return _assign(id, loaded, brightness: brightness);
   }
@@ -272,6 +283,7 @@ final class AppAppearanceCubit extends Cubit<AppAppearanceState> {
   /// Возвращает режиму [brightness] встроенную тему по умолчанию («Reset»).
   Future<void> resetTheme(Brightness brightness) async {
     if (isClosed || _closing) return;
+    _choice++;
     _bumpOp(brightness);
     return _assign(brightness == Brightness.light ? 'light' : 'dark', null);
   }
@@ -348,7 +360,7 @@ final class AppAppearanceCubit extends Cubit<AppAppearanceState> {
     final brightness = inLight ? Brightness.light : Brightness.dark;
     _bumpOp(brightness);
     final token = brightness == Brightness.light ? _lightOp : _darkOp;
-    final loaded = await _readLoaded(id);
+    final loaded = await _readLoaded(id, expected: brightness);
     if (isClosed || _closing) return;
     if (token != (brightness == Brightness.light ? _lightOp : _darkOp)) {
       return;
@@ -409,12 +421,19 @@ final class AppAppearanceCubit extends Cubit<AppAppearanceState> {
 
   /// Читает и разбирает файл темы [name]; `null` — темы нет или она не
   /// загрузилась (причина пишется событием без имени и текста файла).
-  Future<ThemeLoaded?> _readLoaded(String name) async {
+  ///
+  /// [expected] — режим, которому назначается тема при перечитывании: база,
+  /// относящаяся к другому режиму, даёт `wrongMode` (spec app-settings «База
+  /// пользовательской темы сменила режим»). Без [expected] режим берётся из
+  /// базы самой темы (`useTheme`).
+  Future<ThemeLoaded?> _readLoaded(String name, {Brightness? expected}) async {
     final ThemeEntry? entry;
     try {
       entry = await _library.read(name);
     } on Object catch (error) {
-      _logInvalid(error.runtimeType.toString(), 0, 0);
+      // Код общий, класс ошибки — отдельным полем: текст исключения порта
+      // может содержать пути (AGENTS.md §16).
+      _logInvalid('unreadable', 0, 0, errorClass: error.runtimeType.toString());
       return null;
     }
     if (entry == null) {
@@ -432,23 +451,49 @@ final class AppAppearanceCubit extends Cubit<AppAppearanceState> {
         _logInvalid(issue.code.name, issue.line, issue.column);
         return null;
       case ThemeLoaded loaded:
+        final brightness = loaded.theme.base == ThemeBase.light
+            ? Brightness.light
+            : Brightness.dark;
+        if (expected != null && expected != brightness) {
+          _logInvalid('wrongMode', 0, 0);
+          return null;
+        }
         _logger?.info(
           'appearance.theme_loaded',
           context: {
             'theme': 'custom',
             'extends': loaded.theme.base.jsonName,
             'warnings': loaded.warnings.length,
-            'codes': [for (final w in loaded.warnings) w.code.name],
+            // Счётчики по кодам, а не массив: число предупреждений в файле
+            // не ограничено, а журнал — да (spec «События журнала»).
+            'code_counts': _codeCounts(loaded.warnings),
           },
         );
         return loaded;
     }
   }
 
-  void _logInvalid(String code, int line, int column) => _logger?.warning(
-    'appearance.theme_invalid',
-    context: {'theme': 'custom', 'code': code, 'line': line, 'column': column},
-  );
+  /// Счётчики предупреждений по кодам за один проход: файл до 64 КиБ даёт до
+  /// десятков тысяч предупреждений, квадратичный подсчёт повесил бы UI isolate.
+  static Map<String, int> _codeCounts(List<ThemeIssue> warnings) {
+    final counts = <String, int>{};
+    for (final warning in warnings) {
+      counts.update(warning.code.name, (n) => n + 1, ifAbsent: () => 1);
+    }
+    return counts;
+  }
+
+  void _logInvalid(String code, int line, int column, {String? errorClass}) =>
+      _logger?.warning(
+        'appearance.theme_invalid',
+        context: {
+          'theme': 'custom',
+          'code': code,
+          'line': line,
+          'column': column,
+          'error_class': ?errorClass,
+        },
+      );
 
   /// Ставит запись в очередь; при пустой очереди начинает её сразу.
   Future<void> _enqueue(AppAppearanceSettings settings, int token) {

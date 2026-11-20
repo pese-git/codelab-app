@@ -4386,5 +4386,489 @@
   "agentsErrorFallbackOther": "The definition cannot be loaded.",
   "@agentsErrorFallbackOther": {
     "description": "Текст InfoBar ошибки определения, когда ядро не дало текста и причина неизвестна."
+  },
+  "settingsSearchKeywordsAppearance": "theme, dark, light, mode, color, accent, contrast, json",
+  "@settingsSearchKeywordsAppearance": {
+    "description": "Ключевые слова поиска настроек для страницы Appearance (через запятую; английские слова ищутся при любом языке)."
+  },
+  "appearanceModeTitle": "Mode",
+  "@appearanceModeTitle": {
+    "description": "Заголовок блока выбора режима оформления на странице Appearance."
+  },
+  "appearanceModeDescription": "Light, dark, or follow the system setting",
+  "@appearanceModeDescription": {
+    "description": "Пояснение блока Mode."
+  },
+  "appearanceModeLight": "Light",
+  "@appearanceModeLight": {
+    "description": "Значение режима: светлая тема."
+  },
+  "appearanceModeDark": "Dark",
+  "@appearanceModeDark": {
+    "description": "Значение режима: тёмная тема."
+  },
+  "appearanceModeSystem": "Match system ({current})",
+  "@appearanceModeSystem": {
+    "description": "Значение режима: следовать системе; {current} — текущий режим системы (appearanceSystemLight или appearanceSystemDark).",
+    "placeholders": {
+      "current": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceSystemLight": "light",
+  "@appearanceSystemLight": {
+    "description": "Текущий режим системы в скобках у значения Match system: светлый."
+  },
+  "appearanceSystemDark": "dark",
+  "@appearanceSystemDark": {
+    "description": "Текущий режим системы в скобках у значения Match system: тёмный."
+  },
+  "appearanceAccentTitle": "Accent color",
+  "@appearanceAccentTitle": {
+    "description": "Заголовок строки системного акцента."
+  },
+  "appearanceAccentDescription": "Buttons, selection and focus use the system accent",
+  "@appearanceAccentDescription": {
+    "description": "Пояснение строки системного акцента."
+  },
+  "appearanceAccentToggle": "Use system accent",
+  "@appearanceAccentToggle": {
+    "description": "Подпись переключателя системного акцента."
+  },
+  "appearanceThemesTitle": "Color theme",
+  "@appearanceThemesTitle": {
+    "description": "Заголовок блока карточек тем."
+  },
+  "appearanceThemeFluentLight": "Fluent Light",
+  "@appearanceThemeFluentLight": {
+    "description": "Имя встроенной светлой темы; не переводится."
+  },
+  "appearanceThemeFluentDark": "Fluent Dark",
+  "@appearanceThemeFluentDark": {
+    "description": "Имя встроенной тёмной темы; не переводится."
+  },
+  "appearanceThemeHighContrast": "High contrast",
+  "@appearanceThemeHighContrast": {
+    "description": "Имя встроенной темы высокого контраста."
+  },
+  "appearanceKindBuiltInDefault": "Built-in · default",
+  "@appearanceKindBuiltInDefault": {
+    "description": "Вид карточки встроенной темы по умолчанию."
+  },
+  "appearanceKindBuiltIn": "Built-in",
+  "@appearanceKindBuiltIn": {
+    "description": "Вид карточки встроенной темы."
+  },
+  "appearanceKindCustom": "Custom · extends {base}",
+  "@appearanceKindCustom": {
+    "description": "Вид карточки пользовательской темы; {base} — значение extends (light, dark, high-contrast), не переводится.",
+    "placeholders": {
+      "base": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceKindCustomUnknown": "Custom",
+  "@appearanceKindCustomUnknown": {
+    "description": "Вид карточки пользовательской темы, которая не загрузилась."
+  },
+  "appearanceTagLightMode": "Light mode",
+  "@appearanceTagLightMode": {
+    "description": "Тег карточки темы светлого режима."
+  },
+  "appearanceTagDarkMode": "Dark mode",
+  "@appearanceTagDarkMode": {
+    "description": "Тег карточки темы тёмного режима."
+  },
+  "appearanceTagInvalid": "Invalid",
+  "@appearanceTagInvalid": {
+    "description": "Тег карточки темы, которая не загрузилась."
+  },
+  "appearanceWarningsBadge": "{count, plural, one{{count} warning} other{{count} warnings}}",
+  "@appearanceWarningsBadge": {
+    "description": "Бейдж карточки: число предупреждений (разбора и низкого контраста).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appearanceCustomTitle": "Custom themes",
+  "@appearanceCustomTitle": {
+    "description": "Заголовок блока пользовательских тем."
+  },
+  "appearanceImportButton": "Import JSON…",
+  "@appearanceImportButton": {
+    "description": "Кнопка импорта файла темы."
+  },
+  "appearanceIssuesSummary": "{name} loaded with {count, plural, one{{count} warning} other{{count} warnings}}",
+  "@appearanceIssuesSummary": {
+    "description": "InfoBar панели проблем: тема загружена с предупреждениями; {name} — имя темы как есть.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appearanceIssuesHint": "Unknown keys were ignored; the theme is applied. Missing roles come from extends: \"{base}\" ({builtIn}).",
+  "@appearanceIssuesHint": {
+    "description": "Пояснение под InfoBar предупреждений; {base} — значение extends, {builtIn} — имя встроенной темы базы.",
+    "placeholders": {
+      "base": {
+        "type": "String"
+      },
+      "builtIn": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceIssuesError": "{name} couldn't be loaded",
+  "@appearanceIssuesError": {
+    "description": "InfoBar ошибки темы; {name} — имя темы как есть.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceOpenFolder": "Open folder",
+  "@appearanceOpenFolder": {
+    "description": "Кнопка открытия каталога тем."
+  },
+  "appearanceReload": "Reload",
+  "@appearanceReload": {
+    "description": "Кнопка перечитывания каталога тем."
+  },
+  "appearanceIssueUnknownKey": "{file}:{line}:{column} unknown key \"{key}\"",
+  "@appearanceIssueUnknownKey": {
+    "description": "Строка списка проблем; {file} — имя файла, {key} — ключ из файла, как есть.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      },
+      "line": {
+        "type": "int"
+      },
+      "column": {
+        "type": "int"
+      },
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceIssueUnknownKeyHint": "Ignored. Did you mean \"{role}\"?",
+  "@appearanceIssueUnknownKeyHint": {
+    "description": "Пояснение к неизвестному ключу с подсказкой; {role} — имя роли.",
+    "placeholders": {
+      "role": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceIssueUnknownKeyNoHint": "Ignored — not a theme role.",
+  "@appearanceIssueUnknownKeyNoHint": {
+    "description": "Пояснение к неизвестному ключу без подсказки."
+  },
+  "appearanceIssueDuplicateKey": "{file}:{line}:{column} duplicate key \"{key}\"",
+  "@appearanceIssueDuplicateKey": {
+    "description": "Строка списка проблем: повтор ключа.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      },
+      "line": {
+        "type": "int"
+      },
+      "column": {
+        "type": "int"
+      },
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceIssueDuplicateKeyHint": "The last value is used.",
+  "@appearanceIssueDuplicateKeyHint": {
+    "description": "Пояснение к повтору ключа."
+  },
+  "appearanceIssueTerminalColor": "{file}:{line}:{column} terminal color \"{value}\"",
+  "@appearanceIssueTerminalColor": {
+    "description": "Строка списка проблем: терминальный цвет вместо #rrggbb.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      },
+      "line": {
+        "type": "int"
+      },
+      "column": {
+        "type": "int"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceIssueTerminalColorHint": "Terminal colors are not used by the app; the role comes from extends.",
+  "@appearanceIssueTerminalColorHint": {
+    "description": "Пояснение к терминальному цвету."
+  },
+  "appearanceIssueLowContrast": "Low contrast: {role}, {ratio}:1",
+  "@appearanceIssueLowContrast": {
+    "description": "Строка списка проблем: роль ниже порога 4,5:1; {role} — имя роли, {ratio} — отношение.",
+    "placeholders": {
+      "role": {
+        "type": "String"
+      },
+      "ratio": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceIssueLowContrastHint": "Applied as set. Text roles need 4.5:1.",
+  "@appearanceIssueLowContrastHint": {
+    "description": "Пояснение к низкому контрасту."
+  },
+  "appearanceIssueTooLarge": "The file is larger than 64 KiB.",
+  "@appearanceIssueTooLarge": {
+    "description": "Причина ошибки темы: файл слишком большой."
+  },
+  "appearanceIssueNotUtf8": "The file is not valid UTF-8.",
+  "@appearanceIssueNotUtf8": {
+    "description": "Причина ошибки темы: не UTF-8."
+  },
+  "appearanceIssueInvalidJson": "The file is not valid JSON.",
+  "@appearanceIssueInvalidJson": {
+    "description": "Причина ошибки темы: JSON не разобран."
+  },
+  "appearanceIssueNotAnObject": "The top level must be a JSON object.",
+  "@appearanceIssueNotAnObject": {
+    "description": "Причина ошибки темы: корень не объект."
+  },
+  "appearanceIssueMissingName": "The \"name\" key is missing.",
+  "@appearanceIssueMissingName": {
+    "description": "Причина ошибки темы: нет name."
+  },
+  "appearanceIssueInvalidName": "The theme name must be 1–32 characters: a–z, 0–9 and hyphens.",
+  "@appearanceIssueInvalidName": {
+    "description": "Причина ошибки темы: недопустимое имя."
+  },
+  "appearanceIssueNameMismatch": "The \"name\" value must match the file name.",
+  "@appearanceIssueNameMismatch": {
+    "description": "Причина ошибки темы: имя не совпадает с файлом."
+  },
+  "appearanceIssueReservedName": "The name is taken by a built-in theme.",
+  "@appearanceIssueReservedName": {
+    "description": "Причина ошибки темы: имя встроенной темы."
+  },
+  "appearanceIssueInvalidExtends": "\"extends\" must be light, dark or high-contrast.",
+  "@appearanceIssueInvalidExtends": {
+    "description": "Причина ошибки темы: недопустимое extends."
+  },
+  "appearanceIssueInvalidValue": "The color value is not valid: use #rrggbb, default, an ANSI color name or 256:n.",
+  "@appearanceIssueInvalidValue": {
+    "description": "Причина ошибки темы: недопустимое значение цвета."
+  },
+  "appearanceIssueUnreadable": "The file could not be read.",
+  "@appearanceIssueUnreadable": {
+    "description": "Причина: файл темы не прочитан."
+  },
+  "appearanceIssueWithPosition": "{file}:{line}:{column} {problem}",
+  "@appearanceIssueWithPosition": {
+    "description": "Ошибка темы с позицией; {problem} — одна из причин appearanceIssue*.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      },
+      "line": {
+        "type": "int"
+      },
+      "column": {
+        "type": "int"
+      },
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceUnsetRoles": "{count, plural, one{{count} role not set} other{{count} roles not set}} — taken from \"{base}\"",
+  "@appearanceUnsetRoles": {
+    "description": "Справка о незаданных ролях; {base} — значение extends, не переводится.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "base": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceUnsetRolesNote": "For reference, not a warning",
+  "@appearanceUnsetRolesNote": {
+    "description": "Пояснение к списку незаданных ролей."
+  },
+  "appearancePreviewTitle": "Preview",
+  "@appearancePreviewTitle": {
+    "description": "Заголовок блока предпросмотра темы."
+  },
+  "appearancePreviewLink": "Link",
+  "@appearancePreviewLink": {
+    "description": "Образец ссылки в предпросмотре; роль info."
+  },
+  "appearancePreviewDone": "Done",
+  "@appearancePreviewDone": {
+    "description": "Образец статуса успеха в предпросмотре."
+  },
+  "appearancePreviewContext": "84% context",
+  "@appearancePreviewContext": {
+    "description": "Образец статуса предупреждения в предпросмотре."
+  },
+  "appearancePreviewFailed": "Failed",
+  "@appearancePreviewFailed": {
+    "description": "Образец статуса ошибки в предпросмотре."
+  },
+  "appearanceContrastTitle": "Contrast on code background",
+  "@appearanceContrastTitle": {
+    "description": "Заголовок блока проверки контраста."
+  },
+  "appearanceContrastText": "Text",
+  "@appearanceContrastText": {
+    "description": "Строка контраста: роль text."
+  },
+  "appearanceContrastComment": "Comment",
+  "@appearanceContrastComment": {
+    "description": "Строка контраста: роль code.comment."
+  },
+  "appearanceContrastKeyword": "Keyword",
+  "@appearanceContrastKeyword": {
+    "description": "Строка контраста: роль code.keyword."
+  },
+  "appearanceContrastError": "Error",
+  "@appearanceContrastError": {
+    "description": "Строка контраста: роль error."
+  },
+  "appearanceContrastPass": "AA",
+  "@appearanceContrastPass": {
+    "description": "Вердикт контраста не ниже 4,5:1; обозначение WCAG, не переводится."
+  },
+  "appearanceContrastLow": "Low",
+  "@appearanceContrastLow": {
+    "description": "Вердикт контраста ниже 4,5:1."
+  },
+  "appearanceContrastNote": "Text roles need 4.5:1. A role below that still applies, with a warning on its card.",
+  "@appearanceContrastNote": {
+    "description": "Пояснение под строками контраста."
+  },
+  "appearanceReset": "Reset",
+  "@appearanceReset": {
+    "description": "Кнопка возврата встроенной темы режима."
+  },
+  "appearanceUse": "Use {name}",
+  "@appearanceUse": {
+    "description": "Кнопка назначения выбранной темы; {name} — имя темы как есть.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceFallback": "\"{name}\" couldn't be loaded. Using {builtIn} until it is fixed.",
+  "@appearanceFallback": {
+    "description": "InfoBar отката к встроенной теме; {name} — имя темы как есть, {builtIn} — имя встроенной темы.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "builtIn": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceSaveFailed": "Couldn't save the appearance. CodeLab will use the previous appearance after restart.",
+  "@appearanceSaveFailed": {
+    "description": "InfoBar сбоя записи выбора оформления."
+  },
+  "appearanceSaveRetry": "Retry",
+  "@appearanceSaveRetry": {
+    "description": "Кнопка повтора записи оформления."
+  },
+  "appearanceImportFailed": "Couldn't import {file}: {problem}",
+  "@appearanceImportFailed": {
+    "description": "InfoBar ошибки импорта; {file} — имя файла, {problem} — причина с позицией.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      },
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceImportFailedGeneric": "Couldn't import the theme. Check that the file is readable and try again.",
+  "@appearanceImportFailedGeneric": {
+    "description": "InfoBar ошибки импорта без причины в порте: файл не прочитан или не записан (порт ThemeLibrary их не различает)."
+  },
+  "appearanceReplaceTitle": "Replace the theme \"{name}\"?",
+  "@appearanceReplaceTitle": {
+    "description": "Заголовок диалога замены; {name} — имя темы как есть.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceReplaceBody": "A theme with this name is already in the folder. Its file will be replaced.",
+  "@appearanceReplaceBody": {
+    "description": "Текст диалога замены."
+  },
+  "appearanceReplaceConfirm": "Replace",
+  "@appearanceReplaceConfirm": {
+    "description": "Кнопка подтверждения замены."
+  },
+  "appearanceIssuePosition": "{line}:{column} {problem}",
+  "@appearanceIssuePosition": {
+    "description": "Позиция ошибки темы без имени файла (для InfoBar ошибки импорта); {problem} — одна из причин appearanceIssue*.",
+    "placeholders": {
+      "line": {
+        "type": "int"
+      },
+      "column": {
+        "type": "int"
+      },
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceCatalogFailed": "Couldn't read {path}. Custom themes are not shown.",
+  "@appearanceCatalogFailed": {
+    "description": "InfoBar сбоя чтения каталога тем; {path} — каталог тем с ~, не переводится.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceIssuesMore": "{count, plural, one{… and {count} more warning} other{… and {count} more warnings}}",
+  "@appearanceIssuesMore": {
+    "description": "Строка под списком проблем, когда показаны первые 50 из многих предупреждений; {count} — сколько не показано.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "appearanceImportPickerFailed": "Couldn't open the file dialog.",
+  "@appearanceImportPickerFailed": {
+    "description": "InfoBar сбоя системного диалога выбора файла темы (исключение порта, не ошибка записи)."
+  },
+  "appearanceImportSourceChanged": "The file changed after you chose it. Choose it again.",
+  "@appearanceImportSourceChanged": {
+    "description": "InfoBar отказа замены: источник изменился между проверкой и подтверждением."
   }
 }

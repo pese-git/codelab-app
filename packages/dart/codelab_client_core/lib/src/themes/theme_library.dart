@@ -44,6 +44,35 @@ final class ThemeEntry {
   final ThemeReadError? error;
 }
 
+/// Каталог тем не читается: перечисление невозможно (spec app-settings,
+/// «Каталог тем не читается»).
+///
+/// Почему: «каталога нет» (пустой список) и «каталог есть, но недоступен»
+/// (`themes` — файл, нет прав) — разные состояния; смешав их, страница
+/// показала бы пустой каталог вместо ошибки.
+///
+/// Как использовать: бросает [ThemeLibrary.list]; хост ловит и показывает
+/// сообщение по [failure] на своём языке. Путь и текст ОС сюда намеренно не
+/// кладутся: исключение попадает в журнал, а пути содержат имя пользователя
+/// (`AGENTS.md` §16).
+final class ThemeCatalogException implements Exception {
+  const ThemeCatalogException(this.failure);
+
+  final ThemeCatalogFailure failure;
+
+  @override
+  String toString() => 'ThemeCatalogException(${failure.name})';
+}
+
+/// Причина, по которой каталог тем не читается.
+enum ThemeCatalogFailure {
+  /// `<home>/themes` существует, но не каталог.
+  notADirectory,
+
+  /// Каталог не удалось перечислить (нет прав, сбой ввода-вывода).
+  unreadable,
+}
+
 /// Исход импорта файла темы (spec `client-themes`, «Импорт файла темы»).
 ///
 /// Почему: у импорта шесть различимых исходов, и страница по-разному
@@ -88,6 +117,16 @@ final class ThemeImportInvalid extends ThemeImportResult {
   final ThemeIssue issue;
 }
 
+/// Подтверждение замены отклонено: `name` в файле теперь не тот, что
+/// показывали пользователю ([name] — новое имя из файла). Ничего не записано.
+///
+/// Почему: между проверкой («нужна замена» для `expectedName`) и подтверждением
+/// источник мог измениться, и замена затёрла бы другую тему.
+final class ThemeImportSourceChanged extends ThemeImportResult {
+  const ThemeImportSourceChanged(this.name);
+  final String name;
+}
+
 /// Источник не прочитан или запись не удалась. Деталей нет намеренно: пути и
 /// тексты ОС не должны попадать в состояние и журнал.
 final class ThemeImportFailed extends ThemeImportResult {
@@ -104,7 +143,8 @@ final class ThemeImportFailed extends ThemeImportResult {
 /// исключений ввода-вывода: сбой — запись с ошибкой или `ThemeImportFailed`.
 abstract interface class ThemeLibrary {
   /// Записи по алфавиту имени; нет каталога — пустой список (каталог при
-  /// чтении не создаётся).
+  /// чтении не создаётся). Каталог есть, но не читается (`themes` — файл, нет
+  /// прав) — [ThemeCatalogException], а не пустой список.
   Future<List<ThemeEntry>> list();
 
   /// Читает одну тему по имени (старт app читает файлы двух режимов с
@@ -116,7 +156,16 @@ abstract interface class ThemeLibrary {
   /// Импорт файла [sourcePath] (D9): разбор без сверки имени источника, запись
   /// байт в байт под `name` из файла. [replace] подтверждает замену
   /// существующей темы с другим содержимым.
-  Future<ThemeImportResult> import(String sourcePath, {bool replace = false});
+  ///
+  /// [expectedName] — имя, для которого пользователь подтвердил замену (из
+  /// `ThemeImportNeedsReplace`). При `replace: true` и другом `name` в файле
+  /// результат — [ThemeImportSourceChanged], запись не выполняется. Без
+  /// [replace] параметр не учитывается.
+  Future<ThemeImportResult> import(
+    String sourcePath, {
+    bool replace = false,
+    String? expectedName,
+  });
 }
 
 /// Реализация в памяти для тестов и двойников хоста.
@@ -141,8 +190,14 @@ final class InMemoryThemeLibrary implements ThemeLibrary {
   /// Файлы-источники импорта: путь → текст.
   final Map<String, String> sources;
 
+  /// Смоделированный сбой каталога: пока не `null`, [list] бросает
+  /// [ThemeCatalogException] с этой причиной.
+  ThemeCatalogFailure? catalogFailure;
+
   @override
   Future<List<ThemeEntry>> list() async {
+    final failure = catalogFailure;
+    if (failure != null) throw ThemeCatalogException(failure);
     final entries = [
       for (final e in files.entries) ThemeEntry.read(e.key, e.value),
       for (final e in broken.entries)
@@ -164,6 +219,7 @@ final class InMemoryThemeLibrary implements ThemeLibrary {
   Future<ThemeImportResult> import(
     String sourcePath, {
     bool replace = false,
+    String? expectedName,
   }) async {
     final text = sources[sourcePath];
     if (text == null) return const ThemeImportFailed();
@@ -172,6 +228,11 @@ final class InMemoryThemeLibrary implements ThemeLibrary {
     if (parsed is ThemeRejected) return ThemeImportInvalid(parsed.issue);
     final name = (parsed as ThemeLoaded).theme.name;
     final existing = files[name];
+    // Подтверждение относится к теме, которую показывали пользователю: если
+    // источник изменился и `name` другой, замена затёрла бы чужую тему.
+    if (replace && expectedName != null && expectedName != name) {
+      return ThemeImportSourceChanged(name);
+    }
     if (existing == null) {
       files[name] = text;
       broken.remove(name);

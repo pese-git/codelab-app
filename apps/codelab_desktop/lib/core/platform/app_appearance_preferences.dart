@@ -12,8 +12,14 @@ enum AppearanceMode { light, dark, system }
 
 /// Выбор оформления пользователем: режим, темы двух режимов, системный акцент.
 ///
-/// ЗАГЛУШКА для красных тестов 4.1/4.5 (change `add-app-appearance-page`):
-/// только форма данных; чтение и запись документа — задача 4.2.
+/// Почему отдельный тип: четыре поля читаются и пишутся одним JSON-документом
+/// (D5), а `AppAppearanceCubit` публикует их как единое состояние выбора.
+///
+/// Для чего: неизменяемое значение с умолчаниями без сохранённого выбора —
+/// `Match system`, темы `light` и `dark`, системный акцент выключен (Q3, Q5).
+///
+/// Как использовать: порт [AppAppearancePreferences] возвращает его в
+/// [AppAppearanceLoad] и принимает в `save`; `copyWith` меняет одно поле.
 final class AppAppearanceSettings {
   const AppAppearanceSettings({
     this.mode = AppearanceMode.system,

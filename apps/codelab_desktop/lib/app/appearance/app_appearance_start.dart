@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'dart:ui' show Brightness;
+
 import 'package:codelab_client_core/codelab_client_core.dart';
 
 import '../../core/platform/app_appearance_preferences.dart';
@@ -10,6 +12,19 @@ import 'built_in_themes.dart';
 /// потому что её файл не загрузился (spec app-settings «Режим оформления и
 /// темы режимов»).
 enum AppearanceFallback { none, light, dark, both }
+
+/// Почему тема режима не загрузилась при старте (D12): код для события
+/// `appearance.theme_invalid` — код разбора (`invalidJson`, …), `missing`,
+/// `tooLarge`, `notUtf8`, `unreadable` или `wrongMode` (база темы относится к
+/// другому режиму); у проблем без позиции [line] и [column] равны 0. Имя темы
+/// сюда не входит: оно выбрано пользователем и бывает личным.
+final class AppearanceThemeProblem {
+  const AppearanceThemeProblem(this.code, {this.line = 0, this.column = 0});
+
+  final String code;
+  final int line;
+  final int column;
+}
 
 /// Начальное оформление, которое `main` передаёт в composition root
 /// (design.md change `add-app-appearance-page`, D13).
@@ -32,6 +47,7 @@ final class AppAppearanceStart {
     this.systemAccent,
     this.storedValueInvalid = false,
     this.readFailure,
+    this.themeProblems = const [],
   });
 
   /// Умолчание без сохранённого выбора: `Match system`, `light`, `dark`.
@@ -43,8 +59,9 @@ final class AppAppearanceStart {
   /// [fileTimeout] (1 с по умолчанию): не прочитанный вовремя, не
   /// разобранный и не существующий файл — как не загрузившийся (режим
   /// показывает встроенную тему, выбор не меняется). Встроенные темы файлов не
-  /// читают. Тема чужого режима в поле режима читается как умолчание поля
-  /// (D5). Метод не бросает: ошибки чтения — это «не загрузилась».
+  /// читают. Пользовательская тема, база которой относится к другому режиму,
+  /// тоже не загрузилась (`wrongMode`): имя в документе сохраняется и
+  /// документ не помечается повреждённым. Метод не бросает: ошибки чтения — это «не загрузилась».
   ///
   /// [accentSource] — порт, у которого `supported` уже известен после его
   /// старта; его первое чтение тоже ограничено [fileTimeout].
@@ -54,21 +71,59 @@ final class AppAppearanceStart {
     SystemAccentSource? accentSource,
     Duration fileTimeout = const Duration(seconds: 1),
   }) async {
-    var settings = load.settings;
-    var invalid = load.storedValueInvalid;
+    final settings = load.settings;
 
-    Future<ThemeLoaded?> read(String id) async {
-      if (kBuiltInThemeIds.contains(id)) return null;
+    /// Файл темы [id] режима [brightness]: тема или причина, почему её нет.
+    Future<({ThemeLoaded? theme, AppearanceThemeProblem? problem})> read(
+      String id,
+      Brightness brightness,
+    ) async {
+      if (kBuiltInThemeIds.contains(id)) return (theme: null, problem: null);
       try {
         final entry = await library.read(id).timeout(fileTimeout);
-        final text = entry?.text;
-        if (text == null) return null;
-        final parsed = ThemeFile.parse('$id.json', text);
-        return parsed is ThemeLoaded ? parsed : null;
+        if (entry == null) {
+          return (
+            theme: null,
+            problem: const AppearanceThemeProblem('missing'),
+          );
+        }
+        final text = entry.text;
+        if (text == null) {
+          return (
+            theme: null,
+            problem: AppearanceThemeProblem(entry.error?.name ?? 'unreadable'),
+          );
+        }
+        switch (ThemeFile.parse('$id.json', text)) {
+          case ThemeRejected(:final issue):
+            return (
+              theme: null,
+              problem: AppearanceThemeProblem(
+                issue.code.name,
+                line: issue.line,
+                column: issue.column,
+              ),
+            );
+          case ThemeLoaded loaded:
+            // База пользовательской темы относится к другому режиму: тема не
+            // загрузилась для этого режима, а имя в документе сохраняется
+            // (spec app-settings «Хранение оформления»).
+            final light = loaded.theme.base == ThemeBase.light;
+            if (light != (brightness == Brightness.light)) {
+              return (
+                theme: null,
+                problem: const AppearanceThemeProblem('wrongMode'),
+              );
+            }
+            return (theme: loaded, problem: null);
+        }
       } on Object {
-        // Причина не нужна: таймаут, ошибка чтения и ошибка разбора одинаково
-        // дают встроенную тему режима; подробности покажет страница.
-        return null;
+        // Таймаут и исключение порта одинаково дают встроенную тему режима;
+        // текст исключения в журнал не идёт.
+        return (
+          theme: null,
+          problem: const AppearanceThemeProblem('unreadable'),
+        );
       }
     }
 
@@ -81,31 +136,22 @@ final class AppAppearanceStart {
     }
 
     final results = await Future.wait([
-      read(settings.lightTheme),
-      read(settings.darkTheme),
+      read(settings.lightTheme, Brightness.light),
+      read(settings.darkTheme, Brightness.dark),
     ]);
-    var light = results[0];
-    var dark = results[1];
-    // Пользовательская тема чужого режима в поле режима — незнакомое значение.
-    if (light != null && light.theme.base != ThemeBase.light) {
-      light = null;
-      settings = settings.copyWith(lightTheme: 'light');
-      invalid = true;
-    }
-    if (dark != null && dark.theme.base == ThemeBase.light) {
-      dark = null;
-      settings = settings.copyWith(darkTheme: 'dark');
-      invalid = true;
-    }
     final supported = accentSource?.supported ?? false;
     return AppAppearanceStart(
       settings: settings,
-      lightTheme: light,
-      darkTheme: dark,
+      lightTheme: results[0].theme,
+      darkTheme: results[1].theme,
       systemAccentSupported: supported,
       systemAccent: supported ? await readAccent(accentSource!) : null,
-      storedValueInvalid: invalid,
+      storedValueInvalid: load.storedValueInvalid,
       readFailure: load.readFailure,
+      themeProblems: [
+        for (final result in results)
+          if (result.problem != null) result.problem!,
+      ],
     );
   }
 
@@ -127,6 +173,9 @@ final class AppAppearanceStart {
 
   /// Имя типа ошибки чтения хранилища; `null` — чтение прошло.
   final String? readFailure;
+
+  /// Причины, по которым выбранные пользовательские темы не загрузились.
+  final List<AppearanceThemeProblem> themeProblems;
 
   /// Какие режимы вернулись к встроенным темам из-за ошибки файла.
   AppearanceFallback get fallback {

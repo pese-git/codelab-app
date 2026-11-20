@@ -136,28 +136,40 @@ final _namePattern = RegExp(r'^[a-z0-9-]{1,32}$');
 bool isValidThemeName(String name) => _namePattern.hasMatch(name);
 
 /// Расстояние редактирования Левенштейна — для подсказки `unknownKey`.
+///
+/// Вызывается только для ключей не длиннее [_maxHintKeyLength] с разницей
+/// длин не больше 2 (см. [_hintFor]): ключ из файла — недоверенный ввод, и
+/// квадратичный перебор по 60 000 символов не нужен. Две строки без
+/// промежуточных списков на ячейку.
 int _distance(String a, String b) {
   var prev = List<int>.generate(b.length + 1, (i) => i);
+  var cur = List<int>.filled(b.length + 1, 0);
   for (var i = 1; i <= a.length; i++) {
-    final cur = List<int>.filled(b.length + 1, 0)..[0] = i;
+    cur[0] = i;
     for (var j = 1; j <= b.length; j++) {
       final cost = a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1) ? 0 : 1;
-      cur[j] = [
-        prev[j] + 1,
-        cur[j - 1] + 1,
-        prev[j - 1] + cost,
-      ].reduce((x, y) => x < y ? x : y);
+      var best = prev[j] + 1;
+      if (cur[j - 1] + 1 < best) best = cur[j - 1] + 1;
+      if (prev[j - 1] + cost < best) best = prev[j - 1] + cost;
+      cur[j] = best;
     }
+    final tmp = prev;
     prev = cur;
+    cur = tmp;
   }
   return prev[b.length];
 }
 
+const _maxHintKeyLength = 64;
+
 /// Подсказка: ближайший ключ области на расстоянии не больше 2 или `null`.
 String? _hintFor(String key, Iterable<String> areaKeys) {
+  if (key.length > _maxHintKeyLength) return null;
   String? best;
   var bestDistance = 3;
   for (final candidate in areaKeys) {
+    // Разница длин — нижняя граница расстояния: считать нечего.
+    if ((key.length - candidate.length).abs() > 2) continue;
     final d = _distance(key, candidate);
     if (d < bestDistance) {
       best = candidate;

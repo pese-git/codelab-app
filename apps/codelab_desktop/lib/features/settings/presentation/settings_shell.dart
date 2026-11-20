@@ -8,6 +8,7 @@ import '../../../l10n/l10n.dart';
 import '../application/settings_search_index.dart';
 import 'agents_modes_page.dart';
 import 'connection_page.dart';
+import 'appearance_page.dart';
 import 'general_page.dart';
 import 'mcp_page.dart';
 import 'providers_page.dart';
@@ -32,6 +33,7 @@ final Map<SettingsPage, WidgetBuilder> settingsPageBuilders =
       SettingsPage.agentsAndModes: buildAgentsModesPage,
       SettingsPage.skillsAndExtensions: buildSkillsPage,
       SettingsPage.general: buildGeneralPage,
+      SettingsPage.appearance: buildAppearancePage,
     });
 
 /// Ширина окна, меньше которой навигация настроек уходит наверх.

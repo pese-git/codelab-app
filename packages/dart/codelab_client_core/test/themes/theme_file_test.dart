@@ -549,6 +549,26 @@ void main() {
       expect(hintFor('Accent'), 'accent'); // регистр — замена, расстояние 1
     });
 
+    test('очень длинный ключ: без подсказки и без перебора', () {
+      final long = 'a' * 60000;
+      final sw = Stopwatch()..start();
+      final loaded = _loaded(
+        'acme.json',
+        '{"name": "acme", "colors": {"$long": "#ffffff"}}',
+      );
+      expect(loaded.warnings.single.code, ThemeIssueCode.unknownKey);
+      expect(loaded.warnings.single.hint, isNull);
+      expect(sw.elapsedMilliseconds, lessThan(1000));
+      // Ключ длиннее роли больше чем на 2 — подсказки нет без расчёта.
+      expect(
+        _loaded(
+          'acme.json',
+          '{"name": "acme", "colors": {"accentxyz": "#ffffff"}}',
+        ).warnings.single.hint,
+        isNull,
+      );
+    });
+
     test('подсказка только из ролей той же области', () {
       // `keywrd` похож на роль code.keyword, но стоит в `colors`.
       final inColors = _loaded(

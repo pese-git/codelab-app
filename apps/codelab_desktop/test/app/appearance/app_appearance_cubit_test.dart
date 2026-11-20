@@ -68,8 +68,27 @@ final class _GatedLibrary implements ThemeLibrary {
   }
 
   @override
-  Future<ThemeImportResult> import(String sourcePath, {bool replace = false}) =>
-      _inner.import(sourcePath, replace: replace);
+  Future<ThemeImportResult> import(
+    String sourcePath, {
+    bool replace = false,
+    String? expectedName,
+  }) => _inner.import(sourcePath, replace: replace, expectedName: expectedName);
+}
+
+/// Каталог, чьё чтение бросает исключение порта.
+final class _ThrowingLibrary implements ThemeLibrary {
+  @override
+  Future<List<ThemeEntry>> list() => Future.error(StateError('secret'));
+
+  @override
+  Future<ThemeEntry?> read(String name) => Future.error(StateError('secret'));
+
+  @override
+  Future<ThemeImportResult> import(
+    String sourcePath, {
+    bool replace = false,
+    String? expectedName,
+  }) => Future.error(StateError('secret'));
 }
 
 String _theme(
@@ -555,6 +574,98 @@ void main() {
     });
   });
 
+  group('порядок выборов «Use» (D13)', () {
+    test('«Use A», затем «Use B»: A дочитывается первым — итог B', () async {
+      library.files['other'] = _theme('other', accent: '#112233');
+      final gated = _GatedLibrary(library);
+      final cubit = build(themes: gated);
+      addTearDown(cubit.close);
+
+      final first = cubit.useTheme('acme-night');
+      await _pump();
+      final second = cubit.useTheme('other');
+      await _pump();
+
+      // Старый выбор дочитан раньше нового: он не должен победить.
+      gated.gates[0].complete();
+      await first;
+      gated.gates[1].complete();
+      await second;
+
+      expect(cubit.state.darkTheme, 'other');
+      expect(
+        cubit.state.resolvedDark.accentColor.normal,
+        const Color(0xFF112233),
+      );
+    });
+
+    test(
+      '«Use B», затем «Use A» с поздним B: новее — A, поздний B отброшен',
+      () async {
+        library.files['other'] = _theme('other', accent: '#112233');
+        final gated = _GatedLibrary(library);
+        final cubit = build(themes: gated);
+        addTearDown(cubit.close);
+
+        final older = cubit.useTheme('other');
+        await _pump();
+        final newer = cubit.useTheme('acme-night');
+        await _pump();
+
+        gated.gates[1].complete();
+        await newer;
+        gated.gates[0].complete();
+        await older;
+
+        expect(cubit.state.darkTheme, 'acme-night');
+      },
+    );
+
+    test(
+      'смена режима новее читающегося «Use»: поздний результат отброшен',
+      () async {
+        final gated = _GatedLibrary(library);
+        final cubit = build(
+          settings: const AppAppearanceSettings(mode: AppearanceMode.light),
+        );
+        addTearDown(cubit.close);
+        final custom = AppAppearanceCubit(
+          preferences: preferences,
+          library: gated,
+          accentSource: accent,
+          start: const AppAppearanceStart(
+            settings: AppAppearanceSettings(mode: AppearanceMode.light),
+          ),
+          logger: logger,
+        );
+        addTearDown(custom.close);
+
+        final pending = custom.useTheme('acme-night');
+        await _pump();
+        await custom.setMode(AppearanceMode.system);
+        gated.gates.single.complete();
+        await pending;
+
+        expect(custom.state.darkTheme, 'dark');
+        expect(custom.state.mode, AppearanceMode.system);
+      },
+    );
+
+    test('встроенный «Use» новее поздней пользовательской темы', () async {
+      final gated = _GatedLibrary(library);
+      final cubit = build(themes: gated);
+      addTearDown(cubit.close);
+
+      final custom = cubit.useTheme('acme-night');
+      await _pump();
+      await cubit.useTheme('high-contrast');
+      gated.gates[0].complete();
+      await custom;
+
+      expect(cubit.state.darkTheme, 'high-contrast');
+    });
+  });
+
   group('Reload (spec «Reload применяет исправленный файл»)', () {
     test('исправленный файл применяется без перезапуска', () async {
       final cubit = build(
@@ -676,6 +787,90 @@ void main() {
     );
   });
 
+  group('«База пользовательской темы сменила режим»', () {
+    test('Reload: тёмный режим показывает Fluent Dark, выбор не '
+        'перезаписан, fallback, wrongMode в журнале', () async {
+      final cubit = build(
+        settings: const AppAppearanceSettings(
+          mode: AppearanceMode.dark,
+          darkTheme: 'acme-night',
+        ),
+        darkTheme: _loaded('acme-night', night),
+      );
+      addTearDown(cubit.close);
+      library.files['acme-night'] = _theme('acme-night', base: 'light');
+
+      await cubit.reloadTheme('acme-night');
+
+      expect(cubit.state.darkTheme, 'acme-night');
+      expect(cubit.state.fallback, AppearanceFallback.dark);
+      expect(_success(cubit.state.resolvedDark), isNot(customGreen));
+      expect(preferences.saves, isEmpty);
+      final invalid = logger.entries.singleWhere(
+        (e) => e['event'] == 'appearance.theme_invalid',
+      );
+      expect(invalid['code'], 'wrongMode');
+      expect(invalid['theme'], 'custom');
+      expect(invalid['line'], 0);
+      expect(invalid['column'], 0);
+      expect(invalid.values.join(' '), isNot(contains('acme-night')));
+    });
+
+    test('тема светлого режима с базой dark тоже не загружается', () async {
+      library.files['acme-day'] = _theme('acme-day');
+      final cubit = build(
+        settings: const AppAppearanceSettings(lightTheme: 'acme-day'),
+        lightTheme: _loaded('acme-day', _theme('acme-day', base: 'light')),
+      );
+      addTearDown(cubit.close);
+
+      await cubit.reloadTheme('acme-day');
+
+      expect(cubit.state.lightTheme, 'acme-day');
+      expect(cubit.state.fallback, AppearanceFallback.light);
+      expect(
+        logger.entries.singleWhere(
+          (e) => e['event'] == 'appearance.theme_invalid',
+        )['code'],
+        'wrongMode',
+      );
+    });
+  });
+
+  group('причина «не загрузилась» в журнале (spec «События журнала»)', () {
+    test('файла нет: code missing, нулевая позиция', () async {
+      final cubit = build();
+      addTearDown(cubit.close);
+
+      await cubit.useTheme('ghost');
+
+      final invalid = logger.entries.singleWhere(
+        (e) => e['event'] == 'appearance.theme_invalid',
+      );
+      expect(invalid['code'], 'missing');
+      expect(invalid['line'], 0);
+      expect(invalid['column'], 0);
+      expect(invalid.containsKey('error_class'), isFalse);
+    });
+
+    test(
+      'исключение порта: code unreadable и отдельное поле error_class',
+      () async {
+        final cubit = build(themes: _ThrowingLibrary());
+        addTearDown(cubit.close);
+
+        await cubit.useTheme('acme-night');
+
+        final invalid = logger.entries.singleWhere(
+          (e) => e['event'] == 'appearance.theme_invalid',
+        );
+        expect(invalid['code'], 'unreadable');
+        expect(invalid['error_class'], 'StateError');
+        expect(invalid.values.join(' '), isNot(contains('secret')));
+      },
+    );
+  });
+
   group('close (D13, concurrency §47б)', () {
     test('ждёт идущую запись, но не дольше срока', () async {
       preferences.autoComplete = false;
@@ -792,7 +987,8 @@ void main() {
 
         final loaded = events('appearance.theme_loaded').single;
         expect(loaded['warnings'], 1);
-        expect(loaded['codes'], ['unknownKey']);
+        expect(loaded['code_counts'], {'unknownKey': 1});
+        expect(loaded.containsKey('codes'), isFalse);
         expect(loaded.values.join(' '), isNot(contains('acent')));
       },
     );

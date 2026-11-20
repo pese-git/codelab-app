@@ -92,7 +92,7 @@ App SHALL хранить две темы: тему светлого режима
 - **THEN** строки `settings-appearance-system-accent` на странице нет
 
 ### Requirement: Карточки тем и превью
-«Color theme» SHALL показывать карточки `settings-appearance-theme-<id>`: сначала встроенные `light`, `dark`, `high-contrast`, затем пользовательские в порядке каталога тем. Карточка SHALL показывать мини-превью кода в цветах темы (фон кода, `text`, `code.keyword`, `code.string`, `code.comment`, `code.number`), имя темы и вид: `Built-in · default` у `light` и `dark`, `Built-in` у `high-contrast`, `Custom · extends <base>` у пользовательской. Карточка темы светлого режима SHALL нести тег `Light mode`, тёмного — `Dark mode`. Карточка с предупреждениями SHALL нести бейдж `settings-appearance-theme-<id>-warnings` с текстом `N warnings` (ICU `plural`). N — предупреждения разбора плюс роли с низким контрастом (требование «Контраст на фоне кода»). Тема, которая не загрузилась, SHALL нести тег `Invalid` вместо бейджа.
+«Color theme» SHALL показывать карточки: сначала встроенные `light`, `dark`, `high-contrast` (ключ `settings-appearance-theme-<id>`), затем пользовательские в порядке каталога тем (ключ `settings-appearance-theme-custom-<name>`). Встроенные и пользовательские темы SHALL различаться видом, а не только именем: файл каталога с именем встроенной темы (`dark.json`) SHALL быть карточкой пользовательской темы с ошибкой `reservedName`. Ниже в требованиях `<id>` в ключах карточки означает `<id>` встроенной темы или `custom-<name>` пользовательской. Карточка SHALL показывать мини-превью кода (`settings-appearance-theme-<id>-preview`) в цветах темы (фон кода, `text`, `code.keyword`, `code.string`, `code.comment`, `code.number`), имя темы и вид: `Built-in · default` у `light` и `dark`, `Built-in` у `high-contrast`, `Custom · extends <base>` у пользовательской. Карточка темы светлого режима SHALL нести тег `Light mode`, тёмного — `Dark mode`. Карточка с предупреждениями SHALL нести бейдж `settings-appearance-theme-<id>-warnings` с текстом `N warnings` (ICU `plural`). N — предупреждения разбора плюс роли с низким контрастом (требование «Контраст на фоне кода»). Тема, которая не загрузилась, SHALL нести тег `Invalid` вместо бейджа.
 
 Нажатие карточки SHALL выбирать тему для превью и панели проблем и НЕ SHALL применять её. При открытии страницы выбрана действующая тема.
 
@@ -111,6 +111,14 @@ App SHALL хранить две темы: тему светлого режима
 - **WHEN** действующая тема — «Fluent Dark», и пользователь нажимает карточку `acme-night`
 - **THEN** превью нарисовано цветами `acme-night`, app по-прежнему в «Fluent Dark», кнопка называется `Use acme-night`
 
+#### Scenario: Пользовательский файл с именем встроенной темы
+- **WHEN** в каталоге тем лежит `dark.json`
+- **THEN** есть карточка `settings-appearance-theme-custom-dark` с тегом `Invalid` и проблемой `reservedName`, карточка `settings-appearance-theme-dark` («Fluent Dark») одна и работает
+
+#### Scenario: Последний выбор побеждает
+- **WHEN** пользователь нажимает «Use» у `acme-night`, файл читается медленно, и до конца чтения пользователь нажимает «Use» у «Fluent Dark»
+- **THEN** тема тёмного режима — `dark`, позднее чтение `acme-night` ничего не меняет
+
 #### Scenario: Use переключает фиксированный режим
 - **WHEN** «Mode» — `Light`, и пользователь нажимает «Use» у выбранной `acme-night` (`extends: dark`)
 - **THEN** тема тёмного режима — `acme-night`, «Mode» — `Dark`, app рисуется в `acme-night`
@@ -120,20 +128,20 @@ App SHALL хранить две темы: тему светлого режима
 - **THEN** тема тёмного режима — `dark`, выбрана карточка «Fluent Dark»
 
 ### Requirement: Пользовательские темы на странице «Appearance»
-Страница SHALL читать каталог тем при открытии и по «Reload», только через порт каталога тем (spec client-themes «Каталог пользовательских тем»). Пока каталог читается, карточки встроенных тем SHALL работать, а на месте пользовательских SHALL стоять индикатор загрузки. Результат чтения, начатого до закрытия страницы или до более нового «Reload», НЕ SHALL менять состояние страницы.
+Страница SHALL читать каталог тем при открытии и по «Reload», только через порт каталога тем (spec client-themes «Каталог пользовательских тем»). Пока каталог читается, карточки встроенных тем SHALL работать, а на месте пользовательских SHALL стоять индикатор загрузки (`settings-appearance-themes-loading`). Если каталог не удалось прочитать целиком (порт бросил исключение), страница SHALL показывать встроенные темы и InfoBar уровня `warning` `settings-appearance-catalog-failed`: `Couldn't read <home>/themes. Custom themes are not shown.` без текста исключения и с кнопкой «Reload» (`settings-appearance-catalog-reload`), которая повторяет чтение. Результат чтения, начатого до закрытия страницы или до более нового «Reload», НЕ SHALL менять состояние страницы.
 
 Если у выбранной темы есть предупреждения, панель проблем SHALL показывать:
 - InfoBar уровня `warning` `settings-appearance-issues-summary`: `<name> loaded with N warnings` и пояснение `Unknown keys were ignored; the theme is applied. Missing roles come from extends: "<base>" (<built-in name>).`;
 - кнопки «Open folder» (`settings-appearance-open-folder`) и «Reload» (`settings-appearance-reload`);
-- текст файла с номерами строк, где строки с предупреждением выделены (`CodeLabFilePreview`);
-- список проблем `settings-appearance-issue-<n>` (n с 1, по порядку позиции): `<file>:<line>:<col> unknown key "<key>"` с пояснением `Ignored. Did you mean "<role>"?` или `Ignored — not a theme role.`, `duplicate key "<key>"` — `The last value is used.`, `terminal color "<value>"` — `Terminal colors are not used by the app; the role comes from extends.`, а также строка о низком контрасте для каждой такой роли;
+- текст файла с номерами строк (`settings-appearance-file`), где строки с предупреждением выделены (`CodeLabFilePreview`);
+- список проблем `settings-appearance-issue-<n>` (n с 1, по порядку позиции; показываются первые 50, остальные — строкой `settings-appearance-issues-more` `… and {count} more warnings`, бейдж карточки считает все): `<file>:<line>:<col> unknown key "<key>"` с пояснением `Ignored. Did you mean "<role>"?` или `Ignored — not a theme role.`, `duplicate key "<key>"` — `The last value is used.`, `terminal color "<value>"` — `Terminal colors are not used by the app; the role comes from extends.`, а также строка о низком контрасте для каждой такой роли;
 - справку `settings-appearance-unset-roles`: `N roles not set — taken from "<base>"` и список ролей с пояснением `For reference, not a warning`. Роли, которые app не применяет (`status_bg`, `approval_border`), в справку и в N НЕ SHALL входить.
 
 Если тема не загрузилась, InfoBar SHALL быть уровня `error`: `<name> couldn't be loaded`. Под ним — та же проблема с позицией. Текст файла SHALL показываться, если файл прочитан и не больше 64 КиБ. Справки о ролях при этом нет.
 
 Если у темы нет предупреждений и ошибок, но есть незаданные роли, SHALL показываться только справка.
 
-Текст файла и значения из него SHALL проходить экранирование управляющих символов и символов направления текста (`escapeForDisplay`) перед показом.
+Текст файла и значения из него SHALL проходить экранирование управляющих символов и символов направления текста (`escapeForDisplay`) перед показом. Текст файла SHALL экранироваться построчно: переводы строк сохраняются, и номер строки на экране совпадает с номером строки в позиции проблемы. Табуляция SHALL показываться четырьмя пробелами, остальные управляющие и невидимые символы — как `\uXXXX`.
 
 «Open folder» SHALL открывать каталог тем через порт `LocalFolderOpener` (создавая его, если нет). Файл темы app НЕ SHALL открывать внешним приложением. «Reload» SHALL перечитывать каталог. Если выбранная тема назначена режиму, «Reload» SHALL заново применять её из файла.
 
@@ -149,9 +157,17 @@ App SHALL хранить две темы: тему светлого режима
 - **WHEN** чтение каталога ещё идёт, и пользователь нажимает «Reload»
 - **THEN** состояние страницы строит только второе чтение, событие `appearance.catalog_discarded` записано
 
+#### Scenario: Каталог тем не читается
+- **WHEN** порт каталога бросает исключение при чтении
+- **THEN** карточки встроенных тем работают, показан `settings-appearance-catalog-failed` с кнопкой `settings-appearance-catalog-reload`, в журнале `appearance.catalog_failed` с `error_class` и без пути; нажатие кнопки читает каталог заново
+
 #### Scenario: Управляющие символы в файле
 - **WHEN** файл темы содержит в строке символ U+202E
 - **THEN** текст файла на странице показывает его экранированным, а не меняет направление строки
+
+#### Scenario: Экранирование не склеивает строки
+- **WHEN** выбран файл темы из 13 строк с предупреждением в строке 6
+- **THEN** просмотр `settings-appearance-file` показывает 13 строк, выделена строка 6, символов `\u000a` в тексте нет, табуляция в отступе показана четырьмя пробелами, а не `\u0009`
 
 ### Requirement: Импорт темы на странице «Appearance»
 «Import JSON…» SHALL открывать системный диалог выбора одного файла `.json`. Отмена диалога SHALL ничего не менять. Выбранный файл SHALL импортироваться по spec client-themes «Импорт файла темы»:
@@ -159,13 +175,19 @@ App SHALL хранить две темы: тему светлого режима
 - нужна замена — диалог `Replace the theme "<name>"?` с кнопками «Replace» (`settings-appearance-import-replace`) и «Cancel»; без «Replace» файл не меняется;
 - тема уже есть с тем же содержимым — выбирается для превью без записи;
 - ошибка разбора — InfoBar `error` `settings-appearance-import-failed`: `Couldn't import <file name>: <проблема с позицией>`, файл не копируется;
-- ошибка записи — тот же InfoBar с `Couldn't save the theme to <home>/themes.` без текста исключения.
+- источник не читается (нет доступа, не обычный файл, ошибка ввода-вывода) или тему не удалось записать в каталог тем — тот же InfoBar с `Couldn't import the theme. Check that the file is readable and try again.` без пути и текста исключения;
+- источник изменился после вопроса о замене — тот же InfoBar с `The file changed after you chose it. Choose it again.`, файл не записан;
+- системный диалог выбора файла не открылся — тот же InfoBar с `Couldn't open the file dialog.`, без текста исключения.
 
 Пока идёт импорт, кнопка «Import JSON…» SHALL быть недоступна.
 
 #### Scenario: Импорт и превью
 - **WHEN** пользователь импортирует корректный файл `acme-night`
-- **THEN** появляется карточка `settings-appearance-theme-acme-night`, она выбрана, действующая тема не изменилась
+- **THEN** появляется карточка `settings-appearance-theme-custom-acme-night`, она выбрана, действующая тема не изменилась
+
+#### Scenario: Диалог выбора файла не открылся
+- **WHEN** системный диалог выбора файла бросает исключение
+- **THEN** показан `settings-appearance-import-failed` с `Couldn't open the file dialog.`, в журнале `appearance.theme_imported` с `outcome: failed` и `error_class`, кнопка «Import JSON…» снова доступна
 
 #### Scenario: Отказ от замены
 - **WHEN** импортируется `acme-night` с другим содержимым, и пользователь нажимает «Cancel» в диалоге замены
@@ -189,7 +211,7 @@ App SHALL хранить две темы: тему светлого режима
 
 Документ SHALL читаться до первого кадра вместе с файлами тем двух режимов. Каждый файл читается с ограничением времени 1 с; не прочитанный вовремя — как не загрузившийся. Незнакомый или нечитаемый документ и незнакомое значение поля SHALL читаться как значения по умолчанию для этих полей. Встроенная тема чужого режима в поле режима (`"light_theme": "dark"`) — тоже незнакомое значение. Пользовательская тема, база которой относится к другому режиму, SHALL считаться не загрузившейся для этого режима (требование «Режим оформления и темы режимов»), а не незнакомым значением: имя в документе сохраняется. Документ при этом НЕ SHALL перезаписываться до явного выбора пользователя, а в журнал SHALL писаться предупреждение без значения. Сбой хранилища при старте НЕ SHALL мешать запуску.
 
-Если запись не удалась, выбор SHALL оставаться применённым до конца работы app, а страница SHALL показать ошибку `Couldn't save the appearance. CodeLab will use the previous appearance after restart.` с кнопкой `Retry` (`settings-appearance-save-retry`). При нескольких выборах подряд SHALL применяться и сохраняться последний.
+Если запись не удалась, выбор SHALL оставаться применённым до конца работы app, а страница SHALL показать ошибку (`settings-appearance-save-failed`) `Couldn't save the appearance. CodeLab will use the previous appearance after restart.` с кнопкой `Retry` (`settings-appearance-save-retry`). При нескольких выборах подряд SHALL применяться и сохраняться последний.
 
 #### Scenario: Повреждённый документ
 - **WHEN** `codelab.app.appearance` содержит `{"mode": "sepia"}`
@@ -203,9 +225,10 @@ App SHALL хранить две темы: тему светлого режима
 События оформления SHALL писаться логгером `codelab_desktop.settings`:
 - `app.appearance_resolved` при старте: `mode`, `light_theme`, `dark_theme`, `system_accent`, `fallback` (`none`, `light`, `dark`, `both`);
 - `settings.appearance_changed`: `field` (`mode`, `light_theme`, `dark_theme`, `system_accent`) и новое значение;
-- `appearance.theme_loaded`: `theme`, `extends`, `warnings` (число), `codes` (коды проблем без ключей и значений);
+- `appearance.theme_loaded`: `theme`, `extends`, `warnings` (число), `code_counts` (число предупреждений по каждому коду, без ключей и значений);
 - `appearance.theme_invalid`: `theme`, `code`, `line`, `column`. `code` — код проблемы разбора (`ThemeIssueCode`), `missing` (файла нет), `tooLarge`, `notUtf8`, `unreadable` (ошибка чтения; при исключении порта — ещё поле `error_class`) или `wrongMode` (база темы относится к другому режиму); у проблем без позиции `line` и `column` равны 0;
-- `appearance.theme_imported`: `outcome` (`imported`, `replaced`, `unchanged`, `cancelled`, `invalid`, `failed`);
+- `appearance.theme_imported`: `outcome` (`imported`, `replaced`, `unchanged`, `cancelled`, `invalid`, `source_changed`, `failed`); при `failed` из-за исключения (в том числе диалога выбора файла) — ещё `error_class`;
+- `appearance.catalog_failed`: `error_class` и, если порт сообщил причину, `failure` (`notADirectory` или `unreadable`) — каталог тем не удалось прочитать;
 - `appearance.catalog_discarded`: `reason` (`reload`, `closed`);
 - `appearance.save_failed` с именем типа ошибки (`error_class`); `appearance.save_timeout` с `timeout_ms`, если при закрытии запись не успела за 3 с;
 - при старте: `appearance.stored_value_invalid` без полей (в документе незнакомое значение) и `appearance.read_failed` с `error_class` (хранилище не удалось прочитать);

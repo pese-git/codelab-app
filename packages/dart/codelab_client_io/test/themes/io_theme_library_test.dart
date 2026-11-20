@@ -107,14 +107,15 @@ void main() {
     });
 
     test(
-      'читается не больше 64 КиБ + 1 байта: бесконечный файл не виснет',
+      'не обычный файл (символьное устройство /dev/zero) — unreadable, без зависания',
       () async {
-        // `/dev/zero` не кончается: чтение «целиком» не завершилось бы.
+        // Читаются только обычные файлы (ревью, FIFO); бесконечное
+        // устройство отвергается до чтения, а не по лимиту.
         await Directory(themes).create(recursive: true);
         await Link(p.join(themes, 'zero.json')).create('/dev/zero');
         final entry = (await library.list()).single;
         expect(entry.name, 'zero');
-        expect(entry.error, ThemeReadError.tooLarge);
+        expect(entry.error, ThemeReadError.unreadable);
       },
       testOn: '!windows',
       timeout: const Timeout(Duration(seconds: 10)),
@@ -162,6 +163,62 @@ void main() {
       expect(entry.name, 'folder');
       expect(entry.error, ThemeReadError.unreadable);
     });
+
+    test('themes — файл: ThemeCatalogException(notADirectory)', () async {
+      await Directory(home).create(recursive: true);
+      await File(themes).writeAsString('не каталог');
+      await expectLater(
+        library.list(),
+        throwsA(
+          isA<ThemeCatalogException>().having(
+            (e) => e.failure,
+            'failure',
+            ThemeCatalogFailure.notADirectory,
+          ),
+        ),
+      );
+    });
+
+    test('каталог без прав: ThemeCatalogException(unreadable)', () async {
+      await writeTheme('a.json', _acme);
+      await Process.run('chmod', ['000', themes]);
+      addTearDown(() => Process.run('chmod', ['755', themes]));
+      // Права не действуют (root, Windows): сценарий недоступен.
+      try {
+        Directory(themes).listSync();
+        return;
+      } on FileSystemException {
+        // ожидаемо
+      }
+      await expectLater(
+        library.list(),
+        throwsA(
+          isA<ThemeCatalogException>().having(
+            (e) => e.failure,
+            'failure',
+            ThemeCatalogFailure.unreadable,
+          ),
+        ),
+      );
+    }, testOn: '!windows');
+
+    test(
+      'именованный канал (FIFO) — unreadable, без зависания',
+      () async {
+        await Directory(themes).create(recursive: true);
+        final fifo = p.join(themes, 'pipe.json');
+        final made = await Process.run('mkfifo', [fifo]);
+        if (made.exitCode != 0) return; // mkfifo недоступен
+        // Если открытие зависнет, разблокируем его, чтобы процесс тестов вышел.
+        addTearDown(() => Process.run('sh', ['-c', 'exec 3<>"\$0"', fifo]));
+        final entry = (await library.list()).single;
+        expect(entry.name, 'pipe');
+        expect(entry.error, ThemeReadError.unreadable);
+        expect((await library.read('pipe'))!.error, ThemeReadError.unreadable);
+      },
+      testOn: '!windows',
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
 
     test('чтение каталога ничего не создаёт и не меняет', () async {
       await writeTheme('a.json', _acme);
@@ -353,6 +410,57 @@ void main() {
       );
       expect((await target.stat()).modified, before.modified);
       expect(themeFileNames(), ['acme-night.json']);
+    });
+
+    test(
+      'файл назначения — FIFO: needsReplace без открытия',
+      () async {
+        await Directory(themes).create(recursive: true);
+        final made = await Process.run('mkfifo', [
+          p.join(themes, 'acme-night.json'),
+        ]);
+        if (made.exitCode != 0) return;
+        addTearDown(
+          () => Process.run('sh', [
+            '-c',
+            'exec 3<>"\$0"',
+            p.join(themes, 'acme-night.json'),
+          ]),
+        );
+        final path = await source('s.json', _acme);
+        expect(await library.import(path), isA<ThemeImportNeedsReplace>());
+      },
+      testOn: '!windows',
+      timeout: const Timeout(Duration(seconds: 10)),
+    );
+
+    test('подтверждение с другим name в источнике — sourceChanged', () async {
+      await writeTheme('acme-night.json', _acme);
+      await writeTheme('other.json', '{"name": "other"}');
+      final path = await source(
+        's.json',
+        '{"name": "other", "extends": "light"}',
+      );
+      final result = await library.import(
+        path,
+        replace: true,
+        expectedName: 'acme-night',
+      );
+      expect(result, isA<ThemeImportSourceChanged>());
+      expect(
+        await File(p.join(themes, 'other.json')).readAsString(),
+        '{"name": "other"}',
+      );
+      expect(themeFileNames(), ['acme-night.json', 'other.json']);
+    });
+
+    test('подтверждение с тем же name заменяет', () async {
+      await writeTheme('acme-night.json', _acme);
+      final path = await source('s.json', _acmeV2);
+      expect(
+        await library.import(path, replace: true, expectedName: 'acme-night'),
+        isA<ThemeImportReplaced>(),
+      );
     });
 
     test('replace: true без существующего файла — imported', () async {

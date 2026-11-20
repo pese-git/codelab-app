@@ -20,7 +20,8 @@ import '../../../support/settings_search.dart';
 
 /// Страницы группы Agent рабочей сборки: без «General» заголовка «App» нет.
 final _agentPages = {...defaultSettingsPages.available}
-  ..remove(SettingsPage.general);
+  ..remove(SettingsPage.general)
+  ..remove(SettingsPage.appearance);
 
 Finder _nav(SettingsPage page) => find.byKey(ValueKey(page.navKey));
 
@@ -407,6 +408,7 @@ void main() {
       SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
       SettingsPage.general,
+      SettingsPage.appearance,
     ]);
   });
 
@@ -461,6 +463,7 @@ void main() {
       SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
       SettingsPage.general,
+      SettingsPage.appearance,
     ]);
   });
 

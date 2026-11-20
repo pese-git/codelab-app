@@ -187,4 +187,36 @@ void main() {
     );
     expect((block.decoration as BoxDecoration).color, background);
   });
+
+  // Spec agent-workbench-ui / app-settings «Нейтральный тег в тёмной теме»
+  // (задача 4.12): `Colors.grey` (#323130) на тёмном фоне давал 1,3:1.
+  group('нейтральный тег: цвет по режиму темы', () {
+    test('светлая тема — прежний Colors.grey', () {
+      final theme = FluentThemeData(brightness: Brightness.light);
+
+      expect(
+        CodeLabPalette.of(theme).toneColor(CodeLabTone.neutral, theme),
+        Colors.grey,
+      );
+    });
+
+    test('тёмная тема — вторичный текст темы', () {
+      final theme = FluentThemeData(brightness: Brightness.dark);
+
+      expect(
+        CodeLabPalette.of(theme).toneColor(CodeLabTone.neutral, theme),
+        theme.resources.textFillColorSecondary,
+      );
+    });
+
+    test('остальные тона не зависят от режима темы', () {
+      final theme = FluentThemeData(brightness: Brightness.dark);
+      final palette = CodeLabPalette.of(theme);
+
+      expect(palette.toneColor(CodeLabTone.success, theme), palette.success);
+      expect(palette.toneColor(CodeLabTone.warning, theme), palette.warning);
+      expect(palette.toneColor(CodeLabTone.danger, theme), palette.danger);
+      expect(palette.toneColor(CodeLabTone.accent, theme), palette.accent);
+    });
+  });
 }

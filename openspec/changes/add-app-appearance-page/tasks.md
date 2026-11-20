@@ -101,7 +101,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 ## 5. Итерация 5 — страница «Appearance»
 
 - [x] 5.1 `[desktop]` Красный: правило сторожа `package:file_selector/` в `apps/codelab_desktop/lib` — только `core/platform/` (D1; второе правило, `system_theme`, — задача 4.9): `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` с фиктивным нарушением.
-- [ ] 5.2 `[desktop]` Реализация 5.1: правило в `test/support/rules.dart` с комментарием-причиной. `guard` зелёный.
+- [x] 5.2 `[desktop]` Реализация 5.1: правило в `test/support/rules.dart` с комментарием-причиной. `guard` зелёный.
 - [x] 5.3 `[desktop]` Красный: `test/features/settings/application/appearance_settings_cubit_test.dart` на `InMemoryThemeLibrary`, двойнике `ThemeFilePicker` и `FakeLocalFolderOpener`. Spec app-settings:
   - «Выбор карточки не применяет тему», выбор по умолчанию — действующая тема;
   - «Тема с двумя предупреждениями» (данные панели: строки 6 и 9, коды, подсказка, справка ролей), тема с ошибкой — данные `error`;
@@ -109,7 +109,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - импорт: «Импорт и превью», «Отказ от замены», `unchanged`, `invalid`, `failed` (без текста исключения), отмена выбора файла, повторный импорт во время идущего недоступен;
   - «Open folder» — `LocalFolderOpener.open(<home>/themes, create: true)`, файл не открывается;
   - «Низкий контраст пользовательской роли» — бейдж учитывает контраст.
-- [ ] 5.4 `[desktop]` Реализация 5.3: `AppearanceSettingsCubit`, `AppearanceSettingsState`, `core/platform/theme_file_picker.dart`, фабрика `CodeLabDependencies.createAppearanceSettingsCubit` (D9, D11, D13). 5.3 зелёный.
+- [x] 5.4 `[desktop]` Реализация 5.3: `AppearanceSettingsCubit`, `AppearanceSettingsState`, `core/platform/theme_file_picker.dart`, фабрика `CodeLabDependencies.createAppearanceSettingsCubit` (D9, D11, D13). 5.3 зелёный.
 - [x] 5.5 `[desktop]` Красный: `test/features/settings/presentation/appearance_page_test.dart` на Cubit-двойнике. Spec app-settings:
   - «Страница видна», «Поиск по ключевому слову», «Узкая область»;
   - порядок блоков и ключи тестов требования «Страница «Appearance»: видимость и состав»;
@@ -119,15 +119,15 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - доступность «Use» и «Reset»; InfoBar `settings-appearance-fallback`;
   - «Управляющие символы в файле» (U+202E экранирован);
   - русский интерфейс: переводы из `app_ru.arb`, имена тем, ключи, значения и `4.8:1` — как есть; `expectNoStaleLanguage` при смене языка на странице.
-- [ ] 5.6 `[desktop]` Реализация 5.5: `appearance_page.dart`, `theme_issue_texts.dart`, построитель страницы в `settingsPageBuilders`, `SettingsPage.appearance` в `defaultSettingsPages`, ключевые слова поиска, ARB `en`/`ru` (D14, D15). Пополнить `language_switch_sweep_test.dart` страницей «Appearance». 5.5 зелёный, `l10n:check` зелёный, `ui_literals_test` зелёный без новых записей allowlist.
+- [x] 5.6 `[desktop]` Реализация 5.5: `appearance_page.dart`, `theme_issue_texts.dart`, построитель страницы в `settingsPageBuilders`, `SettingsPage.appearance` в `defaultSettingsPages`, ключевые слова поиска, ARB `en`/`ru` (D14, D15). Пополнить `language_switch_sweep_test.dart` страницей «Appearance». 5.5 зелёный, `l10n:check` зелёный, `ui_literals_test` зелёный без новых записей allowlist.
 - [x] 5.7 `[desktop]` Интеграционный тест `apps/codelab_desktop/integration_test/settings_appearance_flow_test.dart`: импорт файла во временный `CODELAB_HOME`, превью, «Use», смена «Mode», перезапуск app — тема сохранена. Скрипт `test:e2e:app:appearance` в `pubspec.yaml`; запуск — только в `release/*`, в `feature/*` тест только компилируется.
 
 ## 6. Документация и закрытие строки
 
-- [ ] 6.1 `docs-writer`: `apps/codelab_desktop/doc/user-guide.md` — раздел «Оформление»: режим и «Match system», системный акцент (macOS и Windows — сразу, Linux — цвет выделения GTK-темы при старте и открытии страницы), встроенные темы, своя тема (формат с примером, роли, `extends`, где лежит каталог), «Import JSON…», предупреждения и контраст, «Reload», что делать, если тема не загрузилась.
-- [ ] 6.2 `docs-writer`: `apps/codelab_desktop/README.md` (возможности: тёмный режим и темы), `docs/user/configuration.md` (каталог `$CODELAB_HOME/themes/`, общий с будущими темами CLI), `apps/codelab_desktop/doc/operations.md` («Где лежат данные»: `themes/`, ключ `codelab.app.appearance`), `apps/codelab_desktop/doc/development.md` (порт системного акцента и адаптер `system_theme`).
-- [ ] 6.3 `[desktop]`: `apps/codelab_desktop/AGENTS.md` — раздел «Страница «Appearance»» (владельцы, хранение, «App файлов не открывает», события, правила `file_selector` и `system_theme`); `packages/dart/codelab_client_core/AGENTS.md` — строка о `src/themes/` (языконезависимые коды).
-- [ ] 6.4 `codelab-architect`: `docs/architecture/l10n-glossary.md` — термины D15.
-- [ ] 6.5 `codelab-architect`: `agent-parity-goals.md`, строка D-20 — доказательства: `packages/flutter/codelab_ui/test/codelab_palette_test.dart`, `packages/dart/codelab_client_core/test/themes/theme_file_test.dart`, `apps/codelab_desktop/test/features/settings/presentation/appearance_page_test.dart`, приёмка `app:settings_appearance_flow_test.dart` (`release/*`); пометка «закрыто change `add-app-appearance-page`».
+- [x] 6.1 `docs-writer`: `apps/codelab_desktop/doc/user-guide.md` — раздел «Оформление»: режим и «Match system», системный акцент (macOS и Windows — сразу, Linux — цвет выделения GTK-темы при старте и открытии страницы), встроенные темы, своя тема (формат с примером, роли, `extends`, где лежит каталог), «Import JSON…», предупреждения и контраст, «Reload», что делать, если тема не загрузилась.
+- [x] 6.2 `docs-writer`: `apps/codelab_desktop/README.md` (возможности: тёмный режим и темы), `docs/user/configuration.md` (каталог `$CODELAB_HOME/themes/`, общий с будущими темами CLI), `apps/codelab_desktop/doc/operations.md` («Где лежат данные»: `themes/`, ключ `codelab.app.appearance`), `apps/codelab_desktop/doc/development.md` (порт системного акцента и адаптер `system_theme`).
+- [x] 6.3 `[desktop]`: `apps/codelab_desktop/AGENTS.md` — раздел «Страница «Appearance»» (владельцы, хранение, «App файлов не открывает», события, правила `file_selector` и `system_theme`); `packages/dart/codelab_client_core/AGENTS.md` — строка о `src/themes/` (языконезависимые коды).
+- [x] 6.4 `codelab-architect`: `docs/architecture/l10n-glossary.md` — термины D15.
+- [x] 6.5 `codelab-architect`: `agent-parity-goals.md`, строка D-20 — доказательства: `packages/flutter/codelab_ui/test/codelab_palette_test.dart`, `packages/dart/codelab_client_core/test/themes/theme_file_test.dart`, `apps/codelab_desktop/test/features/settings/presentation/appearance_page_test.dart`, приёмка `app:settings_appearance_flow_test.dart` (`release/*`); пометка «закрыто change `add-app-appearance-page`».
 - [ ] 6.6 `docs-writer`, при подготовке выпуска в `release/*`: строка в разделе выпуска `CHANGELOG.md` — тёмный режим включается по системе («Match system» по умолчанию, Q3 (а)), системный акцент — пакетом `system_theme`.
-- [ ] 6.7 Сверка перед архивацией: все сценарии spec покрыты тестами задач 1–5; design D-решения совпадают с кодом; `openspec validate add-app-appearance-page --strict` зелёный.
+- [ ] 6.7 Сверка перед архивацией: строка D-20 в `agent-parity-goals.md` переводится из «в работе» в «закрыто», статус — «— / есть», если тесты-доказательства зелёные; все сценарии spec покрыты тестами задач 1–5; design D-решения совпадают с кодом; `openspec validate add-app-appearance-page --strict` зелёный.

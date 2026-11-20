@@ -40,8 +40,11 @@ final class _HangingLibrary implements ThemeLibrary {
   Future<ThemeEntry?> read(String name) => Completer<ThemeEntry?>().future;
 
   @override
-  Future<ThemeImportResult> import(String sourcePath, {bool replace = false}) =>
-      throw UnimplementedError();
+  Future<ThemeImportResult> import(
+    String sourcePath, {
+    bool replace = false,
+    String? expectedName,
+  }) => throw UnimplementedError();
 }
 
 final _night = jsonEncode({
@@ -270,6 +273,89 @@ void main() {
 
       expect(start.darkTheme, isNotNull);
       expect(start.fallback, AppearanceFallback.none);
+    });
+  });
+
+  group('«База пользовательской темы сменила режим» при старте', () {
+    final dayAsDark = jsonEncode({
+      'name': 'acme-night',
+      'extends': 'light',
+      'colors': {'success': '#00ff00'},
+    });
+
+    testWidgets('имя в документе сохраняется, тема режима не загружена, '
+        'документ не помечен повреждённым', (tester) async {
+      final start = (await tester.runAsync(
+        () => AppAppearanceStart.resolve(
+          load: const AppAppearanceLoad(
+            AppAppearanceSettings(
+              mode: AppearanceMode.dark,
+              darkTheme: 'acme-night',
+            ),
+          ),
+          library: InMemoryThemeLibrary(themes: {'acme-night': dayAsDark}),
+        ),
+      ))!;
+
+      expect(start.settings.darkTheme, 'acme-night');
+      expect(start.storedValueInvalid, isFalse);
+      expect(start.darkTheme, isNull);
+      expect(start.fallback, AppearanceFallback.dark);
+      expect(start.themeProblems.single.code, 'wrongMode');
+    });
+
+    testWidgets('первый кадр — Fluent Dark, в журнале appearance.theme_invalid '
+        'с wrongMode', (tester) async {
+      final start = (await tester.runAsync(
+        () => AppAppearanceStart.resolve(
+          load: const AppAppearanceLoad(
+            AppAppearanceSettings(
+              mode: AppearanceMode.dark,
+              darkTheme: 'acme-night',
+            ),
+          ),
+          library: InMemoryThemeLibrary(themes: {'acme-night': dayAsDark}),
+        ),
+      ))!;
+      final binding = CodeLabTestBinding(
+        project: '/workspace',
+        appearance: start,
+      );
+      await pumpApp(tester, binding);
+
+      expect(
+        CodeLabPalette.of(appTheme(tester)).success,
+        isNot(const Color(0xFF00FF00)),
+      );
+      final events = binding.scope
+          .resolve<LogBuffer>()
+          .entries
+          .value
+          .where((e) => e['event'] == 'appearance.theme_invalid')
+          .toList();
+      expect(events, hasLength(1));
+      expect(events.single['code'], 'wrongMode');
+      expect(events.single['theme'], 'custom');
+      expect(events.single.values.join(' '), isNot(contains('acme-night')));
+    });
+
+    testWidgets('светлая тема в поле светлого режима с базой dark — то же', (
+      tester,
+    ) async {
+      final start = (await tester.runAsync(
+        () => AppAppearanceStart.resolve(
+          load: const AppAppearanceLoad(
+            AppAppearanceSettings(lightTheme: 'acme-day'),
+          ),
+          library: InMemoryThemeLibrary(
+            themes: {'acme-day': _night.replaceAll('acme-night', 'acme-day')},
+          ),
+        ),
+      ))!;
+
+      expect(start.settings.lightTheme, 'acme-day');
+      expect(start.lightTheme, isNull);
+      expect(start.fallback, AppearanceFallback.light);
     });
   });
 

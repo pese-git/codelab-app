@@ -136,4 +136,73 @@ void main() {
       );
     });
   });
+
+  // Spec app-settings «Тоны тёмной темы читаемы» (задача 4.12): текст тона
+  // читаем на фоне страницы, карточки, кода и на заливке самого тега (альфа 56
+  // у тегов тонов, 46 у нейтрального).
+  group('тоны темы читаемы на четырёх фонах', () {
+    List<Color> backgrounds(FluentThemeData theme, Color tone, int alpha) {
+      final page = theme.resources.solidBackgroundFillColorBase;
+      final card = Color.alphaBlend(
+        theme.resources.cardBackgroundFillColorDefault,
+        page,
+      ).withValues(alpha: 1);
+      return [
+        page,
+        card,
+        CodeLabCodeTheme.of(theme).background,
+        Color.alphaBlend(tone.withAlpha(alpha), page),
+        Color.alphaBlend(tone.withAlpha(alpha), card),
+      ];
+    }
+
+    void expectReadable(
+      FluentThemeData theme,
+      String name,
+      Color tone, {
+      int alpha = 56,
+    }) {
+      for (final background in backgrounds(theme, tone, alpha)) {
+        expect(
+          contrastRatio(Color.alphaBlend(tone, background), background),
+          greaterThanOrEqualTo(kMinTextContrast),
+          reason: '$name на #${background.toARGB32().toRadixString(16)}',
+        );
+      }
+    }
+
+    test('dark: success, warning, danger и accent', () {
+      final theme = buildFluentTheme(builtInThemeFile('dark'));
+      final palette = CodeLabPalette.of(theme);
+
+      expectReadable(theme, 'success', palette.success);
+      expectReadable(theme, 'warning', palette.warning);
+      expectReadable(theme, 'danger', palette.danger);
+      expectReadable(theme, 'accent', palette.accent);
+    });
+
+    test('light: danger и нейтральный тег', () {
+      final theme = buildFluentTheme(builtInThemeFile('light'));
+      final palette = CodeLabPalette.of(theme);
+
+      expectReadable(theme, 'danger', palette.danger);
+      expectReadable(
+        theme,
+        'neutral',
+        palette.toneColor(CodeLabTone.neutral, theme),
+        alpha: 46,
+      );
+    });
+
+    test('dark: нейтральный тег', () {
+      final theme = buildFluentTheme(builtInThemeFile('dark'));
+
+      expectReadable(
+        theme,
+        'neutral',
+        CodeLabPalette.of(theme).toneColor(CodeLabTone.neutral, theme),
+        alpha: 46,
+      );
+    });
+  });
 }

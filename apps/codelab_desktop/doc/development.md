@@ -45,6 +45,7 @@ flowchart LR
 | `lib/app/app_scope.dart` | composition root: `createCodeLabRootScope` (модули Cherrypick и швы тестов), `CodeLabBootstrap`, `CodeLabDependencies`, `CodeLabRootLifecycle` |
 | `lib/app/codelab_app_widget.dart` | `CodeLabApp`: `FluentApp`, провайдеры Cubit-ов, переключение рабочего места и настроек, запуск агента после первого кадра |
 | `lib/app/language/` | `AppLanguageCubit`: язык интерфейса (System, English, Русский), `AppStrings` в корневой области; `app_language_start.dart` — `AppLanguageStart`, начальный язык и диагностика чтения, которые `main` передаёт в composition root; `CodeLabApp` меняет только `locale` у `FluentApp` |
+| `lib/app/appearance/` | оформление: `AppAppearanceCubit` (режим, две темы по режимам, очередь записи, номера операций), `AppAppearanceStart` (решение для первого кадра: сохранённый выбор, загруженные темы, акцент), `built_in_themes.dart`, `fluent_theme_builder.dart` (`FluentThemeData` из ролей темы и `CodeLabPalette`); `CodeLabApp` строит `FluentApp` с обеими темами и `themeMode` |
 | `lib/l10n/` | каталоги gen-l10n: `app_en.arb` (шаблон) и `app_ru.arb`, сгенерированный `app_localizations*.dart` (коммитится); настройка — `l10n.yaml` |
 | `lib/app/navigation/` | `NavigationCubit`: переход рабочее место ↔ настройки, страницы настроек |
 | `lib/app/embedded_transport_resolver.dart`, `embedded_logger.dart` | открытие и закрытие встроенного агента, логгер агента → журнал приложения |
@@ -54,10 +55,10 @@ flowchart LR
 | `lib/app/agent_definitions_loader.dart` | чтение определений агентов для страницы «Agents & modes»: `agentDefinitionRowsAt` из `codelab_setup/io.dart`, тайм-аут 5 с |
 | `lib/app/secret_migration_offer.dart`, `embedded_secret_migration_runner.dart` | перенос секретов из `config.yaml` |
 | `lib/app/app_exit_handler.dart` | закрытие при выходе: предел 5 с, сброс журналов |
-| `lib/core/platform/` | порты и адаптеры платформы: `shared_preferences`-хранилища (недавние проекты, снимок рабочего места, раскладка, профиль по умолчанию), выбор папки, запуск оболочки (`UserShellLauncher`), открытие ссылок, открытие каталога в программе ОС (порт `LocalFolderOpener`, адаптер `UrlLauncherLocalFolderOpener` на `url_launcher`; общий для страниц «Skills & extensions» и «Agents & modes»; каталог пользовательских определений порт может создать, файлы не открывает), загрузка изображений, сохранение CSV панели «Usage» (`UsageCsvSaver`) |
+| `lib/core/platform/` | порты и адаптеры платформы: оформление в `shared_preferences` под ключом `codelab.app.appearance` (`AppAppearancePreferences`), системный акцент (порт `SystemAccentSource`, адаптер `SystemThemeAccentSource` на пакете `system_theme`), выбор файла темы (порт `ThemeFilePicker`, `file_selector`), `shared_preferences`-хранилища (недавние проекты, снимок рабочего места, раскладка, профиль по умолчанию), выбор папки, запуск оболочки (`UserShellLauncher`), открытие ссылок, открытие каталога в программе ОС (порт `LocalFolderOpener`, адаптер `UrlLauncherLocalFolderOpener` на `url_launcher`; общий для страниц «Skills & extensions» и «Agents & modes»; каталог пользовательских определений порт может создать, файлы не открывает), загрузка изображений, сохранение CSV панели «Usage» (`UsageCsvSaver`) |
 | `lib/core/text/` | общие текстовые функции |
 | `lib/features/workbench/` | рабочее место: `CodeLabShellCubit` из частей (`ConnectionCubit`, `SessionsCubit`, `ActiveSessionCubit`, `LayoutCubit`, `SettingsCubit`, `TranscriptViewCubit`), маппер строк ленты `ui_mappers.dart`, данные панели «Agents» `agents_pane_data.dart`, перенос секретов; виджеты оболочки, ленты, баннеров, панели «Agents» |
-| `lib/features/settings/` | настройки: страницы «Connection», «Providers», «MCP servers», «Agents & modes» (`AgentsModesCubit` читает умолчания сессии через мост `sessionDefaultsOf` из `codelab_setup`), «Skills & extensions» (`SkillsSettingsCubit`: навыки и расширения, выключатели навыков и согласие на корни), диалог профиля, мастер провайдера |
+| `lib/features/settings/` | настройки: страницы «Connection», «Providers», «MCP servers», «Agents & modes» (`AgentsModesCubit` читает умолчания сессии через мост `sessionDefaultsOf` из `codelab_setup`), «Skills & extensions» (`SkillsSettingsCubit`: навыки и расширения, выключатели навыков и согласие на корни), «Appearance» (`AppearanceSettingsCubit`: каталог тем, карточки, превью, контраст, импорт; применённым оформлением владеет `AppAppearanceCubit` из `lib/app/appearance/`, страница только показывает его), диалог профиля, мастер провайдера |
 | `lib/features/usage/` | панель «Usage»: `usage_pane_data.dart` (данные карточек и таблиц), `usage_budget.dart` (блок «Turn budget» с вычетом ожиданий одобрений), `ledger_refresh.dart` (обновление журнала), `usage_csv.dart` (экспорт), `usage_step_label.dart` (подписи шагов); виджеты `workbench_usage_pane.dart`, `usage_pane_view.dart` поверх `CodeLabUsagePane` из `codelab_ui` |
 | `lib/features/project_files/` | панель «Files»: дерево и просмотр файлов |
 | `lib/features/terminal/` | терминал пользователя: вкладки, ссылки, вывод |
@@ -91,7 +92,7 @@ flowchart TD
 
 ## Как добавить страницу настроек
 
-1. Найдите значение в `SettingsPage` (`lib/app/navigation/settings_page.dart`) — там заведены все одиннадцать страниц настроек; в сборке видны шесть: «Connection», «Providers», «MCP servers», «Agents & modes», «Skills & extensions» и «General» (`defaultSettingsPages`). Если значения нет, добавьте его: группа и `slug` (ключ навигации — `settings-nav-<slug>`).
+1. Найдите значение в `SettingsPage` (`lib/app/navigation/settings_page.dart`) — там заведены все одиннадцать страниц настроек; в сборке видны семь: «Connection», «Providers», «MCP servers», «Agents & modes», «Skills & extensions», «General» и «Appearance» (`defaultSettingsPages`). Если значения нет, добавьте его: группа и `slug` (ключ навигации — `settings-nav-<slug>`).
 2. Напишите Cubit в `lib/features/settings/application/` и страницу в `lib/features/settings/presentation/`. Файлы и процессы — только через порт, реализацию которого собирает `lib/app/`.
 3. Зарегистрируйте построитель страницы в `settingsPageBuilders` (`lib/features/settings/presentation/settings_shell.dart`) и фабрику Cubit-а в `CodeLabDependencies` (`lib/app/app_scope.dart`).
 4. Включите страницу в `defaultSettingsPages` (`lib/app/default_settings_pages.dart`): страница из набора обязана иметь построитель.
@@ -99,6 +100,12 @@ flowchart TD
 6. Добавьте стабильные `ValueKey` для элементов, которые нажимают тесты.
 
 Поведение настроек задаёт спецификация [app-settings](../../../openspec/specs/app-settings/spec.md); новая страница с новым поведением начинается с OpenSpec change.
+
+## Системный акцент и темы
+
+- Системный цвет акцента (на Linux — цвет выделения темы GTK) app получает через порт `SystemAccentSource` (`lib/core/platform/system_accent_source.dart`): `AppAppearanceCubit` и страница знают только его. Адаптер `SystemThemeAccentSource` — единственное место, где импортируется пакет `system_theme` (правило сторожа в `codelab_architecture_tests`). Он ждёт `load()` с пределом 1 с, не принимает запасной цвет пакета за настоящий и подписывается на смены один раз за процесс. Поддерживающие платформы и уведомления о смене определяют `supportsAccentColor` и `supportsListeningToAccentColorChanges` пакета: на Linux уведомлений нет, поэтому `AppearancePageHost` вызывает `refreshSystemAccent()` при каждом открытии страницы.
+- Выбор файла для «Import JSON…» — порт `ThemeFilePicker` (`lib/core/platform/theme_file_picker.dart`); пакет `file_selector` импортируется только в адаптерах `lib/core/platform/`. Страница к `dart:io` не обращается: каталог тем — порт `ThemeLibrary` из `codelab_client_core` (реализация `IoThemeLibrary` в `codelab_client_io`), разбор файла — `ThemeFile.parse` там же.
+- Тест на стороне app подменяет порты двойниками (`InMemoryThemeLibrary`, двойник `SystemAccentSource`): настоящие файлы и канал плагина в виджет-тестах не нужны.
 
 ## Тесты
 
@@ -114,7 +121,7 @@ fvm flutter test
 | `test_driver/app.dart` | точка входа для ручного управления приложением через `flutter_driver` | вручную |
 
 - Виджет-тесты не работают с настоящими файлами: внутри `testWidgets` файловый ввод-вывод зависает в fake-async зоне. Файлы `profiles.json` и конфигурации проверяют обычные `test` на временном каталоге.
-- Скрипты интеграционных тестов: `test:e2e:app:stdio`, `permission`, `fs`, `open-project`, `terminal`, `plan-checklist`, `prompt-queue`, `multi-session`, `command-palette`, `transcript-rendering`, `language` (по одному сценарию против scripted-агента; `language` — смена языка на живой сессии, `integration_test/settings_language_flow_test.dart`), `usage` (два файла: строка статуса и панель «Usage»), а также `test:e2e:app:dart-agent` и `test:e2e:app:embedded` (все сценарии, кроме помеченных `scripted-only`, против Dart-агента или встроенного агента). Агента выбирает `--dart-define=CODELAB_E2E_AGENT=scripted|dart|embedded`.
+- Скрипты интеграционных тестов: `test:e2e:app:stdio`, `permission`, `fs`, `open-project`, `terminal`, `plan-checklist`, `prompt-queue`, `multi-session`, `command-palette`, `transcript-rendering`, `language` (по одному сценарию против scripted-агента; `language` — смена языка на живой сессии, `integration_test/settings_language_flow_test.dart`), `usage` (два файла: строка статуса и панель «Usage»), `appearance` (`integration_test/settings_appearance_flow_test.dart`: импорт темы `acme-night`, превью, «Use» в режиме «Dark», перезапуск сохраняет тему), а также `test:e2e:app:dart-agent` и `test:e2e:app:embedded` (все сценарии, кроме помеченных `scripted-only`, против Dart-агента или встроенного агента). Агента выбирает `--dart-define=CODELAB_E2E_AGENT=scripted|dart|embedded`.
 - В ветках `feature/*` и `hotfix/*` интеграционные тесты на устройстве не запускаются: для `integration_test/` там достаточно `fvm flutter analyze`. Прогон `test:e2e:app:*` — приёмка выпуска в `release/<version>` (корневой [`AGENTS.md`](../../../AGENTS.md), §21).
 
 Проверки, которые обычно затрагивает изменение приложения:
