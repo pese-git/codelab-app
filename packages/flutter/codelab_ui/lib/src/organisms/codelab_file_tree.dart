@@ -237,7 +237,7 @@ class _FileTreeRow extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             color: row.kind == CodeLabFileTreeRowKind.error
-                ? Colors.warningPrimaryColor
+                ? CodeLabPalette.of(theme).warning
                 : muted,
           ),
         ),

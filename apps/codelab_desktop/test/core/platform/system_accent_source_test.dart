@@ -17,6 +17,8 @@
 import 'dart:async';
 
 import 'package:codelab_desktop/core/platform/system_accent_source.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -163,6 +165,8 @@ void main() {
     });
 
     test('на macOS changes отображает события onChange в ARGB', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       MockStreamHandlerEventSink? sink;
       mockColor(() => _color(1, 2, 3));
       mockEvents(onListen: (s) => sink = s);
@@ -181,6 +185,8 @@ void main() {
     });
 
     test('на Windows changes отображает события onChange', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       MockStreamHandlerEventSink? sink;
       mockColor(() => _color(1, 2, 3));
       mockEvents(onListen: (s) => sink = s);

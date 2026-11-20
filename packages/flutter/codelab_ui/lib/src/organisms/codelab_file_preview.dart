@@ -223,7 +223,7 @@ class _CodeLabFilePreviewState extends State<CodeLabFilePreview> {
           color: muted,
         );
       case CodeLabFilePreviewFailed(:final message):
-        return _Notice(message, color: Colors.warningPrimaryColor);
+        return _Notice(message, color: CodeLabPalette.of(theme).warning);
       case CodeLabFilePreviewText():
         break;
     }

@@ -70,11 +70,11 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 4. Итерация 4 — оформление app
 
-- [ ] 4.1 `[desktop]` Красный: `apps/codelab_desktop/test/core/platform/app_appearance_preferences_test.dart`. Spec app-settings «Хранение оформления»: формат документа, поля по умолчанию, «Повреждённый документ» (ключ не перезаписан), тема чужого режима в поле режима, сбой открытия хранилища — значения по умолчанию и `readFailure`.
-- [ ] 4.2 `[desktop]` Реализация 4.1: `core/platform/app_appearance_preferences.dart` (D5). 4.1 зелёный.
-- [ ] 4.3 `[desktop]` Красный: `test/app/appearance/built_in_themes_test.dart` и `contrast_checks_test.dart`. Spec app-settings «Контраст на фоне кода» («Встроенные темы проходят» — три темы, акцент выключен и три значения системного акцента), «Режим оформления и темы режимов» («Стандартная тема не меняет вид» — значения `CodeLabPalette` и `CodeLabCodeTheme` для `light` и `dark` равны выведенным китом), формула WCAG на эталонных парах (`#000000`/`#ffffff` = 21:1).
-- [ ] 4.4 `[desktop]` Реализация 4.3: `lib/app/appearance/built_in_themes.dart`, `fluent_theme_builder.dart` (D4, D6), `features/settings/application/contrast_checks.dart` (D8). 4.3 зелёный.
-- [ ] 4.5 `[desktop]` Красный: `test/app/appearance/app_appearance_cubit_test.dart` на двойниках хранилища, `InMemoryThemeLibrary` и `FakeSystemAccentSource`. Spec app-settings:
+- [x] 4.1 `[desktop]` Красный: `apps/codelab_desktop/test/core/platform/app_appearance_preferences_test.dart`. Spec app-settings «Хранение оформления»: формат документа, поля по умолчанию, «Повреждённый документ» (ключ не перезаписан), тема чужого режима в поле режима, сбой открытия хранилища — значения по умолчанию и `readFailure`.
+- [x] 4.2 `[desktop]` Реализация 4.1: `core/platform/app_appearance_preferences.dart` (D5). 4.1 зелёный.
+- [x] 4.3 `[desktop]` Красный: `test/app/appearance/built_in_themes_test.dart` и `contrast_checks_test.dart`. Spec app-settings «Контраст на фоне кода» («Встроенные темы проходят» — три темы, акцент выключен и три значения системного акцента), «Режим оформления и темы режимов» («Стандартная тема не меняет вид» — значения `CodeLabPalette` и `CodeLabCodeTheme` для `light` и `dark` равны выведенным китом), формула WCAG на эталонных парах (`#000000`/`#ffffff` = 21:1).
+- [x] 4.4 `[desktop]` Реализация 4.3: `lib/app/appearance/built_in_themes.dart`, `fluent_theme_builder.dart` (D4, D6), `features/settings/application/contrast_checks.dart` (D8). 4.3 зелёный.
+- [x] 4.5 `[desktop]` Красный: `test/app/appearance/app_appearance_cubit_test.dart` на двойниках хранилища, `InMemoryThemeLibrary` и `FakeSystemAccentSource`. Spec app-settings:
   - «Темы двух режимов», «Удалённый файл темы» (выбор не перезаписан, `fallback`);
   - «Use переключает фиксированный режим», «Reset»;
   - «Системный акцент включён», ошибка канала — `accent` темы и `appearance.system_accent_failed`;
@@ -82,27 +82,27 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - «Reload применяет исправленный файл»; поздний `reloadTheme` после `useTheme` того же режима отброшен;
   - `close()` ждёт идущую запись не дольше 3 с и отменяет подписку на акцент;
   - события «События журнала оформления» без имени пользовательской темы (`recording_logger.dart`, `no_text_leak.dart`).
-- [ ] 4.6 `[desktop]` Реализация 4.5: `AppAppearanceCubit`, `AppAppearanceState`, `AppAppearanceStart` (D13). 4.5 зелёный.
-- [ ] 4.7 `[desktop]` Красный: `test/app/codelab_app_appearance_test.dart`. Spec app-settings «Режим оформления и темы режимов»:
+- [x] 4.6 `[desktop]` Реализация 4.5: `AppAppearanceCubit`, `AppAppearanceState`, `AppAppearanceStart` (D13). 4.5 зелёный.
+- [x] 4.7 `[desktop]` Красный: `test/app/codelab_app_appearance_test.dart`. Spec app-settings «Режим оформления и темы режимов»:
   - «Тёмная система» через `platformDispatcher.platformBrightnessTestValue` — текст композера, фокус и прокрутка ленты сохранены, `FluentApp` не пересоздан;
   - первый кадр — в оформлении из `AppAppearanceStart`;
   - файл темы не прочитан за 1 с — встроенная тема режима и `fallback` в `app.appearance_resolved`.
 
   `test/app/app_exit_wiring_test.dart` — шаг `appearance` в ветке записи настроек.
-- [ ] 4.8 `[desktop]` Реализация 4.7: `BlocBuilder` над `FluentApp` (`theme`, `darkTheme`, `themeMode`), чтение в `main` до `runApp` через `IoThemeLibrary`, шов `createCodeLabRootScope(appearance:)`, модуль событий старта, шаг выхода в `app_exit_handler.dart` (D13). 4.7 зелёный.
-- [ ] 4.9 `[desktop]` Красный:
+- [x] 4.8 `[desktop]` Реализация 4.7: `BlocBuilder` над `FluentApp` (`theme`, `darkTheme`, `themeMode`), чтение в `main` до `runApp` через `IoThemeLibrary`, шов `createCodeLabRootScope(appearance:)`, модуль событий старта, шаг выхода в `app_exit_handler.dart` (D13). 4.7 зелёный.
+- [x] 4.9 `[desktop]` Красный:
   - `test/core/platform/system_accent_source_test.dart` — адаптер `SystemThemeAccentSource` на подменённом обработчике каналов `system_theme` (`TestDefaultBinaryMessenger`): цвет → ARGB; ответ без цвета и `MissingPluginException` — маркер `Color(0x00000000)` остаётся, `read()` даёт `null`, `supported == false`; исключение канала не теряется (ошибка `read()`, а не необработанное асинхронное исключение); на macOS и Windows `changes` отображает события `onChange`, на Linux — пустой поток; `UnsupportedSystemAccentSource.supported == false`. Spec app-settings «Системный акцент»: «Плагин не отдал цвет», «Платформа без системного акцента».
   - `test/app/appearance/app_appearance_cubit_test.dart` дополняется: «Пользовательская тема и системный акцент», «Linux без уведомлений» (`refreshSystemAccent` при открытии страницы — одно чтение).
   - правило сторожа `package:system_theme/` в `apps/codelab_desktop/lib` — только `core/platform/system_accent_source.dart` (D1): `import_guard_test.dart` с фиктивным нарушением.
-- [ ] 4.10 `[desktop]` Реализация 4.9: `system_theme: 3.3.0` (точный пин) в `dependencies` app, `melos bootstrap`; `core/platform/system_accent_source.dart` (порт, `SystemThemeAccentSource`, `UnsupportedSystemAccentSource`; D7); первое чтение в `main` до `runApp` с ограничением 1 с, выбор реализации по платформе — в composition root; `refreshSystemAccent()` в `AppAppearanceCubit`; правило в `rules.dart` с комментарием-причиной. Нативного кода в раннерах app нет. Ручная проверка на macOS: смена акцента в «Системных настройках» применяется сразу. 4.9 зелёный, `guard` зелёный.
-- [ ] 4.11 `[desktop]` Красный: «тёмная проверка» `test/app/dark_theme_sweep_test.dart` — рабочее место с лентой, доки, диалог одобрения и все видимые страницы настроек в `dark` и `high-contrast`: нет исключений рендера, у текста ключевых ролей контраст не ниже 4,5:1 к своему фону (риск «Тёмный режим впервые»).
-- [ ] 4.12 `[desktop]` Реализация 4.11: заменить найденные зашитые цвета ролями темы (только места, на которые указал тест). 4.11 зелёный.
+- [x] 4.10 `[desktop]` Реализация 4.9: `system_theme: 3.3.0` (точный пин) в `dependencies` app, `melos bootstrap`; `core/platform/system_accent_source.dart` (порт, `SystemThemeAccentSource`, `UnsupportedSystemAccentSource`; D7); первое чтение в `main` до `runApp` с ограничением 1 с, выбор реализации по платформе — в composition root; `refreshSystemAccent()` в `AppAppearanceCubit`; правило в `rules.dart` с комментарием-причиной. Нативного кода в раннерах app нет. Ручная проверка на macOS: смена акцента в «Системных настройках» применяется сразу. 4.9 зелёный, `guard` зелёный.
+- [x] 4.11 `[desktop]` Красный: «тёмная проверка» `test/app/dark_theme_sweep_test.dart` — рабочее место с лентой, доки, диалог одобрения и все видимые страницы настроек в `dark` и `high-contrast`: нет исключений рендера, у текста ключевых ролей контраст не ниже 4,5:1 к своему фону (риск «Тёмный режим впервые»).
+- [x] 4.12 `[desktop]` Реализация 4.11: заменить найденные зашитые цвета ролями темы (только места, на которые указал тест). 4.11 зелёный.
 
 ## 5. Итерация 5 — страница «Appearance»
 
-- [ ] 5.1 `[desktop]` Красный: правило сторожа `package:file_selector/` в `apps/codelab_desktop/lib` — только `core/platform/` (D1; второе правило, `system_theme`, — задача 4.9): `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` с фиктивным нарушением.
+- [x] 5.1 `[desktop]` Красный: правило сторожа `package:file_selector/` в `apps/codelab_desktop/lib` — только `core/platform/` (D1; второе правило, `system_theme`, — задача 4.9): `packages/dart/codelab_architecture_tests/test/import_guard_test.dart` с фиктивным нарушением.
 - [ ] 5.2 `[desktop]` Реализация 5.1: правило в `test/support/rules.dart` с комментарием-причиной. `guard` зелёный.
-- [ ] 5.3 `[desktop]` Красный: `test/features/settings/application/appearance_settings_cubit_test.dart` на `InMemoryThemeLibrary`, двойнике `ThemeFilePicker` и `FakeLocalFolderOpener`. Spec app-settings:
+- [x] 5.3 `[desktop]` Красный: `test/features/settings/application/appearance_settings_cubit_test.dart` на `InMemoryThemeLibrary`, двойнике `ThemeFilePicker` и `FakeLocalFolderOpener`. Spec app-settings:
   - «Выбор карточки не применяет тему», выбор по умолчанию — действующая тема;
   - «Тема с двумя предупреждениями» (данные панели: строки 6 и 9, коды, подсказка, справка ролей), тема с ошибкой — данные `error`;
   - «Поздний результат чтения» (`appearance.catalog_discarded`), результат после `close()` отброшен;
@@ -110,7 +110,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - «Open folder» — `LocalFolderOpener.open(<home>/themes, create: true)`, файл не открывается;
   - «Низкий контраст пользовательской роли» — бейдж учитывает контраст.
 - [ ] 5.4 `[desktop]` Реализация 5.3: `AppearanceSettingsCubit`, `AppearanceSettingsState`, `core/platform/theme_file_picker.dart`, фабрика `CodeLabDependencies.createAppearanceSettingsCubit` (D9, D11, D13). 5.3 зелёный.
-- [ ] 5.5 `[desktop]` Красный: `test/features/settings/presentation/appearance_page_test.dart` на Cubit-двойнике. Spec app-settings:
+- [x] 5.5 `[desktop]` Красный: `test/features/settings/presentation/appearance_page_test.dart` на Cubit-двойнике. Spec app-settings:
   - «Страница видна», «Поиск по ключевому слову», «Узкая область»;
   - порядок блоков и ключи тестов требования «Страница «Appearance»: видимость и состав»;
   - «Платформа без системного акцента»;
@@ -120,7 +120,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - «Управляющие символы в файле» (U+202E экранирован);
   - русский интерфейс: переводы из `app_ru.arb`, имена тем, ключи, значения и `4.8:1` — как есть; `expectNoStaleLanguage` при смене языка на странице.
 - [ ] 5.6 `[desktop]` Реализация 5.5: `appearance_page.dart`, `theme_issue_texts.dart`, построитель страницы в `settingsPageBuilders`, `SettingsPage.appearance` в `defaultSettingsPages`, ключевые слова поиска, ARB `en`/`ru` (D14, D15). Пополнить `language_switch_sweep_test.dart` страницей «Appearance». 5.5 зелёный, `l10n:check` зелёный, `ui_literals_test` зелёный без новых записей allowlist.
-- [ ] 5.7 `[desktop]` Интеграционный тест `apps/codelab_desktop/integration_test/settings_appearance_flow_test.dart`: импорт файла во временный `CODELAB_HOME`, превью, «Use», смена «Mode», перезапуск app — тема сохранена. Скрипт `test:e2e:app:appearance` в `pubspec.yaml`; запуск — только в `release/*`, в `feature/*` тест только компилируется.
+- [x] 5.7 `[desktop]` Интеграционный тест `apps/codelab_desktop/integration_test/settings_appearance_flow_test.dart`: импорт файла во временный `CODELAB_HOME`, превью, «Use», смена «Mode», перезапуск app — тема сохранена. Скрипт `test:e2e:app:appearance` в `pubspec.yaml`; запуск — только в `release/*`, в `feature/*` тест только компилируется.
 
 ## 6. Документация и закрытие строки
 

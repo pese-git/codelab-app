@@ -49,7 +49,7 @@ final class _ControlledPreferences implements AppAppearancePreferences {
       : _gates[index].completeError(error);
 }
 
-/// Каталог, у которого `list()` завершается по сигналу теста.
+/// Каталог, у которого `read()` завершается по сигналу теста.
 final class _GatedLibrary implements ThemeLibrary {
   _GatedLibrary(this._inner);
 
@@ -57,11 +57,14 @@ final class _GatedLibrary implements ThemeLibrary {
   final gates = <Completer<void>>[];
 
   @override
-  Future<List<ThemeEntry>> list() async {
+  Future<List<ThemeEntry>> list() => _inner.list();
+
+  @override
+  Future<ThemeEntry?> read(String name) async {
     final gate = Completer<void>();
     gates.add(gate);
     await gate.future;
-    return _inner.list();
+    return _inner.read(name);
   }
 
   @override

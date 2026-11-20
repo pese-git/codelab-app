@@ -56,6 +56,7 @@ final class $CodeLabRootLifecycleModuleContract
             currentScope.resolve<NavigationCubit>(),
             currentScope.resolve<TerminalTabsCubit>(),
             currentScope.resolve<AppLanguageCubit>(),
+            currentScope.resolve<AppAppearanceCubit>(),
           ),
         )
         .singleton();

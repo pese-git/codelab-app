@@ -112,7 +112,7 @@ class _ReadyView extends StatelessWidget {
               child: CodeLabText(
                 l10n.projectFilesRootOutside('${state.root}'),
                 role: CodeLabTextRole.caption,
-                color: Colors.warningPrimaryColor,
+                color: CodeLabPalette.of(FluentTheme.of(context)).warning,
               ),
             ),
           ),

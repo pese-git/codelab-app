@@ -70,6 +70,41 @@ void _expectKeyRoles(WidgetTester tester, String screen) {
   }
 }
 
+/// Тег кита читаем на своей заливке: цвет текста `CodeLabBadge` к фону страницы
+/// с заливкой тега не ниже 4,5:1. Находка 4.12: нейтральный тег (`http`,
+/// `user`, `app`) рисовался зашитым `Colors.grey` (#323130) — 1,3:1 на тёмном.
+void _expectBadgesReadable(WidgetTester tester, String screen) {
+  final page = _themeOf(tester).resources.solidBackgroundFillColorBase;
+  for (final badge in tester.elementList(find.byType(CodeLabBadge))) {
+    final fill = find
+        .descendant(
+          of: find.byWidget(badge.widget),
+          matching: find.byType(DecoratedBox),
+        )
+        .evaluate()
+        .map((e) => (e.widget as DecoratedBox).decoration)
+        .whereType<BoxDecoration>()
+        .map((d) => d.color)
+        .whereType<Color>()
+        .first;
+    final text = tester
+        .widget<Text>(
+          find.descendant(
+            of: find.byWidget(badge.widget),
+            matching: find.byType(Text),
+          ),
+        )
+        .style
+        ?.color;
+    final background = _flat(fill, page);
+    expect(
+      contrastRatio(_flat(text!, background), background),
+      greaterThanOrEqualTo(kMinTextContrast),
+      reason: '$screen: тег «${(badge.widget as CodeLabBadge).label}»',
+    );
+  }
+}
+
 void main() {
   const themes = {
     'dark': AppAppearanceSettings(mode: AppearanceMode.dark),
@@ -127,6 +162,7 @@ void main() {
       );
       expect(tester.takeException(), isNull, reason: 'рабочее место');
       _expectKeyRoles(tester, 'рабочее место (${entry.key})');
+      _expectBadgesReadable(tester, 'рабочее место (${entry.key})');
 
       final navigation = scene.binding.scope.resolve<NavigationCubit>();
       await navigation.openSettings(
@@ -144,6 +180,7 @@ void main() {
           reason: 'настройки: ${page.slug}',
         );
         _expectKeyRoles(tester, 'настройки: ${page.slug} (${entry.key})');
+        _expectBadgesReadable(tester, 'настройки: ${page.slug} (${entry.key})');
       }
 
       await scene.close();

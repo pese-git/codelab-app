@@ -9,6 +9,10 @@
 /// `null` — строка не по формату (`invalidValue`).
 library;
 
+/// Вид значения цвета роли: RGB, «из базы», ANSI или индекс 256 цветов.
+///
+/// Как использовать: приходит из [ThemeColorValue.tryParse] и из карты ролей
+/// темы; `switch` по закрытой иерархии. Терминальные виды app не применяет.
 sealed class ThemeColorValue {
   const ThemeColorValue();
 
@@ -45,7 +49,7 @@ sealed class ThemeColorValue {
   }
 }
 
-/// `#rrggbb`: [value] — 24 бита RGB.
+/// `#rrggbb`: [value] — 24 бита RGB. Единственный вид, который app применяет.
 final class Rgb extends ThemeColorValue {
   const Rgb(this.value);
 
@@ -61,7 +65,8 @@ final class Rgb extends ThemeColorValue {
   String toString() => 'Rgb(0x${value.toRadixString(16).padLeft(6, '0')})';
 }
 
-/// `default` — «роль из `extends`».
+/// `default` — «роль из `extends`»; так же помечена роль, которую файл не
+/// задал или задал терминальным цветом.
 final class DefaultColor extends ThemeColorValue {
   const DefaultColor();
 
@@ -75,7 +80,8 @@ final class DefaultColor extends ThemeColorValue {
   String toString() => 'DefaultColor()';
 }
 
-/// Один из 16 цветов ANSI: [name] — `red`, `bright_red`.
+/// Один из 16 цветов ANSI: [name] — `red`, `bright_red`. Для CLI; app даёт
+/// предупреждение `terminalColor`.
 final class AnsiColor extends ThemeColorValue {
   const AnsiColor(this.name);
 
@@ -91,7 +97,8 @@ final class AnsiColor extends ThemeColorValue {
   String toString() => 'AnsiColor($name)';
 }
 
-/// `256:<n>`, [index] от 0 до 255.
+/// `256:<n>`, [index] от 0 до 255. Для CLI; app даёт предупреждение
+/// `terminalColor`.
 final class IndexedColor extends ThemeColorValue {
   const IndexedColor(this.index);
 

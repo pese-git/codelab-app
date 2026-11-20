@@ -77,9 +77,17 @@ class CodeLabPalette extends ThemeExtension<CodeLabPalette> {
     selection: theme.accentColor.withValues(alpha: 0.18),
   );
 
-  /// Цвет тона [tone]; `neutral` остаётся серым, смысл тона не только в цвете.
-  Color toneColor(CodeLabTone tone) => switch (tone) {
-    CodeLabTone.neutral => Colors.grey,
+  /// Цвет тона [tone] в теме [theme]; смысл тона не только в цвете.
+  ///
+  /// `neutral` — не цвет палитры, а роль текста: на светлой теме остаётся
+  /// прежним `Colors.grey` (#323130), на тёмной берётся вторичный текст темы,
+  /// иначе тег `http` или `user` нечитаем (1,3:1; задача 4.12
+  /// `add-app-appearance-page`).
+  Color toneColor(CodeLabTone tone, FluentThemeData theme) => switch (tone) {
+    CodeLabTone.neutral =>
+      theme.brightness == Brightness.light
+          ? Colors.grey
+          : theme.resources.textFillColorSecondary,
     CodeLabTone.accent => accent,
     CodeLabTone.success => success,
     CodeLabTone.warning => warning,

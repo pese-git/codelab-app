@@ -20,6 +20,10 @@ import 'package:path/path.dart' as p;
 
 import '../stores/json_file.dart';
 
+/// Реализация [ThemeLibrary] на файлах `<home>/themes/*.json`.
+///
+/// Почему и как использовать — см. описание библиотеки; создаётся один раз в
+/// composition root, состояния между вызовами не держит.
 final class IoThemeLibrary implements ThemeLibrary {
   /// [home] — `$CODELAB_HOME`; темы лежат в `<home>/themes`.
   IoThemeLibrary({required this.home});
@@ -44,21 +48,40 @@ final class IoThemeLibrary implements ThemeLibrary {
       // Только `*.json` прямо в каталоге: подкаталоги не обходятся.
       if (!base.endsWith('.json') || base.length == '.json'.length) continue;
       final name = base.substring(0, base.length - '.json'.length);
-      final bytes = await _readBounded(child.path);
-      if (bytes == null) {
-        entries.add(ThemeEntry.failed(name, ThemeReadError.unreadable));
-      } else if (bytes.length > themeFileMaxBytes) {
-        entries.add(ThemeEntry.failed(name, ThemeReadError.tooLarge));
-      } else {
-        try {
-          entries.add(ThemeEntry.read(name, utf8.decode(bytes)));
-        } on FormatException {
-          entries.add(ThemeEntry.failed(name, ThemeReadError.notUtf8));
-        }
-      }
+      entries.add(await _entryAt(name, child.path));
     }
     entries.sort((a, b) => a.name.compareTo(b.name));
     return entries;
+  }
+
+  @override
+  Future<ThemeEntry?> read(String name) async {
+    // Путь строится только из имени по шаблону: `..` и разделители не пройдут.
+    if (!isValidThemeName(name)) return null;
+    final path = p.join(_themesDir, '$name.json');
+    // Отсутствие файла — `null`, а не ошибка; битая ссылка и каталог —
+    // существующая запись, которую не удалось прочитать.
+    if (await FileSystemEntity.type(path, followLinks: false) ==
+        FileSystemEntityType.notFound) {
+      return null;
+    }
+    return _entryAt(name, path);
+  }
+
+  /// Запись каталога по пути файла: текст либо причина, по которой его нет.
+  Future<ThemeEntry> _entryAt(String name, String path) async {
+    final bytes = await _readBounded(path);
+    if (bytes == null) {
+      return ThemeEntry.failed(name, ThemeReadError.unreadable);
+    }
+    if (bytes.length > themeFileMaxBytes) {
+      return ThemeEntry.failed(name, ThemeReadError.tooLarge);
+    }
+    try {
+      return ThemeEntry.read(name, utf8.decode(bytes));
+    } on FormatException {
+      return ThemeEntry.failed(name, ThemeReadError.notUtf8);
+    }
   }
 
   @override

@@ -10,6 +10,7 @@
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_desktop/app/appearance/built_in_themes.dart';
 import 'package:codelab_desktop/app/appearance/fluent_theme_builder.dart';
+import 'package:codelab_desktop/features/settings/application/contrast_checks.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,10 +49,24 @@ void main() {
 
         final palette = CodeLabPalette.of(built);
         final expected = CodeLabPalette.of(derived);
-        expect(palette.success, expected.success);
-        expect(palette.warning, expected.warning);
-        expect(palette.danger, expected.danger);
-        expect(palette.accent, expected.accent);
+        // Тоны светлой темы остаются прежними; в тёмной теме `Colors.green` и
+        // `Colors.red` нечитаемы, и app подгоняет их под фон (задача 4.11, D8).
+        if (brightness == Brightness.light) {
+          expect(palette.success, expected.success);
+          expect(palette.warning, expected.warning);
+          expect(palette.accent, expected.accent);
+        }
+        // `Colors.red` на светлом фоне кода даёт 4,23:1 < 4,5 (D8): `danger`
+        // подгоняется в обеих темах и остаётся красным по тону.
+        final background = CodeLabCodeTheme.of(built).background;
+        expect(
+          contrastRatio(palette.danger, background),
+          greaterThanOrEqualTo(kMinTextContrast),
+        );
+        expect(
+          HSLColor.fromColor(palette.danger).hue,
+          closeTo(HSLColor.fromColor(expected.danger).hue, 3),
+        );
         expect(palette.info, expected.info);
         expect(palette.diffAddBackground, expected.diffAddBackground);
         expect(palette.diffRemoveBackground, expected.diffRemoveBackground);

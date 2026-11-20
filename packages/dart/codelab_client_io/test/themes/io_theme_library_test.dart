@@ -170,6 +170,61 @@ void main() {
     });
   });
 
+  group('read: одна тема', () {
+    test('есть файл — запись с текстом, без перечисления каталога', () async {
+      await writeTheme('acme-night.json', _acme);
+      await writeTheme('other.json', '{}');
+      final entry = await library.read('acme-night');
+      expect(entry!.name, 'acme-night');
+      expect(entry.text, _acme);
+    });
+
+    test('нет файла и нет каталога тем — null, каталог не создан', () async {
+      expect(await library.read('absent'), isNull);
+      expect(Directory(themes).existsSync(), isFalse);
+      await writeTheme('x.json', '{}');
+      expect(await library.read('absent'), isNull);
+    });
+
+    test('большой файл — tooLarge, не UTF-8 — notUtf8', () async {
+      await writeTheme('big.json', 'x' * (100 * 1024));
+      await File(
+        p.join(themes, 'latin.json'),
+      ).writeAsBytes([...utf8.encode('{"v": "'), 0xff, 0x22, 0x7d]);
+      expect((await library.read('big'))!.error, ThemeReadError.tooLarge);
+      expect((await library.read('latin'))!.error, ThemeReadError.notUtf8);
+    });
+
+    test('битая ссылка и каталог с именем *.json — unreadable', () async {
+      await Directory(themes).create(recursive: true);
+      await Link(
+        p.join(themes, 'dangling.json'),
+      ).create(p.join(tmp.path, 'missing.json'));
+      await Directory(p.join(themes, 'folder.json')).create();
+      expect(
+        (await library.read('dangling'))!.error,
+        ThemeReadError.unreadable,
+      );
+      expect((await library.read('folder'))!.error, ThemeReadError.unreadable);
+    });
+
+    test('недопустимое имя — null и файл вне каталога не читается', () async {
+      await source('secret.json', '{"name": "secret"}');
+      await writeTheme('ok.json', '{}');
+      for (final name in [
+        '../../secret',
+        '../secret',
+        'a/b',
+        'A',
+        '',
+        '.',
+        'a' * 33,
+      ]) {
+        expect(await library.read(name), isNull, reason: name);
+      }
+    });
+  });
+
   group('«Импорт файла темы»', () {
     test(
       '«Импорт новой темы»: файл копируется байт в байт, каталог создан',

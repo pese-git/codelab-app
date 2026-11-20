@@ -37,6 +37,9 @@ final class _HangingLibrary implements ThemeLibrary {
   Future<List<ThemeEntry>> list() => Completer<List<ThemeEntry>>().future;
 
   @override
+  Future<ThemeEntry?> read(String name) => Completer<ThemeEntry?>().future;
+
+  @override
   Future<ThemeImportResult> import(String sourcePath, {bool replace = false}) =>
       throw UnimplementedError();
 }

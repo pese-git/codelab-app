@@ -48,6 +48,36 @@ void main() {
     });
   });
 
+  group('read: одна тема', () {
+    test('есть файл — запись с текстом', () async {
+      final library = InMemoryThemeLibrary(themes: {'acme-night': _acme});
+      final entry = await library.read('acme-night');
+      expect(entry!.name, 'acme-night');
+      expect(entry.text, _acme);
+      expect(entry.error, isNull);
+    });
+
+    test('нет файла — null', () async {
+      expect(await InMemoryThemeLibrary().read('absent'), isNull);
+    });
+
+    test('ошибка чтения — запись с error, как в list', () async {
+      final library = InMemoryThemeLibrary(
+        broken: {'big': ThemeReadError.tooLarge},
+      );
+      final entry = await library.read('big');
+      expect(entry!.error, ThemeReadError.tooLarge);
+      expect(entry.text, isNull);
+    });
+
+    test('недопустимое имя — null', () async {
+      final library = InMemoryThemeLibrary(themes: {'../x': '{}', 'A': '{}'});
+      for (final name in ['../x', 'A', '', 'a/b', 'a' * 33]) {
+        expect(await library.read(name), isNull, reason: name);
+      }
+    });
+  });
+
   group('import: результаты', () {
     test(
       'imported: новая тема записана байт в байт под именем из name',

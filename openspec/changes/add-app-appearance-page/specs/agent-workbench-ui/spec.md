@@ -22,7 +22,7 @@
 ## ADDED Requirements
 
 ### Requirement: Цвета кита из палитры темы
-Виджеты `codelab_ui` SHALL брать цвета тонов `success`, `warning`, `danger` и `accent` (`CodeLabTone`), цвет ссылок, фоны строк diff и цвет выделения из расширения темы `CodeLabPalette` в `FluentThemeData.extensions`. Если расширения нет, кит SHALL выводить палитру из `FluentTheme` так, чтобы цвета совпадали с цветами до change `add-app-appearance-page`: тоны `success`, `warning`, `danger`, `accent` — `Colors.green`, `Colors.warningPrimaryColor`, `Colors.red`, `Colors.blue`, ссылки — акцент темы. Кит НЕ SHALL читать файлы тем, `shared_preferences` и типы `codelab_client_core`: палитру собирает app (design.md change `add-app-appearance-page`, D4). Роли `approval_border` в палитре нет: блок одобрения не имеет акцентной рамки (design.md change `lighten-approval-block`), и тема её не возвращает.
+Виджеты `codelab_ui` SHALL брать цвета тонов `success`, `warning`, `danger` и `accent` (`CodeLabTone`), цвет ссылок, фоны строк diff и цвет выделения из расширения темы `CodeLabPalette` в `FluentThemeData.extensions`. Если расширения нет, кит SHALL выводить палитру из `FluentTheme` так, чтобы цвета совпадали с цветами до change `add-app-appearance-page`: тоны `success`, `warning`, `danger`, `accent` — `Colors.green`, `Colors.warningPrimaryColor`, `Colors.red`, `Colors.blue`, ссылки — акцент темы. Цвет тона виджеты SHALL брать через `CodeLabPalette.toneColor(tone, theme)`: тон `neutral` — не цвет палитры, а роль текста, в светлой теме `Colors.grey`, в тёмной — `textFillColorSecondary` темы. Подгонку тонов по контрасту для встроенных тем выполняет app при сборке палитры (spec app-settings «Режим оформления и темы режимов»), кит цвета палитры не меняет. Кит НЕ SHALL читать файлы тем, `shared_preferences` и типы `codelab_client_core`: палитру собирает app (design.md change `add-app-appearance-page`, D4). Роли `approval_border` в палитре нет: блок одобрения не имеет акцентной рамки (design.md change `lighten-approval-block`), и тема её не возвращает.
 
 Смысл НЕ SHALL передаваться только цветом: у тега статуса по-прежнему есть текст или значок рядом.
 
@@ -33,3 +33,7 @@
 #### Scenario: Без расширения вид прежний
 - **WHEN** тот же тест строит `FluentThemeData()` без `CodeLabPalette`
 - **THEN** тег `Done` нарисован `Colors.green`, тег `Failed` — `Colors.red`, ссылка — акцентом темы
+
+#### Scenario: Нейтральный тег в тёмной теме
+- **WHEN** тест строит `FluentThemeData(brightness: Brightness.dark)` без `CodeLabPalette` и рисует тег тона `neutral`
+- **THEN** тег нарисован `textFillColorSecondary` темы, а не `Colors.grey`

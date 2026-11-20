@@ -115,8 +115,10 @@ import 'secret_migration_offer.dart';
 
 import 'appearance/app_appearance_cubit.dart';
 import 'appearance/app_appearance_start.dart';
+import 'appearance/built_in_themes.dart' show kBuiltInThemeIds;
 import '../core/platform/app_appearance_preferences.dart';
 import '../core/platform/system_accent_source.dart';
+import '../core/platform/theme_file_picker.dart';
 import 'language/app_language_cubit.dart' show AppLanguageCubit, AppStrings;
 import 'language/app_language_start.dart';
 import '../core/platform/app_language_preferences.dart';
@@ -137,6 +139,9 @@ Scope createCodeLabRootScope({
   AppAppearancePreferences? appearancePreferences,
   ThemeLibrary? themeLibrary,
   SystemAccentSource? systemAccentSource,
+  // Шов порта выбора файла темы страницы «Appearance» (D9). ЗАГЛУШКА для
+  // красных тестов 5.3/5.7: параметр принимается, проводка — задача 5.4.
+  ThemeFilePicker? themeFilePicker,
   // Шов порта настроек запуска (D9).
   StartupPreferences? startupPreferences,
   // Данные раздела «About» (D11): шов тестов, без него — версия сборки,
@@ -539,10 +544,22 @@ final class CodeLabLanguageModule extends Module {
   }
 }
 
-/// Регистрирует владельца оформления app (`add-app-appearance-page`, D13).
+/// Регистрирует единственного владельца оформления app
+/// (`add-app-appearance-page`, D13).
 ///
-/// ЗАГЛУШКА для красных тестов 4.5/4.7: биндит [AppAppearanceCubit] без
-/// событий журнала и без применения к `FluentApp`; настоящий модуль — 4.8.
+/// Почему отдельный модуль: оформление, как и язык, — не часть платформы и не
+/// рабочего места; у него один владелец на весь процесс (`state-management.md`
+/// §63б).
+///
+/// Для чего: singleton [AppAppearanceCubit] с начальным состоянием из шва
+/// [AppAppearanceStart] и события журнала старта (`app.appearance_resolved` и
+/// диагностика чтения), как `app.locale_resolved` у языка. Закрывает Cubit
+/// `CodeLabRootLifecycle.dispose` отдельным шагом `appearance`.
+///
+/// Как использовать: `createCodeLabRootScope(appearance:, appearancePreferences:,
+/// themeLibrary:, systemAccentSource:)`. Без каталога и порта акцента —
+/// пустой каталог в памяти и платформа без акцента (тесты и хосты без
+/// пользовательских тем).
 final class CodeLabAppearanceModule extends Module {
   CodeLabAppearanceModule({
     AppAppearanceStart? appearance,
@@ -558,6 +575,33 @@ final class CodeLabAppearanceModule extends Module {
 
   @override
   void builder(Scope currentScope) {
+    final logger = _settingsLogger();
+    final settings = appearance.settings;
+    // Один раз за запуск (D12): имя пользовательской темы в событие не
+    // попадает — оно выбирается пользователем и бывает личным.
+    String logName(String id) => kBuiltInThemeIds.contains(id) ? id : 'custom';
+    logger.info(
+      'app.appearance_resolved',
+      context: {
+        'mode': settings.mode.name,
+        'light_theme': logName(settings.lightTheme),
+        'dark_theme': logName(settings.darkTheme),
+        'system_accent': settings.systemAccent,
+        'fallback': appearance.fallback.name,
+      },
+    );
+    // Диагностика чтения приходит швом из `main`, где журнала ещё нет; без
+    // значений ключа и текста исключения.
+    if (appearance.storedValueInvalid) {
+      logger.warning('appearance.stored_value_invalid');
+    }
+    final readFailure = appearance.readFailure;
+    if (readFailure != null) {
+      logger.warning(
+        'appearance.read_failed',
+        context: {'error_class': readFailure},
+      );
+    }
     bind<AppAppearanceCubit>().toInstance(
       AppAppearanceCubit(
         preferences:
@@ -565,6 +609,7 @@ final class CodeLabAppearanceModule extends Module {
         library: library ?? InMemoryThemeLibrary(),
         accentSource: accentSource ?? const UnsupportedSystemAccentSource(),
         start: appearance,
+        logger: logger,
       ),
     );
   }
@@ -1252,6 +1297,7 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     NavigationCubit navigationCubit,
     TerminalTabsCubit terminalTabsCubit,
     AppLanguageCubit languageCubit,
+    AppAppearanceCubit appearanceCubit,
   ) => CodeLabRootLifecycle(
     application: application,
     transport: transport,
@@ -1264,6 +1310,7 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     navigationCubit: navigationCubit,
     terminalTabsCubit: terminalTabsCubit,
     languageCubit: languageCubit,
+    appearanceCubit: appearanceCubit,
   );
 }
 
@@ -1325,7 +1372,8 @@ final class CodeLabRootLifecycle implements Disposable {
        _secretMigrationOffer = secretMigrationOffer,
        _navigationCubit = navigationCubit,
        _terminalTabsCubit = terminalTabsCubit,
-       _languageCubit = languageCubit;
+       _languageCubit = languageCubit,
+       _appearanceCubit = appearanceCubit;
 
   final AcpClientApplication _application;
   final AcpTransport _transport;
@@ -1364,6 +1412,10 @@ final class CodeLabRootLifecycle implements Disposable {
   /// запись выбора не применяется.
   final AppLanguageCubit? _languageCubit;
 
+  /// Владелец оформления (D13): закрывается отдельной веткой, как язык —
+  /// `close()` ждёт идущую запись выбора до 3 с.
+  final AppAppearanceCubit? _appearanceCubit;
+
   /// Логгер событий `app.*` (D6); по умолчанию — `codelab_desktop.app`, как у
   /// обработчика выхода. Шов тестов.
   final Logger _logger;
@@ -1379,6 +1431,9 @@ final class CodeLabRootLifecycle implements Disposable {
     'client',
     // Отдельная ветвь: ждёт запись выбора языка до 3 с (D2, D10).
     'language',
+    // Та же ветвь для записи оформления (D13): шаг без сигналов процессам не
+    // стоит перед шагами с сигналами (`concurrency.md` §45, §46).
+    'appearance',
   ];
 
   /// Общий проход закрытия: повторный `dispose()` ждёт его, а не возвращается
@@ -1387,8 +1442,8 @@ final class CodeLabRootLifecycle implements Disposable {
 
   /// Имена ещё не завершённых шагов, включая не начатые, в порядке закрытого
   /// набора: `terminal`, `cubits`, `workspace`, `embedded`, `migration_offer`,
-  /// `transport`, `client`, `language` (D5, D10; `language` — только если у
-  /// lifecycle есть Cubit языка). Пуст до [dispose] и после прохода.
+  /// `transport`, `client`, `language`, `appearance` (D5, D10, D13; `language` и
+  /// `appearance` — только если у lifecycle есть соответствующий Cubit). Пуст до [dispose] и после прохода.
   final List<String> _pendingSteps = [];
 
   /// Шаги, которые не завершились к моменту вызова, в том числе не начатые
@@ -1410,10 +1465,17 @@ final class CodeLabRootLifecycle implements Disposable {
     // «не завершены» (D10).
     _pendingSteps.addAll(
       _shutdownSteps.where(
-        (step) => step != 'language' || _languageCubit != null,
+        (step) =>
+            (step != 'language' || _languageCubit != null) &&
+            (step != 'appearance' || _appearanceCubit != null),
       ),
     );
-    await Future.wait([_closeTerminal(), _closeClient(), _closeLanguage()]);
+    await Future.wait([
+      _closeTerminal(),
+      _closeClient(),
+      _closeLanguage(),
+      _closeAppearance(),
+    ]);
   }
 
   /// Ветка терминала: `closeAll()` шлёт `hangUp`, через 3 с `kill` и
@@ -1432,6 +1494,15 @@ final class CodeLabRootLifecycle implements Disposable {
   Future<void> _closeLanguage() async {
     final cubit = _languageCubit;
     if (cubit != null) await _step('language', cubit.close);
+  }
+
+  /// Ветка оформления: `close()` ждёт запись выбора до 3 с, поэтому она идёт
+  /// параллельно (как язык) и не отнимает время у рабочего пространства, агента
+  /// и транспорта; зависшая запись видна в [pendingSteps] как `appearance`
+  /// (D13).
+  Future<void> _closeAppearance() async {
+    final cubit = _appearanceCubit;
+    if (cubit != null) await _step('appearance', cubit.close);
   }
 
   /// Клиентская ветка: Cubit-ы отписываются до закрытия рабочего
@@ -1507,6 +1578,7 @@ final class CodeLabDependencies {
     required this.navigationCubit,
     required this.terminalTabsCubit,
     required this.languageCubit,
+    required this.appearanceCubit,
     required this.settingsPages,
     required this.createConnectionSettingsCubit,
     required this.createAddProfileCubit,
@@ -1536,6 +1608,9 @@ final class CodeLabDependencies {
 
   /// Единственный владелец языка интерфейса (D2).
   final AppLanguageCubit languageCubit;
+
+  /// Единственный владелец оформления app (D13): режим, темы, системный акцент.
+  final AppAppearanceCubit appearanceCubit;
 
   /// Страницы настроек, видимые в этой сборке.
   final SettingsPages settingsPages;
@@ -1624,6 +1699,9 @@ class CodeLabBootstrap extends StatefulWidget {
     this.profileSecrets,
     this.profileSecretsOpener,
     this.language,
+    this.appearance,
+    this.systemAccentSource,
+    this.themeLibrary,
     super.key,
   });
 
@@ -1631,6 +1709,16 @@ class CodeLabBootstrap extends StatefulWidget {
 
   /// Начальное состояние языка из `main` (D2); без него — `en`.
   final AppLanguageStart? language;
+
+  /// Начальное оформление из `main` (`add-app-appearance-page`, D13); без него
+  /// — `Match system` и встроенные темы.
+  final AppAppearanceStart? appearance;
+
+  /// Порт системного акцента, уже прочитанный в `main` (D7).
+  final SystemAccentSource? systemAccentSource;
+
+  /// Каталог пользовательских тем, созданный в `main`.
+  final ThemeLibrary? themeLibrary;
   final Scope? scope;
 
   /// Хранилище секретов, открытое в `main` (`openProfileSecrets`); без него
@@ -1659,6 +1747,9 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
         profileSecrets: widget.profileSecrets,
         profileSecretsOpener: widget.profileSecretsOpener,
         language: widget.language,
+        appearance: widget.appearance,
+        systemAccentSource: widget.systemAccentSource,
+        themeLibrary: widget.themeLibrary,
       );
   late final CodeLabDependencies _dependencies = CodeLabDependencies(
     application: _scope.resolve<AcpClientApplication>(),
@@ -1668,6 +1759,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     navigationCubit: _scope.resolve<NavigationCubit>(),
     terminalTabsCubit: _scope.resolve<TerminalTabsCubit>(),
     languageCubit: _scope.resolve<AppLanguageCubit>(),
+    appearanceCubit: _scope.resolve<AppAppearanceCubit>(),
     settingsPages: _scope.resolve<SettingsPages>(),
     createConnectionSettingsCubit: _scope.resolve<ConnectionSettingsCubit>,
     createAddProfileCubit: _scope.resolve<AddProfileCubit>,

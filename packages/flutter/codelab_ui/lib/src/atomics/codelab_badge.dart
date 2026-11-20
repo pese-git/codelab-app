@@ -15,9 +15,10 @@ class CodeLabBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = CodeLabPalette.of(FluentTheme.of(context));
-    final color = _backgroundColorForTone(palette, tone);
-    final foreground = palette.toneColor(tone);
+    final theme = FluentTheme.of(context);
+    final palette = CodeLabPalette.of(theme);
+    final color = _backgroundColorForTone(palette, theme, tone);
+    final foreground = palette.toneColor(tone, theme);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -40,8 +41,12 @@ class CodeLabBadge extends StatelessWidget {
   }
 }
 
-Color _backgroundColorForTone(CodeLabPalette palette, CodeLabTone tone) {
-  final base = palette.toneColor(tone);
+Color _backgroundColorForTone(
+  CodeLabPalette palette,
+  FluentThemeData theme,
+  CodeLabTone tone,
+) {
+  final base = palette.toneColor(tone, theme);
   return base.withAlpha(switch (tone) {
     CodeLabTone.warning => 56,
     _ => 46,

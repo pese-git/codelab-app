@@ -16,10 +16,16 @@ import 'theme_color.dart';
 import 'theme_issue.dart';
 import 'theme_role.dart';
 
-/// Предел размера файла темы, байт (64 КиБ).
+/// Предел размера файла темы, байт (64 КиБ): больше — `tooLarge`.
+///
+/// Почему: файл читается целиком в память и показывается в просмотре; предел
+/// общий для разбора и адаптеров каталога (читают `themeFileMaxBytes + 1`).
 const themeFileMaxBytes = 64 * 1024;
 
-/// Допустимые значения `extends`.
+/// Допустимые значения `extends`: база, из которой берутся незаданные роли.
+///
+/// Почему: `auto` — выбор темы, а не набор цветов, `mono` нечем изобразить
+/// в app (D2); поэтому набор закрыт. [jsonName] — значение в файле.
 enum ThemeBase {
   light('light'),
   dark('dark'),
@@ -30,7 +36,14 @@ enum ThemeBase {
   final String jsonName;
 }
 
-/// Тема с полным набором ролей: не заданные файлом — [DefaultColor].
+/// Разобранная тема с полным набором ролей: не заданные файлом (или `default`,
+/// или терминальный цвет, который app не применяет) — [DefaultColor].
+///
+/// Почему: потребителю нужен ответ на любую роль без проверки на `null`;
+/// «из базы» — явное значение, а не отсутствие.
+///
+/// Как использовать: создаётся только разбором [ThemeFile.parse]; хост
+/// заменяет [DefaultColor] ролью темы [base] своего режима.
 final class ThemeFile {
   const ThemeFile({
     required this.name,
@@ -77,11 +90,19 @@ final class ThemeFile {
   final Map<ThemeRole, ThemeColorValue> roles;
 }
 
+/// Результат разбора: тема ([ThemeLoaded]) либо отказ ([ThemeRejected]).
+///
+/// Почему: ошибка разбора — ожидаемый исход, а не исключение; «строгость»
+/// решает потребитель (D2).
 sealed class ThemeParseResult {
   const ThemeParseResult();
 }
 
-/// Тема загружена: возможно, с предупреждениями.
+/// Тема загружена, возможно, с предупреждениями.
+///
+/// Как использовать: app применяет [theme] и показывает [warnings]; CLI
+/// считает любое предупреждение ошибкой. [unsetRoles] — справка о ролях,
+/// взятых из базы, не предупреждение.
 final class ThemeLoaded extends ThemeParseResult {
   const ThemeLoaded(this.theme, this.warnings, this.unsetRoles);
 
@@ -92,7 +113,11 @@ final class ThemeLoaded extends ThemeParseResult {
   final List<ThemeRole> unsetRoles;
 }
 
-/// Тема не загружается: клиент берёт запасную.
+/// Тема не загружается: клиент применяет запасную (у app — встроенную тему
+/// режима, у CLI — `extends` файла или `dark`).
+///
+/// Как использовать: [issue] — единственная, первая по порядку проверок
+/// ошибка с кодом и позицией; текст строит клиент.
 final class ThemeRejected extends ThemeParseResult {
   const ThemeRejected(this.issue);
 
@@ -103,6 +128,12 @@ final class ThemeRejected extends ThemeParseResult {
 const _reservedNames = {'auto', 'dark', 'light', 'high-contrast', 'mono'};
 
 final _namePattern = RegExp(r'^[a-z0-9-]{1,32}$');
+
+/// Имя темы подходит под шаблон `[a-z0-9-]{1,32}` (spec `client-themes`).
+///
+/// Порты каталога проверяют им имя до обращения к файловой системе: путь
+/// строится только из такого имени и не выходит за каталог тем.
+bool isValidThemeName(String name) => _namePattern.hasMatch(name);
 
 /// Расстояние редактирования Левенштейна — для подсказки `unknownKey`.
 int _distance(String a, String b) {
@@ -250,7 +281,7 @@ final class _ThemeParser {
     if (value is! String) {
       throw _reject(ThemeIssueCode.invalidName, node.start, key: 'name');
     }
-    if (!_namePattern.hasMatch(value)) {
+    if (!isValidThemeName(value)) {
       throw _reject(
         ThemeIssueCode.invalidName,
         node.start,

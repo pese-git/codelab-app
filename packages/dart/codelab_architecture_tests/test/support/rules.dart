@@ -366,6 +366,19 @@ const rules = [
     exclude: ['core/platform/user_shell_launcher.dart'],
     sealExclude: false,
   ),
+  // Системный акцент — нативный плагин и инфраструктура (`AGENTS.md` §11,
+  // `platform-integration.md` §4, §8): пакет `system_theme` импортирует только
+  // адаптер `SystemThemeAccentSource`; остальной код видит порт
+  // `SystemAccentSource`. API пакета меняется между минорными версиями и имеет
+  // три особенности (молчаливый запасной цвет, неотменяемая подписка, статическое
+  // поле без `await`), которые закрывает один адаптер (design.md change
+  // `add-app-appearance-page`, D1, D7).
+  PackageRule(
+    'apps/codelab_desktop/lib',
+    forbidden: ['package:system_theme/'],
+    exclude: ['core/platform/system_accent_source.dart'],
+    sealExclude: false,
+  ),
   // Application терминала не знает Flutter (D11, правило 3; задача 2.0): модель
   // эмулятора — чистый Dart из `xterm2_core`, виджеты — только presentation.
   PackageRule(
