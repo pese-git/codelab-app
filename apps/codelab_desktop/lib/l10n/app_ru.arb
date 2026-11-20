@@ -938,7 +938,6 @@
   "settingsKeyboardWhereTurnRunning": "Рабочее место или поле ввода, пока идёт ход",
   "settingsKeyboardWhereComposer": "Поле ввода",
   "settingsKeyboardWhereCommandMenu": "Меню команд после /",
-  "settingsKeyboardWhereApproval": "Ожидающее одобрение в фокусе, когда агент предлагает этот вариант",
   "settingsSearchKeywordsKeyboard": "сочетание, горячие клавиши, клавиатура, клавиша",
   "appearanceIssuesHintUnknownKeys": "Неизвестные ключи пропущены, тема применяется.",
   "appearanceIssuesHintApplied": "Тема применяется с предупреждениями.",
@@ -976,5 +975,8 @@
   "settingsLegalEmptyText": "Ни одно имя пакета не содержит «{query}». Поиск не меняет реестр уведомлений выше.",
   "settingsGeneralSectionPrivacy": "Конфиденциальность",
   "settingsGeneralNoTelemetry": "Без телеметрии",
-  "settingsGeneralNoTelemetryDescription": "Приложение, CLI и агент не отправляют аналитику использования и отчёты о сбоях. Промпты и файлы уходят только провайдеру и инструментам, которые вы настроили."
+  "settingsGeneralNoTelemetryDescription": "Приложение, CLI и агент не отправляют аналитику использования и отчёты о сбоях. Промпты и файлы уходят только провайдеру и инструментам, которые вы настроили.",
+  "settingsKeyboardWhereApprovalAnywhere": "Рабочее место, самое раннее ожидающее одобрение, если в нём есть этот вариант",
+  "settingsKeyboardActionGoToApproval": "Перейти к одобрению",
+  "settingsKeyboardWhereApprovalPending": "Рабочее место, пока ждёт одобрение"
 }

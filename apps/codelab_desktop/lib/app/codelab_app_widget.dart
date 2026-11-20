@@ -1,6 +1,11 @@
 import 'dart:async';
 
-import 'package:codelab_ui/codelab_ui.dart' show CodeLabLocalizations;
+import 'package:codelab_ui/codelab_ui.dart'
+    show
+        CodeLabApprovalPrompt,
+        CodeLabApprovalVisibility,
+        CodeLabLocalizations,
+        CodeLabSessionSidebar;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -10,6 +15,8 @@ import 'language/app_language_cubit.dart';
 import '../features/settings/presentation/settings_shell.dart';
 import '../features/workbench/application/shell_cubit.dart';
 import '../features/workbench/presentation/widgets/restart_confirmation_dialog.dart';
+import '../features/workbench/application/approval_focus_return.dart';
+import '../features/workbench/presentation/workbench_focus.dart';
 import '../features/workbench/presentation/workbench_shell.dart';
 import 'app_scope.dart';
 import 'navigation/app_destination.dart';
@@ -100,8 +107,8 @@ class CodeLabApp extends StatelessWidget {
 /// где запоминается фокус рабочего места. Как использовать: `home`
 /// приложения; логики перехода здесь нет — только чтение состояния и
 /// передача колбэков в `NavigationCubit`. Фокус при уходе запоминается, при
-/// возврате восстанавливается в тот же узел, а если его уже нет — в первый
-/// фокусируемый узел рабочего места (композер).
+/// возврате восстанавливается в тот же узел, а если его уже нет (или это кнопка
+/// сайдбара, открывшая настройки) — в композер, без композера — в рабочее место.
 class _CodeLabHome extends StatefulWidget {
   const _CodeLabHome({required this.startOnLaunch});
 
@@ -113,6 +120,15 @@ class _CodeLabHome extends StatefulWidget {
 
 class _CodeLabHomeState extends State<_CodeLabHome> {
   final _workbenchScope = FocusScopeNode(debugLabel: 'Workbench');
+
+  /// Узел поля композера: принадлежит `State` рабочего места, чтобы после
+  /// ухода полосы одобрения вернуть в него фокус (`fix-approval-focus`, D5).
+  final _composerFocus = FocusNode(debugLabel: 'Composer');
+
+  /// Ручка видимости полос одобрения: лента подключает её к себе, сочетания
+  /// ответа спрашивают у неё, видна ли полоса (D14, п. 1). Принадлежит хосту,
+  /// как узел композера.
+  final _approvalVisibility = CodeLabApprovalVisibility();
 
   /// Узел, державший фокус в момент ухода в настройки.
   FocusNode? _returnFocus;
@@ -126,6 +142,7 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
   @override
   void initState() {
     super.initState();
+    _workbenchScope.addListener(_redirectScopeFocus);
     // Триггер запуска (D19): после первого кадра, а не в `initState`, чтобы
     // старт агента не блокировал отрисовку окна (D-15). Восстановленный проект
     // стартует агента в его папке; без проекта агент не стартует.
@@ -138,8 +155,109 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
 
   @override
   void dispose() {
-    _workbenchScope.dispose();
+    _workbenchScope
+      ..removeListener(_redirectScopeFocus)
+      ..dispose();
+    _composerFocus.dispose();
     super.dispose();
+  }
+
+  /// Полоса одобрения с клавиатурным фокусом ушла из ленты (ответ, отмена
+  /// хода, снятие запроса, смена сессии): возвращает фокус в композер, иначе на
+  /// рабочее место (`fix-approval-focus`, D5).
+  ///
+  /// Вызывается из `dispose` полосы, поэтому дерево не трогает. Микротаск
+  /// после освобождения записывает узел, которому Flutter сам отдал фокус.
+  /// Если это кнопка другой полосы одобрения (история фокуса области), фокус
+  /// возвращается сразу: у этой полосы после решения прежней включаются
+  /// сочетания, и второй Cmd/Ctrl+Enter в этот кадр ответил бы на запрос, к
+  /// которому пользователь не переходил (AGENTS.md §10). Иначе фокус
+  /// возвращается в следующем кадре и только если он всё ещё на этом узле, то
+  /// есть никто его за это время не взял (§12: устаревший результат не
+  /// отбирает фокус у пользователя).
+  void _onApprovalFocusReleased() {
+    scheduleMicrotask(() {
+      if (!mounted) {
+        return;
+      }
+      final settled = FocusManager.instance.primaryFocus;
+      if (settled?.context
+              ?.findAncestorWidgetOfExactType<CodeLabApprovalPrompt>() !=
+          null) {
+        _returnApprovalFocus(focusTaken: false);
+        return;
+      }
+      WidgetsBinding.instance
+        ..addPostFrameCallback((_) {
+          if (!mounted) {
+            return;
+          }
+          _returnApprovalFocus(
+            focusTaken: FocusManager.instance.primaryFocus != settled,
+          );
+        })
+        ..scheduleFrame();
+    });
+  }
+
+  void _returnApprovalFocus({required bool focusTaken}) {
+    final shell = context.read<CodeLabShellCubit>();
+    final target = approvalFocusReturnOf(
+      hasComposer: _composerFocus.context != null,
+      composerEnabled: shell.state.isPromptEnabled,
+      focusTaken: focusTaken,
+    );
+    switch (target) {
+      case ApprovalFocusReturn.composer:
+        _composerFocus.requestFocus();
+      case ApprovalFocusReturn.workbench:
+        _workbenchScope.requestFocus();
+      case ApprovalFocusReturn.none:
+        break;
+    }
+  }
+
+  /// Уводит фокус со скоупа рабочего места на узел-хозяин сочетаний.
+  ///
+  /// Почему: `CallbackShortcuts` в `CodeLabWorkbenchShortcuts` стоит внутри
+  /// скоупа, и событие клавиши идёт вверх от `primaryFocus`. Клик по тексту
+  /// ленты снимает фокус с внутреннего узла так, что primary оказывается сам
+  /// `FocusScopeNode` (подтверждено журналом на macOS): привязки не в цепочке,
+  /// и ⌘K, ⌘Y и остальные сочетания рабочего места молчат (change
+  /// `fix-approval-focus`, D14 «Где действуют»). Так же фокус попадает на
+  /// скоуп, когда `_returnApprovalFocus` просит `requestFocus()` без
+  /// `focusedChild`.
+  ///
+  /// Для чего: сочетания действуют при любом фокусе внутри рабочего места,
+  /// включая сам скоуп. Из настроек они по-прежнему не действуют (spec
+  /// app-settings «Переход в настройки и обратно»): рабочее место под
+  /// `ExcludeFocus`, скоуп не принимает фокус, узел-хозяин тоже не примет.
+  void _redirectScopeFocus() {
+    if (!_workbenchScope.hasPrimaryFocus) {
+      return;
+    }
+    // Хозяин — самый внешний из узлов `Focus(autofocus)` под скоупом:
+    // `descendants` отдаёт потомков раньше родителей, а у композера и других
+    // элементов тоже есть собственные узлы с `autofocus`.
+    for (final node in _workbenchScope.descendants) {
+      if (_isShortcutHost(node) &&
+          node.canRequestFocus &&
+          !node.ancestors
+              .takeWhile((a) => a != _workbenchScope)
+              .any(_isShortcutHost)) {
+        node.requestFocus();
+        return;
+      }
+    }
+  }
+
+  /// Узел-хозяин сочетаний рабочего места: `Focus(autofocus: true)` в
+  /// `CodeLabWorkbenchShortcuts`. Фокус на нём означает «никто не выбран», а не
+  /// выбранный пользователем элемент, поэтому как «элемент до ухода» он не
+  /// запоминается (spec app-settings «Переход в настройки и обратно»).
+  bool _isShortcutHost(FocusNode node) {
+    final widget = node.context?.widget;
+    return widget is Focus && widget.autofocus;
   }
 
   void _onNavigation(AppDestination current) {
@@ -158,10 +276,29 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
         if (!mounted) {
           return;
         }
-        if (saved != null && saved.context != null && saved.canRequestFocus) {
+        // Восстанавливается только узел, который действительно лежит в
+        // рабочем месте (композер, элемент ленты, полоса одобрения). Кнопка
+        // «Настройки» сайдбара при клике мышью сама берёт фокус и стала бы
+        // «элементом до ухода», как и корневой узел-хозяин сочетаний
+        // (`Focus(autofocus)`, на нём фокус оказывается, когда никто не выбран);
+        // узел вне рабочего места (корневой, исчезнувший
+        // или не принимающий фокус) тоже не подходит: после «Назад» фокус там
+        // оставлял пользователя без сочетаний рабочего места (spec
+        // app-settings «Переход в настройки и обратно»). Запасной путь по
+        // спецификации — композер активной сессии, без него — рабочее место.
+        final restorable =
+            saved != null &&
+            saved.context != null &&
+            saved.canRequestFocus &&
+            saved.ancestors.contains(_workbenchScope) &&
+            !_isShortcutHost(saved) &&
+            saved.context!
+                    .findAncestorWidgetOfExactType<CodeLabSessionSidebar>() ==
+                null;
+        if (restorable) {
           saved.requestFocus();
         } else {
-          _workbenchScope.requestFocus();
+          _returnApprovalFocus(focusTaken: false);
         }
       });
     }
@@ -218,7 +355,12 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
                     excluding: settings != null,
                     child: FocusScope(
                       node: _workbenchScope,
-                      child: const CodeLabShell(),
+                      child: WorkbenchFocus(
+                        composerNode: _composerFocus,
+                        onApprovalFocusReleased: _onApprovalFocusReleased,
+                        approvalVisibility: _approvalVisibility,
+                        child: const CodeLabShell(),
+                      ),
                     ),
                   ),
                 ),

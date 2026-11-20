@@ -176,6 +176,9 @@ Scope createCodeLabRootScope({
   UsageCsvSaver? usageCsvSaver,
   ProjectFiles? projectFiles,
   bool projectFilesEnabled = true,
+  // Часы задержек ответа сочетанием на одобрение (D14): шов тестов, без него
+  // `DateTime.now`.
+  DateTime Function()? clock,
 }) {
   // Одно окружение на открыватель встроенного агента, профили и токены:
   // `CODELAB_HOME` и переменные читаются из одного места (design.md change
@@ -239,6 +242,7 @@ Scope createCodeLabRootScope({
         legalPorts: legalPorts,
         // Тот же каталог, что получает `CodeLabLoggingModule` (D14).
         logDirectory: logDirectoryPath ?? Directory.systemTemp.path,
+        clock: clock,
       ),
       $CodeLabTransportsModuleContract(),
       $CodeLabProtocolApplicationModuleContract(),
@@ -853,7 +857,9 @@ final class CodeLabPresentationModule extends Module {
     ProjectFiles? projectFiles,
     AboutInfo? aboutInfo,
     LegalPorts? legalPorts,
-  }) : _logDirectory = logDirectory,
+    DateTime Function()? clock,
+  }) : _clock = clock,
+       _logDirectory = logDirectory,
        _aboutInfo = aboutInfo,
        _legalPorts = legalPorts,
        _settingsPages = settingsPages,
@@ -877,6 +883,10 @@ final class CodeLabPresentationModule extends Module {
   /// (`createCodeLabRootScope(settingsPages:)`, design.md change
   /// `add-app-settings-shell`, D3).
   final SettingsPages _settingsPages;
+
+  /// Часы рабочего места (`CodeLabShellParts.clock`); шов тестов
+  /// (`createCodeLabRootScope(clock:)`).
+  final DateTime Function()? _clock;
 
   /// Каталог журналов app для кнопки «Open log folder» (D14).
   final String _logDirectory;
@@ -950,6 +960,7 @@ final class CodeLabPresentationModule extends Module {
             usageLogger: _usageLogger(),
             startupPreferences: currentScope.resolve<StartupPreferences>(),
             appLogger: codeLabAppLogger(),
+            clock: _clock,
             // Язык интерфейса: Cubit-ы рабочего места с текстом подписаны на
             // порт в конструкторе (`add-desktop-localization`, D5).
             strings: currentScope.resolve<AppStrings>(),

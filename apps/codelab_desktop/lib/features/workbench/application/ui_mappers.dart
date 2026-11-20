@@ -534,6 +534,9 @@ CodeLabTranscriptApproval? _transcriptApprovalOf(
     // Цель «Go to approval» панели Agents: лента прокручивается к блоку по
     // id запроса (D49 Т7). Решение по-прежнему принимается только в ленте.
     targetId: approval.approvalId.value,
+    // Вместе с `targetId` даёт ключ полосы: id JSON-RPC уникальны только в
+    // соединении (`fix-approval-focus`, D4, п. 4).
+    sessionId: approval.sessionId.value,
   ),
 };
 

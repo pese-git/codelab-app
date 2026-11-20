@@ -1,11 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart' show HitTestResult;
+
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
 import '../l10n/strings.dart';
 import '../molecules/molecules.dart';
 import '../rendering/rendering.dart';
+import 'codelab_approval_prompt.dart';
 import 'codelab_tool_call_tile.dart';
 import 'codelab_transcript_notice.dart';
 import 'codelab_transcript_row.dart';
@@ -79,6 +82,8 @@ class CodeLabTranscriptPanel extends StatefulWidget {
     this.viewMode = CodeLabViewMode.normal,
     this.showRequest,
     this.onShowRequestDone,
+    this.onApprovalFocusReleased,
+    this.approvalVisibility,
     super.key,
   });
 
@@ -98,11 +103,26 @@ class CodeLabTranscriptPanel extends StatefulWidget {
   /// Хост очищать запрос не обязан.
   final CodeLabTranscriptShowRequest? showRequest;
 
+  /// Ручка запроса видимости полос одобрения (change `fix-approval-focus`,
+  /// D14, п. 1): хост создаёт её, передаёт ленте и перед ответом сочетанием
+  /// спрашивает, видна ли полоса цели. Без ручки лента видимость не
+  /// сообщает.
+  final CodeLabApprovalVisibility? approvalVisibility;
+
   /// Показ с этим номером закончен: цель показана или шаги исчерпаны. Не
   /// вызывается, если цепочку оборвала смена или исчезновение запроса, смена
   /// сессии или `dispose`. Хост по нему гасит разовый запрос, чтобы
   /// перемонтированная лента не прокрутила снова (D49 Т7).
   final ValueChanged<int>? onShowRequestDone;
+
+  /// Полоса одобрения с клавиатурным фокусом исчезла из ленты (ответ, отмена
+  /// хода, снятие запроса, смена сессии): хост возвращает фокус (change
+  /// `fix-approval-focus`, D5). Колбэк идёт от полосы через строку вызова;
+  /// вызывается один раз и только если фокус был в полосе, когда она уходила.
+  /// Если Flutter отдал фокус внутрь другой полосы одобрения, хост переводит
+  /// его сразу (в микротаске), иначе — в следующем кадре, если пользователь
+  /// не перевёл фокус сам (§12).
+  final VoidCallback? onApprovalFocusReleased;
 
   final List<CodeLabTranscriptRow> rows;
   final Map<String, bool> expansionOverrides;
@@ -128,12 +148,140 @@ final class CodeLabTranscriptShowRequest {
     required this.rowId,
     required this.targetId,
     required this.serial,
+    this.focusApproval = false,
+    this.sessionId,
+    this.approvalId,
   });
 
   final String rowId;
   final String targetId;
   final int serial;
+
+  /// После показа поставить клавиатурный фокус на полосу решения цели
+  /// (change `fix-approval-focus`, D4, п. 2): сочетание «Go to approval».
+  /// Фокус ставится только в построенной цели и только пока запрос актуален;
+  /// не нашли полосу или запрос устарел — фокус прежний. Разовость запроса
+  /// (`serial`, `onShowRequestDone`) защищает от повтора при перемонтировании.
+  final bool focusApproval;
+
+  /// Сессия и id запроса, выбранного при нажатии «Go to approval»: фокус
+  /// получает только полоса с ключом `CodeLabApprovalPrompt.keyFor(sessionId,
+  /// approvalId)`. Без них или без такой полосы в цели фокус не трогается:
+  /// запрос мог уйти, а в той же строке появиться другой (D13; спецификация
+  /// «Цель ушла до фокуса»).
+  final String? sessionId;
+  final String? approvalId;
 }
+
+/// Ручка видимости полос одобрения в ленте (change `fix-approval-focus`,
+/// D14, п. 1; spec agent-workbench-ui «Ответ на одобрение сочетанием с любого
+/// места рабочего места», компенсирующая мера «Видимость»).
+///
+/// Почему: ответ глобальным сочетанием не должен уходить на запрос, которого
+/// пользователь не видит (лента прокручена, строка не построена, поверх ленты
+/// выдвижная панель). Видимость знает только лента: у неё прокрутка и
+/// построенные полосы; application решает по её признаку (AGENTS.md §10).
+///
+/// Для чего: единственный источник «полоса видна» для решения по нажатию.
+///
+/// Как использовать: `final visibility = CodeLabApprovalVisibility();`,
+/// передать в `CodeLabTranscriptPanel(approvalVisibility: visibility)`,
+/// перед ответом вызвать [isVisible]. Видна — полоса запроса с ключом
+/// `CodeLabApprovalPrompt.keyFor(sessionId, approvalId)` построена, её
+/// прямоугольник целиком внутри области прокрутки, и в центре и у углов
+/// события указателя доходят до неё, а не до панели поверх ленты.
+///
+/// Допущение: видимость определяется hit-test: слой без hit-test (например,
+/// `IgnorePointer`) перекрытием не считается, даже если он закрывает полосу
+/// глазу. Панели поверх ленты (палитра, меню) принимают указатель, поэтому их
+/// перекрытие распознаётся.
+///
+/// Лента подключает ручку в `initState` и отключает в `dispose`; пока ленты
+/// нет, полоса считается невидимой (безопасная сторона, §10).
+final class CodeLabApprovalVisibility {
+  CodeLabApprovalVisibilityResult Function(String sessionId, String approvalId)?
+  _resolver;
+
+  /// Видна ли полоса одобрения [approvalId] сессии [sessionId] целиком.
+  bool isVisible(String sessionId, String approvalId) =>
+      check(sessionId, approvalId) is CodeLabApprovalVisible;
+
+  /// То же, что [isVisible], но с причиной отказа для диагностики (журнал
+  /// `not_visible`): ленты нет — [CodeLabApprovalNotBuilt].
+  CodeLabApprovalVisibilityResult check(String sessionId, String approvalId) =>
+      _resolver?.call(sessionId, approvalId) ?? const CodeLabApprovalNotBuilt();
+}
+
+/// Результат проверки видимости полосы одобрения.
+///
+/// Почему: «не видна» без причины не диагностируется (ручная проверка на
+/// macOS, change `fix-approval-focus`, D14 п. 1). Для чего: журнал app
+/// показывает, что именно мешает. Данные — только типы и геометрия, без
+/// подписей, путей и текста ленты (AGENTS.md §16).
+sealed class CodeLabApprovalVisibilityResult {
+  const CodeLabApprovalVisibilityResult();
+
+  /// Краткая запись для журнала: `visible`, `not_built`,
+  /// `out_of_viewport bar=<rect> viewport=<rect>` или
+  /// `obscured by=<Type> owner=<Type> at=(x,y)`.
+  String get diagnostic;
+}
+
+/// Полоса целиком в области и не перекрыта.
+final class CodeLabApprovalVisible extends CodeLabApprovalVisibilityResult {
+  const CodeLabApprovalVisible();
+
+  @override
+  String get diagnostic => 'visible';
+}
+
+/// Ленты нет, полоса не построена или не имеет размера.
+final class CodeLabApprovalNotBuilt extends CodeLabApprovalVisibilityResult {
+  const CodeLabApprovalNotBuilt();
+
+  @override
+  String get diagnostic => 'not_built';
+}
+
+/// Полоса выходит за область ленты; [bar] и [viewport] — глобальные
+/// прямоугольники.
+final class CodeLabApprovalOutOfViewport
+    extends CodeLabApprovalVisibilityResult {
+  const CodeLabApprovalOutOfViewport({
+    required this.bar,
+    required this.viewport,
+  });
+
+  final Rect bar;
+  final Rect viewport;
+
+  @override
+  String get diagnostic =>
+      'out_of_viewport bar=${_rectText(bar)} viewport=${_rectText(viewport)}';
+}
+
+/// Проверочную точку [point] получает [blocker] (тип `RenderObject`), а не
+/// полоса; [owner] — тип виджета-создателя (`debugCreator`), в release `null`.
+final class CodeLabApprovalObscured extends CodeLabApprovalVisibilityResult {
+  const CodeLabApprovalObscured({
+    required this.blocker,
+    required this.point,
+    this.owner,
+  });
+
+  final Type blocker;
+  final Type? owner;
+  final Offset point;
+
+  @override
+  String get diagnostic =>
+      'obscured by=$blocker${owner == null ? '' : ' owner=$owner'} '
+      'at=(${point.dx.toStringAsFixed(1)},${point.dy.toStringAsFixed(1)})';
+}
+
+String _rectText(Rect r) =>
+    '(${r.left.toStringAsFixed(1)},${r.top.toStringAsFixed(1)},'
+    '${r.right.toStringAsFixed(1)},${r.bottom.toStringAsFixed(1)})';
 
 /// Состояние ленты: владеет `ScrollController` и решает, когда двигать
 /// прокрутку.
@@ -193,6 +341,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   @override
   void initState() {
     super.initState();
+    widget.approvalVisibility?._resolver = _checkApprovalBar;
 
     // Панель может появиться сразу с pending approval в первых записях (хост
     // обычно подставляет ленту, только когда записи уже есть) — предыдущей
@@ -207,6 +356,9 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
 
   @override
   void dispose() {
+    if (widget.approvalVisibility?._resolver == _checkApprovalBar) {
+      widget.approvalVisibility?._resolver = null;
+    }
     _showToken++;
     _highlightTimer?.cancel();
     _controller.dispose();
@@ -216,6 +368,11 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   @override
   void didUpdateWidget(covariant CodeLabTranscriptPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.approvalVisibility != widget.approvalVisibility) {
+      oldWidget.approvalVisibility?._resolver = null;
+      widget.approvalVisibility?._resolver = _checkApprovalBar;
+    }
 
     // Запрос показа важнее следования за хвостом: он сам переводит ленту в
     // режим чтения истории (D49 Т7), иначе обновление строк ниже вернуло бы
@@ -344,6 +501,17 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   void _startShow(CodeLabTranscriptShowRequest request) {
     final token = ++_showToken;
     _lastShowSerial = request.serial;
+    // Фокус уже в полосе цели: повторный переход ничего не меняет — ни фокуса,
+    // ни прокрутки, ни подсветки, ни следования за хвостом (спецификация
+    // «Переход к ожидающему одобрению с клавиатуры»). Показ закрываем в
+    // следующем кадре: `didUpdateWidget` идёт в сборке, а хост меняет состояние.
+    if (request.focusApproval && _approvalBarNode(request)?.hasFocus == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || token != _showToken) return;
+        widget.onShowRequestDone?.call(request.serial);
+      });
+      return;
+    }
     _isReadingHistory = true;
     _isFollowingTail = false;
     _isKeepingApprovalInView = false;
@@ -387,6 +555,11 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
         if (!mounted || token != _showToken) return;
         final again = _findKeyed(_targetKeyOf(request));
         if (again != null) _reveal(again);
+        // Запрос мог устареть между кадрами: фокус ставит только актуальный.
+        if (request.focusApproval &&
+            widget.showRequest?.serial == request.serial) {
+          _focusApprovalBar(request);
+        }
         widget.onShowRequestDone?.call(request.serial);
       });
       return;
@@ -421,11 +594,124 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
     _scheduleShowStep(request, token, attempt + 1);
   }
 
+  /// Видна ли полоса одобрения целиком (D14, п. 1): построена, её
+  /// прямоугольник внутри области ленты, и в центре и у углов полосы указатель
+  /// доходит до неё, а не до панели поверх ленты. Только читает дерево, ничего не
+  /// меняет.
+  CodeLabApprovalVisibilityResult _checkApprovalBar(
+    String sessionId,
+    String approvalId,
+  ) {
+    if (!mounted) return const CodeLabApprovalNotBuilt();
+    final prompt = _findKeyed(
+      CodeLabApprovalPrompt.keyFor(sessionId, approvalId),
+    );
+    if (prompt is! Element || !prompt.mounted) {
+      return const CodeLabApprovalNotBuilt();
+    }
+    final bar = prompt.renderObject;
+    final viewport = context.findRenderObject();
+    if (bar is! RenderBox ||
+        viewport is! RenderBox ||
+        !bar.attached ||
+        !viewport.attached ||
+        !bar.hasSize ||
+        !viewport.hasSize) {
+      return const CodeLabApprovalNotBuilt();
+    }
+    final barRect = bar.localToGlobal(Offset.zero) & bar.size;
+    final viewRect = viewport.localToGlobal(Offset.zero) & viewport.size;
+    const epsilon = 0.5;
+    if (barRect.left < viewRect.left - epsilon ||
+        barRect.top < viewRect.top - epsilon ||
+        barRect.right > viewRect.right + epsilon ||
+        barRect.bottom > viewRect.bottom + epsilon) {
+      return CodeLabApprovalOutOfViewport(bar: barRect, viewport: viewRect);
+    }
+    // Полосу закрывает то, что получает указатель в её прямоугольнике и не
+    // лежит ни внутри полосы, ни среди её предков (выдвижная панель поверх
+    // ленты — соседнее поддерево). Пробел между кнопками указатель не
+    // принимает вовсе, поэтому проверяем несколько точек.
+    final ancestors = <RenderObject>{};
+    for (RenderObject? up = bar.parent; up != null; up = up.parent) {
+      ancestors.add(up);
+    }
+    bool inside(RenderObject target) {
+      for (RenderObject? node = target; node != null; node = node.parent) {
+        if (identical(node, bar)) return true;
+      }
+      return false;
+    }
+
+    final viewId = View.of(context).viewId;
+    for (final point in [
+      barRect.center,
+      barRect.topLeft + const Offset(4, 4),
+      barRect.topRight + const Offset(-4, 4),
+      barRect.bottomLeft + const Offset(4, -4),
+      barRect.bottomRight + const Offset(-4, -4),
+    ]) {
+      final result = HitTestResult();
+      WidgetsBinding.instance.hitTestInView(result, point, viewId);
+      for (final entry in result.path) {
+        final target = entry.target;
+        if (target is RenderObject &&
+            !ancestors.contains(target) &&
+            !inside(target)) {
+          final creator = target.debugCreator;
+          return CodeLabApprovalObscured(
+            blocker: target.runtimeType,
+            owner: creator is DebugCreator
+                ? creator.element.widget.runtimeType
+                : null,
+            point: point,
+          );
+        }
+      }
+    }
+    return const CodeLabApprovalVisible();
+  }
+
   /// Ключ цели: строка верхнего уровня — её `rowKey`, иначе ключ цели внутри.
   static Key _targetKeyOf(CodeLabTranscriptShowRequest request) =>
       request.targetId == request.rowId
       ? CodeLabTranscriptPanel.rowKey(request.rowId)
       : CodeLabTranscriptPanel.targetKey(request.targetId);
+
+  /// Узел фокуса полосы запроса, выбранного в [request], или `null`: запрос
+  /// не назван или полосы с его ключом нет в построенном дереве. Ищется
+  /// именно по ключу запроса, а не «первая полоса цели»: цель могла сменить
+  /// запрос или нести под собой блок потомка (§9, D13).
+  FocusNode? _approvalBarNode(CodeLabTranscriptShowRequest request) {
+    final session = request.sessionId;
+    final approval = request.approvalId;
+    if (session == null || approval == null) return null;
+    final prompt = _findKeyed(CodeLabApprovalPrompt.keyFor(session, approval));
+    if (prompt is! Element || !prompt.mounted) return null;
+    Element? bar;
+    void visit(Element element) {
+      if (bar != null) return;
+      if (element.widget.key == CodeLabApprovalPrompt.barKey) {
+        bar = element;
+        return;
+      }
+      element.visitChildren(visit);
+    }
+
+    prompt.visitChildren(visit);
+    final found = bar;
+    if (found == null || !found.mounted) return null;
+    return Focus.maybeOf(found, createDependency: false);
+  }
+
+  /// Ставит фокус на полосу решения запроса [request]; полосы нет — фокус не
+  /// трогает. Фокус уже в полосе — тоже не трогает: перенос с кнопки на
+  /// контейнер ломал бы текущий выбор пользователя.
+  void _focusApprovalBar(CodeLabTranscriptShowRequest request) {
+    final node = _approvalBarNode(request);
+    if (node == null || node.hasFocus || !node.canRequestFocus) return;
+    node.requestFocus();
+  }
 
   void _reveal(BuildContext target) {
     Scrollable.ensureVisible(target, alignment: 0.1, duration: Duration.zero);
@@ -547,6 +833,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
                           widget.expansionOverrides[id] ?? false,
                       onNestedToggle: _toggle,
                       highlightedId: _highlightId,
+                      onApprovalFocusReleased: widget.onApprovalFocusReleased,
                     ),
                   ),
                 ),
@@ -576,9 +863,11 @@ class _TranscriptRowView extends StatelessWidget {
     required this.nestedExpanded,
     required this.onNestedToggle,
     this.highlightedId,
+    this.onApprovalFocusReleased,
   });
 
   final String? highlightedId;
+  final VoidCallback? onApprovalFocusReleased;
   final CodeLabTranscriptRow row;
   final CodeLabMarkdownConfig markdownConfig;
   final bool expanded;
@@ -614,6 +903,7 @@ class _TranscriptRowView extends StatelessWidget {
         nestedExpanded: nestedExpanded,
         onNestedToggle: onNestedToggle,
         highlightedId: highlightedId,
+        onApprovalFocusReleased: onApprovalFocusReleased,
       ),
       final CodeLabNoticeRow notice => CodeLabTranscriptNotice(row: notice),
       CodeLabTaskOpsRow(:final text) => CodeLabTaskOpsLine(text: text),

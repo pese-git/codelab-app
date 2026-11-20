@@ -3624,10 +3624,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsKeyboardWhereCommandMenu => 'Command menu after /';
 
   @override
-  String get settingsKeyboardWhereApproval =>
-      'Pending approval in focus, when the agent offers this option';
-
-  @override
   String get settingsSearchKeywordsKeyboard =>
       'shortcut, hotkey, keybinding, key';
 
@@ -3783,4 +3779,15 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsGeneralNoTelemetryDescription =>
       'The app, the CLI and the agent send no usage analytics or crash reports. Prompts and files go only to the provider and tools you set up.';
+
+  @override
+  String get settingsKeyboardWhereApprovalAnywhere =>
+      'Workbench, earliest pending approval, if it offers this option';
+
+  @override
+  String get settingsKeyboardActionGoToApproval => 'Go to approval';
+
+  @override
+  String get settingsKeyboardWhereApprovalPending =>
+      'Workbench, while an approval is pending';
 }

@@ -145,6 +145,9 @@ final class CodeLabTestBinding {
     // `rootBundle` и реестр лицензий.
     LegalPorts? legalPorts,
     LocalFolderOpener? localFolderOpener,
+    // Часы рабочего места (задержки ответа сочетанием, D14): тест двигает их
+    // явно, а не ждёт реальное время (`testing.md` §20).
+    DateTime Function()? clock,
   }) : transport = transport ?? FakeAcpTransport() {
     // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
     // а у плагина в тестах нет реализации канала: без моков каждая загрузка
@@ -231,6 +234,7 @@ final class CodeLabTestBinding {
       // двойник (`FakeProjectFiles`).
       projectFiles: projectFiles,
       projectFilesEnabled: projectFiles != null,
+      clock: clock,
     );
     // `CherryPick.openRootScope()` is a process-global singleton that
     // silently REUSES an unclosed scope, so a test that fails before its own

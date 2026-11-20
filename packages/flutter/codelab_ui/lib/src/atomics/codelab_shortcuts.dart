@@ -19,6 +19,7 @@
 library;
 
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/services.dart';
 
 /// Группа строк страницы «Keyboard» (D1) в порядке показа.
@@ -41,6 +42,7 @@ final class CodeLabKeyCombo {
     this.primary = false,
     this.alt = false,
     this.shift = false,
+    this.meta = false,
     this.alsoKeys = const [],
   });
 
@@ -62,17 +64,50 @@ final class CodeLabKeyCombo {
   /// Нужен ли Shift (⇧ на macOS); смысл и использование как у [alt].
   final bool shift;
 
+  /// Точный модификатор ⌘ без Ctrl (change `fix-approval-focus`, D15).
+  ///
+  /// Почему: сочетания ответа на одобрение на macOS привязаны только к ⌘
+  /// (Ctrl+Y в поле ввода — «yank» Emacs-раскладки Cocoa и не должен
+  /// отвечать на запрос), а [primary] привязывает и Ctrl, и ⌘.
+  ///
+  /// Для чего: `activators`, `accepts` и обозначения клавиш; в обозначениях
+  /// ⌘ стоит там же, где у [primary]. Как использовать: задаётся в записи
+  /// каталога вместо [primary], вместе с ним не указывается.
+  final bool meta;
+
   List<LogicalKeyboardKey> get _keys => [key, ...alsoKeys];
 
   /// Активаторы привязки: у `primary` — по паре `control` и `meta` на каждую
-  /// клавишу, иначе по одному.
-  List<SingleActivator> get activators => [
+  /// клавишу, у [meta] — только `meta`, иначе по одному.
+  List<SingleActivator> get activators => activatorsWith();
+
+  /// Те же активаторы; [includeRepeats] `false` отключает автоповтор
+  /// удерживаемой клавиши (сочетания ответа на одобрение, D14, п. 3).
+  List<SingleActivator> activatorsWith({bool includeRepeats = true}) => [
     for (final k in _keys)
       if (primary) ...[
-        SingleActivator(k, control: true, alt: alt, shift: shift),
-        SingleActivator(k, meta: true, alt: alt, shift: shift),
+        SingleActivator(
+          k,
+          control: true,
+          alt: alt,
+          shift: shift,
+          includeRepeats: includeRepeats,
+        ),
+        SingleActivator(
+          k,
+          meta: true,
+          alt: alt,
+          shift: shift,
+          includeRepeats: includeRepeats,
+        ),
       ] else
-        SingleActivator(k, alt: alt, shift: shift),
+        SingleActivator(
+          k,
+          meta: meta,
+          alt: alt,
+          shift: shift,
+          includeRepeats: includeRepeats,
+        ),
   ];
 
   /// Подходит ли нажатие [event] комбинации при текущих модификаторах
@@ -86,7 +121,7 @@ final class CodeLabKeyCombo {
     final meta = keyboard.isMetaPressed;
     // Как `SingleActivator`: основной модификатор — ровно один из Ctrl и ⌘
     // (активаторы `control` и `meta` по отдельности), а не оба сразу.
-    final primaryOk = primary ? control != meta : !control && !meta;
+    final primaryOk = primary ? control != meta : !control && meta == this.meta;
     return primaryOk &&
         keyboard.isAltPressed == alt &&
         keyboard.isShiftPressed == shift;
@@ -103,7 +138,7 @@ final class CodeLabKeyCombo {
       if (mac) ...[
         if (alt) '⌥',
         if (shift) '⇧',
-        if (primary) '⌘',
+        if (primary || meta) '⌘',
       ] else ...[
         if (primary) 'Ctrl',
         if (alt) 'Alt',
@@ -132,7 +167,7 @@ final class CodeLabKeyCombo {
       if (mac) ...[
         if (alt) 'Option',
         if (shift) 'Shift',
-        if (primary) 'Cmd',
+        if (primary || meta) 'Cmd',
       ] else ...[
         if (primary) 'Ctrl',
         if (alt) 'Alt',
@@ -234,36 +269,183 @@ enum CodeLabShortcut {
   commandMenuClose(CodeLabShortcutGroup.composer, [
     CodeLabKeyCombo(LogicalKeyboardKey.escape),
   ]),
-  allowOnce(CodeLabShortcutGroup.approvals, [
-    CodeLabKeyCombo(LogicalKeyboardKey.enter, primary: true),
-  ]),
-  allowAlways(CodeLabShortcutGroup.approvals, [
-    CodeLabKeyCombo(LogicalKeyboardKey.enter, primary: true, alt: true),
-  ]),
-  rejectOnce(CodeLabShortcutGroup.approvals, [
-    CodeLabKeyCombo(LogicalKeyboardKey.backspace, primary: true),
-  ]),
-  rejectAlways(CodeLabShortcutGroup.approvals, [
-    CodeLabKeyCombo(LogicalKeyboardKey.backspace, primary: true, alt: true),
-  ]);
 
-  const CodeLabShortcut(this.group, this.combos);
+  /// «Go to approval»: перейти к активному одобрению (change
+  /// `fix-approval-focus`, D3). Cmd/Ctrl+Shift+A; первая запись группы.
+  goToApproval(CodeLabShortcutGroup.approvals, [
+    CodeLabKeyCombo(LogicalKeyboardKey.keyA, primary: true, shift: true),
+  ]),
+
+  // Сочетания ответа на одобрение (change `fix-approval-focus`, итерация 7,
+  // D14, D15): общих комбинаций нет, клавиши свои на macOS и на остальных ОС.
+  // macOS — только ⌘ (`meta`): Ctrl+Y там «yank» Cocoa. Windows и Linux — только
+  // Alt+Shift: Ctrl+Z и Ctrl+Shift+Z правят текст, Ctrl+Alt даёт AltGr.
+  allowOnce(
+    CodeLabShortcutGroup.approvals,
+    [],
+    macCombos: [CodeLabKeyCombo(LogicalKeyboardKey.keyY, meta: true)],
+    otherCombos: [
+      CodeLabKeyCombo(LogicalKeyboardKey.keyY, alt: true, shift: true),
+    ],
+  ),
+  allowAlways(
+    CodeLabShortcutGroup.approvals,
+    [],
+    macCombos: [
+      CodeLabKeyCombo(LogicalKeyboardKey.keyY, meta: true, alt: true),
+    ],
+    otherCombos: [
+      CodeLabKeyCombo(LogicalKeyboardKey.keyQ, alt: true, shift: true),
+    ],
+  ),
+  rejectOnce(
+    CodeLabShortcutGroup.approvals,
+    [],
+    macCombos: [
+      CodeLabKeyCombo(LogicalKeyboardKey.keyZ, meta: true, alt: true),
+    ],
+    otherCombos: [
+      CodeLabKeyCombo(LogicalKeyboardKey.keyX, alt: true, shift: true),
+    ],
+  ),
+  rejectAlways(
+    CodeLabShortcutGroup.approvals,
+    [],
+    macCombos: [
+      CodeLabKeyCombo(
+        LogicalKeyboardKey.keyZ,
+        meta: true,
+        alt: true,
+        shift: true,
+      ),
+    ],
+    otherCombos: [
+      CodeLabKeyCombo(LogicalKeyboardKey.keyW, alt: true, shift: true),
+    ],
+  );
+
+  const CodeLabShortcut(
+    this.group,
+    this.combos, {
+    this.macCombos,
+    this.otherCombos,
+  });
 
   final CodeLabShortcutGroup group;
 
-  /// Комбинации записи; альтернативы — по порядку показа.
+  /// Общие комбинации записи; альтернативы — по порядку показа. У записей с
+  /// клавишами по платформе пусты: действуют [macCombos] и [otherCombos].
   final List<CodeLabKeyCombo> combos;
+
+  /// Комбинации macOS; `null` — действуют общие [combos] (D15).
+  final List<CodeLabKeyCombo>? macCombos;
+
+  /// Комбинации Windows и Linux; `null` — действуют общие [combos] (D15).
+  final List<CodeLabKeyCombo>? otherCombos;
 
   /// kebab-case идентификатор строки страницы и ключей тестов
   /// (`command-palette`, `file-tree-open`).
   String get id =>
       name.replaceAllMapped(RegExp('[A-Z]'), (m) => '-${m[0]!.toLowerCase()}');
 
-  /// Привязка [action] ко всем активаторам всех комбинаций записи, для
-  /// `CallbackShortcuts`. Записи с разными действиями у альтернатив (меню
-  /// команд, дерево Files) привязывают по `combos[i].activators`.
-  Map<ShortcutActivator, VoidCallback> bind(VoidCallback action) => {
-    for (final combo in combos)
-      for (final activator in combo.activators) activator: action,
+  /// Комбинации записи на платформе [platform] (D15): у сочетаний ответа
+  /// клавиши macOS и остальных ОС различаются, у остальных записей это
+  /// общие [combos]. Платформу выбирает вызывающий (`defaultTargetPlatform`).
+  List<CodeLabKeyCombo> combosFor(TargetPlatform platform) =>
+      (platform == TargetPlatform.macOS ? macCombos : otherCombos) ?? combos;
+
+  /// Нотации поиска страницы «Keyboard» (D15, D8): общие комбинации — все
+  /// нотации, комбинации macOS — только нотации macOS (символы и слова ⌘/Option),
+  /// комбинации Windows и Linux — только слова этих ОС. Иначе поиск находил бы
+  /// клавиши, которых на платформе нет (`Y`, `Alt+Z` для записи с ⌘).
+  Iterable<String> searchNotations() => {
+    for (final combo in combos) ...combo.searchNotations(),
+    for (final combo in macCombos ?? const <CodeLabKeyCombo>[]) ...[
+      combo.compactFor(TargetPlatform.macOS),
+      combo.spokenFor(TargetPlatform.macOS),
+    ],
+    for (final combo in otherCombos ?? const <CodeLabKeyCombo>[])
+      combo.spokenFor(TargetPlatform.windows),
   };
+
+  /// Привязка [action] ко всем активаторам комбинаций записи на
+  /// `defaultTargetPlatform`, для `CallbackShortcuts`. Записи с разными
+  /// действиями у альтернатив (меню команд, дерево Files) привязывают по
+  /// `combos[i].activators`.
+  Map<ShortcutActivator, VoidCallback> bind(
+    VoidCallback action, {
+    bool includeRepeats = true,
+  }) => {
+    for (final combo in combosFor(defaultTargetPlatform))
+      for (final activator in combo.activatorsWith(
+        includeRepeats: includeRepeats,
+      ))
+        activator: action,
+  };
+}
+
+/// Сколько Alt и Shift зажаты одновременно, до текущего нажатия.
+///
+/// Почему: на Windows и Linux Alt+Shift — ещё и смена раскладки. Если буква
+/// ответа наложилась на смену раскладки, пользователь не собирался отвечать на
+/// одобрение (решение пользователя 2026-11-20, `fix-approval-focus`, D14).
+/// Различить это можно только по времени: модификаторы «зажаты заранее»,
+/// а не нажаты вместе с буквой.
+///
+/// Для чего: кит различает нажатие и сообщает хосту, сколько модификаторы уже
+/// зажаты (`CodeLabWorkbenchShortcuts.onAnswerApproval`); сколько этого
+/// достаточно, решает хост (политика — application, AGENTS.md §10). Класс не
+/// читает клавиши событий, а только состояние модификаторов
+/// `HardwareKeyboard`, поэтому литералов клавиш (сторож каталога, D3) нет.
+///
+/// Как использовать: владелец вызывает [attach] один раз и [detach] при
+/// освобождении; [heldFor] читают в момент нажатия сочетания. Обработчик
+/// `HardwareKeyboard` вызывается раньше фокус-дерева, поэтому к нажатию буквы
+/// отсчёт уже обновлён. [clock] — внедряемые часы (тесты двигают их явно).
+final class CodeLabModifierHoldTracker {
+  CodeLabModifierHoldTracker({DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
+
+  final DateTime Function() _clock;
+  DateTime? _since;
+  bool _attached = false;
+
+  /// Подписывается на события клавиатуры; повторный вызов ничего не делает.
+  void attach() {
+    if (_attached) {
+      return;
+    }
+    _attached = true;
+    HardwareKeyboard.instance.addHandler(_onKeyEvent);
+  }
+
+  /// Отписывается; без вызова подписка пережила бы владельца.
+  void detach() {
+    if (!_attached) {
+      return;
+    }
+    _attached = false;
+    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
+  }
+
+  bool _onKeyEvent(KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isAltPressed && keyboard.isShiftPressed) {
+      _since ??= _clock();
+    } else {
+      _since = null;
+    }
+    // Событие не поглощается: фокус-дерево обработает его как обычно.
+    return false;
+  }
+
+  /// Сколько Alt и Shift зажаты вместе; [Duration.zero] — не зажаты или
+  /// зажаты только что.
+  Duration get heldFor {
+    final since = _since;
+    if (since == null) {
+      return Duration.zero;
+    }
+    return _clock().difference(since);
+  }
 }

@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/widget_previews.dart';
 
 import 'codelab_approval_option_group.dart';
@@ -478,7 +479,9 @@ Widget codelabKeycapsPreview() {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CodeLabKeycaps(combos: CodeLabShortcut.allowAlways.combos),
+        CodeLabKeycaps(
+          combos: CodeLabShortcut.allowAlways.combosFor(defaultTargetPlatform),
+        ),
         const SizedBox(height: 12),
         CodeLabKeycaps(combos: CodeLabShortcut.fileTreeMove.combos),
       ],

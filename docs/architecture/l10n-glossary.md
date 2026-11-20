@@ -372,7 +372,7 @@
 
 ### Страница «Keyboard»
 
-Термины страницы «Settings › Keyboard» (change [`add-app-keyboard-page`](../../openspec/changes/add-app-keyboard-page/design.md), D5). Сообщения — `settingsKeyboard…` в `app_en.arb` и `app_ru.arb`. Обозначения клавиш (`⌘`, `Ctrl`, `Esc`, `⏎`) и `/` в «Command menu after /» не переводятся (§2): их выбирает каталог сочетаний кита по платформе. Строки одобрения несут метку `security`. Все термины вычитаны пользователем 2026-11-19 и приняты без правок (задача 3.6).
+Термины страницы «Settings › Keyboard» (change [`add-app-keyboard-page`](../../openspec/changes/add-app-keyboard-page/design.md), D5). Сообщения — `settingsKeyboard…` в `app_en.arb` и `app_ru.arb`. Обозначения клавиш (`⌘`, `Ctrl`, `Esc`, `⏎`) и `/` в «Command menu after /» не переводятся (§2): их выбирает каталог сочетаний кита по платформе. Строки одобрения несут метку `security`. Все термины вычитаны пользователем 2026-11-19 и приняты без правок (задача 3.6); строки «Go to approval» и места одобрения добавлены change [`fix-approval-focus`](../../openspec/changes/fix-approval-focus/design.md) (D7) и вычитаны 2026-11-20 (задача 4.3).
 
 | en | ru | Примечание |
 |---|---|---|
@@ -389,6 +389,9 @@
 | Sliding panel | Выдвижная панель | вычитано (2026-11-19) |
 | Agent commands have no shortcuts; open them from the command palette. | У команд агента нет сочетаний — открывайте их из палитры команд. | подпись под таблицей; вычитано (2026-11-19) |
 | No shortcuts match "{query}" | Нет сочетаний по запросу «{query}» | `{query}` — плейсхолдер (§2); вычитано (2026-11-19) |
+| Go to approval | Перейти к одобрению | `security`; действие сочетания Cmd/Ctrl+Shift+A (`settingsKeyboardActionGoToApproval`); как «Go to approval» панели Agents (§5); вычитано (2026-11-20, change `fix-approval-focus`) |
+| Workbench, while an approval is pending | Рабочее место, пока ждёт одобрение | `security`; колонка «Где» строки «Go to approval» (`settingsKeyboardWhereApprovalPending`); вычитано (2026-11-20) |
+| Workbench, earliest pending approval, if it offers this option | Рабочее место, самое раннее ожидающее одобрение, если в нём есть этот вариант | `security`; колонка «Где» четырёх строк ответа (`settingsKeyboardWhereApprovalAnywhere`): сочетания действуют с любого места рабочего места; заменяет «Pending approval with keyboard focus…» / «Ожидающее одобрение с фокусом клавиатуры…» (итерация 7, D14) и ещё раньше «Pending approval in focus…»; вычитано (2026-11-20) |
 | Allow once | Разрешить только сейчас | `security`; опирается на «Allow» и «Only this time» (§5); вычитано (2026-11-19) |
 | Allow always | Всегда разрешать | `security`; вычитано (2026-11-19) |
 | Reject once | Отклонить только сейчас | `security`; вычитано (2026-11-19) |

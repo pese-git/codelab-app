@@ -567,26 +567,47 @@ SubagentRequester? _requesterOf(PromptTurn turn, ApprovalRequest approval) {
 /// Запрос потомка при строке корня сюда не попадает: его одобрение лежит в
 /// `ToolCallItem.childApprovals` строки корня (D43 п. 2). [announced] —
 /// вызовы, объявленные `tool_call` хода.
+///
+/// Элемент один на `toolCallId`; его одобрение выбирается правилом D13
+/// (`_approvalFor`): самое раннее ожидающее, иначе последнее.
 List<TranscriptItem> _unannouncedApprovalItems(
   PromptTurn turn,
   Set<ToolCallId> seen,
   ApprovalRequestId? focused,
   Set<ToolCallId> announced,
-) => [
-  for (final approval in turn.approvals.values)
-    if (_hostRowOf(turn, approval, announced) == null &&
-        seen.add(approval.toolCall.id))
-      TranscriptItem.toolCall(
-        id: _toolItemId(turn.id, approval.toolCall.id),
-        toolCallId: approval.toolCall.id,
-        title: approval.toolCall.title,
-        details: _callView(
-          _cancelledWithTurn(turn, approval),
-          subagent: _requesterOf(turn, approval),
+) {
+  bool own(ApprovalRequest a) => _hostRowOf(turn, a, announced) == null;
+  return [
+    for (final first in turn.approvals.values)
+      // Элемент один на `toolCallId`, на месте первого запроса; одобрение
+      // элемента выбирается правилом D13 среди запросов этого вызова.
+      if (own(first) && seen.add(first.toolCall.id))
+        _unannouncedItem(
+          turn,
+          _chooseApproval(
+            turn.approvals.values.where(
+              (a) => a.toolCall.id == first.toolCall.id && own(a),
+            ),
+          )!,
+          focused,
         ),
-        approval: _approvalView(turn, approval, focused),
-      ),
-];
+  ];
+}
+
+TranscriptItem _unannouncedItem(
+  PromptTurn turn,
+  ApprovalRequest approval,
+  ApprovalRequestId? focused,
+) => TranscriptItem.toolCall(
+  id: _toolItemId(turn.id, approval.toolCall.id),
+  toolCallId: approval.toolCall.id,
+  title: approval.toolCall.title,
+  details: _callView(
+    _cancelledWithTurn(turn, approval),
+    subagent: _requesterOf(turn, approval),
+  ),
+  approval: _approvalView(turn, approval, focused),
+);
 
 /// Запись вызова без `tool_call` для показа: при отмене хода вместе с
 /// одобрением нетерминальный вызов помечается отменённым (см.
@@ -740,33 +761,61 @@ String? _command(ToolCallRecord record) {
   return command is String && command.trim().isNotEmpty ? command : null;
 }
 
-ApprovalRequest? _approvalFor(PromptTurn turn, ToolCallId toolCallId) {
-  for (final approval in turn.approvals.values) {
-    if (approval.toolCall.id == toolCallId) {
-      return approval;
-    }
+/// Одобрение элемента вызова [toolCallId] среди одобрений хода.
+///
+/// Почему: агент вправе спросить разрешение на тот же вызов повторно, а
+/// «первое по порядку» показывало решённый запрос поверх ожидающего — ответить
+/// на него в ленте было нельзя (D13 change `fix-approval-focus`).
+///
+/// Правило: самое раннее ожидающее по `requestedAt` (без него — по порядку
+/// прихода), иначе последнее по порядку прихода (его исход — тег строки).
+ApprovalRequest? _approvalFor(PromptTurn turn, ToolCallId toolCallId) =>
+    _chooseApproval(
+      turn.approvals.values.where(
+        (approval) => approval.toolCall.id == toolCallId,
+      ),
+    );
+
+/// Выбор одобрения по правилу D13 из [candidates] в порядке прихода.
+ApprovalRequest? _chooseApproval(Iterable<ApprovalRequest> candidates) =>
+    _earliestPending(candidates) ?? candidates.lastOrNull;
+
+/// Строгое «раньше» в едином порядке «самое раннее ожидающее» (D13).
+///
+/// Почему: сравнение «0 при отсутствии времени» нетранзитивно, и строка вызова
+/// с `focused` могли указывать на разные запросы (A(t2), B(null), C(t1)).
+/// Порядок: сначала запросы с `requestedAt` (по времени), затем без него;
+/// равные остаются в порядке прихода — это делает порядок полным и
+/// транзитивным.
+bool _isEarlierPending(ApprovalRequest a, ApprovalRequest b) {
+  final aTime = a.requestedAt;
+  final bTime = b.requestedAt;
+  if (aTime == null) {
+    return false;
   }
-  return null;
+  return bTime == null || aTime.isBefore(bTime);
 }
 
-/// Самое раннее по `requestedAt` ожидающее одобрение хода — единственное,
-/// которому принадлежат клавиши одобрения (embed-approval-in-thread/
-/// design.md, Decision 6).
-ApprovalRequestId? _earliestPendingApprovalId(PromptTurn turn) {
-  final pending =
-      turn.approvals.values
-          .where((approval) => approval.status == ApprovalStatus.pending)
-          .toList()
-        ..sort((a, b) {
-          final aTime = a.requestedAt;
-          final bTime = b.requestedAt;
-          if (aTime == null || bTime == null) {
-            return 0;
-          }
-          return aTime.compareTo(bTime);
-        });
-  return pending.firstOrNull?.id;
+/// Самое раннее ожидающее одобрение из [candidates] (порядок прихода) по
+/// [_isEarlierPending]; `null`, если ожидающих нет. Общая для выбора строки
+/// вызова и признака `focused`, чтобы они всегда указывали на один запрос.
+ApprovalRequest? _earliestPending(Iterable<ApprovalRequest> candidates) {
+  ApprovalRequest? best;
+  for (final approval in candidates) {
+    if (approval.status != ApprovalStatus.pending) {
+      continue;
+    }
+    if (best == null || _isEarlierPending(approval, best)) {
+      best = approval;
+    }
+  }
+  return best;
 }
+
+/// Самое раннее ожидающее одобрение хода — единственное, которому принадлежат
+/// клавиши одобрения (embed-approval-in-thread/design.md, Decision 6; D13).
+ApprovalRequestId? _earliestPendingApprovalId(PromptTurn turn) =>
+    _earliestPending(turn.approvals.values)?.id;
 
 ApprovalStateView? _approvalView(
   PromptTurn turn,

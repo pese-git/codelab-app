@@ -3682,10 +3682,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsKeyboardWhereCommandMenu => 'Меню команд после /';
 
   @override
-  String get settingsKeyboardWhereApproval =>
-      'Ожидающее одобрение в фокусе, когда агент предлагает этот вариант';
-
-  @override
   String get settingsSearchKeywordsKeyboard =>
       'сочетание, горячие клавиши, клавиатура, клавиша';
 
@@ -3847,4 +3843,15 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsGeneralNoTelemetryDescription =>
       'Приложение, CLI и агент не отправляют аналитику использования и отчёты о сбоях. Промпты и файлы уходят только провайдеру и инструментам, которые вы настроили.';
+
+  @override
+  String get settingsKeyboardWhereApprovalAnywhere =>
+      'Рабочее место, самое раннее ожидающее одобрение, если в нём есть этот вариант';
+
+  @override
+  String get settingsKeyboardActionGoToApproval => 'Перейти к одобрению';
+
+  @override
+  String get settingsKeyboardWhereApprovalPending =>
+      'Рабочее место, пока ждёт одобрение';
 }

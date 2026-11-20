@@ -49,6 +49,21 @@ flowchart LR
 - `CodeLabStatusTable` рисует готовые строки и ячейки; действие строки — колбэк.
 - `CodeLabUsagePane` показывает уже отформатированные значения (`CodeLabUsageCard`, `CodeLabUsageRow`, `CodeLabUsageNote`); кит ничего не считает.
 
+## Одобрение: фокус и переход
+
+`CodeLabApprovalPrompt` (полоса решения) не берёт клавиатурный фокус сама и не привязывает своих клавиш. Ответ с клавиатуры даёт `CodeLabWorkbenchShortcuts.onAnswerApproval`: сочетания действуют с любого места рабочего места, включая поле ввода, и не повторяются при удержании клавиши. Клик по кнопке варианта просто отвечает этой кнопкой.
+
+- **Клавиши по платформе.** Каталог `CodeLabShortcut` хранит клавиши ответа отдельно для macOS (⌘Y, ⌥⌘Y, ⌥⌘Z, ⌥⇧⌘Z) и для Windows и Linux (Alt+Shift+Y, Q, X, W); клавиши на платформе даёт `combosFor(TargetPlatform)`, точный ⌘ без Ctrl задаёт поле `meta` комбинации.
+- **Раскладка ввода.** Каталог сверяет логическую клавишу события: при нелатинской раскладке (русской) Flutter отдаёт латинскую клавишу той же позиции, при латинской (AZERTY, QWERTZ, Dvorak) — напечатанную букву. Кириллица без модификатора сочетанием не считается.
+- **Что решает хост.** Кит передаёт в `onAnswerApproval` вид варианта (`CodeLabApprovalOptionKind`) и, на Windows и Linux, сколько Alt и Shift зажаты вместе к моменту нажатия буквы (`CodeLabModifierHoldTracker`; часы — параметр `clock` у `CodeLabWorkbenchShortcuts`; на macOS `null`). Цель, наличие варианта, видимость полосы, срок зажатия модификаторов (Alt+Shift — ещё и смена раскладки) и задержку после появления решает app.
+- **Видимость.** `CodeLabApprovalVisibility` передаётся в `CodeLabTranscriptPanel(approvalVisibility:)`; `isVisible(sessionId, approvalId)` говорит, видна ли полоса целиком и не закрыта ли панелью поверх ленты. Без ленты полоса считается невидимой.
+- **Переход.** `CodeLabWorkbenchShortcuts.onGoToApproval` привязывает `CodeLabShortcut.goToApproval` (⇧⌘A, `Ctrl+Shift+A`). Какое одобрение показать, решает app. Он просит ленту показать цель с `CodeLabTranscriptShowRequest.focusApproval`, и лента ставит фокус на полосу.
+- **Вид.** Фокус на полосе виден рамкой (`focusFrameKey`); Tab идёт сразу к кнопкам, Enter и Space на самой полосе ничего не выбирают. На кнопках варианта стоят подсказки клавиш платформы.
+- **Возврат.** Когда полоса с фокусом уходит, она вызывает `onApprovalFocusReleased`; хост возвращает фокус.
+- **Ключ.** Ключ полосы строится из id сессии и id запроса (`CodeLabApprovalPrompt.keyFor`): новый запрос не наследует фокус прежнего.
+
+`CodeLabApprovalOptionGroup` тоже без `autofocus` и без своих клавиш.
+
 ## Тема и тоны
 
 Своей темы у пакета нет: виджеты берут цвета и типографику из `FluentTheme.of(context)`, поэтому ими управляет `FluentApp` приложения (`apps/codelab_desktop/lib/app/codelab_app_widget.dart`). Светлую и тёмную тему проверяют превью.
