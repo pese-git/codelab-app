@@ -42,7 +42,15 @@ enum ApprovalShortcutSkipReason {
   modifiersNotHeld('modifiers_not_held'),
 
   /// Предыдущий ответ ещё в полёте; новое нажатие ничего не отправляет.
-  answerInFlight('answer_in_flight');
+  answerInFlight('answer_in_flight'),
+
+  /// Палитра команд открыта и закрывает рабочее место: ответ не уходит
+  /// (D14); нажатие оставляет след (D9, AGENTS.md §16). Цели в событии нет.
+  paletteOpen('palette_open'),
+
+  /// Открыт диалог открытия сессии в корне диска: ответ не уходит (D14, D24);
+  /// цели в событии нет.
+  rootDialog('root_dialog');
 
   const ApprovalShortcutSkipReason(this.wireName);
 

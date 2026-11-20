@@ -683,10 +683,20 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   }) {
     // Палитра и диалог открытия сессии в корне диска закрывают рабочее место:
     // ответ из них не уходит (D14); оба лежат внутри поддерева сочетаний.
+    // Молчаливый выход не оставил бы следа в журнале (D9, §16): пишем
+    // событие без `request_id` — решение о цели здесь ещё не принималось.
+    final sessionId = _parts.activeSession.state.sessionId;
     if (state.isCommandPaletteOpen || state.pendingRootSession != null) {
+      _parts.activeSession.logApprovalShortcutSkipped(
+        ApprovalShortcutSkipped(
+          reason: state.isCommandPaletteOpen
+              ? ApprovalShortcutSkipReason.paletteOpen
+              : ApprovalShortcutSkipReason.rootDialog,
+          sessionId: sessionId,
+        ),
+      );
       return;
     }
-    final sessionId = _parts.activeSession.state.sessionId;
     final decision = approvalShortcutDecisionOf(
       connectionStatus: state.connectionStatus,
       view: sessionId == null
