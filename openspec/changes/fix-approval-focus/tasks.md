@@ -193,8 +193,8 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - `openspec validate fix-approval-focus --strict`;
   - если правились опубликованные на сайте документы и установлен Node — `cd site && npm ci && npm run verify`.
 - [ ] 6.2 `[desktop]` Ручная проверка app:
-  - на macOS — появление одобрения после клика по пустой ленте, затем ⌘⏎: ответа нет; ⇧⌘A и ⌘⏎: ответ; VoiceOver на полосе;
-  - на Windows — Ctrl+Shift+A не переключает раскладку и доходит до app (D3, Risks). При конфликте — решение по Q1 до PR.
+  - на macOS — появление одобрения после клика по пустой ленте, затем ⌘⏎: ответа нет; ⇧⌘A и ⌘⏎: ответ; VoiceOver на полосе; — пройдено пользователем 2026-11-20 (debug-сборка ветки);
+  - на Windows — Ctrl+Shift+A не переключает раскладку и доходит до app (D3, Risks). При конфликте — решение по Q1 до PR. — не проверялось.
 - [x] 6.3 `[desktop]` Двойное ревью (`architecture-reviewer`, `acp-safety-reviewer`): ни одного пути к ответу на `session/request_permission` без явного действия пользователя.
 - [ ] 6.4 `[desktop]` Архивация — только после архивации `add-app-keyboard-page`: MODIFIED-дельта app-settings опирается на его требования (proposal, «Зависимость»).
 - [ ] 6.5 `[desktop]` PR в `develop`. В описании:
