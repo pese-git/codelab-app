@@ -1839,6 +1839,134 @@
    "w": 1180,
    "x": 10080,
    "y": 5620
+  },
+  "PhoneWizardFailKey.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11e Provider wizard — check failed: key rejected (401)",
+   "w": 390,
+   "x": 2350,
+   "y": 6416
+  },
+  "PhoneWizardFailKey-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11e Provider wizard — check failed: key rejected (401) — dark",
+   "w": 390,
+   "x": 2350,
+   "y": 6416
+  },
+  "PhoneWizardFailNet.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11f Provider wizard — check failed: unreachable or timeout",
+   "w": 390,
+   "x": 2820,
+   "y": 6416
+  },
+  "PhoneWizardFailNet-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11f Provider wizard — check failed: unreachable or timeout — dark",
+   "w": 390,
+   "x": 2820,
+   "y": 6416
+  },
+  "PhoneWizardSkip.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11g Provider wizard — confirm “Save without check”",
+   "w": 390,
+   "x": 3290,
+   "y": 6416
+  },
+  "PhoneWizardSkip-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11g Provider wizard — confirm “Save without check” — dark",
+   "w": 390,
+   "x": 3290,
+   "y": 6416
+  },
+  "PhoneWizardManual.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11h Provider wizard — model entered by hand (not verified)",
+   "w": 390,
+   "x": 3760,
+   "y": 6416
+  },
+  "PhoneWizardManual-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11h Provider wizard — model entered by hand (not verified) — dark",
+   "w": 390,
+   "x": 3760,
+   "y": 6416
+  },
+  "TabletOnbWizardFailKey.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13f Tablet — wizard: check failed, key rejected (401)",
+   "w": 1180,
+   "x": 5040,
+   "y": 6580
+  },
+  "TabletOnbWizardFailKey-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13f Tablet — wizard: check failed, key rejected (401) — dark",
+   "w": 1180,
+   "x": 5040,
+   "y": 6580
+  },
+  "TabletOnbWizardFailNet.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13g Tablet — wizard: check failed, unreachable",
+   "w": 1180,
+   "x": 6300,
+   "y": 6580
+  },
+  "TabletOnbWizardFailNet-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13g Tablet — wizard: check failed, unreachable — dark",
+   "w": 1180,
+   "x": 6300,
+   "y": 6580
+  },
+  "TabletOnbWizardSkip.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13h Tablet — wizard: confirm “Save without check”",
+   "w": 1180,
+   "x": 7560,
+   "y": 6580
+  },
+  "TabletOnbWizardSkip-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13h Tablet — wizard: confirm “Save without check” — dark",
+   "w": 1180,
+   "x": 7560,
+   "y": 6580
+  },
+  "TabletOnbWizardManual.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13i Tablet — wizard: model entered by hand (not verified)",
+   "w": 1180,
+   "x": 8820,
+   "y": 6580
+  },
+  "TabletOnbWizardManual-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13i Tablet — wizard: model entered by hand (not verified) — dark",
+   "w": 1180,
+   "x": 8820,
+   "y": 6580
   }
  },
  "createdOnFiles": {
@@ -1915,7 +2043,9 @@
   "t-row5",
   "dt-row5",
   "p-row5s",
-  "t-row5s"
+  "t-row5s",
+  "p-row5f",
+  "t-row5f"
  ],
  "notes": {
   "c-row1": {
@@ -2604,6 +2734,24 @@
    "x": 11340,
    "y": 5620,
    "text": "Онбординг на планшете (D-11, §12.4.9, §12.8.5): T11 → T12 → T13 → мастер T13a–T13d диалогом поверх шага 3 → T13e → T14 → T1.\nКак на десктопе (07b–07a), с ограничениями профиля mobile: в T12 команд нет, в T13b ключ — Keychain или «No key». Отказ проверки — как 06.\nКнопки и строки ≥ 44 px. Граф переходов — NavOnboarding."
+  },
+  "p-row5f": {
+   "fill": "orange",
+   "size": 24,
+   "page": "phone",
+   "w": 460,
+   "x": 4230,
+   "y": 6416,
+   "text": "Отказ проверки (§12.4.4, шаги 4–5), под P11 Check.\nP11e — 401/403: ключ не принят; Back → P11b (ключ), Retry повторяет проверку.\nP11f — нет ответа или таймаут 10 с: Retry, Back → P11a (Base URL) и «Save without check…».\nP11g — подтверждение; после него P11h: модель и окно контекста вручную, Review покажет «Not verified: timeout».\nВ сообщении только код и вид отказа, тело ответа не показывается; редиректы не выполняются (SETUP-23). 404 на OpenAI-совместимом адресе — как 06 десктопа."
+  },
+  "t-row5f": {
+   "fill": "orange",
+   "size": 24,
+   "page": "tablet",
+   "w": 460,
+   "x": 10080,
+   "y": 6580,
+   "text": "Отказ проверки на планшете (§12.4.4, шаги 4–5), под T13b–T13c: T13f — 401, Back → T13b; T13g — недоступен или таймаут, Back → T13a, «Save without check…»; T13h — подтверждение; T13i — модель вручную, Review с «Not verified: timeout». 404 — как 06."
   }
  },
  "order": [
@@ -2825,7 +2973,23 @@
   "TabletOnbModelDone.dc.html",
   "TabletOnbModelDone-dark.dc.html",
   "TabletOnbPrivacy.dc.html",
-  "TabletOnbPrivacy-dark.dc.html"
+  "TabletOnbPrivacy-dark.dc.html",
+  "PhoneWizardFailKey.dc.html",
+  "PhoneWizardFailKey-dark.dc.html",
+  "PhoneWizardFailNet.dc.html",
+  "PhoneWizardFailNet-dark.dc.html",
+  "PhoneWizardSkip.dc.html",
+  "PhoneWizardSkip-dark.dc.html",
+  "PhoneWizardManual.dc.html",
+  "PhoneWizardManual-dark.dc.html",
+  "TabletOnbWizardFailKey.dc.html",
+  "TabletOnbWizardFailKey-dark.dc.html",
+  "TabletOnbWizardFailNet.dc.html",
+  "TabletOnbWizardFailNet-dark.dc.html",
+  "TabletOnbWizardSkip.dc.html",
+  "TabletOnbWizardSkip-dark.dc.html",
+  "TabletOnbWizardManual.dc.html",
+  "TabletOnbWizardManual-dark.dc.html"
  ],
  "pages": [
   {
