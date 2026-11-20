@@ -47,7 +47,7 @@
 | Числа usage | `94.0k`, `1.2M`, `$1.20`, `79%`, `m:ss` — формат ядра клиента, общий с CLI и CSV: точка, без пробелов между разрядами, `k` и `M` не переводятся (D8, Q2) |
 | Даты списка сессий | `yyyy-MM-dd HH:mm` (D8) |
 | Диагностика | содержимое «Debug log» и «Inspector», события журнала и их поля, `WorkspaceDiagnostic.message`, текст исключений. Заголовки вкладок «Debug log» и «Inspector» переводятся (Q3) |
-| Юридические тексты | `LICENSE`, записи `THIRD_PARTY_NOTICES.md` в диалоге «Third-party notices», лицензии пакетов (`LicenseRegistry`) — как есть, на языке источника (change `add-app-general-page`, D13) |
+| Юридические тексты | `PRIVACY.md` и `TERMS.md` не переводятся при показе: страница «Legal» выбирает готовую редакцию по языку интерфейса (`PRIVACY.ru.md`, `TERMS.ru.md` при русском, английская — при любом другом). `LICENSE`, записи `THIRD_PARTY_NOTICES.md` на вкладке «Third-party notices» и лицензии пакетов (`LicenseRegistry`) — как есть, на языке источника (change `add-app-general-page`, D13; change `add-app-legal-page`, D2). Имена пакетов не переводятся |
 | Ключи тестов | `ValueKey` (`settings-nav-general`, `settings-language-ru`) |
 
 Подпись `Unknown kind` и другие подписи «неизвестного значения» переводятся: это текст app, а не значение провода.
@@ -167,6 +167,7 @@
 | General | Общие |
 | Appearance | Оформление |
 | Keyboard | Клавиатура |
+| Legal | Правовая информация |
 | Language | Язык |
 | System (значение языка) | Как в системе |
 
@@ -302,14 +303,14 @@
 | embedded agent {version} | встроенный агент {version} | подзаголовок «About»; термин — §3 |
 | License | Лицензия | строка «About»; `MIT` не переводится (§2) |
 | Config folder | Папка настроек | строка «About» со значением `$CODELAB_HOME`: в ней не только конфигурация, поэтому не «папка конфигурации» (решение пользователя 2026-11-19) |
-| Package licenses | Лицензии пакетов | заголовок списка в диалоге «Third-party notices» |
+| Package licenses | Лицензии пакетов | заголовок списка пакетов; с change `add-app-legal-page` — раздел вкладки «Third-party notices» страницы «Legal» (§4, «Страница «Legal»») |
 | Close | Закрыть | кнопка диалога |
 | Diagnostics copied | Диагностика скопирована | подтверждение «Copy diagnostics» |
 | Budget (подзаголовок группы) | Бюджет | раздел реестра `Budget`: ключи `budget.*` (решение пользователя 2026-11-19, D2) |
 | Agent (подзаголовок группы) | Агент | раздел реестра `Agent` (`compaction.enabled`) |
 | Subagents (подзаголовок группы) | Субагенты | раздел реестра `Subagents` |
 | Logging (подзаголовок группы) | Журнал агента | раздел реестра `Logging` (`logging.level`); значение «журнала» — «журнал агента» (§4, «Журнал: значения слова») |
-| Entries of the CodeLab third-party notices register, as kept in the repository. | Записи реестра сторонних уведомлений CodeLab в том виде, в каком они хранятся в репозитории. | подпись диалога «Third-party notices»; сами записи не переводятся (§2) |
+| Entries of the CodeLab third-party notices register, as kept in the repository. | Записи реестра сторонних уведомлений CodeLab в том виде, в каком они хранятся в репозитории. | подпись реестра; с change `add-app-legal-page` — на вкладке «Third-party notices» страницы «Legal»; сами записи не переводятся (§2) |
 
 Подписи ключей реестра в блоке «Agent defaults» (английский текст — `label` и `description` реестра, D2):
 
@@ -395,6 +396,51 @@
 | shortcut, hotkey, keybinding, key | сочетание, горячие клавиши, клавиатура, клавиша | ключевые слова поиска страницы настроек; вычитано (2026-11-19) |
 
 Остальные тексты действий и мест («Open the command palette» → «Открыть палитру команд», «Show or hide the Files pane» → «Показать или скрыть панель файлов» и т. д.) собраны из терминов §3–§5 и приняты вместе с таблицей.
+
+### Страница «Legal»
+
+Термины страницы «Settings › Legal» и ссылок на неё со страницы «General» (change [`add-app-legal-page`](../../openspec/changes/add-app-legal-page/design.md), D1, D2, D6, D9, D10; артборды `Legal`, `Terms`, `License`, `Notices`, `NoticesSearch`, `NoticesMatch`, `NoticesEmpty`). Сообщения — `settingsLegal…`, `settingsPageLegal`, `settingsSearchKeywordsLegal` и блок «Privacy» `settingsGeneral…` в `app_en.arb` и `app_ru.arb`.
+
+Не переводятся (§2): тексты документов — страница показывает готовую редакцию `PRIVACY.ru.md` или `TERMS.ru.md` по языку интерфейса, а не перевод каталога; `LICENSE`, записи реестра `THIRD_PARTY_NOTICES.md` и лицензии пакетов — как есть; имена пакетов; путь ресурса `assets/legal/…` и версия в подписи источника; `MIT`. Запрос поиска в пустом блоке — плейсхолдер в «ёлочках» (§1 п. 5), экранированный `escapeForDisplay`.
+
+Названия вкладок совпадают с названиями ссылок «About» и блока «Privacy» страницы «General»: одна вкладка — одно имя на обеих страницах (§1 п. 1).
+
+| en | ru | Примечание |
+|---|---|---|
+| Legal | Правовая информация | заголовок страницы и пункт навигации; см. «Страницы и группы настроек» |
+| Legal documents | Правовые документы | доступное имя группы вкладок для программ чтения с экрана |
+| Privacy policy | Политика конфиденциальности | вкладка, ссылки «About» и блока «Privacy»; подпись не обрезается — вкладки прокручиваются (D6) |
+| Terms of use | Условия использования | вкладка и ссылка «About» |
+| License | Лицензия | вкладка; совпадает со строкой «About» (§4, «Страница «General»») |
+| Third-party notices | Сторонние уведомления | вкладка; совпадает с кнопкой «About» |
+| Bundled with CodeLab {version} as {asset} · readable offline | Поставляется с CodeLab {version} как {asset} · доступно без сети | подпись источника `settings-legal-source`; `{version}` и `{asset}` не переводятся (§2) |
+| Couldn't load this document. | Не удалось загрузить документ. | InfoBar `settings-legal-load-failed` |
+| Couldn't open the link. | Не удалось открыть ссылку. | InfoBar `settings-legal-link-failed`; перевод как у `workbenchLinkOpenFailed` |
+| Allowed | Разрешено | строка краткого содержания MIT |
+| Use, copy, modify, merge, publish, distribute, sublicense and sell copies | Использовать, копировать, изменять, объединять, публиковать, распространять, сублицензировать и продавать копии | значение «Allowed»; вычитывает пользователь (юридическая проверка, open question 1 change) |
+| Condition | Условие | строка краткого содержания MIT |
+| Keep the copyright and license notice in copies or substantial portions | Сохранять уведомление об авторском праве и текст лицензии во всех копиях и существенных частях | значение «Condition»; вычитывает пользователь |
+| No warranty | Без гарантий | строка краткого содержания MIT |
+| Provided “as is”; the authors are not liable for damages | Предоставляется «как есть»; авторы не отвечают за ущерб | значение «No warranty»; вычитывает пользователь |
+| This summary is not the license. The full text below is what applies. | Это краткое содержание, а не лицензия. Действует полный текст ниже. | подпись под кратким содержанием; вычитывает пользователь |
+| Third-party components | Сторонние компоненты | абзац вкладки «License» |
+| Open-source packages bundled with CodeLab keep their own licenses. They are listed in Third-party notices. | Пакеты с открытым исходным кодом в составе CodeLab сохраняют свои лицензии. Они перечислены на вкладке «Сторонние уведомления». | «Сторонние уведомления» — текст ссылки `settings-legal-license-notices-link`; в `ru` название вкладки не склоняется, поэтому «на вкладке …» |
+| Notices register | Реестр уведомлений | раздел 1 вкладки «Third-party notices»; полное имя в подписи — «реестр сторонних уведомлений» (§4, «Страница «General»») |
+| Package licenses | Лицензии пакетов | раздел 2 вкладки (уже принят, §4, «Страница «General»») |
+| Every package the build collected, including development tools of the workspace. A longer list is safe; a missing license would not be. | Все пакеты, которые собрала сборка, включая инструменты разработки рабочего пространства. Лишние строки в списке безопасны, пропущенная лицензия — нет. | InfoBar `settings-legal-packages-info` |
+| Search packages | Поиск пакетов | подсказка поля; как «Search sessions» → «Поиск сессий» (§5) |
+| Search packages by name | Поиск пакетов по имени | доступное имя поля |
+| Clear search | Очистить поиск | крестик поля и кнопка пустого блока; как «Clear all» → «Очистить всё» (§5) |
+| {count} packages | {count} пакет / пакета / пакетов | счётчик `settingsLegalPackagesCount`, ICU `plural` (§1 п. 7) |
+| {matched} of {total} packages | {matched} из {total} пакета / пакетов | счётчик `settingsLegalPackagesMatched`: после «из» — родительный падеж, `one{# пакета} few{# пакетов} many{# пакетов} other{# пакета}` (D6) |
+| {count} license / licenses | {count} лицензия / лицензии / лицензий | число лицензий в заголовке пакета, ICU `plural` |
+| No packages match | Нет подходящих пакетов | заголовок пустого блока `settings-legal-packages-empty` |
+| No package name contains “{query}”. The notices register above is not affected by search. | Ни одно имя пакета не содержит «{query}». Поиск не меняет реестр уведомлений выше. | текст пустого блока; кавычки `“…”` в `ru` — «ёлочки» (§1 п. 5) |
+| Privacy (блок «General») | Конфиденциальность | заголовок блока `settings-general-privacy` |
+| No telemetry | Без телеметрии | строка блока «Privacy»; справка, а не настройка (D9) |
+| The app, the CLI and the agent send no usage analytics or crash reports. Prompts and files go only to the provider and tools you set up. | Приложение, CLI и агент не отправляют аналитику использования и отчёты о сбоях. Промпты и файлы уходят только провайдеру и инструментам, которые вы настроили. | описание «No telemetry»; `CLI` не переводится (§2) |
+| legal, privacy, terms, license, notices, third-party, telemetry, packages | правовая, конфиденциальность, условия, лицензия, уведомления, телеметрия, пакеты | ключевые слова поиска страницы `settingsSearchKeywordsLegal` (spec `app-settings` «Страница «Legal»: видимость и вкладки») |
+| telemetry (ключевое слово «General») | телеметрия | добавляется в `settingsSearchKeywordsGeneral` |
 
 ### Настройки I: «Подключение», «Провайдеры», мастер провайдера (итерация 4)
 
