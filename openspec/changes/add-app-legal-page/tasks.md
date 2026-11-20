@@ -47,7 +47,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - каждый файл каталога `assets/legal/` объявлен.
 
   Красный: копий нет.
-- [ ] 1.4 `[desktop]` Реализация 1.3: копии четырёх файлов в `apps/codelab_desktop/assets/legal/`, записи в `pubspec.yaml` (`flutter.assets`). Комментарий над списком ссылается на D4. 1.3 зелёный.
+- [x] 1.4 `[desktop]` Реализация 1.3: копии четырёх файлов в `apps/codelab_desktop/assets/legal/`, записи в `pubspec.yaml` (`flutter.assets`). Комментарий над списком ссылается на D4. 1.3 зелёный.
 
 ## 2. Итерация 2 — application страницы «Legal»
 
@@ -56,13 +56,13 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - вхождения без перекрытия (`aaa` / `aa` — одно);
   - порядок сохраняется;
   - `total` не зависит от запроса;
-  - имя, у которого нижний регистр меняет длину, попадает в выдачу без диапазонов.
-- [ ] 2.2 `[desktop]` Реализация 2.1: `features/settings/application/package_license_search.dart` (`PackageLicense`, `PackageSearch`, `PackageHit`, `searchPackageLicenses`). Doc-комментарии по `AGENTS.md` §15. 2.1 зелёный.
+  - имя, у которого нижний регистр меняет длину или в котором есть не-ASCII символ (`İstanbul`), попадает в выдачу без диапазонов.
+- [x] 2.2 `[desktop]` Реализация 2.1: `features/settings/application/package_license_search.dart` (`PackageLicense`, `PackageSearch`, `PackageHit`, `searchPackageLicenses`). Doc-комментарии по `AGENTS.md` §15. 2.1 зелёный.
 - [x] 2.3 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/application/legal_document_routing_test.dart` (D2, D8; spec «…документы на языке интерфейса», «…ссылки внутри документов»):
   - `legalAssetOf`: `ru` → `*.ru.md`, `en`, `de` и пустой код → английские, `LICENSE` и `THIRD_PARTY_NOTICES.md` от языка не зависят;
   - `legalLinkOf`: `TERMS.md`, `./LICENSE#x`, `PRIVACY.ru.md` → вкладка; `https://…` → внешняя; `http:`, `mailto:`, `file:`, `SECURITY.md`, `../PRIVACY.md` → нет;
   - `LegalTab.slug` и `logName`.
-- [ ] 2.4 `[desktop]` Реализация 2.3: `features/settings/application/legal_documents.dart` (`LegalTab`, `legalAssetOf`, `LegalLink`, `legalLinkOf`). 2.3 зелёный.
+- [x] 2.4 `[desktop]` Реализация 2.3: `features/settings/application/legal_documents.dart` (`LegalTab`, `legalAssetOf`, `LegalLink`, `legalLinkOf`). 2.3 зелёный.
 - [x] 2.5 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/application/legal_page_cubit_test.dart` (D7, D8, D10, D11) на портах-двойниках `LegalPorts` и записывающем логгере:
   - `open(null, 'en')` выбирает «Privacy policy» и читает только `PRIVACY.md`;
   - `open(LegalTab.termsOfUse, 'ru')` читает `TERMS.ru.md`;
@@ -78,7 +78,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - запись с двумя пакетами относится к каждому;
   - пакеты идут по имени;
   - ошибка потока даёт собранное и `failed: true`, без исключения.
-- [ ] 2.7 `[desktop]` Реализация 2.5–2.6:
+- [x] 2.7 `[desktop]` Реализация 2.5–2.6:
   - `features/settings/application/legal_ports.dart`, `legal_page_state.dart`, `legal_page_cubit.dart`;
   - `lib/app/legal_ports_factory.dart` (`buildLegalPorts`, `collectPackageLicenses`) — единственное место `rootBundle` и `LicenseRegistry` для страницы;
   - `CodeLabDependencies.legalPorts`, шов `CodeLabTestBinding(legalPorts:)`.
@@ -93,11 +93,11 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - семантика: подпись группы, `selected` у выбранной вкладки;
   - в ширину 400 px с длинными русскими подписями нет многоточия и переполнения, есть горизонтальная прокрутка;
   - цвета из `FluentTheme` в светлой и тёмной теме.
-- [ ] 3.2 `[desktop]` Реализация 3.1: `packages/flutter/codelab_ui/lib/src/molecules/codelab_selector_bar.dart`, экспорт через `molecules.dart`, пример в `codelab_molecule_previews.dart` (один экран — на `ru`), `codelab_previews_test.dart`. 3.1 зелёный.
+- [x] 3.2 `[desktop]` Реализация 3.1: `packages/flutter/codelab_ui/lib/src/molecules/codelab_selector_bar.dart`, экспорт через `molecules.dart`, пример в `codelab_molecule_previews.dart` (один экран — на `ru`), `codelab_previews_test.dart`. 3.1 зелёный.
 
 ## 4. Итерация 4 — страница «Legal» и навигация
 
-- [ ] 4.1 `[desktop]` Красный: навигация (D1; spec app-settings «Навигация настроек», сценарий «Legal — последний пункт группы «App»»; «Страница «Legal»: видимость и вкладки», сценарии «Последняя страница без вкладки», «Поиск страницы по ключевому слову»):
+- [x] 4.1 `[desktop]` Красный: навигация (D1; spec app-settings «Навигация настроек», сценарий «Legal — последний пункт группы «App»»; «Страница «Legal»: видимость и вкладки», сценарии «Последняя страница без вкладки», «Поиск страницы по ключевому слову»):
   - `test/app/navigation/navigation_cubit_test.dart`: `selectSettingsPage(legal, legalTab: termsOfUse)` выпускает `SettingsDestination` с вкладкой; `last_page` хранит `legal`; повторное открытие даёт `legalTab: null`;
   - тест оболочки настроек: `settings-nav-legal` последний в «App», поиск `privacy` и `конфиденциальность` (на `ru`);
   - `defaultSettingsPages` содержит `legal`.
@@ -108,13 +108,13 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - ARB `settingsPageLegal`, `settingsSearchKeywordsLegal`.
 
   4.1 зелёный.
-- [ ] 4.3 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/legal_page_test.dart` (spec «Страница «Legal»: видимость и вкладки», «…документы на языке интерфейса», «…ссылки внутри документов», «…вкладка «License»», «…вкладка «Third-party notices»» — все сценарии, кроме поиска). Плюс:
+- [x] 4.3 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/legal_page_test.dart` (spec «Страница «Legal»: видимость и вкладки», «…документы на языке интерфейса», «…ссылки внутри документов», «…вкладка «License»», «…вкладка «Third-party notices»» — все сценарии, кроме поиска). Плюс:
   - подпись `settings-legal-source` для каждой вкладки;
   - InfoBar `settings-legal-load-failed` и `settings-legal-link-failed` без пути и адреса;
   - на странице нет ключей кнопок артбордов из D12.
 
   Порты — двойники с фиктивными текстами ресурсов и реестра.
-- [ ] 4.4 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/legal_notices_search_test.dart` (spec «Страница «Legal»: поиск по пакетам», все сценарии; D6). Проверяет:
+- [x] 4.4 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/legal_notices_search_test.dart` (spec «Страница «Legal»: поиск по пакетам», все сценарии; D6). Проверяет:
   - подсветку через `TextSpan` (жирные диапазоны), видимый текст и `Semantics` имени без изменений;
   - крестик только при непустом запросе;
   - блок `settings-legal-packages-empty` с экранированным запросом (bidi-символ показан как `‮`);
@@ -131,7 +131,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 5. Итерация 5 — ссылки «General» и удаление диалога
 
-- [ ] 5.1 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/general_page_test.dart` (D9; spec «Страница «General»: состав и порядок» — сценарии «Порядок блоков», «No telemetry» ведёт на политику»; «Раздел «About» страницы «General»» — «Ссылки «About» открывают вкладки Legal», «Диалога сторонних уведомлений нет»; «События журнала страницы «General»» — «Переход на Legal в журнале»). Ожидания прежнего диалога `settings-general-third-party-dialog` в тесте заменяются ожиданием вкладки. Остальные сценарии «About» (версии, диагностика, сбои) зелёные без изменений.
+- [x] 5.1 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/general_page_test.dart` (D9; spec «Страница «General»: состав и порядок» — сценарии «Порядок блоков», «No telemetry» ведёт на политику»; «Раздел «About» страницы «General»» — «Ссылки «About» открывают вкладки Legal», «Диалога сторонних уведомлений нет»; «События журнала страницы «General»» — «Переход на Legal в журнале»). Ожидания прежнего диалога `settings-general-third-party-dialog` в тесте заменяются ожиданием вкладки. Остальные сценарии «About» (версии, диагностика, сбои) зелёные без изменений.
 - [ ] 5.2 `[desktop]` Реализация 5.1:
   - `general_page.dart` — блок «Privacy» и колбэк `onOpenLegal`;
   - `about_section.dart` — кнопки «Privacy policy», «Terms of use», ссылка `MIT`, «Third-party notices» на вкладку; `_ThirdPartyDialog` и импорт `LicenseRegistry` удалены;

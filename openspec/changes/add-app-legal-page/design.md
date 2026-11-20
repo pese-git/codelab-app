@@ -127,7 +127,7 @@ Draft pending legal review. …       ← «Черновик до юридиче
 - `searchPackageLicenses(List<PackageLicense> all, String query) → PackageSearch { int total; String needle; List<PackageHit> hits }`, где `PackageHit { PackageLicense package; List<(int start, int end)> ranges }`;
 - `needle = query.trim().toLowerCase()`. Пустой `needle` возвращает все пакеты без диапазонов;
 - иначе пакет попадает в выдачу, если `name.toLowerCase().contains(needle)`. Диапазоны — все вхождения слева направо без перекрытия: следующий поиск идёт с конца предыдущего вхождения, поэтому `aaa` по запросу `aa` даёт одно вхождение;
-- если `name.toLowerCase().length != name.length` (редкая Unicode-свёртка), пакет попадает в выдачу без подсветки. Неверная подсветка хуже её отсутствия. Имена pub — ASCII `[a-z0-9_]`, так что ветка защитная;
+- если `name.toLowerCase().length != name.length` или в имени есть не-ASCII символ (кодовая единица больше `0x7f`), пакет попадает в выдачу без подсветки. Одной проверки длины мало: Unicode-свёртка может сдвинуть индексы и без изменения длины — в Dart `'İstanbul'.toLowerCase()` длину не меняет. Неверная подсветка хуже её отсутствия. Имена pub — ASCII `[a-z0-9_]`, так что ветка защитная;
 - порядок `all` сохраняется. Функция не бросает и не знает виджетов.
 
 Почему не фильтр по составу сборки: D13 `add-app-general-page` (список шире сборки юридически безопасен). Поиск меняет только показ, полный список остаётся в состоянии (§12.7.7а).

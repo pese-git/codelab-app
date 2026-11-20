@@ -78,5 +78,12 @@ flutter:
   # каталога пакета; побайтное равенство с корнем проверяет
   # `test/app/legal_assets_test.dart`.
   assets:
+    # Правовые документы страницы «Legal» (change `add-app-legal-page`, D4):
+    # копии корневых PRIVACY/TERMS на двух языках; побайтное равенство и
+    # объявление каждого файла проверяет `test/app/legal_assets_test.dart`.
+    - assets/legal/PRIVACY.md
+    - assets/legal/PRIVACY.ru.md
+    - assets/legal/TERMS.md
+    - assets/legal/TERMS.ru.md
     - assets/legal/LICENSE
     - assets/legal/THIRD_PARTY_NOTICES.md

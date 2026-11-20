@@ -135,3 +135,5 @@ fvm dart run melos run check
 ## Лицензия
 
 Код распространяется по лицензии MIT — см. [`LICENSE`](LICENSE). Учёт воспроизведённых внешних фрагментов — [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+Политика конфиденциальности — [`PRIVACY.md`](PRIVACY.md) ([`PRIVACY.ru.md`](PRIVACY.ru.md)); условия использования — [`TERMS.md`](TERMS.md) ([`TERMS.ru.md`](TERMS.ru.md)). Условия справочные, принимать их не нужно.

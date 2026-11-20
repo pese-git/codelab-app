@@ -79,6 +79,7 @@ import '../features/settings/application/profiles_unavailable.dart';
 import '../features/settings/application/agent_defaults_cubit.dart';
 import '../features/settings/application/about_diagnostics.dart';
 import '../features/settings/application/about_ports.dart';
+import '../features/settings/application/legal_ports.dart';
 import '../features/settings/application/agents_modes_cubit.dart';
 import '../features/settings/application/startup_settings_cubit.dart';
 import '../features/settings/application/mcp_settings_cubit.dart';
@@ -101,6 +102,7 @@ import 'default_settings_pages.dart';
 import 'about_ports_factory.dart';
 import 'build_version.dart';
 import 'embedded_logger.dart';
+import 'legal_ports_factory.dart';
 import 'embedded_mcp_status_source.dart';
 import 'embedded_secret_migration_runner.dart';
 import 'embedded_transport_resolver.dart';
@@ -150,6 +152,9 @@ Scope createCodeLabRootScope({
   // Данные раздела «About» (D11): шов тестов, без него — версия сборки,
   // `BuildInfo` и ресурсы `assets/legal/`.
   AboutInfo? aboutInfo,
+  // Порты страницы «Legal» (`add-app-legal-page`, D7): шов тестов, без него —
+  // `rootBundle` и `LicenseRegistry`.
+  LegalPorts? legalPorts,
   CodeLabTransportFactory? transportFactory,
   CodeLabStdioTransportFactory? stdioTransportFactory,
   CodeLabWebSocketTransportFactory? webSocketTransportFactory,
@@ -231,6 +236,7 @@ Scope createCodeLabRootScope({
             ? (projectFiles ?? const IoProjectFiles())
             : null,
         aboutInfo: aboutInfo,
+        legalPorts: legalPorts,
         // Тот же каталог, что получает `CodeLabLoggingModule` (D14).
         logDirectory: logDirectoryPath ?? Directory.systemTemp.path,
       ),
@@ -846,8 +852,10 @@ final class CodeLabPresentationModule extends Module {
     ProviderSettingsOpener? providerSettingsOpener,
     ProjectFiles? projectFiles,
     AboutInfo? aboutInfo,
+    LegalPorts? legalPorts,
   }) : _logDirectory = logDirectory,
        _aboutInfo = aboutInfo,
+       _legalPorts = legalPorts,
        _settingsPages = settingsPages,
        _providerSettingsOpener = providerSettingsOpener,
        _projectFiles = projectFiles;
@@ -876,6 +884,10 @@ final class CodeLabPresentationModule extends Module {
   /// Готовые данные раздела «About»; шов тестов
   /// (`createCodeLabRootScope(aboutInfo:)`, D11).
   final AboutInfo? _aboutInfo;
+
+  /// Готовые порты страницы «Legal»; шов тестов
+  /// (`createCodeLabRootScope(legalPorts:)`, `add-app-legal-page`, D7).
+  final LegalPorts? _legalPorts;
 
   @override
   void builder(Scope currentScope) {
@@ -1149,6 +1161,18 @@ final class CodeLabPresentationModule extends Module {
             fixed: _aboutInfo,
             logger: _settingsLogger(),
           ),
+        )
+        .singleton();
+    // Страница «Legal» (change `add-app-legal-page`, D7, D10): ресурсы и
+    // реестр лицензий читает только фабрика; Cubit страница создаёт сама.
+    bind<LegalPorts>()
+        .toProvide(
+          () =>
+              _legalPorts ??
+              buildLegalPorts(
+                externalLinks: currentScope.resolve<ExternalLinkOpener>(),
+                logger: _settingsLogger(),
+              ),
         )
         .singleton();
     // Строка «Reopen the last project and its tabs» страницы «General»
@@ -1645,6 +1669,7 @@ final class CodeLabDependencies {
     required this.createStartupSettingsCubit,
     required this.createAppearanceSettingsCubit,
     required this.aboutPorts,
+    required this.legalPorts,
     required this.openEmbeddedWizard,
     this.projectFilesCubit,
   });
@@ -1711,6 +1736,10 @@ final class CodeLabDependencies {
   /// Данные и порты раздела «About» страницы «General» (design.md change
   /// `add-app-general-page`, D11).
   final AboutPorts aboutPorts;
+
+  /// Порты страницы «Legal»: чтение документов, реестр лицензий, ссылки
+  /// (design.md change `add-app-legal-page`, D7).
+  final LegalPorts legalPorts;
 
   /// Открывает мастер встроенного агента из баннера соединения; владелец
   /// закрывает Cubit после диалога (design.md change `add-provider-setup-ui`,
@@ -1831,6 +1860,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     createStartupSettingsCubit: _scope.resolve<StartupSettingsCubit>,
     createAppearanceSettingsCubit: _scope.resolve<AppearanceSettingsCubit>,
     aboutPorts: _scope.resolve<AboutPorts>(),
+    legalPorts: _scope.resolve<LegalPorts>(),
     openEmbeddedWizard: _scope.resolve<EmbeddedWizardOpener>(),
     projectFilesCubit: _projectFilesCubitOf(_scope),
   );
