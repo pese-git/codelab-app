@@ -12,6 +12,8 @@
 // защищают от ответа «видна» вне области.
 
 import 'package:codelab_ui/codelab_ui.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -173,5 +175,43 @@ void main() {
     await tester.pump();
 
     expect(visibility.isVisible('s1', 'perm-1'), isTrue);
+  });
+
+  // Гипотеза «полоса прокрутки ленты считается перекрытием» (D14, п. 1)
+  // проверена и опровергнута: скроллбар Fluent оборачивает `Scrollable` ленты,
+  // то есть он предок полосы, а предки в проверке не перекрывают. Тест
+  // фиксирует это: колесо мыши на macOS, указатель у правого края (полоса
+  // прокрутки разворачивается до наведённой толщины) — полоса видна.
+  testWidgets('полоса прокрутки ленты полосу одобрения не перекрывает', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    final visibility = CodeLabApprovalVisibility();
+    await tester.pumpWidget(
+      FluentApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 700,
+            height: 400,
+            child: CodeLabTranscriptPanel(
+              rows: _rows(),
+              approvalVisibility: visibility,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(pointer.hover(const Offset(695, 200)));
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, 1)));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.sendEventToBinding(pointer.hover(const Offset(695, 70)));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final visible = visibility.isVisible('s1', 'perm-1');
+    debugDefaultTargetPlatformOverride = null;
+    expect(visible, isTrue);
   });
 }
