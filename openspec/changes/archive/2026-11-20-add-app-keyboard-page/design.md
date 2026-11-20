@@ -15,7 +15,7 @@
 - [`delivery-roadmap.md`](../../../../docs/architecture/proposals/delivery-roadmap.md) §10, строка 27;
 - активные changes:
   - [`add-desktop-localization`](../2026-11-20-add-desktop-localization/design.md) — D5 (три вида текста), D7 (что не переводится, в том числе клавиши), D12 (параллельные changes пишут строки сразу в ARB), D14 (метка `security`);
-  - [`add-app-general-page`](../../add-app-general-page/design.md) — D15 (ключевые слова поиска в ARB);
+  - [`add-app-general-page`](../2026-11-20-add-app-general-page/design.md) — D15 (ключевые слова поиска в ARB);
   - [`add-app-skills-page`](../../add-app-skills-page/design.md) — MODIFIED «Страницы Providers и MCP servers в навигации»;
   - [`add-integrated-terminal`](../../add-integrated-terminal/design.md) — D6, итерация 3: Ctrl+\` по физической клавише, только Control;
   - [`add-file-preview-and-tree`](../../add-file-preview-and-tree/design.md) — дерево Files;

@@ -4,7 +4,7 @@
 Страница «General» группы «App» SHALL показывать блоки в таком порядке (артборд «26 Settings — General»; design.md change `add-app-general-page`, D17):
 1. InfoBar `settings-general-shared-info` и блок «Agent defaults» (`settings-general-agent-defaults`) — требования «Умолчания агента на странице «General»: …»;
 2. блок «Interface» со строкой «Language» (`settings-general-language`, spec app-settings «Язык интерфейса app»); строка и её поведение этим требованием не меняются;
-3. блок «Startup and files» со строками «Reopen the last project and its tabs» (`settings-general-reopen-last-project`) и «Show ignored files» (`settings-general-show-ignored`);
+3. блок «Startup and files» со строкой «Reopen the last project and its tabs» (`settings-general-reopen-last-project`);
 4. раздел «About» (`settings-general-about`).
 
 Строка без поведения в текущей сборке НЕ SHALL показываться (SETUP-17). Строки «When I press Enter during a turn», «Sidebar opens on», «Send crash reports» и ссылка «Privacy policy» НЕ SHALL показываться (design.md, D8, D17). Блок, в котором не осталось видимых строк, SHALL быть скрыт вместе с заголовком.
@@ -151,15 +151,6 @@
 #### Scenario: Переключение не трогает текущую работу
 - **WHEN** открыт проект `/work/app` с идущей сессией, и пользователь выключает настройку
 - **THEN** проект, сессии и подключение не меняются, агенту не отправлено ни одного запроса
-
-### Requirement: Показ игнорируемых файлов на странице «General»
-Строка «Show ignored files» (`settings-general-show-ignored`) SHALL быть переключателем той же настройки `codelab.file_browser.show_ignored`, что переключатель `file-tree-show-ignored` панели Files (spec workspace-file-browser «Игнорируемые записи по `.gitignore`», change `add-file-preview-and-tree`). Значение SHALL иметь одного владельца в app: строка «General» и переключатель панели SHALL менять одно значение, второй копии НЕ SHALL быть. Смена на «General» SHALL применяться к открытой панели Files без перезапуска. Подпись строки — `Files matched by .gitignore appear dimmed in the Files pane.`
-
-Строка SHALL показываться, только когда в сборке есть фильтр `.gitignore` панели Files (итерация 3 change `add-file-preview-and-tree`). До этого строка НЕ SHALL показываться (SETUP-17).
-
-#### Scenario: Одна настройка на две точки
-- **WHEN** панель Files открыта, в корне `.gitignore` со строкой `build/`, и пользователь включает «Show ignored files» на «General»
-- **THEN** `codelab.file_browser.show_ignored` равен `true`, переключатель `file-tree-show-ignored` панели включён, а папка `build` в дереве показана приглушённой
 
 ### Requirement: Раздел «About» страницы «General»
 Раздел «About» (`settings-general-about`) SHALL быть Fluent `Expander`, по умолчанию свёрнутым. В заголовке SHALL быть `CodeLab <version>` и строка `<os> <arch> · embedded agent <agentVersion>`, где:

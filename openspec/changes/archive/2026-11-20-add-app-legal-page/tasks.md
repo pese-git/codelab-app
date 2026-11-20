@@ -171,7 +171,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - `openspec validate add-app-legal-page --strict`;
   - `cd site && npm ci && npm run verify`, если установлен Node: правится опубликованный `README.md`.
   - Итог 2026-11-20: всё перечисленное выше прошло; 7 info `use_null_aware_elements` в `apps/codelab_desktop` унаследованы от `develop`. `npm run verify` локально не запускался: `site/` требует Node 26.13.1, установлен 26.4.0, — проверит джоб `site` в CI.
-- [ ] 7.3 `[desktop]` Ручная проверка app на macOS:
+- [x] 7.3 `[desktop]` Ручная проверка app на macOS:
   - четыре вкладки на `en` и `ru`;
   - смена языка при открытой странице;
   - минимальное окно 800 px на русском;
@@ -181,8 +181,8 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - поиск по пакетам и пустой блок;
   - ссылки «General» и «About»;
   - запрос не появился в журнале отладки.
-  - Итог 2026-11-20 (macOS, debug-сборка, `test_driver/app.dart`): пройдено всё, кроме VoiceOver — его проверяет пользователь. Найдено и исправлено: таблица раздела 2 политики пряталась за горизонтальной прокруткой (`wrapTables`), ссылка «Third-party notices» на вкладке License отрывала кавычки (`_InlineLinkParagraph`). `test:e2e:app:legal` на macOS — зелёный.
-- [ ] 7.4 `[desktop]` PR в `develop` — только по просьбе пользователя. В описании:
+  - Итог 2026-11-20 (macOS, debug-сборка, `test_driver/app.dart`): пройдено всё, кроме VoiceOver. Проверка VoiceOver перенесена в ручную приёмку выпуска (`release/*`) решением пользователя 2026-11-20 при архивации. Найдено и исправлено: таблица раздела 2 политики пряталась за горизонтальной прокруткой (`wrapTables`), ссылка «Third-party notices» на вкладке License отрывала кавычки (`_InlineLinkParagraph`). `test:e2e:app:legal` на macOS — зелёный.
+- [x] 7.4 `[desktop]` PR в `develop` — только по просьбе пользователя. В описании: Слито в `develop` в составе PR #389 (merge `fdc483cc`).
   - запущенные проверки и что полный `check` не запускался;
   - документы — черновики до юридической проверки;
   - порядок архивации после `add-app-general-page` (design.md).

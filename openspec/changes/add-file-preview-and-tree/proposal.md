@@ -35,6 +35,7 @@
   - `IoProjectFiles` — в `codelab_client_io`;
   - места вызова с номером строки `ToolCallView.locations`.
 - **Док** (`agent-workbench-ui`, MODIFIED «Tool dock with closable pane tabs»): доступность панели определяет её предикат; панель без данных не предлагается; недоступная панель скрывается, но остаётся в сохранённой раскладке.
+- **Строка «Show ignored files» на странице «General»** (`app-settings`): MODIFIED «Страница «General»: состав и порядок» — строка `settings-general-show-ignored` в блоке «Startup and files»; ADDED «Показ игнорируемых файлов на странице «General»» — та же настройка `codelab.file_browser.show_ignored` и тот же владелец `ShowIgnoredFilesCubit`, что у переключателя панели. Перенесено из change `add-app-general-page` (его задачи 4.1–4.2) решением пользователя 2026-11-20 при его архивации (design.md, D14).
 - **Документы:** §12.6.8, §12.3 (таблица компонентов), §12.4.9, `agent-parity-goals.md` D-13 и `delivery-roadmap.md` §10.1 приводятся к доку и к решениям пользователя.
 - **BREAKING:** нет. ACP не меняется.
 
@@ -62,6 +63,9 @@
   - ADDED «Чтение папки проекта в границах рабочей папки» — порт и чистые правила kit;
   - ADDED «Места вызова с номером строки»;
   - MODIFIED «IO-адаптеры клиента» — `IoProjectFiles`.
+- `app-settings`:
+  - MODIFIED «Страница «General»: состав и порядок» — строка «Show ignored files» в блоке «Startup and files»;
+  - ADDED «Показ игнорируемых файлов на странице «General»».
 
 ## Impact
 
@@ -74,6 +78,7 @@
   - вычисляемые доступные панели в `workbench_shell.dart`;
   - привязка `ProjectFiles` в `lib/app/app_scope.dart`;
   - Cmd/Ctrl+Shift+E, пункт палитры.
+  - строка `settings-general-show-ignored` в `lib/features/settings/presentation/general_page.dart` (D14).
 - `packages/dart/codelab_architecture_tests` (`[desktop]`): правило «`dart:io` запрещён в `apps/codelab_desktop/lib/features/project_files/`».
 - Граф пакетов в `README.md` не меняется: app уже зависит от `codelab_client_core` и `codelab_client_io`.
 - Документы: `12-6-cli-desktop-extras.md` §12.6.8, §12.6.15 (UX-15, UX-16), §12.6.17; `12-3-desktop-display.md` §12.3.2; `12-4-first-run-and-settings.md` §12.4.9; `agent-parity-goals.md` D-13; `delivery-roadmap.md` §10.1.

@@ -669,7 +669,7 @@ sequenceDiagram
   Строка этой настройки на странице «Settings › General» (§12.4.9) появится с change steering
   (C-03): до него Enter во время хода только ставит сообщение в очередь, и строка с одним
   вариантом ничего бы не меняла (change
-  [`add-app-general-page`](../../../../openspec/changes/add-app-general-page/design.md), D8;
+  [`add-app-general-page`](../../../../openspec/changes/archive/2026-11-20-add-app-general-page/design.md), D8;
   решение пользователя Q1, 2026-11-19).
 * Панель очереди (R-18): у каждой строки рядом с «Отправить сейчас» (отмена хода) — «Направить»
   (без отмены), `PromptQueue.steer(id)`.

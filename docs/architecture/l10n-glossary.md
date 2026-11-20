@@ -277,7 +277,7 @@
 
 ### Страница «General»
 
-Термины блоков страницы «Settings › General» (change [`add-app-general-page`](../../openspec/changes/add-app-general-page/design.md), D15). Подписи ключей реестра (`budget.*`, `subagents.*`, `compaction.enabled`, `logging.level`) переводятся по §3: «ход», «шаг», «субагент», «бюджет», «сжатие контекста»; сами ключи и значения не переводятся (§2).
+Термины блоков страницы «Settings › General» (change [`add-app-general-page`](../../openspec/changes/archive/2026-11-20-add-app-general-page/design.md), D15). Подписи ключей реестра (`budget.*`, `subagents.*`, `compaction.enabled`, `logging.level`) переводятся по §3: «ход», «шаг», «субагент», «бюджет», «сжатие контекста»; сами ключи и значения не переводятся (§2).
 
 | en | ru | Примечание |
 |---|---|---|
@@ -402,7 +402,7 @@
 
 ### Страница «Legal»
 
-Термины страницы «Settings › Legal» и ссылок на неё со страницы «General» (change [`add-app-legal-page`](../../openspec/changes/add-app-legal-page/design.md), D1, D2, D6, D9, D10; артборды `Legal`, `Terms`, `License`, `Notices`, `NoticesSearch`, `NoticesMatch`, `NoticesEmpty`). Сообщения — `settingsLegal…`, `settingsPageLegal`, `settingsSearchKeywordsLegal` и блок «Privacy» `settingsGeneral…` в `app_en.arb` и `app_ru.arb`.
+Термины страницы «Settings › Legal» и ссылок на неё со страницы «General» (change [`add-app-legal-page`](../../openspec/changes/archive/2026-11-20-add-app-legal-page/design.md), D1, D2, D6, D9, D10; артборды `Legal`, `Terms`, `License`, `Notices`, `NoticesSearch`, `NoticesMatch`, `NoticesEmpty`). Сообщения — `settingsLegal…`, `settingsPageLegal`, `settingsSearchKeywordsLegal` и блок «Privacy» `settingsGeneral…` в `app_en.arb` и `app_ru.arb`.
 
 Не переводятся (§2): тексты документов — страница показывает готовую редакцию `PRIVACY.ru.md` или `TERMS.ru.md` по языку интерфейса, а не перевод каталога; `LICENSE`, записи реестра `THIRD_PARTY_NOTICES.md` и лицензии пакетов — как есть; имена пакетов; путь ресурса `assets/legal/…` и версия в подписи источника; `MIT`. Запрос поиска в пустом блоке — плейсхолдер в «ёлочках» (§1 п. 5), экранированный `escapeForDisplay`.
 

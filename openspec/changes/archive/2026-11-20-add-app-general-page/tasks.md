@@ -88,10 +88,9 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 - [x] 3.5 `[desktop]` Красный: `test/features/settings/application/startup_settings_cubit_test.dart` и дополнение `general_page_test.dart` — строка `settings-general-reopen-last-project`, сценарий «Переключение не трогает текущую работу», сбой записи с «Retry» (`settings-general-reopen-last-project-retry`), событие `settings.reopen_last_project_changed`.
 - [x] 3.6 `[desktop]` Реализация 3.5: `StartupSettingsCubit`, строка в блоке «Startup and files», ARB. 3.5 зелёный.
 
-## 4. Итерация 4 — «Show ignored files» (после итерации 3 `add-file-preview-and-tree`)
+## 4. Итерация 4 — «Show ignored files» (перенесена)
 
-- [ ] 4.1 `[desktop]` Красный: дополнение `general_page_test.dart` и `test/features/project_files/project_files_pane_test.dart` — сценарий «Одна настройка на две точки»: переключение на «General» меняет `ShowIgnoredFilesCubit`, переключатель `file-tree-show-ignored` открытой панели и приглушённую `build`. Без привязки `ProjectFiles` строки нет.
-- [ ] 4.2 `[desktop]` Реализация 4.1: строка `settings-general-show-ignored` поверх `ShowIgnoredFilesCubit` (вводит задача 3.4 `add-file-preview-and-tree`), ARB. 4.1 зелёный.
+Задачи 4.1–4.2 (строка `settings-general-show-ignored` поверх `ShowIgnoredFilesCubit`) перенесены в change `add-file-preview-and-tree`, задачи 3.5–3.6, решением пользователя 2026-11-20 при архивации (design.md, D10).
 
 ## 5. Итерация 5 — «About»
 
