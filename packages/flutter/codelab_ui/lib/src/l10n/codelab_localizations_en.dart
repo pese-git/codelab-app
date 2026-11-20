@@ -502,4 +502,9 @@ class CodeLabLocalizationsEn extends CodeLabLocalizations {
 
   @override
   String get codeLabMarkdownShowImage => 'Show image';
+
+  @override
+  String codeLabShortcutAlternatives(String first, String second) {
+    return '$first or $second';
+  }
 }

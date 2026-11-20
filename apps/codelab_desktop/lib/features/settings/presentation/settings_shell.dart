@@ -1,6 +1,5 @@
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/services.dart';
 
 import '../../../app/navigation/settings_page.dart';
 import '../../../l10n/app_localizations_en.dart';
@@ -9,6 +8,7 @@ import '../application/settings_search_index.dart';
 import 'agents_modes_page.dart';
 import 'connection_page.dart';
 import 'general_page.dart';
+import 'keyboard_page.dart';
 import 'mcp_page.dart';
 import 'providers_page.dart';
 import 'settings_titles.dart';
@@ -23,7 +23,8 @@ import 'skills_page.dart';
 /// Как использовать: каждая страница из `SettingsPages.available` ДОЛЖНА
 /// иметь запись (проверяет тест). Итерация 2 change `add-app-settings-shell`
 /// добавила «Connection», итерация 2 change `add-provider-setup-ui` —
-/// «Providers», change `add-app-skills-page` — «Skills & extensions».
+/// «Providers», change `add-app-skills-page` — «Skills & extensions», change
+/// `add-app-keyboard-page` — «Keyboard».
 final Map<SettingsPage, WidgetBuilder> settingsPageBuilders =
     Map.unmodifiable(<SettingsPage, WidgetBuilder>{
       SettingsPage.connection: buildConnectionPage,
@@ -32,6 +33,7 @@ final Map<SettingsPage, WidgetBuilder> settingsPageBuilders =
       SettingsPage.agentsAndModes: buildAgentsModesPage,
       SettingsPage.skillsAndExtensions: buildSkillsPage,
       SettingsPage.general: buildGeneralPage,
+      SettingsPage.keyboard: buildKeyboardPage,
     });
 
 /// Ширина окна, меньше которой навигация настроек уходит наверх.
@@ -143,9 +145,8 @@ class _SettingsShellState extends State<SettingsShell> {
       node: _scopeNode,
       child: FocusTraversalGroup(
         child: CallbackShortcuts(
-          bindings: {
-            const SingleActivator(LogicalKeyboardKey.escape): widget.onBack,
-          },
+          // Esc экрана настроек — запись каталога кита (D3).
+          bindings: CodeLabShortcut.leaveSettings.bind(widget.onBack),
           child: Focus(
             focusNode: _focusNode,
             child: CodeLabSettingsNavigation(

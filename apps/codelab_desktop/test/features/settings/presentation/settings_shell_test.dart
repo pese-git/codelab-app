@@ -18,9 +18,11 @@ import '../../../support/l10n_app.dart';
 import '../../../support/l10n_mix.dart';
 import '../../../support/settings_search.dart';
 
-/// Страницы группы Agent рабочей сборки: без «General» заголовка «App» нет.
+/// Страницы группы Agent рабочей сборки: без «General» и «Keyboard» заголовка
+/// «App» нет.
 final _agentPages = {...defaultSettingsPages.available}
-  ..remove(SettingsPage.general);
+  ..remove(SettingsPage.general)
+  ..remove(SettingsPage.keyboard);
 
 Finder _nav(SettingsPage page) => find.byKey(ValueKey(page.navKey));
 
@@ -407,6 +409,7 @@ void main() {
       SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
       SettingsPage.general,
+      SettingsPage.keyboard,
     ]);
   });
 
@@ -461,6 +464,7 @@ void main() {
       SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
       SettingsPage.general,
+      SettingsPage.keyboard,
     ]);
   });
 

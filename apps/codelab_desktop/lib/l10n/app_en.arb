@@ -4386,5 +4386,182 @@
   "agentsErrorFallbackOther": "The definition cannot be loaded.",
   "@agentsErrorFallbackOther": {
     "description": "Текст InfoBar ошибки определения, когда ядро не дало текста и причина неизвестна."
+  },
+  "settingsKeyboardTitle": "Keyboard shortcuts",
+  "@settingsKeyboardTitle": {
+    "description": "Заголовок страницы настроек «Keyboard»."
+  },
+  "settingsKeyboardSearchPlaceholder": "Search by action or key",
+  "@settingsKeyboardSearchPlaceholder": {
+    "description": "Подсказка поля поиска страницы «Keyboard»: ищет по тексту действия и по клавишам в любой нотации."
+  },
+  "settingsKeyboardReadOnly": "Read-only list. Shortcuts are fixed in the app.",
+  "@settingsKeyboardReadOnly": {
+    "description": "Подпись под полем поиска страницы «Keyboard»: сочетания нельзя менять."
+  },
+  "settingsKeyboardColumnAction": "Action",
+  "@settingsKeyboardColumnAction": {
+    "description": "Заголовок колонки таблицы сочетаний: что делает сочетание."
+  },
+  "settingsKeyboardColumnShortcut": "Shortcut",
+  "@settingsKeyboardColumnShortcut": {
+    "description": "Заголовок колонки таблицы сочетаний: клавиши."
+  },
+  "settingsKeyboardColumnWhere": "Where",
+  "@settingsKeyboardColumnWhere": {
+    "description": "Заголовок колонки таблицы сочетаний: где сочетание действует."
+  },
+  "settingsKeyboardGroupGlobal": "Global",
+  "@settingsKeyboardGroupGlobal": {
+    "description": "Заголовок группы таблицы сочетаний: сочетания рабочего места, настроек и диалогов."
+  },
+  "settingsKeyboardGroupNavigation": "Navigation",
+  "@settingsKeyboardGroupNavigation": {
+    "description": "Заголовок группы таблицы сочетаний: сайдбар, панель файлов, дерево файлов."
+  },
+  "settingsKeyboardGroupTranscript": "Transcript",
+  "@settingsKeyboardGroupTranscript": {
+    "description": "Заголовок группы таблицы сочетаний: действия над идущим ходом в ленте."
+  },
+  "settingsKeyboardGroupComposer": "Composer",
+  "@settingsKeyboardGroupComposer": {
+    "description": "Заголовок группы таблицы сочетаний: поле ввода сообщения и меню команд."
+  },
+  "settingsKeyboardGroupApprovals": "Approvals",
+  "@settingsKeyboardGroupApprovals": {
+    "description": "Заголовок группы таблицы сочетаний: ответы на запросы разрешения агента. Метка security (D14): перевод не смягчает смысл."
+  },
+  "settingsKeyboardFooter": "Agent commands have no shortcuts; open them from the command palette.",
+  "@settingsKeyboardFooter": {
+    "description": "Строка под таблицей сочетаний."
+  },
+  "settingsKeyboardEmpty": "No shortcuts match \"{query}\"",
+  "@settingsKeyboardEmpty": {
+    "description": "Строка вместо таблицы, когда поиск ничего не нашёл. Плейсхолдер query — запрос пользователя как есть, не переводить.",
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsKeyboardActionCommandPalette": "Open the command palette",
+  "@settingsKeyboardActionCommandPalette": {
+    "description": "Действие сочетания Cmd/Ctrl+K в таблице страницы «Keyboard»."
+  },
+  "settingsKeyboardActionOpenSettings": "Open settings",
+  "@settingsKeyboardActionOpenSettings": {
+    "description": "Действие сочетания Cmd/Ctrl+, в таблице страницы «Keyboard»."
+  },
+  "settingsKeyboardActionCloseOverlay": "Close the command palette, a dialog or a sliding panel",
+  "@settingsKeyboardActionCloseOverlay": {
+    "description": "Действие Esc в палитре, диалоге или выдвижной панели."
+  },
+  "settingsKeyboardActionLeaveSettings": "Back to the workbench",
+  "@settingsKeyboardActionLeaveSettings": {
+    "description": "Действие Esc на экране настроек."
+  },
+  "settingsKeyboardActionToggleSidebar": "Show or hide the sidebar",
+  "@settingsKeyboardActionToggleSidebar": {
+    "description": "Действие сочетания Cmd/Ctrl+B."
+  },
+  "settingsKeyboardActionToggleFiles": "Show or hide the Files pane",
+  "@settingsKeyboardActionToggleFiles": {
+    "description": "Действие сочетания Cmd/Ctrl+Shift+E. Files — название панели."
+  },
+  "settingsKeyboardActionFileTreeMove": "Move through files",
+  "@settingsKeyboardActionFileTreeMove": {
+    "description": "Действие стрелок ↑ и ↓ в дереве файлов."
+  },
+  "settingsKeyboardActionFileTreeFold": "Expand or collapse a folder",
+  "@settingsKeyboardActionFileTreeFold": {
+    "description": "Действие стрелок → и ← в дереве файлов."
+  },
+  "settingsKeyboardActionFileTreeOpen": "Open a file or expand a folder",
+  "@settingsKeyboardActionFileTreeOpen": {
+    "description": "Действие Enter в дереве файлов."
+  },
+  "settingsKeyboardActionCancelTurn": "Cancel the running turn",
+  "@settingsKeyboardActionCancelTurn": {
+    "description": "Действие Esc, пока идёт ход агента."
+  },
+  "settingsKeyboardActionSend": "Send the message; it is queued while the session is busy",
+  "@settingsKeyboardActionSend": {
+    "description": "Действие сочетания Cmd/Ctrl+Enter в поле ввода."
+  },
+  "settingsKeyboardActionCommandMenuMove": "Move through commands",
+  "@settingsKeyboardActionCommandMenuMove": {
+    "description": "Действие стрелок ↑ и ↓ в меню команд после /."
+  },
+  "settingsKeyboardActionCommandMenuRun": "Run the highlighted command",
+  "@settingsKeyboardActionCommandMenuRun": {
+    "description": "Действие Enter в меню команд после /."
+  },
+  "settingsKeyboardActionCommandMenuClose": "Close the command menu",
+  "@settingsKeyboardActionCommandMenuClose": {
+    "description": "Действие Esc в меню команд после /."
+  },
+  "settingsKeyboardActionAllowOnce": "Allow once",
+  "@settingsKeyboardActionAllowOnce": {
+    "description": "Действие сочетания Cmd/Ctrl+Enter при ожидающем одобрении: разрешить один раз. Метка security (D14): перевод не смягчает смысл."
+  },
+  "settingsKeyboardActionAllowAlways": "Allow always",
+  "@settingsKeyboardActionAllowAlways": {
+    "description": "Действие сочетания Cmd/Ctrl+Alt+Enter при ожидающем одобрении: разрешить всегда. Метка security (D14): перевод не смягчает смысл."
+  },
+  "settingsKeyboardActionRejectOnce": "Reject once",
+  "@settingsKeyboardActionRejectOnce": {
+    "description": "Действие сочетания Cmd/Ctrl+Backspace при ожидающем одобрении: отклонить один раз. Метка security (D14): перевод не смягчает смысл."
+  },
+  "settingsKeyboardActionRejectAlways": "Reject always",
+  "@settingsKeyboardActionRejectAlways": {
+    "description": "Действие сочетания Cmd/Ctrl+Alt+Backspace при ожидающем одобрении: отклонить всегда. Метка security (D14): перевод не смягчает смысл."
+  },
+  "settingsKeyboardWhereWorkbench": "Workbench",
+  "@settingsKeyboardWhereWorkbench": {
+    "description": "Колонка «Где»: рабочее место."
+  },
+  "settingsKeyboardWhereWorkbenchProject": "Workbench, when a project is selected",
+  "@settingsKeyboardWhereWorkbenchProject": {
+    "description": "Колонка «Где»: рабочее место при выбранном проекте."
+  },
+  "settingsKeyboardWhereOverlay": "Command palette, dialog or sliding panel",
+  "@settingsKeyboardWhereOverlay": {
+    "description": "Колонка «Где»: поверхности, которые закрывает Esc."
+  },
+  "settingsKeyboardWhereSettings": "Settings",
+  "@settingsKeyboardWhereSettings": {
+    "description": "Колонка «Где»: экран настроек."
+  },
+  "settingsKeyboardWhereWorkbenchFiles": "Workbench, when the Files pane is available",
+  "@settingsKeyboardWhereWorkbenchFiles": {
+    "description": "Колонка «Где»: рабочее место при доступной панели Files."
+  },
+  "settingsKeyboardWhereFilesTree": "Files tree",
+  "@settingsKeyboardWhereFilesTree": {
+    "description": "Колонка «Где»: дерево файлов."
+  },
+  "settingsKeyboardWhereFilesTreeFolder": "Files tree, on a folder",
+  "@settingsKeyboardWhereFilesTreeFolder": {
+    "description": "Колонка «Где»: дерево файлов при выбранной папке."
+  },
+  "settingsKeyboardWhereTurnRunning": "Workbench or composer, while a turn runs",
+  "@settingsKeyboardWhereTurnRunning": {
+    "description": "Колонка «Где»: рабочее место или поле ввода во время хода."
+  },
+  "settingsKeyboardWhereComposer": "Composer",
+  "@settingsKeyboardWhereComposer": {
+    "description": "Колонка «Где»: поле ввода сообщения."
+  },
+  "settingsKeyboardWhereCommandMenu": "Command menu after /",
+  "@settingsKeyboardWhereCommandMenu": {
+    "description": "Колонка «Где»: меню команд, открытое символом /. Символ / не переводится."
+  },
+  "settingsKeyboardWhereApproval": "Pending approval in focus, when the agent offers this option",
+  "@settingsKeyboardWhereApproval": {
+    "description": "Колонка «Где» строк одобрения. Метка security (D14): перевод не смягчает смысл."
+  },
+  "settingsSearchKeywordsKeyboard": "shortcut, hotkey, keybinding, key",
+  "@settingsSearchKeywordsKeyboard": {
+    "description": "Ключевые слова поиска «Find a setting» для страницы Keyboard: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять."
   }
 }

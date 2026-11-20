@@ -147,5 +147,6 @@
   "codeLabMarkdownTaskDone": "Задача выполнена",
   "codeLabMarkdownTaskOpen": "Задача не выполнена",
   "codeLabMarkdownImage": "Изображение",
-  "codeLabMarkdownShowImage": "Показать изображение"
+  "codeLabMarkdownShowImage": "Показать изображение",
+  "codeLabShortcutAlternatives": "{first} или {second}"
 }

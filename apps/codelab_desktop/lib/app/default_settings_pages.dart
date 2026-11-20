@@ -13,8 +13,11 @@ import 'navigation/settings_page.dart';
 /// (итерация 5; Migration Plan, п. 2; SETUP-17), change
 /// `add-settings-agents-modes` — «Agents & modes» (итерация 1, D9), change
 /// `add-app-skills-page` — «Skills & extensions» (итерация 4, только чтение),
-/// `add-desktop-localization` — «General» с выбором языка (итерация 1, D2);
-/// следующие страницы появятся вместе со своими телами.
+/// `add-desktop-localization` — «General» с выбором языка (итерация 1, D2),
+/// `add-app-keyboard-page` — «Keyboard» (итерация 3, только чтение; у неё нет
+/// ключей конфигурации, её содержимое — каталог сочетаний сборки, поэтому
+/// SETUP-17 её не скрывает, D7); следующие страницы появятся вместе со
+/// своими телами.
 /// Страница из набора ДОЛЖНА иметь построитель в `settingsPageBuilders`.
 const defaultSettingsPages = SettingsPages(
   available: {
@@ -24,5 +27,6 @@ const defaultSettingsPages = SettingsPages(
     SettingsPage.agentsAndModes,
     SettingsPage.skillsAndExtensions,
     SettingsPage.general,
+    SettingsPage.keyboard,
   },
 );

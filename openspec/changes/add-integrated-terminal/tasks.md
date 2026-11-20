@@ -311,6 +311,8 @@
   - привязку колбэков в `CodeLabShell`.
 
   Обновить тесты кита, считающие шесть команд палитры. 3.3 зелёный.
+
+  Если change `add-app-keyboard-page` уже влит: активаторы Ctrl+\` и Ctrl+Shift+\` объявляются записями каталога `CodeLabShortcut` (комбинация «только Control» по физической клавише расширяет `CodeLabKeyCombo`), получают тексты «Action» и «Where» в `app_en.arb` и `app_ru.arb`, строки страницы «Settings › Keyboard» и сценарии в тесте нажатий каталога. Иначе тест-сторож литералов активаторов падает (design.md `add-app-keyboard-page`, D3, D13).
 - 3.5 `[desktop]` — перенесено в 1.0 — задача 2.14 (решение пользователя 2026-11-12, пересмотр варианта 2).
 - 3.6 `[desktop]` — перенесено в 1.0 — задача 2.15 (решение пользователя 2026-11-12, пересмотр варианта 2).
 - [ ] 3.7 `[desktop]` `apps/codelab_desktop/integration_test/terminal_flow_test.dart` (приёмка D13): вкладка, `echo`, `tput cols`, закрытие вкладки без живого процесса, выход из app без сирот. В `feature/*` — только `fvm flutter analyze`; запуск на устройстве — в `release/<version>` (`AGENTS.md` §21).

@@ -142,6 +142,13 @@ Platform.isLinux
 
 если поведение можно скрыть за abstraction.
 
+Обозначения клавиш (⌘ или Ctrl, ⌥ или Alt) — не поведение платформы, а соглашение её интерфейса.
+Их выбирает только каталог сочетаний кита `CodeLabShortcut` (`packages/flutter/codelab_ui`) по
+`defaultTargetPlatform` из `package:flutter/foundation.dart`, а не по `Platform.is*`: значение
+подменяется в тестах (`debugDefaultTargetPlatformOverride`) и не требует `dart:io`. Feature-код
+берёт готовую подпись из каталога и сам платформу для этого не проверяет (change
+`add-app-keyboard-page`, D4).
+
 ---
 
 ## 6. Conditional imports

@@ -988,6 +988,12 @@ abstract class CodeLabLocalizations {
   /// In en, this message translates to:
   /// **'Show image'**
   String get codeLabMarkdownShowImage;
+
+  /// Подпись для чтения с экрана у альтернативных клавиш одной строки сочетаний («Up or Down»). Плейсхолдеры first и second — подписи словами; союз переводится, сами клавиши нет.
+  ///
+  /// In en, this message translates to:
+  /// **'{first} or {second}'**
+  String codeLabShortcutAlternatives(String first, String second);
 }
 
 class _CodeLabLocalizationsDelegate

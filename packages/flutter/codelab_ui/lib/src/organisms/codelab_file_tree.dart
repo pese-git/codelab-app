@@ -147,19 +147,25 @@ class _CodeLabFileTreeState extends State<CodeLabFileTree> {
       return KeyEventResult.ignored;
     }
     final row = widget.rows[_focusedIndex];
-    final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowDown) {
+    final keyboard = HardwareKeyboard.instance;
+    // Альтернативы записей — в порядке показа: ↑ / ↓, → / ← (порядок
+    // защищают тест каталога и сторож 2).
+    final move = CodeLabShortcut.fileTreeMove.combos;
+    final fold = CodeLabShortcut.fileTreeFold.combos;
+    if (move[1].accepts(event, keyboard)) {
       _moveFocus(1);
-    } else if (key == LogicalKeyboardKey.arrowUp) {
+    } else if (move[0].accepts(event, keyboard)) {
       _moveFocus(-1);
-    } else if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter) {
+    } else if (CodeLabShortcut.fileTreeOpen.combos.single.accepts(
+      event,
+      keyboard,
+    )) {
       _activate(row);
-    } else if (key == LogicalKeyboardKey.arrowRight) {
+    } else if (fold[0].accepts(event, keyboard)) {
       if (row.kind == CodeLabFileTreeRowKind.directory && !row.expanded) {
         widget.onToggleDirectory?.call(row);
       }
-    } else if (key == LogicalKeyboardKey.arrowLeft) {
+    } else if (fold[1].accepts(event, keyboard)) {
       if (row.kind == CodeLabFileTreeRowKind.directory && row.expanded) {
         widget.onToggleDirectory?.call(row);
       }

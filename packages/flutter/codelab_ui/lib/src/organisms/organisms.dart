@@ -6,6 +6,7 @@ export 'codelab_app_bar.dart';
 export 'codelab_approval_prompt.dart';
 export 'codelab_command_palette_surface.dart';
 export 'codelab_connection_screen.dart';
+export 'codelab_shortcut_table.dart';
 export 'codelab_start_screen.dart';
 export 'codelab_file_preview.dart';
 export 'codelab_file_tree.dart';

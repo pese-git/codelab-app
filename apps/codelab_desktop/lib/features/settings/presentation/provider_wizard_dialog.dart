@@ -32,9 +32,8 @@ Future<void> showProviderWizardDialog(
     builder: (dialogContext) => BlocProvider<ProviderWizardCubit>.value(
       value: cubit,
       child: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): cubit.cancel,
-        },
+        // Esc диалога — запись `close-overlay` каталога кита (D3).
+        bindings: CodeLabShortcut.closeOverlay.bind(cubit.cancel),
         // Без узла фокуса внутри диалога Esc после щелчка по флажку не дошёл
         // бы до привязки.
         child: const Focus(autofocus: true, child: ProviderWizardDialog()),

@@ -1,7 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/services.dart';
 
 import '../atomics/codelab_resize_handle.dart';
+import '../atomics/codelab_shortcuts.dart';
 import '../l10n/strings.dart';
 
 /// Класс раскладки рабочего места по ширине окна.
@@ -297,8 +297,7 @@ class _Overlay extends StatelessWidget {
     final theme = FluentTheme.of(context);
     return CallbackShortcuts(
       bindings: {
-        if (onDismiss != null)
-          const SingleActivator(LogicalKeyboardKey.escape): onDismiss!,
+        if (onDismiss != null) ...CodeLabShortcut.closeOverlay.bind(onDismiss!),
       },
       child: Focus(
         autofocus: true,

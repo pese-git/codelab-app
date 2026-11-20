@@ -122,10 +122,12 @@ class CodeLabShell extends StatelessWidget {
                   appBar: CodeLabAppBar(
                     title: 'CodeLab',
                     connectionStatus: state.connectionStatus,
-                    searchShortcutLabel:
-                        defaultTargetPlatform == TargetPlatform.macOS
-                        ? '⌘K'
-                        : 'Ctrl+K',
+                    // Обозначение клавиш выбирает каталог кита (D3, D4).
+                    searchShortcutLabel: CodeLabShortcut
+                        .commandPalette
+                        .combos
+                        .single
+                        .compactFor(defaultTargetPlatform),
                     onSearch: cubit.openCommandPalette,
                     paneToggles: [
                       for (final pane in availablePanes)
@@ -179,10 +181,8 @@ class CodeLabShell extends StatelessWidget {
                       cubit.closeSidebarOverlay();
                     },
                     onNewSession: () => unawaited(cubit.createSession()),
-                    newSessionShortcut:
-                        defaultTargetPlatform == TargetPlatform.macOS
-                        ? '⌘N'
-                        : 'Ctrl+N',
+                    newSessionShortcut: CodeLabShortcut.newSession.combos.single
+                        .compactFor(defaultTargetPlatform),
                     onProjectSelected: (path) =>
                         unawaited(cubit.selectProject(path)),
                     onLoadMore: state.hasMoreSessions

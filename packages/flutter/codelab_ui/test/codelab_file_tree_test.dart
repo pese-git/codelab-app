@@ -197,6 +197,48 @@ void main() {
     expect(toggled.last, 'lib');
   });
 
+  // Сочетания дерева сверяют модификаторы точно (`CodeLabKeyCombo.accepts`,
+  // change `add-app-keyboard-page`, D3): Ctrl+Enter, ⌘⏎ и Alt+→ — не Enter и
+  // не →.
+  testWidgets('keys with extra modifiers neither open a file nor toggle a '
+      'folder', (tester) async {
+    final toggled = <String>[];
+    final opened = <String>[];
+    await pumpTree(
+      tester,
+      [_dir('lib'), _file('a.txt')],
+      autofocus: true,
+      onToggle: (row) => toggled.add(row.relativePath),
+      onOpen: (row) => opened.add(row.relativePath),
+    );
+    await tester.pump();
+
+    Future<void> press(
+      LogicalKeyboardKey modifier,
+      LogicalKeyboardKey key,
+    ) async {
+      await tester.sendKeyDownEvent(modifier);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(modifier);
+    }
+
+    // Фокус на папке: Ctrl+Enter, ⌘⏎ и Alt+→ её не раскрывают.
+    await press(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.enter);
+    await press(LogicalKeyboardKey.metaLeft, LogicalKeyboardKey.enter);
+    await press(LogicalKeyboardKey.altLeft, LogicalKeyboardKey.arrowRight);
+    expect(toggled, isEmpty);
+
+    // Фокус на файле: те же сочетания его не открывают.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await press(LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.enter);
+    await press(LogicalKeyboardKey.metaLeft, LogicalKeyboardKey.enter);
+    expect(opened, isEmpty);
+
+    // Контроль: чистый Enter всё ещё открывает.
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(opened, ['a.txt']);
+  });
+
   testWidgets('a link that leaves the root shows an arrow and gives no '
       'callbacks for click, Enter or Right', (tester) async {
     final calls = <String>[];
