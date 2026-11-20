@@ -3738,6 +3738,12 @@ abstract class AppLocalizations {
   /// **'Close the command menu'**
   String get settingsKeyboardActionCommandMenuClose;
 
+  /// Действие сочетания Cmd/Ctrl+Shift+A: перейти к ожидающему одобрению (change fix-approval-focus, D7). Термин глоссария. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to approval'**
+  String get settingsKeyboardActionGoToApproval;
+
   /// Действие сочетания Cmd/Ctrl+Enter при ожидающем одобрении: разрешить один раз. Метка security (D14): перевод не смягчает смысл.
   ///
   /// In en, this message translates to:
@@ -3822,11 +3828,17 @@ abstract class AppLocalizations {
   /// **'Command menu after /'**
   String get settingsKeyboardWhereCommandMenu;
 
-  /// Колонка «Где» строк одобрения. Метка security (D14): перевод не смягчает смысл.
+  /// Колонка «Где» строк решения (разрешить/отклонить): клавиатурный фокус в полосе решения активного одобрения, а не признак модели (change fix-approval-focus, D7). Метка security (D14): перевод не смягчает смысл.
   ///
   /// In en, this message translates to:
-  /// **'Pending approval in focus, when the agent offers this option'**
+  /// **'Pending approval with keyboard focus, when the agent offers this option'**
   String get settingsKeyboardWhereApproval;
+
+  /// Колонка «Где» строки «Go to approval»: сочетание работает на рабочем месте, пока есть ожидающее одобрение (change fix-approval-focus, D7). Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Workbench, while an approval is pending'**
+  String get settingsKeyboardWhereApprovalPending;
 
   /// Ключевые слова поиска «Find a setting» для страницы Keyboard: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять.
   ///

@@ -606,6 +606,7 @@
   "settingsKeyboardActionCommandMenuMove": "Перемещаться по командам",
   "settingsKeyboardActionCommandMenuRun": "Выполнить выбранную команду",
   "settingsKeyboardActionCommandMenuClose": "Закрыть меню команд",
+  "settingsKeyboardActionGoToApproval": "Перейти к одобрению",
   "settingsKeyboardActionAllowOnce": "Разрешить только сейчас",
   "settingsKeyboardActionAllowAlways": "Всегда разрешать",
   "settingsKeyboardActionRejectOnce": "Отклонить только сейчас",
@@ -620,6 +621,7 @@
   "settingsKeyboardWhereTurnRunning": "Рабочее место или поле ввода, пока идёт ход",
   "settingsKeyboardWhereComposer": "Поле ввода",
   "settingsKeyboardWhereCommandMenu": "Меню команд после /",
-  "settingsKeyboardWhereApproval": "Ожидающее одобрение в фокусе, когда агент предлагает этот вариант",
+  "settingsKeyboardWhereApproval": "Ожидающее одобрение с фокусом клавиатуры, когда агент предлагает этот вариант",
+  "settingsKeyboardWhereApprovalPending": "Рабочее место, пока ждёт одобрение",
   "settingsSearchKeywordsKeyboard": "сочетание, горячие клавиши, клавиатура, клавиша"
 }

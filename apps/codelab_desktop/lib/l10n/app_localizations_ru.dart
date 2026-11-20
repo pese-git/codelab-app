@@ -2334,6 +2334,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsKeyboardActionCommandMenuClose => 'Закрыть меню команд';
 
   @override
+  String get settingsKeyboardActionGoToApproval => 'Перейти к одобрению';
+
+  @override
   String get settingsKeyboardActionAllowOnce => 'Разрешить только сейчас';
 
   @override
@@ -2381,7 +2384,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsKeyboardWhereApproval =>
-      'Ожидающее одобрение в фокусе, когда агент предлагает этот вариант';
+      'Ожидающее одобрение с фокусом клавиатуры, когда агент предлагает этот вариант';
+
+  @override
+  String get settingsKeyboardWhereApprovalPending =>
+      'Рабочее место, пока ждёт одобрение';
 
   @override
   String get settingsSearchKeywordsKeyboard =>

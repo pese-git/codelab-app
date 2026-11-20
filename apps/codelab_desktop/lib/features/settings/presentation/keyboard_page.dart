@@ -53,9 +53,7 @@ String keyboardShortcutActionOf(
   CodeLabShortcut.commandMenuRun => l10n.settingsKeyboardActionCommandMenuRun,
   CodeLabShortcut.commandMenuClose =>
     l10n.settingsKeyboardActionCommandMenuClose,
-  // Временно (change `fix-approval-focus`): текста строки ещё нет, ARB
-  // добавляет задача 4.2, она же заменит пустую строку сообщением.
-  CodeLabShortcut.goToApproval => '',
+  CodeLabShortcut.goToApproval => l10n.settingsKeyboardActionGoToApproval,
   CodeLabShortcut.allowOnce => l10n.settingsKeyboardActionAllowOnce,
   CodeLabShortcut.allowAlways => l10n.settingsKeyboardActionAllowAlways,
   CodeLabShortcut.rejectOnce => l10n.settingsKeyboardActionRejectOnce,
@@ -83,8 +81,7 @@ String keyboardShortcutWhereOf(
   CodeLabShortcut.commandMenuMove ||
   CodeLabShortcut.commandMenuRun ||
   CodeLabShortcut.commandMenuClose => l10n.settingsKeyboardWhereCommandMenu,
-  // Временно до задачи 4.2 `fix-approval-focus` (см. `keyboardEntriesOf`).
-  CodeLabShortcut.goToApproval => '',
+  CodeLabShortcut.goToApproval => l10n.settingsKeyboardWhereApprovalPending,
   CodeLabShortcut.allowOnce ||
   CodeLabShortcut.allowAlways ||
   CodeLabShortcut.rejectOnce ||
@@ -112,19 +109,14 @@ List<KeyboardShortcutEntry> keyboardEntriesOf(AppLocalizations l10n) {
   final english = AppLocalizationsEn();
   return [
     for (final shortcut in CodeLabShortcut.values)
-      // Временно (change `fix-approval-focus`): строку «Go to approval» страница
-      // пока не показывает — её тексты и ARB добавляет задача 4.2, она же
-      // уберёт это условие. Пропускается только эта запись, а не любая без
-      // комбинаций: пустая запись в каталоге остаётся ошибкой.
-      if (shortcut != CodeLabShortcut.goToApproval)
-        KeyboardShortcutEntry(
-          shortcut: shortcut,
-          action: keyboardShortcutActionOf(l10n, shortcut),
-          englishAction: keyboardShortcutActionOf(english, shortcut),
-          notations: [
-            for (final combo in shortcut.combos) ...combo.searchNotations(),
-          ],
-        ),
+      KeyboardShortcutEntry(
+        shortcut: shortcut,
+        action: keyboardShortcutActionOf(l10n, shortcut),
+        englishAction: keyboardShortcutActionOf(english, shortcut),
+        notations: [
+          for (final combo in shortcut.combos) ...combo.searchNotations(),
+        ],
+      ),
   ];
 }
 

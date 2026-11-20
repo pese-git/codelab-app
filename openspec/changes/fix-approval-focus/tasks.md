@@ -151,7 +151,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
 
 ## 4. Итерация 4 — страница «Keyboard» и тексты
 
-- [ ] 4.1 `[desktop]` Красный, app (D7; spec app-settings MODIFIED «Страница «Keyboard»: строки таблицы»):
+- [x] 4.1 `[desktop]` Красный, app (D7; spec app-settings MODIFIED «Страница «Keyboard»: строки таблицы»):
   - `keyboard_page_test.dart`:
     - «Полный список на Linux» — 20 строк;
     - новые «Строка «Go to approval»» и «Поиск строки перехода»;
@@ -159,7 +159,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - `keyboard_shortcut_search_test.dart`: 20 записей; `ctrl shift a`, `⇧⌘A`, `Shift+Cmd+A` находят только `go-to-approval`;
   - `keyboard_page_l10n_test.dart`: 20 строк; русские тексты строки `go-to-approval` и нового места строк одобрения;
   - `test/support/keyboard_rows.dart`: эталон 20 строк по спецификации.
-- [ ] 4.2 `[desktop]` Реализация 4.1:
+- [x] 4.2 `[desktop]` Реализация 4.1:
   - `settingsKeyboardActionGoToApproval`, `settingsKeyboardWhereApprovalPending` и новый текст `settingsKeyboardWhereApproval` в `app_en.arb` и `app_ru.arb`, метка `security` в `@description`;
   - ветки `goToApproval` в `keyboardShortcutActionOf`, `keyboardShortcutWhereOf`, `keyboardShortcutGroupOf`.
 
