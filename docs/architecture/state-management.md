@@ -1092,6 +1092,17 @@ Settings чаще всего принадлежат отдельной feature.
 * **Потребители.** `CodeLabApp` — `BlocBuilder<AppAppearanceCubit>` над `FluentApp`, меняет только `theme`, `darkTheme`, `themeMode`; `FluentApp` не пересоздаётся, `State` виджетов сохраняется. Страница «Appearance» вызывает Cubit через свой `AppearanceSettingsCubit`: состояние страницы (каталог тем, выбранная для превью тема, разбор, контраст, импорт) — editing state страницы, а не saved settings, и закрывается вместе со страницей.
 * Смена оформления НЕ ДОЛЖНА менять состояние сессий, очереди, одобрений и соединения.
 
+### 63в. Onboarding app
+
+Источник — change [`add-app-onboarding`](../../openspec/changes/add-app-onboarding/design.md), D1–D6, D8; spec `app-onboarding`. Onboarding — не настройка, но устроен так же: сохранённое значение и экранное состояние различаются (§63), у каждого свой владелец.
+
+* **Saved — флаг `codelab.app.onboarding_done`** (`shared_preferences`, порт `OnboardingPreferences` в `lib/core/platform/`). Хранит только `true`. `load()` не бросает и возвращает `OnboardingLoad(done, storedValueInvalid, readFailure)`: незнакомое значение и сбой хранилища читаются как «пройден», ключ не перезаписывается (целостность данных, AGENTS.md §2). Флаг читается в `main` до `runApp` и приходит швом `createCodeLabRootScope(onboarding:)` (D3).
+* **Навигация — `NavigationCubit`**: начальное назначение `OnboardingDestination` задаёт шов, `finishOnboarding()` переводит его в `WorkbenchDestination`. Шага в назначении нет (D1).
+* **Экранное состояние — `OnboardingCubit`** (`features/onboarding/application/`, живёт, пока показан экран). `OnboardingState`: `step` (`welcome | permissions | model | privacy`), факты `Loading | Loaded | Unavailable`, шаг модели `Pending | Skipped(reason) | Choose(notice) | Saved(summary)` и `finishing`. Невозможных сочетаний булевых флагов нет (§STATE-004). Переходы — таблица D4.
+* **Мастер провайдера** — свой `ProviderWizardCubit` на время диалога (как у страницы «Providers»). `OnboardingCubit` получает только итог `Done(plan, committed)` и строит из него `OnboardingSavedSummary` без значения ключа (SETUP-1).
+* **Тексты по фактам** (пути, бэкенд секретов, режим) — функции presentation «(факты, язык)», а не строки в состоянии (`layers-and-dependencies.md` §54).
+* Onboarding НЕ ДОЛЖЕН менять состояние сессий, соединения и очереди: пока он показан, рабочее место не строится, а агент не стартует (D5; `concurrency.md` §47в).
+
 ---
 
 ## 64. Form state

@@ -59,7 +59,7 @@ Date: 2026-10-22
 | **PoC** | срез P0: «промпт → LLM → read/edit/exec → ответ в codelab-app по stdio» без этапа 3 (§5) | M1 |
 | **Первый полезный результат** | этапы 4 и 6 выполнены полностью: Dart-агент работает с неизменённым codelab-app по stdio; codelab_cli MVP работает с Python-, scripted- и Dart-агентом ([§9.2](dart-agent-and-clients/09-00-migration-plan.md#92-первый-полезный-результат)) | M2 |
 | **MVP** | все Must-строки матрицы зелёные **и** профиль по умолчанию в обоих клиентах переключён на Dart-агента: ворота этапа 9, критерий матрицы [§6](agent-parity-goals.md#6-критерий-вывода-python-агента-и-переключения-по-умолчанию). MVP — внутренняя сборка, публичный релиз в него не входит | M3 |
-| **Продукт 1.0** | MVP + публичный релиз (задача 9.4: U-29, D-16, D-18, D-29, [§12.7](dart-agent-and-clients/12-7-release-and-distribution.md)) + выбранные Should (§6.1) + нефункциональные документы (§6.3) | M4 |
+| **Продукт 1.0** | MVP + публичный релиз (задача 9.4: U-29, D-16, D-18, D-29, [§12.7](dart-agent-and-clients/12-7-release-and-distribution.md)) + выбранные Should (§6.1) и onboarding app D-11 (Could, §6.1) + нефункциональные документы (§6.3) | M4 |
 | **1.x** | остальной пул Should и Could по приоритету (§6.2) | M5 |
 
 **Единственное определение MVP.** MVP = все строки **Must** из §3 и §4.1 матрицы зелёные + все
@@ -83,7 +83,7 @@ Should не блокирует MVP, даже если стоит на этапа
 | **M1** | PoC | 0 полностью; срезы 1, 2, 4 | три теста app проходят против `codelab-agent serve --stdio` |
 | **M2** | первый полезный результат | 1–6 полностью | DoD этапов 4 и 6; 62 Must этапов 1–6 зелёные |
 | **M3** | MVP | 8, 7, 9 (без 9.4, 9.6) | критерий §6 матрицы; профиль по умолчанию — Dart-агент |
-| **M4** | продукт 1.0 | 9.4, 9.6, 9.9–9.11; Should 1.0 | первый публичный `stable`-релиз |
+| **M4** | продукт 1.0 | 9.4, 9.6, 9.9–9.11; Should 1.0; Could D-11 | первый публичный `stable`-релиз |
 | **M5** | 1.x | Should и Could 9+; этап 10 | по каждой строке — её критерий приёмки |
 
 ```mermaid
@@ -110,7 +110,7 @@ flowchart LR
     end
     subgraph M4["M4. Продукт 1.0"]
         R1["9.4 выпуск, 9.6 онбординг"]
-        R2["Should 1.0"]
+        R2["Should 1.0<br/>и onboarding app D-11"]
         R3["НФ-документы<br/>ADR песочницы 9.11"]
     end
     subgraph M5["M5. 1.x"]
@@ -245,7 +245,8 @@ macOS и Linux, ручная проверка Windows откладывается
 **Объём.** Задачи 9.4 (поставка по §12.7), 9.6 (онбординг), 9.11 (решение о песочнице ОС;
 задача 9.10 «объявление `codelab.toml` устаревшим» удалена: файл не читается, решение пользователя
 2026-10-29, change `add-agent-configuration`); незавершённые задачи «Should — не блокирует MVP»
-(3.8, часть 7.5 для D-05, 8.10, 8.11); выбранные Should (§6.1); нефункциональные документы (§6.3).
+(3.8, часть 7.5 для D-05, 8.10, 8.11); выбранные Should (§6.1) и Could D-11 — onboarding app (решение
+пользователя 2026-11-20, §6.1); нефункциональные документы (§6.3).
 Первая задача вехи — навыки E-06 (§6.1, строка 11): change
 [`add-agent-skills`](../../../openspec/changes/archive/2026-11-18-add-agent-skills/proposal.md) реализуется сразу после
 ворот MVP (итерация 4 change `switch-default-agent-to-dart`) и до выпуска 9.4 (решение пользователя
@@ -258,7 +259,8 @@ macOS и Linux, ручная проверка Windows откладывается
 
 * `release.yml` выпустил `stable`: артефакты `codelab` и `codelab-agent` для пяти целей,
   подписанный `SHA256SUMS`, `install.sh` / `install.ps1` (критерии U-29, D-16, D-18, D-29);
-* критерии приёмки всех строк §6.1 зелёные;
+* критерии приёмки всех строк §6.1 зелёные, включая onboarding app D-11 (spec `app-onboarding`; ссылки
+  шага «Privacy» на `PRIVACY.md` и `TERMS.md` включены вместе с задачей 9.4);
 * документы §6.3 приняты; ADR о песочнице ОС (9.11) принят, строка P-13 матрицы исправлена;
 * Python-агент заморожен, алиас `codelab serve` есть в первой `stable` с пометкой deprecated. Удаление —
   после одного релизного цикла без регрессий (задача 9.9): change `remove-python-agent` по условию
@@ -382,6 +384,14 @@ E-15, L-25; P-10 — после 1.0, R8-1), то есть все задачи «
 9.4, 9.6). P-10 идёт до T-28: файл выноса не должен содержать сырых секретов (SPL-3). D-25 (Could) в счёт не входит:
 в 1.0 от неё — только панель Agents v1 строки 9 (решение пользователя 2026-11-12, Q13), строку закрывает доска
 этапа 5 (§6.4).
+
+**Could в 1.0 — onboarding app (D-11).** Решение пользователя 2026-11-20 (Q7 change
+[`add-app-onboarding`](../../../openspec/changes/add-app-onboarding/design.md), D17): экран 07 входит в 1.0, хотя
+цель остаётся Could и в счёт Should не входит. Первый публичный `stable` ставят люди, которые впервые
+видят агента с доступом к файлам и командам; app встречает их так же, как CLI (U-17, строка 2): что
+агент делает, где спрашивает, мастер провайдера и что уходит с компьютера. Ссылки шага «Privacy» на
+документы зависят от `add-privacy-policy` (задача 9.4, строка 1), но выпуск не блокируют: их включает
+тот из двух changes, который вливается вторым. Onboarding смартфона и планшета — этап 10, M5.
 
 ### 6.2. Пул 1.x по порядку
 
@@ -532,7 +542,7 @@ Design «CodeLab Desktop — Feature UI/UX» (номера 01–27 и C1–C14 �
 | 05 | Providers | — | — | D-05 (часть 7.5, 8.10) — реализовано change `add-provider-setup-ui` (итерации 2, 3, 6a) | L-24 — реализовано тем же change (мастер); L-17 — позже |
 | 05b | MCP servers | — | — | — | E-13 — реализовано change `add-provider-setup-ui` (итерации 5, 6a: состав из конфига, редактор, «Agent status») |
 | 06 | мастер провайдера | — | — | готовые пресеты для D-05 и U-17 (задача 9.6) — реализовано change `add-provider-setup-ui` (итерация 3) | L-24 (свой провайдер) — реализовано тем же change |
-| 07 | onboarding | — | — | — | D-11 (отдельный change после `add-app-navigation-shell`; решение Q3 change `add-provider-setup-ui`) |
+| 07 | onboarding | — | — | D-11 (change [`add-app-onboarding`](../../../openspec/changes/add-app-onboarding/proposal.md): четыре шага первого запуска, мастер провайдера с шага «Choose a model», агент стартует после onboarding; ветку `OnboardingDestination` вводит сам change — решения пользователя 2026-11-20, Q1 и Q7; ссылки шага «Privacy» — вместе с `add-privacy-policy`) | смартфон и планшет — этап 10 |
 | 08 | сторож запуска | D-15 | — | — | — |
 | 09 | узкий макет | — | — | — | D-21 (этап 10) |
 | 10 | Appearance | — | — | — | D-20 (change [`add-app-appearance-page`](../../../openspec/changes/archive/2026-11-20-add-app-appearance-page/proposal.md): режим и «Match system», системный акцент, встроенные и пользовательские темы из `$CODELAB_HOME/themes/*.json` с предупреждениями и проверкой контраста; формат файла — общий с CLI U-18, spec `client-themes`) |
@@ -616,9 +626,9 @@ Definition of Done и правки ленты по ручной регресси
 | Change (рабочее имя) | Что вводит | Веха |
 |---|---|---|
 | `add-app-settings-shell` (создан) | `NavigationCubit` и `AppDestination` в части workbench ↔ настройки, Cmd/Ctrl+,, оболочка и навигация настроек §12.4.9, страница «Connection» (20) и «Add connection profile» (20a) с токеном только из переменной окружения: U-06, D-04, R-12 (частично); профиль по умолчанию в app — часть 9.3 | M3 (с первой страницей настроек) |
-| `add-app-navigation-shell` | остальные ветки `AppDestination` (Boot, Onboarding, ProjectPicker, оверлеи) и сочетания A13 вне настроек — вместе с их экранами | M3–M5, по экранам |
+| `add-app-navigation-shell` | остальные ветки `AppDestination` (Boot, ProjectPicker, оверлеи) и сочетания A13 вне настроек — вместе с их экранами; ветку Onboarding вводит `add-app-onboarding` (решение пользователя 2026-11-20) | M3–M5, по экранам |
 | `add-provider-setup-ui` (создан) | страницы Providers (05) и MCP servers (05b), мастер провайдера (06) в app и CLI, первый запуск CLI (C5), `/settings` (C13), токен профиля в хранилище секретов агента (20, R-12 в app), ребро `codelab_desktop → codelab_setup`; без хранилищ ОС и onboarding | M4 (D-05, U-17), M5 (L-24, E-13, U-19) |
-| `add-app-onboarding` (рабочее имя) | onboarding app (07, D-11) поверх того же `ProviderSetupFlow` — после `add-app-navigation-shell` (решение Q3 change `add-provider-setup-ui`) | M5 |
+| `add-app-onboarding` (создан 2026-11-20) | onboarding app (07, D-11) поверх того же `ProviderSetupFlow`; ветка `OnboardingDestination` (D1), флаг `codelab.app.onboarding_done`, отложенный старт агента; решение Q3 change `add-provider-setup-ui`, решения пользователя 2026-11-20 (Q1–Q7) | M4 (решение пользователя 2026-11-20, Q7) |
 | `add-usage-extension` (открыт 2026-11-13, архивирован 2026-11-18) | уведомление `_codelab/session/usage`: usage шага, хода и сессии, заполнение контекста; строка статуса desktop и CLI; затем `add-usage-ledger`, `add-desktop-usage-pane` и Timeline (A14) | M5 |
 | `add-usage-ledger` (открыт 2026-11-17, влит; следующий — `add-desktop-usage-pane`, открыт 2026-11-17, завершён 2026-11-18; оба архивированы 2026-11-18; затем `fix-usage-pane-live-cards`, открыт 2026-11-18, завершён 2026-11-18 (PR #358), архивирован 2026-11-18; `add-session-deadline` отложен решением пользователя 2026-11-18) | журнал usage сессии (L-29): свёртка журнала, `usage.json`, `/usage [rebuild]`, запрос `_codelab/session/usage/ledger` с ходами и шагами, полная сумма после `session/load` (снимок `load`), суммаризатор в сумме сессии; затем `add-desktop-usage-pane` | M5 |
 | `add-subagents-and-tasks` (создан 2026-11-09, решения 2026-11-10 и 2026-11-12, архивирован 2026-11-18) | этапы 1 и 2 субагентов и список задач (§6.4): `agent`, вложенность до 3, запрос ребёнка, `task_*` вместо `update_plan`, `_meta.codelab.subagent`, `_meta.codelab.task`, схема объявлений `_meta.codelab` в `initialize`; строка `agent`, пометка запроса ребёнка, чек-лист с id в app и CLI; этап 2 — `_meta.codelab.parentToolCallId` и шаги потомков деревом; панель Agents v1 в доке app (итерация 5b, Q13) | M4 |

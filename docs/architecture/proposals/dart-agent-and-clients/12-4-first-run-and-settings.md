@@ -17,7 +17,7 @@
 | L-24 | мастер пользовательского провайдера: `/provider add` в CLI и тот же мастер в app | 9+ | CLI, app |
 | E-13 | страница «MCP servers» в app: добавить, изменить, удалить, переподключить | 9+ | app (+ команды агента `/mcp`) |
 | U-19 (Could) | экран настроек CLI `/settings` | 9+ | CLI |
-| D-11 (Could) | onboarding app: первые экраны поверх того же мастера | 9+ | app |
+| D-11 (Could) | onboarding app: первые экраны поверх того же мастера (change `add-app-onboarding`; веха M4 — решение пользователя 2026-11-20) | 9+ | app |
 | — | единая навигация настроек app: группы Agent и App, порядок страниц, доступ по профилю (§12.4.9) | 7 (с первой страницей настроек) | app |
 | D-24 (Could) | страница «Redaction»: слои, белый список, исключения, проверка на примере текста (§12.4.9) | 9+ | app |
 
@@ -1365,14 +1365,37 @@ sequenceDiagram
 только локальный `profiles.json` клиента, поэтому кнопка доступна и при `RemoteReadOnly`
 (SETUP-2 касается конфига агента, а не профилей клиента).
 
-**Onboarding app (D-11, Could)**: при первом запуске (флаг `onboarding_done` в
-`shared_preferences`) экраны «What CodeLab does» → «Permissions» (что агент может делать и где
-спрашивает) → «Choose a model» (тот же `ProviderSetupFlow` в `ProviderWizardDialog`; шаг
-пропускается при `ProviderReady`) → «Privacy» (что пишется в логи, где лежат ключи; ссылки «Privacy policy» и «Terms of use» открывают страницу «Legal», §12.7.7, §12.7.7а; артборд 07a). Шаг «Privacy» не просит принять условия и не пишет запись о согласии: условия информационные (D-29, решение пользователя 2026-11-20). Onboarding
-показывается после `BootReady` и не входит в шаги сторожа.
+**Onboarding app (D-11, Could; веха M4 — решение пользователя 2026-11-20)** — OpenSpec change
+[`add-app-onboarding`](../../../../openspec/changes/add-app-onboarding/design.md), spec `app-onboarding`.
+При первом запуске app показывает экран onboarding (`OnboardingDestination`) вместо рабочего места.
+Первый запуск — нет ключа `codelab.app.onboarding_done` в `shared_preferences`; ключ хранит только
+`true` и пишется при «Start using CodeLab» (D2). Ключ читается до `runApp`, как язык и оформление
+(D3). Другое значение или сбой чтения дают рабочее место без onboarding, ключ не перезаписывается.
+Обновившие app видят onboarding один раз (решение Q2). Шаги:
 
-Решение пользователя 2026-11-05 (Q3 change `add-provider-setup-ui`): onboarding app в этот change не входит. Это
-отдельный change после `add-app-navigation-shell`: тому нужен `OnboardingDestination`.
+1. «What CodeLab does» (артборд 07b).
+2. «Permissions» (07): что агент может делать и где спрашивает — таблица режима `standard`; если
+   в конфиге задан другой режим новой сессии, InfoBar называет его (D7, решение Q6).
+3. «Choose a model» (07c): карточки пресетов мастера; «Set up <preset>…» открывает тот же
+   `ProviderSetupFlow` в `ProviderWizardDialog` с выбранным пресетом, целью `user` и неснимаемым
+   «Make default» (`entry: onboarding`); «Set up later» — без записи (отступление от артборда,
+   решение Q3). Шаг пропускается при `ProviderReady` и при профиле по умолчанию, который не
+   настраивается из app (D6, D8).
+4. «Privacy» (07a): что уходит с компьютера и что остаётся на нём. Пути и способ хранения ключей —
+   по сборке (бэкенд секретов `env`, `file` или хранилище ОС), а не по артборду (D9, решение Q5).
+   Шаг не просит принять условия и не пишет запись о согласии: условия информационные (D-29).
+   Ссылки «Privacy policy» и «Terms of use» открывают страницу «Legal» (§12.7.7, §12.7.7а) и
+   появляются вместе с ней; их включает тот из changes `add-app-onboarding` и `add-privacy-policy`,
+   который вливается вторым (D10, решение Q4).
+
+Пока показан onboarding, рабочее место не строится и агент окна не стартует: восстановленный
+проект становится триггером старта только после «Start using CodeLab» (D5; spec agent-workbench-ui
+«Агент стартует сам»). Выход до последнего шага покажет onboarding снова. Onboarding не входит в
+шаги сторожа; когда сторож появится, он показывается после `BootReady`.
+
+Решение пользователя 2026-11-05 (Q3 change `add-provider-setup-ui`): onboarding app в этот change не
+входит. Решение пользователя 2026-11-20 (Q1 change `add-app-onboarding`): ветку `OnboardingDestination`
+вводит сам change onboarding, отдельный `add-app-navigation-shell` перед ним не нужен.
 
 ## 12.4.10. Примеры
 

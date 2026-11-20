@@ -399,6 +399,31 @@
 
 Остальные тексты действий и мест («Open the command palette» → «Открыть палитру команд», «Show or hide the Files pane» → «Показать или скрыть панель файлов» и т. д.) собраны из терминов §3–§5 и приняты вместе с таблицей.
 
+### Onboarding
+
+Термины экрана первого запуска (change [`add-app-onboarding`](../../openspec/changes/add-app-onboarding/design.md), D14). Сообщения — `onboarding…` в `app_en.arb` и `app_ru.arb`. Имена пресетов, id провайдеров и моделей, `id` бэкенда секретов, имена переменных и секретов, пути и имена режимов (`standard`) не переводятся (§2). Строки о ключах и о том, что уходит с компьютера, несут метку `security`. Предложение архитектора, вычитывает пользователь в задаче итерации 3 change.
+
+| en | ru | Примечание |
+|---|---|---|
+| Welcome to CodeLab | Добро пожаловать в CodeLab | шапка экрана |
+| What CodeLab does | Что делает CodeLab | шаг 1 |
+| Permissions (шаг onboarding) | Разрешения | шаг 2; как страница «Permissions & tools» не называется |
+| Choose a model | Выбор модели | шаг 3 |
+| Privacy (шаг onboarding) | Приватность | шаг 4 |
+| Set up {preset}… | Настроить {preset}… | `{preset}` — плейсхолдер (§2) |
+| Set up again… | Настроить заново… | |
+| Set up later | Настроить позже | шаг 3 без записи (D8) |
+| Start using CodeLab | Начать работу с CodeLab | последняя кнопка |
+| {preset} is connected | {preset} подключён | |
+| Asks each time | Спрашивает каждый раз | `security` |
+| No prompt | Без вопроса | `security` |
+| Blocked | Запрещено | `security` |
+| What leaves this computer | Что уходит с компьютера | `security` |
+| Stays here | Остаётся здесь | `security` |
+| Every turn · When used · Never · Local | Каждый ход · При использовании · Никогда · Локально | теги шага 4 |
+| Nothing to agree to | Принимать нечего | D-29 |
+| The key stays on this computer. | Ключ остаётся на этом компьютере. | `security` |
+
 ### Настройки I: «Подключение», «Провайдеры», мастер провайдера (итерация 4)
 
 Термины, добавленные итерацией 4. Идентификаторы в русских фразах — по правилу 5 §1: id профиля, имя секрета и отдельные символы в «ёлочках», id провайдера, переменные окружения, id бэкенда, команды, пути и URL — без кавычек. Тексты хранилища секретов (`readOnlyHint`, `unavailableReason`, причина отказа записи) и `ConfigIssue.message` показываются как есть (§2; design.md D6).
