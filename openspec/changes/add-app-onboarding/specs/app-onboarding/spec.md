@@ -38,6 +38,10 @@ Onboarding SHALL состоять из четырёх шагов в порядк
 - **WHEN** готовность — `ProviderReady`, пользователь дошёл до шага «Privacy» и нажимает «Back»
 - **THEN** показан шаг «Permissions»; строка шагов показывает «Choose a model» с отметкой
 
+#### Scenario: Back к сохранённому провайдеру
+- **WHEN** пользователь сохранил провайдера `anthropic` на шаге «Choose a model», нажал «Next», затем на шаге «Privacy» — «Back»
+- **THEN** показан шаг «Choose a model» со сводкой `anthropic is connected` и активной «Next»; после «Set up again…» и сохранения провайдера `openai` сводка называет `openai`, а `anthropic` остаётся в `config.yaml`
+
 #### Scenario: Esc и настройки на onboarding
 - **WHEN** на шаге «Permissions» пользователь нажимает Esc, затем Cmd/Ctrl+,
 - **THEN** показан тот же шаг, назначение навигации — `OnboardingDestination`
@@ -119,6 +123,10 @@ InfoBar о мастере SHALL называть хранилище по фак�
 - **WHEN** `config.yaml` содержит `budget.max_steps: 0`
 - **THEN** шаг показывает InfoBar с подсказкой `codelab config check`, «Set up <preset>…» неактивна, после «Set up later» и завершения onboarding `config.yaml` побайтно не изменился
 
+#### Scenario: Итог мастера при битом конфиге не принимается
+- **WHEN** шаг «Choose a model» показан с пояснением о битом конфиге или о непрочитанных настройках, и onboarding всё же получает итог `ConfigSaved` мастера
+- **THEN** шаг остаётся в прежнем состоянии с пояснением, сводки `is connected` и «Next» нет, журнал не содержит `onboarding.model_saved`
+
 #### Scenario: Ключ не найден
 - **WHEN** `config.yaml` задаёт провайдера `openai` с `api_key_secret: codelab/openai`, а секрета нет
 - **THEN** InfoBar называет `openai`, `codelab/openai` и `Settings › Providers › Edit`, карточки доступны
@@ -159,7 +167,11 @@ InfoBar о мастере SHALL называть хранилище по фак�
 
 #### Scenario: Флаг не записался
 - **WHEN** запись `shared_preferences` бросает исключение
-- **THEN** app показывает рабочее место, журнал содержит `onboarding.save_failed`; при следующем запуске onboarding показан снова
+- **THEN** app показывает рабочее место, журнал содержит `onboarding.save_failed` и `onboarding.completed`; при следующем запуске onboarding показан снова
+
+#### Scenario: Значение model_step
+- **WHEN** пользователь завершает onboarding трижды на чистых данных: при готовом провайдере; после сохранения провайдера; после «Set up later» при битом конфиге
+- **THEN** `onboarding.completed` содержит `model_step` соответственно `skipped`, `saved`, `later`
 
 ### Requirement: Локализация и доступность onboarding
 Все тексты onboarding SHALL браться из каталогов ARB `en` и `ru` (spec app-settings «Локализация интерфейса app»). Имена пресетов, id провайдеров и моделей, `id` бэкенда, имена переменных и секретов, пути и имена режимов SHALL показываться как есть. Строка шагов SHALL объявлять список шагов и текущий шаг для экранного диктора. При показе шага фокус SHALL переходить на его заголовок. Контент SHALL быть не шире 920 px; при окне уже 900 px он SHALL прокручиваться по вертикали без обрезки кнопок.

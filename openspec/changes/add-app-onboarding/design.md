@@ -99,7 +99,9 @@ Onboarding app (D-11) описан в §12.4.9 [`12-4-first-run-and-settings.md`
 | privacy | Back | model, если шаг не `Skipped`; иначе permissions |
 | privacy | Start using CodeLab | конец (D5) |
 
-Back на шаге 4 при пропущенном шаге 3 ведёт на шаг 2 (граф `NavOnboarding`). Строка шагов показывает пропущенный шаг 3 отмеченным, как пройденный: пользователь видит четыре шага, а не три.
+Back на шаге 4 при пропущенном шаге 3 ведёт на шаг 2 (граф `NavOnboarding`). Back на шаге 4 при `Saved(summary)` возвращает на шаг 3 в том же `Saved`: сводка сохранённого провайдера не сбрасывается, «Next» остаётся активной. Повторное сохранение через «Set up again…» заменяет сводку новой (последний `Done` побеждает); прежний провайдер остаётся в конфиге (D8).
+
+В событии `onboarding.completed` поле `model_step` принимает три значения (D13): `skipped` — шаг 3 пропущен (`Skipped`); `saved` — на шаг 4 ушли из `Saved`; `later` — любой выход на шаг 4 из `Choose(…)` («Set up later» при любом `notice`). Строка шагов показывает пропущенный шаг 3 отмеченным, как пройденный: пользователь видит четыре шага, а не три.
 
 Next на шаге 2 при `model: Pending` ждёт итога готовности. Кнопка показывает индикатор, повторное нажатие не даёт второго перехода. Ожидание ограничено таймаутом D6, поэтому зависнуть оно не может.
 
@@ -113,7 +115,7 @@ Esc и закрытие окна onboarding не завершают. Закры�
 1. ставит `finishing` (повторное нажатие игнорируется);
 2. пишет флаг через `markDone()`;
 3. при сбое записи пишет `onboarding.save_failed {error_type}` и не останавливается: onboarding покажется при следующем запуске, а это лучше, чем запереть пользователя на шаге 4;
-4. зовёт `NavigationCubit.finishOnboarding()`.
+4. зовёт `NavigationCubit.finishOnboarding()` (в Cubit — колбэк `onFinished`) при любом исходе записи, в том числе после сбоя шага 3.
 
 Когда назначение впервые становится `WorkbenchDestination`, `_CodeLabHome` вызывает `startOnLaunch()` ровно один раз за жизнь app: так же, как сейчас после первого кадра при запуске без onboarding.
 
@@ -185,6 +187,7 @@ Esc и закрытие окна onboarding не завершают. Закры�
 
   Карточки и «Set up <preset>…» доступны: пользователь может добавить другого провайдера. Мастер правки отсюда не открывается (proposal, «Не входит»).
 - **`Choose(configBroken)`** — InfoBar `The agent's config has <n> problems. Fix them in Settings › Providers or run codelab config check.` Карточки неактивны: мастер не пишет поверх битого файла (как D26 и §12.4.3, п. 2). Доступна только «Set up later».
+- **Итог мастера при `Choose(configBroken)` и `Choose(unavailable)`** игнорируется: если `Done` всё же пришёл (мастер открыт в обход неактивной кнопки или гонкой), `OnboardingCubit` не переходит в `Saved`, шаг остаётся в прежнем `Choose(…)`. Защита в Cubit, а не только в виджете: кнопка — представление, а правило «не писать и не признавать запись поверх битого или непрочитанного конфига» — application (AGENTS.md §6, §10).
 - **`Choose(unavailable)`** — InfoBar `Agent settings could not be read. You can set up a provider later in Settings › Providers.` Карточки неактивны, доступна «Set up later».
 
 ### D9. Тексты шагов 1 и 4 — по сборке, а не по макету
@@ -247,7 +250,7 @@ Esc и закрытие окна onboarding не завершают. Закры�
 | `onboarding.step_shown` | debug | `step` |
 | `onboarding.model_step_skipped` | info | `reason` (`ready`, `external`) |
 | `onboarding.model_saved` | info | — (id провайдера пишет `provider_wizard.saved` моста) |
-| `onboarding.completed` | info | `model_step` (`skipped`, `saved`, `later`) |
+| `onboarding.completed` | info | `model_step`: `skipped` (шаг 3 пропущен), `saved` (выход из `Saved`), `later` (любой выход на шаг 4 из `Choose(…)`); пишется и при сбое записи флага |
 | `onboarding.save_failed` | warning | `error_type` |
 
 В событиях нет путей, имён секретов и переменных, адресов, id моделей и текстов исключений (только `runtimeType`), как в событиях настроек (D17 `add-app-settings-shell`). События мастера пишет мост (`provider_wizard.*`, D18 `add-provider-setup-ui`); onboarding их не дублирует.
