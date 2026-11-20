@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Provider wizard, save without check?</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.fc{display:flex;flex-direction:column;gap:6px;padding:14px 16px}
+.fc .f-sci{color:var(--accent-text)}
+.rows{display:flex;flex-direction:column;gap:4px}
+.grid{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}
+.grid legend{grid-column:1/-1}
+.pr{cursor:pointer;min-height:56px}
+.pr.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.pri{appearance:none;-webkit-appearance:none;margin:0;width:20px;height:20px;border-radius:50%;border:1px solid var(--strong);background:var(--control);flex:none;box-sizing:border-box}
+.pri:checked{border:5px solid var(--accent);background:var(--on-accent)}
+.links{display:flex;gap:8px;flex-wrap:wrap}
+.links a{text-decoration:none}
+.tbtn{min-height:44px;min-width:44px}
+.f-rb .f-tb input{appearance:auto;-webkit-appearance:auto;width:auto;height:auto;border:0;border-radius:0;background:transparent;flex:1;min-width:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}
+.bar{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px 0 16px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.steps{display:grid;gap:4px}
+.steps i{height:4px;border-radius:2px;background:var(--sel)}
+.steps i.done{background:var(--accent)}
+.pbody{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:12px;padding:14px 16px}
+.pbody h1{margin:0;font-size:22px;line-height:28px;font-weight:600}
+.pbody .lead{margin:0;font-size:14px;line-height:20px}
+.pfoot{flex:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px 16px 16px;border-top:1px solid var(--stroke);background:var(--layer)}
+.pfoot.one{grid-template-columns:1fr}
+.cards{grid-template-columns:1fr;gap:6px}
+.fc{flex-direction:row;flex-wrap:wrap;align-items:center;column-gap:10px;padding:10px 12px}
+.fc .t-cap{flex-basis:100%}
+.f-sc{min-height:56px;padding:8px 12px;gap:12px}
+.grid{grid-template-columns:1fr;gap:6px}
+.grid .f-sc{min-height:48px;padding:4px 12px}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:6px 10px}
+.ml{display:flex;flex-direction:column;gap:2px;border:1px solid var(--stroke);border-radius:4px;padding:4px;background:var(--card)}
+.ml .f-li{min-height:44px}
+</style>
+</helmet>
+<div class="{{themeCls}} root"  style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}; position: relative">
+  <header class="bar" data-fluent="NavigationAppBar" style="padding-left: 8px">
+    <span data-href="PhoneOnbModel.dc.html" class="f-btn subtle icon tbtn" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+    <h1 class="t-strong" style="margin: 0; flex: 1; font-size: 16px">Connect Anthropic</h1>
+    <span class="t-cap t2" style="padding-right: 8px">Step 4 of 7</span>
+  </header>
+  <div class="pbody">
+    <div class="steps" style="grid-template-columns: repeat(7, minmax(0, 1fr))" role="img" aria-label="Step 4 of 7"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i></div>
+    <div class="t-cap t2">API type → Base URL → API key → <b style="color: var(--text)">Check</b> → Model → Review → Save</div>
+    <h2 class="t-sub" style="margin: 0">Check</h2>
+    <div class="f-card" style="padding: 12px; display: flex; flex-direction: column; gap: 10px">
+      <div class="kv t-cap">
+        <span class="t2">API type</span><span>Anthropic</span>
+        <span class="t2">Base URL</span><span class="mono">https://api.anthropic.com</span>
+        <span class="t2">API key</span><span>Store in Keychain as <span class="mono">codelab/anthropic</span></span>
+      </div>
+      <div class="f-ib warning" role="alert" data-fluent="InfoBar (warning)"><span class="f-ibi" aria-hidden="true">!</span><div style="display: flex; flex-direction: column; gap: 4px"><span><span class="ttl">Can’t reach api.anthropic.com</span></span><span>No answer within 10 s. The device may be offline or the host blocked. Try again, or save without the check.</span><span class="mono t2 t-cap">GET https://api.anthropic.com/v1/models → timeout · 10 s</span></div></div>
+    </div>
+    <p class="t-cap t2" style="margin: 0">Only the status and the kind of failure are shown; the server’s reply is not. Redirects are not followed (SETUP-23).</p>
+    <p class="t-cap t2" style="margin: 0">Save without check is offered only when the server is unreachable or timed out. It asks to confirm; then the model is entered by hand and Review shows “Not verified: timeout”.</p>
+    <span style="flex: 1"></span>
+    <span data-href="#" class="f-btn subtle tbtn" style="text-decoration: none; justify-content: center; color: var(--accent-text)">Save without check…</span>
+  </div>
+  <div class="pfoot"><span data-href="PhoneWizardUrl.dc.html" class="f-btn tbtn" style="text-decoration: none; justify-content: center">Back</span><span data-href="PhoneWizardFailNet.dc.html" class="f-btn accent tbtn" style="text-decoration: none; justify-content: center">Retry</span></div>
+  <div class="smoke" aria-hidden="true" data-fluent="ContentDialog barrier (smoke)" style="position: absolute; inset: 0; background: var(--smoke)"></div>
+  <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px">
+  <div class="f-dlg" role="alertdialog" aria-modal="true" aria-labelledby="sk" data-fluent="ContentDialog" style="width: 100%">
+    <div class="f-dlgb">
+      <h2 id="sk" class="t-sub" style="margin: 0">Save without a check?</h2>
+      <p style="margin: 0">CodeLab could not confirm the address or the key. Next you enter the model by hand, and Review shows <b>Not verified: timeout</b>. If something is wrong, the first turn shows the error.</p>
+    </div>
+    <div class="f-dlgf" style="grid-template-columns: 1fr; gap: 8px">
+      <a href="PhoneWizardManual.dc.html" class="f-btn accent tbtn" data-fluent="primaryButton" style="text-decoration: none; justify-content: center">Save without check</a>
+      <a href="PhoneWizardFailNet.dc.html" class="f-btn tbtn" data-fluent="closeButton" style="text-decoration: none; justify-content: center">Cancel</a>
+    </div>
+  </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>
