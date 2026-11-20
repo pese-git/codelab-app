@@ -203,7 +203,7 @@ JSON-файл.
 атрибутами). `dark` и `high-contrast` используют только 16 ANSI, поэтому уважают палитру
 терминала.
 
-**Формат и разбор — общие с app** (change [`add-app-appearance-page`](../../../../openspec/changes/add-app-appearance-page/design.md), D2; решение пользователя 2026-11-20, Q1 (а)). Формат файла, закрытый набор ролей и правила разбора — spec `client-themes`. Разбор — чистая функция `ThemeFile.parse` в `codelab_client_core` (`lib/src/themes/`): она возвращает тему, проблемы с кодами и позициями и список незаданных ролей; текста проблем ядро не строит. Каталог и чтение файлов — порт `ThemeLibrary` ядра клиента и адаптер `IoThemeLibrary` в `codelab_client_io`. CLI строит поверх них только своё: `CliTheme.sgr`, глубину цвета, `auto` и строгость (любая проблема — ошибка, шаг 3). Контракт ниже описывает эту часть CLI; `ThemeCatalog` CLI берёт записи из `ThemeLibrary`.
+**Формат и разбор — общие с app** (change [`add-app-appearance-page`](../../../../openspec/changes/archive/2026-11-20-add-app-appearance-page/design.md), D2; решение пользователя 2026-11-20, Q1 (а)). Формат файла, закрытый набор ролей и правила разбора — spec `client-themes`. Разбор — чистая функция `ThemeFile.parse` в `codelab_client_core` (`lib/src/themes/`): она возвращает тему, проблемы с кодами и позициями и список незаданных ролей; текста проблем ядро не строит. Каталог и чтение файлов — порт `ThemeLibrary` ядра клиента и адаптер `IoThemeLibrary` в `codelab_client_io`. CLI строит поверх них только своё: `CliTheme.sgr`, глубину цвета, `auto` и строгость (любая проблема — ошибка, шаг 3). Контракт ниже описывает эту часть CLI; `ThemeCatalog` CLI берёт записи из `ThemeLibrary`.
 
 **Контракт.**
 

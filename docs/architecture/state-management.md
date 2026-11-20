@@ -1083,7 +1083,7 @@ Settings чаще всего принадлежат отдельной feature.
 
 ### 63б. Оформление app
 
-Источник — change [`add-app-appearance-page`](../../openspec/changes/add-app-appearance-page/design.md), D4, D5, D13; spec `app-settings` «Режим оформления и темы режимов», «Хранение оформления». Это ещё один частный случай §2 и §19: у оформления один владелец.
+Источник — change [`add-app-appearance-page`](../../openspec/changes/archive/2026-11-20-add-app-appearance-page/design.md), D4, D5, D13; spec `app-settings` «Режим оформления и темы режимов», «Хранение оформления». Это ещё один частный случай §2 и §19: у оформления один владелец.
 
 * **Владелец — `AppAppearanceCubit`** (`apps/codelab_desktop/lib/app/appearance/`, root scope, singleton). Состояние — `AppAppearanceState`: выбор пользователя (`mode`, `lightTheme`, `darkTheme`, `systemAccent`), применённое оформление (готовые `FluentThemeData` двух режимов, акцент, признак запасной темы `fallback`) и `saveFailed`.
 * **Saved / effective (§63).** Сохранённый выбор (`shared_preferences`, документ `codelab.app.appearance`, порт `AppAppearancePreferences`) и применённое оформление различаются. Тема режима, которая не загрузилась (файла нет, ошибка чтения или разбора, база темы относится к другому режиму), применяется как встроенная тема режима, а выбор не перезаписывается. Незнакомое значение документа читается как значение по умолчанию и тоже не перезаписывается до явного выбора.
