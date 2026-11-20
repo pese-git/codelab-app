@@ -140,14 +140,14 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
 
 ## 3а. Итерация 3а — ожидающее одобрение видно в строке своего вызова (`[client]`)
 
-- [ ] 3.3 `[client]` Красный: `packages/dart/codelab_client_core/test/transcript/approval_in_row_test.dart` (design.md D13; spec acp-client-kit «Одобрение в элементе вызова транскрипта», все сценарии):
+- [x] 3.3 `[client]` Красный: `packages/dart/codelab_client_core/test/transcript/approval_in_row_test.dart` (design.md D13; spec acp-client-kit «Одобрение в элементе вызова транскрипта», все сценарии):
   - «Повторный запрос после ответа»;
   - «После ответа на повторный запрос»;
   - «Повторный запрос вызова без `tool_call`»;
   - «Два ожидающих запроса одного вызова»;
   - «Один запрос — без изменений»;
   - инвариант: для каждого `PendingApprovalView` с `focused == true` корня в `pendingApprovals` есть элемент вызова транскрипта с этим одобрением; `childApprovals` строки `agent` не изменились.
-- [ ] 3.4 `[client]` Реализация 3.3: правило выбора в `transcript_projector.dart` — `_approvalFor` и `_unannouncedApprovalItems` (одно правило, один элемент на `toolCallId`); doc-комментарии (`AGENTS.md` §15). 3.3 зелёный; прежние тесты `codelab_client_core` и `apps/codelab_cli` зелёные без изменения сценариев; `web-compile`, `conformance:client`, `test:e2e:cli:dart-agent` зелёные.
+- [x] 3.4 `[client]` Реализация 3.3: правило выбора в `transcript_projector.dart` — `_approvalFor` и `_unannouncedApprovalItems` (одно правило, один элемент на `toolCallId`); doc-комментарии (`AGENTS.md` §15). 3.3 зелёный; прежние тесты `codelab_client_core` и `apps/codelab_cli` зелёные без изменения сценариев; `web-compile`, `conformance:client`, `test:e2e:cli:dart-agent` зелёные.
 
 ## 4. Итерация 4 — страница «Keyboard» и тексты
 

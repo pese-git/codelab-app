@@ -567,26 +567,47 @@ SubagentRequester? _requesterOf(PromptTurn turn, ApprovalRequest approval) {
 /// Запрос потомка при строке корня сюда не попадает: его одобрение лежит в
 /// `ToolCallItem.childApprovals` строки корня (D43 п. 2). [announced] —
 /// вызовы, объявленные `tool_call` хода.
+///
+/// Элемент один на `toolCallId`; его одобрение выбирается правилом D13
+/// (`_approvalFor`): самое раннее ожидающее, иначе последнее.
 List<TranscriptItem> _unannouncedApprovalItems(
   PromptTurn turn,
   Set<ToolCallId> seen,
   ApprovalRequestId? focused,
   Set<ToolCallId> announced,
-) => [
-  for (final approval in turn.approvals.values)
-    if (_hostRowOf(turn, approval, announced) == null &&
-        seen.add(approval.toolCall.id))
-      TranscriptItem.toolCall(
-        id: _toolItemId(turn.id, approval.toolCall.id),
-        toolCallId: approval.toolCall.id,
-        title: approval.toolCall.title,
-        details: _callView(
-          _cancelledWithTurn(turn, approval),
-          subagent: _requesterOf(turn, approval),
+) {
+  bool own(ApprovalRequest a) => _hostRowOf(turn, a, announced) == null;
+  return [
+    for (final first in turn.approvals.values)
+      // Элемент один на `toolCallId`, на месте первого запроса; одобрение
+      // элемента выбирается правилом D13 среди запросов этого вызова.
+      if (own(first) && seen.add(first.toolCall.id))
+        _unannouncedItem(
+          turn,
+          _chooseApproval(
+            turn.approvals.values.where(
+              (a) => a.toolCall.id == first.toolCall.id && own(a),
+            ),
+          )!,
+          focused,
         ),
-        approval: _approvalView(turn, approval, focused),
-      ),
-];
+  ];
+}
+
+TranscriptItem _unannouncedItem(
+  PromptTurn turn,
+  ApprovalRequest approval,
+  ApprovalRequestId? focused,
+) => TranscriptItem.toolCall(
+  id: _toolItemId(turn.id, approval.toolCall.id),
+  toolCallId: approval.toolCall.id,
+  title: approval.toolCall.title,
+  details: _callView(
+    _cancelledWithTurn(turn, approval),
+    subagent: _requesterOf(turn, approval),
+  ),
+  approval: _approvalView(turn, approval, focused),
+);
 
 /// Запись вызова без `tool_call` для показа: при отмене хода вместе с
 /// одобрением нетерминальный вызов помечается отменённым (см.
@@ -740,13 +761,41 @@ String? _command(ToolCallRecord record) {
   return command is String && command.trim().isNotEmpty ? command : null;
 }
 
-ApprovalRequest? _approvalFor(PromptTurn turn, ToolCallId toolCallId) {
-  for (final approval in turn.approvals.values) {
-    if (approval.toolCall.id == toolCallId) {
-      return approval;
+/// Одобрение элемента вызова [toolCallId] среди одобрений хода.
+///
+/// Почему: агент вправе спросить разрешение на тот же вызов повторно, а
+/// «первое по порядку» показывало решённый запрос поверх ожидающего — ответить
+/// на него в ленте было нельзя (D13 change `fix-approval-focus`).
+///
+/// Правило: самое раннее ожидающее по `requestedAt` (без него — по порядку
+/// прихода), иначе последнее по порядку прихода (его исход — тег строки).
+ApprovalRequest? _approvalFor(PromptTurn turn, ToolCallId toolCallId) =>
+    _chooseApproval(
+      turn.approvals.values.where(
+        (approval) => approval.toolCall.id == toolCallId,
+      ),
+    );
+
+/// Выбор одобрения по правилу D13 из [candidates] в порядке прихода.
+ApprovalRequest? _chooseApproval(Iterable<ApprovalRequest> candidates) {
+  ApprovalRequest? earliestPending;
+  ApprovalRequest? last;
+  for (final approval in candidates) {
+    last = approval;
+    if (approval.status != ApprovalStatus.pending) {
+      continue;
+    }
+    final best = earliestPending;
+    final bestTime = best?.requestedAt;
+    final time = approval.requestedAt;
+    // Строгое «раньше»: при равенстве или без времени остаётся первый по
+    // порядку прихода.
+    if (best == null ||
+        (bestTime != null && time != null && time.isBefore(bestTime))) {
+      earliestPending = approval;
     }
   }
-  return null;
+  return earliestPending ?? last;
 }
 
 /// Самое раннее по `requestedAt` ожидающее одобрение хода — единственное,
