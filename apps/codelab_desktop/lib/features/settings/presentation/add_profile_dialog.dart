@@ -4,7 +4,6 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show ProfileDraftField, ProfileKind;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../l10n/l10n.dart';
@@ -31,10 +30,10 @@ Future<void> showAddProfileDialog(BuildContext context, AddProfileCubit cubit) {
     builder: (dialogContext) => BlocProvider<AddProfileCubit>.value(
       value: cubit,
       child: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.escape): () =>
-              unawaited(Navigator.of(dialogContext).maybePop()),
-        },
+        // Esc диалога — запись `close-overlay` каталога кита (D3).
+        bindings: CodeLabShortcut.closeOverlay.bind(
+          () => unawaited(Navigator.of(dialogContext).maybePop()),
+        ),
         // Без узла фокуса внутри диалога Esc после щелчка по флажку не дошёл
         // бы до привязки.
         child: const Focus(autofocus: true, child: AddProfileDialog()),

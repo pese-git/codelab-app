@@ -1,7 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform;
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 
 import '../atomics/atomics.dart';
 import '../l10n/strings.dart';
@@ -162,41 +160,34 @@ final class CodeLabApprovalShortcuts {
   /// Подсказка сочетания для варианта [optionId] в обозначениях платформы;
   /// `null` — у варианта нет сочетания.
   String? labelFor(String optionId) {
-    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
-    final mod = isMac ? '⌘' : 'Ctrl+';
-    final alt = isMac ? '⌥' : 'Alt+';
+    final shortcut = _shortcutOf(optionId);
+    return shortcut?.combos.single.compactFor(defaultTargetPlatform);
+  }
 
-    if (optionId == allowOnceId) return '$mod⏎';
-    if (optionId == allowAlwaysId) return '$alt$mod⏎';
-    if (optionId == rejectOnceId) return '$mod⌫';
-    if (optionId == rejectAlwaysId) return '$alt$mod⌫';
+  CodeLabShortcut? _shortcutOf(String optionId) {
+    if (optionId == allowOnceId) return CodeLabShortcut.allowOnce;
+    if (optionId == allowAlwaysId) return CodeLabShortcut.allowAlways;
+    if (optionId == rejectOnceId) return CodeLabShortcut.rejectOnce;
+    if (optionId == rejectAlwaysId) return CodeLabShortcut.rejectAlways;
     return null;
   }
 
   /// Привязки сочетаний к [select]; Ctrl и ⌘ равноправны на всех
-  /// платформах.
+  /// платформах (активаторы дают записи каталога).
   Map<ShortcutActivator, VoidCallback> bindings(
     void Function(String optionId) select,
   ) {
-    void bind(
-      Map<ShortcutActivator, VoidCallback> map,
-      String? optionId,
-      LogicalKeyboardKey key, {
-      bool alt = false,
-    }) {
-      if (optionId == null) {
-        return;
+    final map = <ShortcutActivator, VoidCallback>{};
+    void bind(String? optionId, CodeLabShortcut shortcut) {
+      if (optionId != null) {
+        map.addAll(shortcut.bind(() => select(optionId)));
       }
-      map[SingleActivator(key, control: true, alt: alt)] = () =>
-          select(optionId);
-      map[SingleActivator(key, meta: true, alt: alt)] = () => select(optionId);
     }
 
-    final map = <ShortcutActivator, VoidCallback>{};
-    bind(map, allowOnceId, LogicalKeyboardKey.enter);
-    bind(map, allowAlwaysId, LogicalKeyboardKey.enter, alt: true);
-    bind(map, rejectOnceId, LogicalKeyboardKey.backspace);
-    bind(map, rejectAlwaysId, LogicalKeyboardKey.backspace, alt: true);
+    bind(allowOnceId, CodeLabShortcut.allowOnce);
+    bind(allowAlwaysId, CodeLabShortcut.allowAlways);
+    bind(rejectOnceId, CodeLabShortcut.rejectOnce);
+    bind(rejectAlwaysId, CodeLabShortcut.rejectAlways);
     return map;
   }
 

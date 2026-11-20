@@ -123,19 +123,13 @@ void main() {
     expect(selected?.slashCommand, '/logs');
   });
 
-  testWidgets('routes workbench command palette and inspector shortcuts', (
-    tester,
-  ) async {
+  testWidgets('routes the workbench command palette shortcut', (tester) async {
     var openedPalette = false;
-    var previousInspector = false;
-    var nextInspector = false;
 
     await tester.pumpWidget(
       FluentApp(
         home: CodeLabWorkbenchShortcuts(
           onOpenCommandPalette: () => openedPalette = true,
-          onInspectorPrevious: () => previousInspector = true,
-          onInspectorNext: () => nextInspector = true,
           child: const SizedBox(width: 320, height: 200),
         ),
       ),
@@ -144,15 +138,9 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(openedPalette, isTrue);
-    expect(previousInspector, isTrue);
-    expect(nextInspector, isTrue);
   });
 
   testWidgets('routes Cmd/Ctrl+, to the settings callback', (tester) async {
@@ -371,6 +359,35 @@ void main() {
 
       expect(selected, ['a2']);
     });
+
+    // Подсказка варианта «Always» строит каталог сочетаний (change
+    // `add-app-keyboard-page`, D3, D4; решение Q4): на Windows и Linux
+    // `Ctrl+Alt+⏎` вместо прежнего `Alt+Ctrl+⏎`, на macOS `⌥⌘⏎`.
+    testWidgets('Linux: allow_always shows Ctrl+Alt+⏎ and Ctrl+Alt+Enter '
+        'selects it', (tester) async {
+      final selected = <String>[];
+      await tester.pumpWidget(prompt(onSelected: selected.add));
+      await pickScope(tester, 'Always');
+
+      expect(find.text('Ctrl+Alt+⏎'), findsOneWidget);
+      expect(find.text('Alt+Ctrl+⏎'), findsNothing);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(selected, ['a2']);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+    testWidgets('macOS: allow_always shows ⌥⌘⏎', (tester) async {
+      await tester.pumpWidget(prompt(onSelected: (_) {}));
+      await pickScope(tester, 'Always');
+
+      expect(find.text('⌥⌘⏎'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
     testWidgets('raw input stays collapsed until View raw input', (
       tester,

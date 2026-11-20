@@ -1,15 +1,25 @@
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/services.dart';
 
+import '../atomics/atomics.dart';
+
+/// Сочетания клавиш рабочего места: палитра, новая сессия, настройки, сайдбар,
+/// панель Files и Esc отмены хода.
+///
+/// Почему: активаторы берутся из каталога [CodeLabShortcut], а не объявляются
+/// здесь литералами, иначе страница «Keyboard» разошлась бы с привязками
+/// (change `add-app-keyboard-page`, D3). Параметры одобрения и навигации
+/// инспектора (`onApprove`, `onReject`, `onInspectorPrevious`,
+/// `onInspectorNext`) удалены: app их не передавал, одобрение привязывает свои
+/// клавиши само, а Alt+←/→ зарезервированы за инспектором (DSK-18), но не
+/// привязаны (решение пользователя Q2).
+///
+/// Как использовать: хост передаёт колбэки только для доступных действий;
+/// без колбэка сочетание не привязано.
 class CodeLabWorkbenchShortcuts extends StatelessWidget {
   const CodeLabWorkbenchShortcuts({
     required this.child,
     this.onOpenCommandPalette,
     this.onCancel,
-    this.onApprove,
-    this.onReject,
-    this.onInspectorPrevious,
-    this.onInspectorNext,
     this.onNewSession,
     this.onToggleSidebar,
     this.onOpenSettings,
@@ -19,12 +29,12 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
   });
 
   final Widget child;
+
+  /// Cmd/Ctrl+K — открыть палитру команд.
   final VoidCallback? onOpenCommandPalette;
+
+  /// Esc — отменить идущий ход (и закрыть палитру, как решает хост).
   final VoidCallback? onCancel;
-  final VoidCallback? onApprove;
-  final VoidCallback? onReject;
-  final VoidCallback? onInspectorPrevious;
-  final VoidCallback? onInspectorNext;
 
   /// Cmd/Ctrl+N — новая сессия (A13, шаг 3; change
   /// `redesign-workbench-shell`).
@@ -52,77 +62,19 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
       return child;
     }
 
-    final bindings = <ShortcutActivator, VoidCallback>{};
-    if (onOpenCommandPalette != null) {
-      bindings[const SingleActivator(LogicalKeyboardKey.keyK, control: true)] =
-          onOpenCommandPalette!;
-      bindings[const SingleActivator(LogicalKeyboardKey.keyK, meta: true)] =
-          onOpenCommandPalette!;
-    }
-    if (onCancel != null) {
-      bindings[const SingleActivator(LogicalKeyboardKey.escape)] = onCancel!;
-    }
-    if (onNewSession != null) {
-      bindings[const SingleActivator(LogicalKeyboardKey.keyN, control: true)] =
-          onNewSession!;
-      bindings[const SingleActivator(LogicalKeyboardKey.keyN, meta: true)] =
-          onNewSession!;
-    }
-    if (onToggleSidebar != null) {
-      bindings[const SingleActivator(LogicalKeyboardKey.keyB, control: true)] =
-          onToggleSidebar!;
-      bindings[const SingleActivator(LogicalKeyboardKey.keyB, meta: true)] =
-          onToggleSidebar!;
-    }
-    if (onOpenSettings != null) {
-      bindings[const SingleActivator(LogicalKeyboardKey.comma, control: true)] =
-          onOpenSettings!;
-      bindings[const SingleActivator(LogicalKeyboardKey.comma, meta: true)] =
-          onOpenSettings!;
-    }
-    if (onToggleFiles != null) {
-      bindings[const SingleActivator(
-            LogicalKeyboardKey.keyE,
-            control: true,
-            shift: true,
-          )] =
-          onToggleFiles!;
-      bindings[const SingleActivator(
-            LogicalKeyboardKey.keyE,
-            meta: true,
-            shift: true,
-          )] =
-          onToggleFiles!;
-    }
-    if (onApprove != null) {
-      bindings[const SingleActivator(LogicalKeyboardKey.enter, control: true)] =
-          onApprove!;
-      bindings[const SingleActivator(LogicalKeyboardKey.enter, meta: true)] =
-          onApprove!;
-    }
-    if (onReject != null) {
-      bindings[const SingleActivator(
-            LogicalKeyboardKey.backspace,
-            control: true,
-          )] =
-          onReject!;
-      bindings[const SingleActivator(
-            LogicalKeyboardKey.backspace,
-            meta: true,
-          )] =
-          onReject!;
-    }
-    if (onInspectorPrevious != null) {
-      bindings[const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true)] =
-          onInspectorPrevious!;
-    }
-    if (onInspectorNext != null) {
-      bindings[const SingleActivator(
-            LogicalKeyboardKey.arrowRight,
-            alt: true,
-          )] =
-          onInspectorNext!;
-    }
+    final bindings = <ShortcutActivator, VoidCallback>{
+      if (onOpenCommandPalette != null)
+        ...CodeLabShortcut.commandPalette.bind(onOpenCommandPalette!),
+      if (onCancel != null) ...CodeLabShortcut.cancelTurn.bind(onCancel!),
+      if (onNewSession != null)
+        ...CodeLabShortcut.newSession.bind(onNewSession!),
+      if (onToggleSidebar != null)
+        ...CodeLabShortcut.toggleSidebar.bind(onToggleSidebar!),
+      if (onOpenSettings != null)
+        ...CodeLabShortcut.openSettings.bind(onOpenSettings!),
+      if (onToggleFiles != null)
+        ...CodeLabShortcut.toggleFiles.bind(onToggleFiles!),
+    };
 
     return CallbackShortcuts(
       bindings: bindings,

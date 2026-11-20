@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:codelab_setup/codelab_setup.dart' show ConfigLayer;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/app_scope.dart';
@@ -673,10 +672,8 @@ class AgentsModesPage extends StatelessWidget {
             }
           },
           child: CallbackShortcuts(
-            bindings: {
-              const SingleActivator(LogicalKeyboardKey.escape): () =>
-                  close(false),
-            },
+            // Esc диалога — запись `close-overlay` каталога кита (D3).
+            bindings: CodeLabShortcut.closeOverlay.bind(() => close(false)),
             child: Focus(
               autofocus: true,
               child: ContentDialog(

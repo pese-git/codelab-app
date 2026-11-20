@@ -49,10 +49,10 @@ List<String> settingsPageKeywordsOf(AppLocalizations l10n, SettingsPage page) {
       l10n.settingsSearchKeywordsSkillsAndExtensions,
     SettingsPage.general => l10n.settingsSearchKeywordsGeneral,
     SettingsPage.appearance => l10n.settingsSearchKeywordsAppearance,
+    SettingsPage.keyboard => l10n.settingsSearchKeywordsKeyboard,
     SettingsPage.permissionsAndTools ||
     SettingsPage.redaction ||
-    SettingsPage.codeAndWeb ||
-    SettingsPage.keyboard => '',
+    SettingsPage.codeAndWeb => '',
   };
   return [
     for (final word in message.split(','))
