@@ -1967,6 +1967,38 @@
    "w": 1180,
    "x": 8820,
    "y": 6580
+  },
+  "PhoneWizardReviewUnverified.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11i Provider wizard — Review, not verified",
+   "w": 390,
+   "x": 4230,
+   "y": 6416
+  },
+  "PhoneWizardReviewUnverified-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11i Provider wizard — Review, not verified — dark",
+   "w": 390,
+   "x": 4230,
+   "y": 6416
+  },
+  "TabletOnbWizardReviewUnverified.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13j Tablet — wizard: Review, not verified",
+   "w": 1180,
+   "x": 10080,
+   "y": 6580
+  },
+  "TabletOnbWizardReviewUnverified-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13j Tablet — wizard: Review, not verified — dark",
+   "w": 1180,
+   "x": 10080,
+   "y": 6580
   }
  },
  "createdOnFiles": {
@@ -2740,18 +2772,18 @@
    "size": 24,
    "page": "phone",
    "w": 460,
-   "x": 4230,
+   "x": 4700,
    "y": 6416,
-   "text": "Отказ проверки (§12.4.4, шаги 4–5), под P11 Check.\nP11e — 401/403: ключ не принят; Back → P11b (ключ), Retry повторяет проверку.\nP11f — нет ответа или таймаут 10 с: Retry, Back → P11a (Base URL) и «Save without check…».\nP11g — подтверждение; после него P11h: модель и окно контекста вручную, Review покажет «Not verified: timeout».\nВ сообщении только код и вид отказа, тело ответа не показывается; редиректы не выполняются (SETUP-23). 404 на OpenAI-совместимом адресе — как 06 десктопа."
+   "text": "Отказ проверки (§12.4.4, шаги 4–5), под P11 Check.\nP11e — 401/403: ключ не принят; Back → P11b (ключ), Retry повторяет проверку.\nP11f — нет ответа или таймаут 10 с: Retry, Back → P11a (Base URL) и «Save without check…».\nP11g — подтверждение; после него P11h: модель и окно контекста вручную; P11i — Review с предупреждением «Not verified: timeout», Save → P19a.\nВ сообщении только код и вид отказа, тело ответа не показывается; редиректы не выполняются (SETUP-23). 404 на OpenAI-совместимом адресе — как 06 десктопа."
   },
   "t-row5f": {
    "fill": "orange",
    "size": 24,
    "page": "tablet",
    "w": 460,
-   "x": 10080,
+   "x": 11340,
    "y": 6580,
-   "text": "Отказ проверки на планшете (§12.4.4, шаги 4–5), под T13b–T13c: T13f — 401, Back → T13b; T13g — недоступен или таймаут, Back → T13a, «Save without check…»; T13h — подтверждение; T13i — модель вручную, Review с «Not verified: timeout». 404 — как 06."
+   "text": "Отказ проверки на планшете (§12.4.4, шаги 4–5), под T13b–T13c: T13f — 401, Back → T13b; T13g — недоступен или таймаут, Back → T13a, «Save without check…»; T13h — подтверждение; T13i — модель вручную; T13j — Review с «Not verified: timeout», Save → T13e. 404 — как 06."
   }
  },
  "order": [
@@ -2989,7 +3021,11 @@
   "TabletOnbWizardSkip.dc.html",
   "TabletOnbWizardSkip-dark.dc.html",
   "TabletOnbWizardManual.dc.html",
-  "TabletOnbWizardManual-dark.dc.html"
+  "TabletOnbWizardManual-dark.dc.html",
+  "PhoneWizardReviewUnverified.dc.html",
+  "PhoneWizardReviewUnverified-dark.dc.html",
+  "TabletOnbWizardReviewUnverified.dc.html",
+  "TabletOnbWizardReviewUnverified-dark.dc.html"
  ],
  "pages": [
   {
