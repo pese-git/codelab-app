@@ -142,6 +142,7 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
   @override
   void initState() {
     super.initState();
+    _workbenchScope.addListener(_redirectScopeFocus);
     // Триггер запуска (D19): после первого кадра, а не в `initState`, чтобы
     // старт агента не блокировал отрисовку окна (D-15). Восстановленный проект
     // стартует агента в его папке; без проекта агент не стартует.
@@ -154,7 +155,9 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
 
   @override
   void dispose() {
-    _workbenchScope.dispose();
+    _workbenchScope
+      ..removeListener(_redirectScopeFocus)
+      ..dispose();
     _composerFocus.dispose();
     super.dispose();
   }
@@ -211,6 +214,40 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
         _workbenchScope.requestFocus();
       case ApprovalFocusReturn.none:
         break;
+    }
+  }
+
+  /// Уводит фокус со скоупа рабочего места на узел-хозяин сочетаний.
+  ///
+  /// Почему: `CallbackShortcuts` в `CodeLabWorkbenchShortcuts` стоит внутри
+  /// скоупа, и событие клавиши идёт вверх от `primaryFocus`. Клик по тексту
+  /// ленты снимает фокус с внутреннего узла так, что primary оказывается сам
+  /// `FocusScopeNode` (подтверждено журналом на macOS): привязки не в цепочке,
+  /// и ⌘K, ⌘Y и остальные сочетания рабочего места молчат (change
+  /// `fix-approval-focus`, D14 «Где действуют»). Так же фокус попадает на
+  /// скоуп, когда `_returnApprovalFocus` просит `requestFocus()` без
+  /// `focusedChild`.
+  ///
+  /// Для чего: сочетания действуют при любом фокусе внутри рабочего места,
+  /// включая сам скоуп. Из настроек они по-прежнему не действуют (spec
+  /// app-settings «Переход в настройки и обратно»): рабочее место под
+  /// `ExcludeFocus`, скоуп не принимает фокус, узел-хозяин тоже не примет.
+  void _redirectScopeFocus() {
+    if (!_workbenchScope.hasPrimaryFocus) {
+      return;
+    }
+    // Хозяин — самый внешний из узлов `Focus(autofocus)` под скоупом:
+    // `descendants` отдаёт потомков раньше родителей, а у композера и других
+    // элементов тоже есть собственные узлы с `autofocus`.
+    for (final node in _workbenchScope.descendants) {
+      if (_isShortcutHost(node) &&
+          node.canRequestFocus &&
+          !node.ancestors
+              .takeWhile((a) => a != _workbenchScope)
+              .any(_isShortcutHost)) {
+        node.requestFocus();
+        return;
+      }
     }
   }
 
