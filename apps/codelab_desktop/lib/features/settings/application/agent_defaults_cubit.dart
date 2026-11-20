@@ -557,7 +557,7 @@ class AgentDefaultsCubit extends Cubit<AgentDefaultsState> {
       AgentDefaultsBannerKind.overridden,
       key: note.key,
       restart: restart,
-      overriddenBy: field.sourceName,
+      overriddenByKind: field.source?.kind,
       effective: field.displayValue,
     );
   }

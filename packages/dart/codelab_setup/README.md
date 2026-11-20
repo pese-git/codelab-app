@@ -42,8 +42,9 @@ flowchart LR
 | `ProviderRemover` | удаление провайдера одной записью конфига; секрет удаляется только после успешной записи |
 | `providerSetupNeeded`, `checkProviderReadiness` | признак «провайдера нет» и готовность модели и ключа к ходу |
 | `McpServerDraft`, `McpServerCommitter`, `McpServerRemover` | форма, запись и удаление MCP-серверов |
+| `McpDraftProblem`, `McpDraftProblemCode`, `McpDraftProblem.of` | проблема черновика сервера: поле `code` (одиннадцать кодов: `nameInvalid`, `renameNotAllowed`, `nameTaken`, `commandEmpty`, `urlInvalid`, `urlHasUserinfo`, `keyHasSpaces`, `keyDuplicate`, `keyEmpty`, `secretValueEmpty`, `secretNameCollision`) и `argument` — имя ключа, он есть только у `keyHasSpaces`, `keyDuplicate`, `secretValueEmpty` и `secretNameCollision`. Приложение строит по коду текст на своём языке; `message` остаётся прежним английским текстом для CLI. Код и текст создаёт одна фабрика `McpDraftProblem.of`, `validate()` строит проблемы через неё; конструктор оставлен для проблем чужого источника (`code == null`). Значений URL, секретов и заголовков нет ни в `argument`, ни в `message` |
 | `restartRequiredServers`, `restartRequiredProviders` | какие изменения агент применит только после перезапуска |
-| `agentExtensionsOf`, `skillsListEdit` | вид расширений агента (цепочка `AGENTS.md`, навыки, шаблоны команд) и правило записи списков навыков |
+| `agentExtensionsOf`, `skillsListEdit` | вид расширений агента (цепочка `AGENTS.md`, навыки, шаблоны команд) и правило записи списков навыков. Для перевода подписей вид навыков несёт `SkillEntryView.overridesScope` (область перекрытого навыка; `null` — перекрытий нет или перекрыт навык той же области) и `SkillRootView.extraEntry` (элемент `skills.extra_roots` как записан у корня `extra`, иначе `null`); `overridesLabel` и `label` остаются прежним английским текстом для CLI |
 | `SecretValue` | значение секрета: `toString()` и JSON дают `***`, значение — только через `reveal()` |
 | `displayBaseUrl` | адрес провайдера без userinfo, query и fragment |
 

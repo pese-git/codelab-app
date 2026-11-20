@@ -8,6 +8,8 @@ import 'package:codelab_desktop/app/language/app_language_cubit.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
 import 'package:codelab_desktop/core/platform/usage_csv_saver.dart';
 import 'package:codelab_desktop/core/platform/user_shell_launcher.dart';
+import 'package:codelab_desktop/features/settings/application/provider_settings_session.dart'
+    show ProviderSettingsOpener;
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -54,6 +56,7 @@ final class LiveScene {
     UserShellLauncher? userShellLauncher,
     UsageCsvSaver? usageCsvSaver,
     CodeLabStdioTransportFactory? stdioTransportFactory,
+    ProviderSettingsOpener? providerSettingsOpener,
     Size size = const Size(1440, 900),
   }) async {
     tester.view.physicalSize = size;
@@ -69,6 +72,7 @@ final class LiveScene {
       projectFiles: projectFiles,
       userShellLauncher: userShellLauncher,
       usageCsvSaver: usageCsvSaver,
+      providerSettingsOpener: providerSettingsOpener,
     );
     final cubit = binding.scope.resolve<CodeLabShellCubit>();
     await tester.pumpWidget(

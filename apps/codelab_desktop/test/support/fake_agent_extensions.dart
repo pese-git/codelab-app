@@ -20,6 +20,19 @@ SkillRootView userSkillRoot({
   String path = '/home/u/.agents/skills',
 }) => SkillRootView(scope: ExtensionScope.user, label: label, path: path);
 
+/// Корень навыков из `skills.extra_roots`: [extraEntry] — сам элемент списка,
+/// по которому app строит подпись `(extra root)` на своём языке (D6, итерация
+/// 5; прежняя подпись моста — `<элемент> (extra root)`).
+SkillRootView extraSkillRoot({
+  String entry = '.claude/skills',
+  String path = '$skillsFolder/.claude/skills',
+}) => SkillRootView(
+  scope: ExtensionScope.extra,
+  label: '$entry (extra root)',
+  path: path,
+  extraEntry: entry,
+);
+
 SkillRootView projectSkillRoot({
   String label = '.codelab/skills',
   String path = '$skillsFolder/.codelab/skills',
@@ -38,6 +51,7 @@ SkillEntryView skillEntry(
   String? directory,
   List<SkillRootView> overrides = const [],
   String? overridesLabel,
+  ExtensionScope? overridesScope,
   List<ExtensionDiagnostic> warnings = const [],
   SkillToggle toggle = const SkillToggle.available(),
 }) {
@@ -57,6 +71,7 @@ SkillEntryView skillEntry(
     directory: directory ?? '${resolvedRoot.path}/$name',
     overrides: overrides,
     overridesLabel: overridesLabel,
+    overridesScope: overridesScope,
     warnings: warnings,
     toggle: toggle,
   );

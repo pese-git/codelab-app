@@ -47,8 +47,12 @@ AgentExtensionsView extensionsInHostForm(
   List<ExtensionDiagnostic> diags(List<ExtensionDiagnostic> l) => [
     for (final d in l) diag(d),
   ];
-  SkillRootView root(SkillRootView r) =>
-      SkillRootView(scope: r.scope, label: r.label, path: host(r.path));
+  SkillRootView root(SkillRootView r) => SkillRootView(
+    scope: r.scope,
+    label: r.label,
+    path: host(r.path),
+    extraEntry: r.extraEntry,
+  );
 
   final context = view.context;
   final skills = view.skills;
@@ -92,6 +96,7 @@ AgentExtensionsView extensionsInHostForm(
             directory: host(e.directory),
             overrides: [for (final o in e.overrides) root(o)],
             overridesLabel: e.overridesLabel,
+            overridesScope: e.overridesScope,
             warnings: diags(e.warnings),
             toggle: e.toggle,
           ),

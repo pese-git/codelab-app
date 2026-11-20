@@ -56,6 +56,19 @@ flowchart LR
 
 ACP (Agent Client Protocol) — протокол, по которому клиент и агент обмениваются сообщениями. Встроенный агент выбран по умолчанию; агент-процесс и агент по WebSocket выбираются профилем на странице «Connection». Терминал пользователя — обычная оболочка в папке сессии: он не проходит через агента и его одобрения.
 
+## Локализация
+
+Интерфейс приложения — на английском и русском. Язык выбирается на странице «General» (System, English, Русский) и применяется сразу; подробности — в [руководстве пользователя](doc/user-guide.md#язык-интерфейса).
+
+Для разработчика:
+
+- Тексты приложения лежат в `lib/l10n/`: `app_en.arb` — шаблон, `app_ru.arb` — перевод. Текст кита `codelab_ui` — в [`packages/flutter/codelab_ui/lib/src/l10n/`](../../packages/flutter/codelab_ui/README.md#локализация).
+- Код каталога генерирует `fvm flutter gen-l10n` (настройка — `l10n.yaml`). Сгенерированные файлы коммитятся.
+- `fvm dart run melos run l10n:check` перегенерирует каталоги app и кита во временной копии и сверяет с рабочими. Скрипт входит в `melos run check`.
+- Сторож литералов `ui_literals_test` (`packages/dart/codelab_architecture_tests`) ищет английские строки интерфейса в `lib/app`, в `presentation/` внутри `lib/features` и в `lib/src` кита (кроме превью и `l10n/`) мимо каталога. Исключение — запись с причиной в `test/support/ui_literals_allowlist.txt`: название продукта, значение конфигурации, пример поля. Запись, которой нет в коде, роняет тест.
+- Русские формулировки — по [глоссарию](../../docs/architecture/l10n-glossary.md). Как добавить строку и страницу — в [разработке](doc/development.md).
+- Меню macOS следует языку системы: `CFBundleLocalizations` в `macos/Runner/Info.plist` и `macos/Runner/ru.lproj/MainMenu.strings`.
+
 ## Смотрите также
 
 - [Документация пользователя CodeLab](../../docs/user/README.md)

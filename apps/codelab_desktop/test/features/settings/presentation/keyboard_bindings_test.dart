@@ -447,10 +447,7 @@ void main() {
       final cubit = FakeAgentsModesCubit(
         const AgentsModesReady(
           mode: 'standard',
-          modeLabel: 'standard',
-          modeSource: 'default',
           effort: 'medium',
-          effortSource: 'default',
           target: ConfigLayer.user,
           canTargetProject: true,
           saving: false,
@@ -458,8 +455,8 @@ void main() {
       );
       addTearDown(cubit.close);
       await tester.pumpWidget(
-        FluentApp(
-          home: ScaffoldPage(
+        localizedFluentApp(
+          ScaffoldPage(
             content: SingleChildScrollView(
               child: BlocProvider<AgentsModesCubit>.value(
                 value: cubit,

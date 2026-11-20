@@ -11,9 +11,11 @@ import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
 /// `Locale` — для `main` до `runApp` и для `AppLanguageCubit`.
 ///
 /// Как использовать: `resolveAppLocale(preference, PlatformDispatcher
-/// .instance.locales)`. До итерации 6 (D2, D12) `system` всегда даёт `en`,
-/// чтобы `develop` оставался рабочим, пока русские тексты не завершены;
-/// затем `system` даёт `ru`, если `languageCode` первого языка системы `ru`.
+/// .instance.locales)`. `system` даёт `ru`, если `languageCode` первого языка
+/// системы `ru`, иначе `en` (Q5 (а)); остальные языки списка и регион не
+/// учитываются. Смена языка ОС при `system` применяется при следующем
+/// старте app или при повторном выборе `System` (D2, spec «Язык интерфейса
+/// app»).
 Locale resolveAppLocale(
   AppLanguagePreference preference,
   List<Locale> systemLocales,
@@ -21,7 +23,9 @@ Locale resolveAppLocale(
   return switch (preference) {
     AppLanguagePreference.en => const Locale('en'),
     AppLanguagePreference.ru => const Locale('ru'),
-    // TODO(add-desktop-localization, итерация 6): ru при первом языке ru.
-    AppLanguagePreference.system => const Locale('en'),
+    AppLanguagePreference.system =>
+      systemLocales.isNotEmpty && systemLocales.first.languageCode == 'ru'
+          ? const Locale('ru')
+          : const Locale('en'),
   };
 }

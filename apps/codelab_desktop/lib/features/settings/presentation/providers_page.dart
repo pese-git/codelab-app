@@ -324,10 +324,12 @@ class _ProvidersPageState extends State<ProvidersPage> {
             ),
           ),
         if (storage.unavailableReason case final reason?)
+          // Текст хранилища — как есть, под переведённым заголовком (D6).
           _bar(
             const ValueKey('providers-store-unavailable'),
             InfoBarSeverity.info,
-            reason,
+            l10n.secretStoreReadOnly,
+            content: reason,
           ),
         Padding(
           padding: const EdgeInsets.only(top: 18, bottom: 4),

@@ -1069,7 +1069,7 @@ Settings чаще всего принадлежат отдельной feature.
 
 ### 63а. Язык интерфейса app
 
-Источник — change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md), D2 и D5; spec `app-settings` «Язык интерфейса app». Это частный случай §2 и §19: у языка один владелец.
+Источник — change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md), D2 и D5; spec `app-settings` «Язык интерфейса app». Это частный случай §2 и §19: у языка один владелец.
 
 * **Владелец — `AppLanguageCubit`** (`apps/codelab_desktop/lib/app/language/app_language_cubit.dart`, root scope, singleton). Состояние — `AppLanguageState(preference, locale, strings, saveFailed)`: `preference` — `system | en | ru`, `locale` — применённый язык, `strings` — `AppLocalizations` этого языка, `saveFailed` — признак неудачной записи. Отдельного `LanguageSettingsCubit` нет: страница «Settings › General» читает и вызывает `AppLanguageCubit` напрямую.
 * **Saved / effective.** Сохранённое значение (`shared_preferences`, ключ `codelab.app.language`, порт `AppLanguagePreferences`) и применённый язык различаются (§63): `locale` выводится чистой функцией `resolveAppLocale(preference, systemLocales)`. Незнакомое или нестроковое сохранённое значение читается как `system`, ключ не перезаписывается. `load()` не бросает и возвращает `AppLanguageLoad(preference, storedValueInvalid, readFailure)`: сбой открытия хранилища тоже даёт `system`.

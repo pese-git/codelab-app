@@ -24,6 +24,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// ответы агента, пути и команды в каталог не входят, поэтому ложных
 /// срабатываний нет.
 ///
+/// [ignore] — значения каталога [from], которые в этом тесте являются данными,
+/// а не подписью (id провайдера `local`, имя сервера `user`): они совпали бы с
+/// переводимой подписью источника. Параметр задаётся только в таких вызовах;
+/// остальные остаются строгими.
+///
 /// Как использовать: экран в [from] с данными → `AppLanguageCubit.select` →
 /// `pumpAndSettle` → `await expectNoStaleLanguage(tester, from: …, to: …)`;
 /// затем обратно. Каталог app читается из `lib/l10n` текущего пакета, каталог
@@ -33,6 +38,7 @@ Future<void> expectNoStaleLanguage(
   WidgetTester tester, {
   required AppLocalizations from,
   required AppLocalizations to,
+  Set<String> ignore = const {},
 }) async {
   final source = _catalog(from.localeName);
   final target = _catalog(to.localeName);
@@ -41,6 +47,7 @@ Future<void> expectNoStaleLanguage(
   final staleCandidates = <String, String>{
     for (final entry in source.entries)
       if (!entry.value.contains('{') &&
+          !ignore.contains(entry.value) &&
           target[entry.key] != null &&
           target[entry.key] != entry.value)
         entry.value: entry.key,

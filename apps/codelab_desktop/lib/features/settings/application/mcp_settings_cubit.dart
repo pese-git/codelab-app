@@ -28,6 +28,7 @@ import '../../../core/platform/home_path_label.dart';
 import '../../../core/text/fenced_block.dart';
 import 'embedded_mcp_status_source.dart';
 import 'mcp_settings_state.dart';
+import 'provider_messages.dart' show configIssuesText;
 import 'provider_settings_session.dart';
 
 export 'embedded_mcp_status_source.dart';
@@ -143,7 +144,8 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
   /// Вид и хвост баннера успешной правки: подсказку про перезапуск строят по
   /// признаку, а не поиском текста готового баннера.
   McpBannerKind? _savedKind;
-  List<String>? _savedTail;
+  List<String>? _savedWarnings;
+  List<McpSecretNote>? _savedSecrets;
 
   /// Поля события `mcp_settings.saved`; пишется после перечитывания снимка,
   /// когда известен `restart_required`, и всегда — в `finally` записи.
@@ -170,7 +172,7 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
   /// [close]; ответ с устаревшим номером отбрасывается (D12, D21).
   var _commandSeq = 0;
   String? _replyText;
-  String? _replyNotice;
+  var _replyFailed = false;
   var _sending = false;
 
   /// Контекст событий панели: корреляция по сессии (AGENTS.md §16).
@@ -178,8 +180,6 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     ...extra,
     'session_id': ?_boundSession?.value,
   };
-
-  static const _listFailed = '/mcp list did not complete. Try Refresh again.';
 
   // --- Загрузка ---------------------------------------------------------------
 
@@ -204,7 +204,9 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
         'mcp_settings.unreadable',
         context: {'error_type': error.runtimeType.toString()},
       );
-      _setUnreadable(const ['Cannot read the agent settings.'], log: false);
+      _setUnreadable(const [
+        AppSettingsProblem(AppSettingsProblemKind.cannotReadSettings),
+      ], log: false);
       return;
     }
     if (isClosed || attempt != _loadAttempt) {
@@ -213,17 +215,11 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     switch (_accessOf(profile)) {
       case RemoteReadOnly(:final endpoint):
         _setReadOnly(
-          'Read-only: this agent runs on ${profileOrigin(endpoint)}.',
-          hint:
-              'Change providers and MCP on that host: codelab provider add, '
-              'codelab mcp add, codelab config set.',
+          RemoteAgentReadOnly(profileOrigin(endpoint)),
           access: 'remote',
         );
       case NotManaged(:final agentName):
-        _setReadOnly(
-          'Provider settings are managed by $agentName.',
-          access: 'not_managed',
-        );
+        _setReadOnly(ForeignAgentReadOnly(agentName), access: 'not_managed');
       case final EditableSettings access:
         await _loadEditable(attempt, profile, access);
     }
@@ -256,19 +252,13 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     };
   }
 
-  void _setReadOnly(String notice, {String? hint, required String access}) {
+  void _setReadOnly(ReadOnlyReason reason, {required String access}) {
     _clearSnapshot();
     _logger?.debug(
       'mcp_settings.loaded',
       context: {'servers': 0, 'access': access},
     );
-    _emit(
-      McpSettingsReadOnly(
-        notice: notice,
-        hint: hint,
-        agentStatus: _agentStatus,
-      ),
-    );
+    _emit(McpSettingsReadOnly(reason: reason, agentStatus: _agentStatus));
   }
 
   void _clearSnapshot() {
@@ -283,7 +273,9 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     EditableSettings access,
   ) async {
     if (access.paths.codelabHome.isEmpty) {
-      _setUnreadable(const ['The CodeLab home folder is not available.']);
+      _setUnreadable(const [
+        AppSettingsProblem(AppSettingsProblemKind.homeUnavailable),
+      ]);
       return;
     }
     final environment = {
@@ -305,7 +297,9 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
         'mcp_settings.unreadable',
         context: {'error_type': error.runtimeType.toString()},
       );
-      _setUnreadable(const ['Cannot read the agent settings.'], log: false);
+      _setUnreadable(const [
+        AppSettingsProblem(AppSettingsProblemKind.cannotReadSettings),
+      ], log: false);
       return;
     }
     if (isClosed || attempt != _loadAttempt) {
@@ -320,8 +314,9 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     ];
     if (blocking.isNotEmpty || !snapshot.isReadable(ConfigLayer.user)) {
       _setUnreadable([
-        for (final issue in blocking) issue.toString(),
-        if (blocking.isEmpty) 'The user config.yaml cannot be read.',
+        for (final issue in blocking) LoaderSettingsProblem(issue.toString()),
+        if (blocking.isEmpty)
+          const AppSettingsProblem(AppSettingsProblemKind.userConfigUnreadable),
       ]);
       return;
     }
@@ -380,17 +375,22 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       return;
     }
     _restartRequired = true;
-    const hint = 'It starts after Restart agent (Settings › Connection).';
     final server = check.server;
     if (check.enabling) {
-      _banner = McpBanner(McpBannerKind.saved, [
-        'Server $server enabled. $hint',
-      ]);
+      _banner = McpBanner(
+        McpBannerKind.saved,
+        message: McpServerEnabledMessage(server),
+      );
     } else if (_savedKind case final kind?) {
-      _banner = McpBanner(kind, [
-        'Server $server saved. $hint',
-        ...?_savedTail,
-      ]);
+      _banner = McpBanner(
+        kind,
+        message: McpServerSavedMessage(
+          server,
+          restartHint: true,
+          warnings: _savedWarnings ?? const [],
+          secrets: _savedSecrets ?? const [],
+        ),
+      );
     }
   }
 
@@ -421,7 +421,8 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     _restart = null;
     _restartRequired = false;
     _savedKind = null;
-    _savedTail = null;
+    _savedWarnings = null;
+    _savedSecrets = null;
   }
 
   static const _blockingKinds = {
@@ -431,7 +432,7 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     ConfigIssueKind.type,
   };
 
-  void _setUnreadable(List<String> problems, {bool log = true}) {
+  void _setUnreadable(List<SettingsProblem> problems, {bool log = true}) {
     _clearSnapshot();
     if (log) {
       _logger?.warning(
@@ -439,7 +440,7 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
         context: {'error_type': 'ConfigIssue'},
       );
     }
-    _emit(McpSettingsUnreadable(problems: problems, agentStatus: _agentStatus));
+    _emit(McpSettingsUnreadable(issues: problems, agentStatus: _agentStatus));
   }
 
   McpSettingsReady _buildReady() {
@@ -468,11 +469,6 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
 
   McpServerRow _rowOf(McpServerEntryView entry) {
     final source = entry.source;
-    final sourceLabel = switch (source.kind) {
-      ConfigSourceKind.user => 'user',
-      ConfigSourceKind.projectLocal => 'this project',
-      _ => 'defined in ${homePathLabel(source.label, _environment)}',
-    };
     final layer = switch (source.kind) {
       ConfigSourceKind.user => ConfigLayer.user,
       ConfigSourceKind.projectLocal => ConfigLayer.projectLocal,
@@ -488,7 +484,11 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
           : McpServerDraft.fromElement(element.element),
       name: entry.name,
       entry: entry,
-      sourceLabel: sourceLabel,
+      source: source.kind,
+      sourceFile: switch (source.kind) {
+        ConfigSourceKind.user || ConfigSourceKind.projectLocal => null,
+        _ => homePathLabel(source.label, _environment),
+      },
       layer: layer,
       enabled: entry.enabled,
       canToggle: entry.editable,
@@ -496,13 +496,10 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       canRemove: entry.editable,
       canDisableHere: fromProjectFile && _canSaveToProject,
       canEnableHere: entry.disabledHere,
-      note: entry.disabledHere
-          ? '${entry.name} is disabled in .codelab/config.local.yaml. '
-                '"Enable here" removes this override.'
+      noteKind: entry.disabledHere
+          ? McpRowNoteKind.disabledHere
           : fromProjectFile
-          ? '${entry.name} comes from the project file: it can\'t be edited '
-                'or removed here; "Disable here" writes enabled: false to '
-                '.codelab/config.local.yaml.'
+          ? McpRowNoteKind.projectFile
           : null,
     );
   }
@@ -516,9 +513,7 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       r'^mcp\.servers\[([^\]]+)\]',
     ).firstMatch(issues.first.key)?.group(1);
     return McpRejectedConfig(
-      title: _afterWrite
-          ? 'Saved, but the agent rejected the new config'
-          : 'The agent rejects the current config',
+      kind: _afterWrite ? McpRejectedKind.afterSave : McpRejectedKind.onOpen,
       problems: [
         for (final issue in issues)
           issue.key.isEmpty ? issue.message : '${issue.key}: ${issue.message}',
@@ -602,6 +597,40 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     _publishReady();
   }
 
+  /// Редактор нашёл два одинаковых ключа: в карте черновика они слились бы,
+  /// поэтому проблему «два значения с одним именем» строит фабрика моста с
+  /// кодом `keyDuplicate`, а страница показывает её вместе с остальными
+  /// проблемами `validate()` (имя, адрес…), а не вместо них (D6, spec
+  /// client-agent-setup «Совпавшие ключи до черновика»).
+  void rejectDuplicateKey(McpServerDraft draft, {required String key}) {
+    if (state is! McpSettingsReady) {
+      return;
+    }
+    final snapshot = _snapshot;
+    rejectDraft(
+      server: draft.originalName,
+      // В событии `save_failed` — исходное имя правки, как до `validate()`.
+      name: draft.originalName ?? draft.name,
+      problems: [
+        // Без снимка проверка имён невозможна, но проблема дубля всё равно
+        // показывается: тихого возврата нет.
+        if (snapshot != null)
+          ...draft.validate(
+            existingNames: {
+              for (final e in mcpServerEntriesOf(snapshot)) e.name,
+            },
+          ),
+        McpDraftProblem.of(
+          McpDraftProblemCode.keyDuplicate,
+          draft.kind == McpTransportKind.http
+              ? McpDraftField.headers
+              : McpDraftField.env,
+          argument: key,
+        ),
+      ],
+    );
+  }
+
   // --- Запись ------------------------------------------------------------------
 
   /// Сохраняет [draft]: новый сервер — в слой [target], правка — в слой самого
@@ -679,17 +708,19 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       return false;
     }
     if (attempt != _loadAttempt || !identical(session, _session)) {
-      _banner = const McpBanner(McpBannerKind.error, [
-        'The MCP server settings changed. Review the page and try again.',
-      ]);
+      _banner = const McpBanner(
+        McpBannerKind.error,
+        message: McpWriteFailedMessage(McpWriteFailure.settingsChanged),
+      );
       _logSaveFailed(server: draft.name, operation: 'save', outcome: 'stale');
       _publishReady();
       return false;
     }
     if (check.errorType case final type?) {
-      _banner = const McpBanner(McpBannerKind.error, [
-        'The secret store could not be read, so nothing was saved.',
-      ]);
+      _banner = const McpBanner(
+        McpBannerKind.error,
+        message: McpWriteFailedMessage(McpWriteFailure.secretStoreUnreadable),
+      );
       _logSaveFailed(
         server: draft.name,
         operation: 'save',
@@ -751,20 +782,25 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
         _savedKind = cleanup.failed > 0
             ? McpBannerKind.error
             : McpBannerKind.saved;
-        _savedTail = [
+        // Предупреждения ядра — строки как есть (D6).
+        _savedWarnings = [
           for (final warning in saved.warnings)
             warning.key.isEmpty
                 ? warning.message
                 : '${warning.key}: ${warning.message}',
-          ...cleanup.lines,
         ];
+        _savedSecrets = cleanup.notes;
         await _finishWrite(
           server: name,
           wrote: true,
-          banner: McpBanner(_savedKind!, [
-            'Server $name saved.',
-            ..._savedTail!,
-          ]),
+          banner: McpBanner(
+            _savedKind!,
+            message: McpServerSavedMessage(
+              name,
+              warnings: _savedWarnings!,
+              secrets: cleanup.notes,
+            ),
+          ),
         );
         return true;
       case McpServerInvalid(:final problems):
@@ -791,14 +827,15 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
           failedOutcome: 'secret_failed',
           operation: 'save',
           rollback: rollback,
-          banner: McpBanner(McpBannerKind.error, [
-            'The secret was not stored, so nothing was saved: $reason',
-            // Записанные до отказа секреты, которые откат не удалил, остались
-            // в хранилище: имя и команда для ручного удаления (D9).
-            for (final secret in notRolledBack)
-              '$secret could not be deleted. Delete it with: '
-                  'codelab secret delete $secret',
-          ]),
+          // Записанные до отказа секреты, которые откат не удалил, остались в
+          // хранилище: имя и команда для ручного удаления (D9).
+          banner: McpBanner(
+            McpBannerKind.error,
+            message: McpSecretNotStoredMessage(
+              reason,
+              notRolledBack: [...notRolledBack],
+            ),
+          ),
         );
         return false;
       case McpServerNotSaved(
@@ -814,56 +851,43 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
           errorType: errorType,
           operation: 'save',
           rollback: rollback,
-          extraLines: [
-            // Созданный секрет, который откат не смог удалить, остаётся в
-            // хранилище: имя и команда нужны для ручного удаления (D9).
-            for (final secret in notRolledBack)
-              '$secret could not be deleted. Delete it with: '
-                  'codelab secret delete $secret',
-            for (final secret in replacedSecrets)
-              'The stored value of $secret was already replaced and could '
-                  'not be restored.',
-          ],
+          // Созданный секрет, который откат не смог удалить, остаётся в
+          // хранилище: имя и команда нужны для ручного удаления (D9).
+          notRolledBack: [...notRolledBack],
+          replacedSecrets: [...replacedSecrets],
         );
         return false;
     }
   }
 
-  /// Итог очистки секретов страницы: строки баннера (как у «Remove», Q25 (4))
+  /// Итог очистки секретов страницы: записи баннера (как у «Remove», Q25 (4))
   /// и числа для журнала; имена секретов в журнал не идут (D18).
-  ({List<String> lines, int deleted, int kept, int failed}) _cleanupSummary(
-    Map<String, SecretCleanup> secrets,
-  ) {
+  ({List<McpSecretNote> notes, int deleted, int kept, int failed})
+  _cleanupSummary(Map<String, SecretCleanup> secrets) {
     var deleted = 0, kept = 0, failed = 0;
-    final lines = <String>[];
+    final notes = <McpSecretNote>[];
     for (final MapEntry(:key, :value) in secrets.entries) {
       switch (value) {
         case SecretCleanup.deleted:
           deleted++;
-        case SecretCleanup.kept:
+        case SecretCleanup.kept || SecretCleanup.stillReferenced:
           kept++;
-          lines.add('$key is kept: it was not created by this page.');
-        case SecretCleanup.stillReferenced:
-          kept++;
-          lines.add('$key is kept because other settings still use it.');
+          notes.add(McpSecretNote(key, value));
         case SecretCleanup.failed:
           failed++;
-          lines.add(
-            '$key could not be deleted. Delete it with: '
-            'codelab secret delete $key',
-          );
+          notes.add(McpSecretNote(key, value));
         case SecretCleanup.alreadyAbsent || SecretCleanup.notRequested:
           break;
       }
     }
-    return (lines: lines, deleted: deleted, kept: kept, failed: failed);
+    return (notes: notes, deleted: deleted, kept: kept, failed: failed);
   }
 
   Map<String, Object?> _savedFields(
     McpServerDraft draft,
     ConfigLayer layer,
     int replaced,
-    ({List<String> lines, int deleted, int kept, int failed}) cleanup,
+    ({List<McpSecretNote> notes, int deleted, int kept, int failed}) cleanup,
   ) => {
     'server': draft.name,
     'type': draft.kind.name,
@@ -992,7 +1016,10 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
           server: name,
           operation: 'toggle',
           refusal: reason,
-          banner: McpBanner(McpBannerKind.error, [_refusalText(reason)]),
+          banner: McpBanner(
+            McpBannerKind.error,
+            message: McpRefusedMessage(reason),
+          ),
         );
         return false;
     }
@@ -1051,7 +1078,7 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
               wrote: true,
               banner: McpBanner(
                 cleanup.failed > 0 ? McpBannerKind.error : McpBannerKind.saved,
-                ['Server $name removed.', ...cleanup.lines],
+                message: McpServerRemovedMessage(name, secrets: cleanup.notes),
               ),
             );
             return true;
@@ -1068,25 +1095,14 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
               server: name,
               operation: 'remove',
               refusal: reason,
-              banner: McpBanner(McpBannerKind.error, [_refusalText(reason)]),
+              banner: McpBanner(
+                McpBannerKind.error,
+                message: McpRefusedMessage(reason),
+              ),
             );
             return false;
         }
       });
-
-  static String _refusalText(McpServerRefusal reason) => switch (reason) {
-    McpServerRefusal.unknownServer ||
-    McpServerRefusal.layerUnreadable ||
-    McpServerRefusal.notDisabledHere =>
-      'The MCP settings changed. Review the page and try again.',
-    McpServerRefusal.notEditable =>
-      'This server is defined in a read-only file. Change it there.',
-    McpServerRefusal.notProject =>
-      'Only a server from the project file can be disabled here.',
-    McpServerRefusal.noProjectTarget =>
-      'The project folder is not known, so nothing can be written to '
-          '.codelab/config.local.yaml.',
-  };
 
   McpServerRow? _rowNamed(String name) {
     final current = state;
@@ -1118,9 +1134,10 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       if (!isClosed) {
         _saving = false;
         if (!_writePassed) {
-          _banner = const McpBanner(McpBannerKind.error, [
-            'The change was not saved because of an error.',
-          ]);
+          _banner = const McpBanner(
+            McpBannerKind.error,
+            message: McpWriteFailedMessage(McpWriteFailure.changeNotSaved),
+          );
           _logSaveFailed(
             server: server,
             operation: operation,
@@ -1155,7 +1172,10 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
 
   /// Отказ до записи: баннер и событие, файл и хранилище не тронуты.
   void _failRefused(String server, String operation, McpServerRefusal reason) {
-    _banner = McpBanner(McpBannerKind.error, [_refusalText(reason)]);
+    _banner = McpBanner(
+      McpBannerKind.error,
+      message: McpRefusedMessage(reason),
+    );
     _logSaveFailed(
       server: server,
       operation: operation,
@@ -1181,7 +1201,8 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     McpServerRefusal? refusal,
     McpBanner? banner,
     bool wrote = false,
-    List<String> extraLines = const [],
+    List<String> notRolledBack = const [],
+    List<String> replacedSecrets = const [],
   }) async {
     final isFailure =
         failed != null ||
@@ -1191,26 +1212,47 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
     if (failed != null || errorType != null) {
       switch (failed) {
         case ConfigConflict():
-          _banner = const McpBanner(McpBannerKind.conflict, [
-            'The config changed on disk, so nothing was saved. The page was '
-                'reloaded; review it and try again.',
-          ]);
+          _banner = McpBanner(
+            McpBannerKind.conflict,
+            message: McpWriteFailedMessage(
+              McpWriteFailure.conflict,
+              notRolledBack: notRolledBack,
+              replacedSecrets: replacedSecrets,
+            ),
+          );
           failedOutcome = 'conflict';
         case ConfigRejected(:final issues):
-          _banner = McpBanner(McpBannerKind.error, [
-            'The config was not saved: ${[for (final i in issues) i.key.isEmpty ? i.message : '${i.key}: ${i.message}'].join('; ')}',
-          ]);
+          _banner = McpBanner(
+            McpBannerKind.error,
+            message: McpWriteFailedMessage(
+              McpWriteFailure.rejected,
+              issues: configIssuesText(issues),
+              notRolledBack: notRolledBack,
+              replacedSecrets: replacedSecrets,
+            ),
+          );
           failedOutcome = 'rejected';
         case ConfigInlineSecret(:final key):
-          _banner = McpBanner(McpBannerKind.error, [
-            'The config was not saved: $key must not hold a literal secret.',
-          ]);
+          _banner = McpBanner(
+            McpBannerKind.error,
+            message: McpWriteFailedMessage(
+              McpWriteFailure.inlineSecret,
+              key: key,
+              notRolledBack: notRolledBack,
+              replacedSecrets: replacedSecrets,
+            ),
+          );
           failedOutcome = 'inline_secret';
         case ConfigSaved():
         case null:
-          _banner = const McpBanner(McpBannerKind.error, [
-            'The config was not saved because of an error.',
-          ]);
+          _banner = McpBanner(
+            McpBannerKind.error,
+            message: McpWriteFailedMessage(
+              McpWriteFailure.configNotSaved,
+              notRolledBack: notRolledBack,
+              replacedSecrets: replacedSecrets,
+            ),
+          );
           failedOutcome = 'error';
       }
     } else {
@@ -1218,9 +1260,6 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       if (refusal != null) {
         failedOutcome = 'refused';
       }
-    }
-    if (extraLines.isNotEmpty && _banner != null) {
-      _banner = McpBanner(_banner!.kind, [..._banner!.lines, ...extraLines]);
     }
     if (isFailure) {
       _logSaveFailed(
@@ -1303,7 +1342,7 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       // Ответ `/mcp …` прежней сессии больше не нужен (D21).
       _commandSeq++;
       _replyText = null;
-      _replyNotice = null;
+      _replyFailed = false;
       _sending = false;
     }
     final id = ws.activeSessionId;
@@ -1373,19 +1412,11 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
             McpStatusRow(
               name: s.name,
               state: s.state,
-              stateLabel: switch (s.state) {
-                McpServerState.connecting => 'connecting',
-                McpServerState.connected => 'connected',
-                McpServerState.disabled => 'disabled',
-                McpServerState.failed =>
-                  s.retryIn == null
-                      ? 'failed'
-                      : 'failed · retry in ${s.retryIn!.inSeconds} s',
-              },
-              tools: s.state == McpServerState.disabled
-                  ? '—'
-                  : '${s.toolCount}',
-              lastError: s.lastError ?? '—',
+              retryIn: s.state == McpServerState.failed ? s.retryIn : null,
+              toolCount: s.state == McpServerState.disabled
+                  ? null
+                  : s.toolCount,
+              errorText: s.lastError,
               canReconnect: s.state != McpServerState.disabled,
             ),
         ],
@@ -1411,7 +1442,7 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
       text: _replyText,
       sending: _sending,
       canSend: canSend,
-      notice: _replyNotice,
+      listFailed: _replyFailed,
     );
   }
 
@@ -1521,12 +1552,12 @@ class McpSettingsCubit extends Cubit<McpSettingsState> {
         ].join();
         // Одно внешнее ограждение снимается общей функцией (Q34, Q37).
         _replyText = unfenceSingleBlock(reply) ?? reply;
-        _replyNotice = null;
+        _replyFailed = false;
       case PromptQueued():
-        _replyNotice = _listFailed;
+        _replyFailed = true;
         _discarded(command, alreadySent ? 'already_sent' : 'queued', id);
       case PromptFailed() || null:
-        _replyNotice = _listFailed;
+        _replyFailed = true;
         _discarded(command, 'failed', id);
     }
     _setStatus(_textStatus());

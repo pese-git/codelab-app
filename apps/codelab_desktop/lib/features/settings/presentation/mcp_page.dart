@@ -7,7 +7,12 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/app_scope.dart';
+import '../../../l10n/l10n.dart';
 import '../application/mcp_settings_cubit.dart';
+import 'config_source_label.dart';
+import 'mcp_texts.dart';
+import 'message_spans.dart';
+import 'settings_problem_text.dart';
 
 /// Тело страницы «MCP servers» для таблицы `settingsPageBuilders`.
 ///
@@ -121,12 +126,7 @@ class _McpPageState extends State<McpPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _header(withAdd: false),
-              _bar(
-                const ValueKey('mcp-read-only'),
-                InfoBarSeverity.warning,
-                state.notice,
-                content: state.hint == null ? null : Text(state.hint!),
-              ),
+              _readOnlyBar(context, state.reason),
               _StatusPanel(status: state.agentStatus),
             ],
           ),
@@ -137,9 +137,9 @@ class _McpPageState extends State<McpPage> {
               _bar(
                 const ValueKey('mcp-unreadable'),
                 InfoBarSeverity.error,
-                'Cannot read the agent config. Fix or remove the file; '
-                'CodeLab will not overwrite it.',
-                content: Text(state.problems.join('\n')),
+                context.l10n.providersUnreadable,
+                // Тексты загрузчика — как есть под переведённым заголовком (D6).
+                content: Text(settingsProblemsText(context.l10n, state.issues)),
               ),
               _StatusPanel(status: state.agentStatus),
             ],
@@ -150,17 +150,39 @@ class _McpPageState extends State<McpPage> {
     );
   }
 
+  /// InfoBar «только чтение» по причине: удалённый агент называет адрес и
+  /// команды для хоста, сторонний — своё имя (D5, «Уточнение итерации 5»).
+  Widget _readOnlyBar(BuildContext context, ReadOnlyReason reason) {
+    final l10n = context.l10n;
+    return switch (reason) {
+      RemoteAgentReadOnly(:final origin) => _bar(
+        const ValueKey('mcp-read-only'),
+        InfoBarSeverity.warning,
+        l10n.providersReadOnlyTitle(origin),
+        content: Text(l10n.settingsRemoteHostHint),
+      ),
+      ForeignAgentReadOnly(:final agentName) => _bar(
+        const ValueKey('mcp-read-only'),
+        InfoBarSeverity.warning,
+        l10n.providersNotManaged(agentName),
+      ),
+    };
+  }
+
   Widget _header({required bool withAdd}) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: Row(
       children: [
-        const Expanded(
-          child: CodeLabText('MCP servers', role: CodeLabTextRole.title),
+        Expanded(
+          child: CodeLabText(
+            context.l10n.settingsPageMcpServersTitle,
+            role: CodeLabTextRole.title,
+          ),
         ),
         if (withAdd)
           CodeLabButton(
             key: const ValueKey('mcp-add'),
-            label: 'Add server',
+            label: context.l10n.mcpAddServer,
             icon: FluentIcons.add,
             emphasis: CodeLabButtonEmphasis.primary,
             onPressed: () => _cubit.openNewServer(),
@@ -207,13 +229,13 @@ class _McpPageState extends State<McpPage> {
             runSpacing: 4,
             children: [
               CodeLabText(
-                '$count ${count == 1 ? 'server' : 'servers'}',
+                context.l10n.mcpServerCount(count),
                 role: CodeLabTextRole.strong,
               ),
-              const Tooltip(
-                message: 'Composition from the config · agent status below',
+              Tooltip(
+                message: context.l10n.mcpCompositionCaption,
                 child: CodeLabStatusIndicator(
-                  label: 'Composition from the config · agent status below',
+                  label: context.l10n.mcpCompositionCaption,
                   tone: CodeLabStatusTone.active,
                 ),
               ),
@@ -236,15 +258,15 @@ class _McpPageState extends State<McpPage> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: CodeLabText(
-                    'No MCP servers yet.',
-                    key: ValueKey('mcp-empty'),
+                    context.l10n.mcpEmpty,
+                    key: const ValueKey('mcp-empty'),
                   ),
                 ),
                 CodeLabButton(
                   key: const ValueKey('mcp-empty-add'),
-                  label: 'Add server',
+                  label: context.l10n.mcpAddServer,
                   icon: FluentIcons.add,
                   onPressed: () => _cubit.openNewServer(),
                 ),
@@ -279,21 +301,25 @@ class _McpPageState extends State<McpPage> {
     );
   }
 
-  Widget _banner(McpBanner banner) => _bar(
-    const ValueKey('mcp-banner'),
-    switch (banner.kind) {
-      McpBannerKind.saved => InfoBarSeverity.success,
-      McpBannerKind.conflict => InfoBarSeverity.warning,
-      McpBannerKind.error => InfoBarSeverity.error,
-    },
-    banner.lines.first,
-    content: banner.lines.length < 2
-        ? null
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [for (final line in banner.lines.skip(1)) Text(line)],
-          ),
-  );
+  Widget _banner(McpBanner banner) {
+    // Строки строит presentation по типизированному сообщению (D5).
+    final lines = mcpMessageLines(context.l10n, banner.message);
+    return _bar(
+      const ValueKey('mcp-banner'),
+      switch (banner.kind) {
+        McpBannerKind.saved => InfoBarSeverity.success,
+        McpBannerKind.conflict => InfoBarSeverity.warning,
+        McpBannerKind.error => InfoBarSeverity.error,
+      },
+      lines.first,
+      content: lines.length < 2
+          ? null
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [for (final line in lines.skip(1)) Text(line)],
+            ),
+    );
+  }
 
   Widget _rejected(McpRejectedConfig rejected) {
     final mono = CodeLabText.styleOf(context, CodeLabTextRole.mono);
@@ -302,16 +328,19 @@ class _McpPageState extends State<McpPage> {
     return _bar(
       const ValueKey('mcp-rejected'),
       InfoBarSeverity.error,
-      rejected.title,
+      switch (rejected.kind) {
+        McpRejectedKind.afterSave => context.l10n.mcpRejectedAfterSave,
+        McpRejectedKind.onOpen => context.l10n.mcpRejectedOnOpen,
+      },
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Config: invalid', style: mono),
+          Text(context.l10n.mcpConfigInvalid, style: mono),
+          // Путь ключа и текст проблемы от ядра агента — как есть (D6).
           for (final problem in rejected.problems) Text(problem, style: mono),
           const SizedBox(height: 4),
           CodeLabText(
-            'The agent keeps running on the previous config until this is '
-            'fixed.',
+            context.l10n.mcpKeepsRunning,
             role: CodeLabTextRole.caption,
             color: secondary,
           ),
@@ -321,7 +350,7 @@ class _McpPageState extends State<McpPage> {
           ? null
           : CodeLabButton(
               key: const ValueKey('mcp-rejected-edit'),
-              label: 'Edit $server',
+              label: context.l10n.mcpEditServer(server),
               onPressed: () => setState(() => _expanded.add(server)),
             ),
     );
@@ -336,21 +365,19 @@ class _McpPageState extends State<McpPage> {
       return;
     }
     final mono = CodeLabText.styleOf(context, CodeLabTextRole.mono);
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => ContentDialog(
-        title: CodeLabDialogTitle('Remove $name?'),
+        title: CodeLabDialogTitle(l10n.mcpRemoveTitle(name)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('The server is removed from the config file.'),
+            Text(l10n.mcpRemoveBody),
             if (plan.secrets.isNotEmpty) ...[
               const SizedBox(height: 12),
-              const Text(
-                'These stored secrets will be deleted if nothing else uses '
-                'them:',
-              ),
+              Text(l10n.mcpRemoveSecretsIntro),
               const SizedBox(height: 4),
               Column(
                 key: const ValueKey('mcp-remove-secrets'),
@@ -366,12 +393,12 @@ class _McpPageState extends State<McpPage> {
           Button(
             key: const ValueKey('mcp-remove-cancel'),
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             key: const ValueKey('mcp-remove-confirm'),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Remove'),
+            child: Text(l10n.commonRemove),
           ),
         ],
       ),
@@ -414,15 +441,19 @@ class _ServerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<McpSettingsCubit>();
+    final l10n = context.l10n;
     final secondary = FluentTheme.of(context).resources.textFillColorSecondary;
     final name = row.name;
     final fromProjectFile = !row.canToggle && !row.canEnableHere;
     final Widget? body;
     if (!expanded) {
       body = null;
-    } else if (row.note case final note?) {
+    } else if (row.noteKind case final kind?) {
       body = CodeLabText(
-        note,
+        switch (kind) {
+          McpRowNoteKind.projectFile => l10n.mcpNoteProjectFile(name),
+          McpRowNoteKind.disabledHere => l10n.mcpNoteDisabledHere(name),
+        },
         key: ValueKey('mcp-note-$name'),
         role: CodeLabTextRole.caption,
         color: secondary,
@@ -441,7 +472,7 @@ class _ServerCard extends StatelessWidget {
               extraActions: [
                 CodeLabButton(
                   key: ValueKey('mcp-reconnect-$name'),
-                  label: 'Reconnect',
+                  label: l10n.mcpReconnect,
                   onPressed: _canReconnect(state.agentStatus)
                       ? () => unawaited(cubit.reconnectServer(name))
                       : null,
@@ -450,7 +481,7 @@ class _ServerCard extends StatelessWidget {
               trailingActions: [
                 CodeLabButton(
                   key: ValueKey('mcp-remove-$name'),
-                  label: 'Remove',
+                  label: l10n.commonRemove,
                   emphasis: CodeLabButtonEmphasis.danger,
                   onPressed: row.canRemove && !state.saving ? onRemove : null,
                 ),
@@ -477,7 +508,7 @@ class _ServerCard extends StatelessWidget {
                 CodeLabText(name),
                 CodeLabBadge(label: row.entry.kind.name),
                 CodeLabBadge(
-                  label: row.sourceLabel,
+                  label: mcpSourceLabel(l10n, row.source, file: row.sourceFile),
                   tone: row.layer == ConfigLayer.projectLocal
                       ? CodeLabTone.accent
                       : CodeLabTone.neutral,
@@ -499,7 +530,7 @@ class _ServerCard extends StatelessWidget {
             if (fromProjectFile)
               CodeLabButton(
                 key: ValueKey('mcp-disable-here-$name'),
-                label: 'Disable here',
+                label: l10n.mcpDisableHere,
                 onPressed: row.canDisableHere && !state.saving
                     ? () => unawaited(cubit.disableHere(name))
                     : null,
@@ -507,7 +538,7 @@ class _ServerCard extends StatelessWidget {
             if (row.canEnableHere)
               CodeLabButton(
                 key: ValueKey('mcp-enable-here-$name'),
-                label: 'Enable here',
+                label: l10n.mcpEnableHere,
                 onPressed: state.saving
                     ? null
                     : () => unawaited(cubit.enableHere(name)),
@@ -519,9 +550,16 @@ class _ServerCard extends StatelessWidget {
               onChanged: row.canToggle && !state.saving
                   ? (value) => unawaited(cubit.setEnabled(name, enabled: value))
                   : null,
-              content: SizedBox(
-                width: 24,
-                child: Text(row.enabled ? 'On' : 'Off'),
+              // Подпись по содержимому и без переноса: фиксированные 24 pt рвали
+              // «Вкл» и «Выкл» на слоги; минимальная ширина держит строки
+              // ровными между «Вкл» и «Выкл».
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 36),
+                child: Text(
+                  row.enabled ? l10n.mcpOn : l10n.mcpOff,
+                  maxLines: 1,
+                  softWrap: false,
+                ),
               ),
             ),
           ],
@@ -562,7 +600,7 @@ class _NewServerCard extends StatelessWidget {
       key: const ValueKey('mcp-new'),
       child: CodeLabExpanderCard(
         leading: const Icon(FluentIcons.add, size: 16),
-        title: const CodeLabText('New server'),
+        title: CodeLabText(context.l10n.mcpNewServer),
         expanded: true,
         bodyPadding: const EdgeInsets.fromLTRB(52, 16, 16, 16),
         body: _McpEditor(
@@ -574,7 +612,7 @@ class _NewServerCard extends StatelessWidget {
           extraActions: [
             CodeLabButton(
               key: const ValueKey('mcp-new-cancel'),
-              label: 'Cancel',
+              label: context.l10n.commonCancel,
               onPressed: state.saving ? null : onCancel,
             ),
           ],
@@ -649,7 +687,7 @@ class _McpEditor extends StatefulWidget {
 
 class _McpEditorState extends State<_McpEditor> {
   /// Подсказка поля со скрытым значением: список его маскирует (D11).
-  static const _hiddenHint = 'Hidden — leave empty to keep';
+  String get _hiddenHint => context.l10n.mcpHiddenHint;
 
   late final TextEditingController _name;
   late final TextEditingController _command;
@@ -797,18 +835,12 @@ class _McpEditorState extends State<_McpEditor> {
   Future<void> _save({Set<String> replace = const {}}) async {
     final duplicate = _duplicateKey();
     if (duplicate != null) {
-      // Совпавшие ключи слились бы в карте черновика: отказ публикует Cubit.
-      context.read<McpSettingsCubit>().rejectDraft(
-        server: widget.initial?.name,
-        name: widget.initial?.name ?? _name.text.trim(),
-        problems: [
-          McpDraftProblem(
-            _kind == McpTransportKind.http
-                ? McpDraftField.headers
-                : McpDraftField.env,
-            'Two values are named $duplicate.',
-          ),
-        ],
+      // Совпавшие ключи слились бы в карте черновика: отказ публикует Cubit
+      // вместе с остальными проблемами `validate()`, а проблему «два значения»
+      // строит фабрика моста с кодом (D6).
+      context.read<McpSettingsCubit>().rejectDuplicateKey(
+        _draft(),
+        key: duplicate,
       );
       return;
     }
@@ -826,6 +858,7 @@ class _McpEditorState extends State<_McpEditor> {
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
+    final l10n = context.l10n;
     final storage = state.secretStorage;
     final server = widget.initial?.name;
     final rows = _kind == McpTransportKind.http ? _headers : _env;
@@ -846,7 +879,7 @@ class _McpEditorState extends State<_McpEditor> {
         CodeLabForm(
           children: [
             CodeLabFormRow(
-              label: 'Name',
+              label: l10n.mcpFieldName,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 360),
                 child: TextBox(
@@ -858,7 +891,7 @@ class _McpEditorState extends State<_McpEditor> {
               ),
             ),
             CodeLabFormRow(
-              label: 'Type',
+              label: l10n.mcpFieldType,
               child: RadioGroup<McpTransportKind>(
                 groupValue: _kind,
                 onChanged: (kind) {
@@ -885,7 +918,7 @@ class _McpEditorState extends State<_McpEditor> {
             ),
             if (_kind == McpTransportKind.stdio) ...[
               CodeLabFormRow(
-                label: 'Command',
+                label: l10n.mcpFieldCommand,
                 child: _field(
                   const ValueKey('mcp-draft-command'),
                   _command,
@@ -893,8 +926,8 @@ class _McpEditorState extends State<_McpEditor> {
                 ),
               ),
               CodeLabFormRow(
-                label: 'Arguments',
-                notes: const [CodeLabFormNote('One argument per line.')],
+                label: l10n.mcpFieldArguments,
+                notes: [CodeLabFormNote(l10n.mcpArgumentsNote)],
                 child: TextBox(
                   key: const ValueKey('mcp-draft-args'),
                   controller: _args,
@@ -906,7 +939,7 @@ class _McpEditorState extends State<_McpEditor> {
               ),
             ] else
               CodeLabFormRow(
-                label: 'URL',
+                label: l10n.mcpFieldUrl,
                 child: _field(
                   const ValueKey('mcp-draft-url'),
                   _url,
@@ -914,18 +947,26 @@ class _McpEditorState extends State<_McpEditor> {
                 ),
               ),
             CodeLabFormRow(
-              label: _kind == McpTransportKind.http ? 'Headers' : 'Environment',
+              label: _kind == McpTransportKind.http
+                  ? l10n.mcpFieldHeaders
+                  : l10n.mcpFieldEnvironment,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   for (var i = 0; i < rows.length; i++)
                     _valueRow(rows, i, storage, server),
-                  if (!storage.writable)
+                  if (!storage.writable) ...[
+                    // Заголовок переведён, причина хранилища — как есть (D6).
                     CodeLabFormNote(
-                      storage.unavailableReason ??
-                          'The secret store is read-only.',
+                      l10n.secretStoreReadOnly,
                       tone: CodeLabFormNoteTone.warning,
                     ),
+                    if (storage.unavailableReason case final reason?)
+                      CodeLabFormNote(
+                        reason,
+                        tone: CodeLabFormNoteTone.warning,
+                      ),
+                  ],
                   Align(
                     alignment: Alignment.centerLeft,
                     child: HyperlinkButton(
@@ -937,8 +978,8 @@ class _McpEditorState extends State<_McpEditor> {
                       ),
                       child: Text(
                         _kind == McpTransportKind.http
-                            ? '+ Add header'
-                            : '+ Add variable',
+                            ? l10n.mcpAddHeader
+                            : l10n.mcpAddVariable,
                       ),
                     ),
                   ),
@@ -946,14 +987,8 @@ class _McpEditorState extends State<_McpEditor> {
               ),
             ),
             CodeLabFormRow(
-              label: 'Save to',
-              notes: [
-                if (!_isNew)
-                  const CodeLabFormNote(
-                    'To move a server to another file, remove it and add it '
-                    'again.',
-                  ),
-              ],
+              label: l10n.mcpFieldSaveTo,
+              notes: [if (!_isNew) CodeLabFormNote(l10n.mcpMoveNote)],
               child: RadioGroup<ConfigLayer>(
                 groupValue: _target,
                 onChanged: (layer) {
@@ -969,13 +1004,13 @@ class _McpEditorState extends State<_McpEditor> {
                       key: const ValueKey('mcp-draft-target-user'),
                       value: ConfigLayer.user,
                       enabled: _isNew,
-                      content: const Text('User config'),
+                      content: Text(l10n.mcpTargetUser),
                     ),
                     RadioButton<ConfigLayer>(
                       key: const ValueKey('mcp-draft-target-local'),
                       value: ConfigLayer.projectLocal,
                       enabled: _isNew && canTargetProject,
-                      content: const Text('This project only'),
+                      content: Text(l10n.mcpTargetProject),
                     ),
                   ],
                 ),
@@ -988,7 +1023,7 @@ class _McpEditorState extends State<_McpEditor> {
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: CodeLabFormNote(
-                problem.message,
+                mcpDraftProblemText(l10n, problem),
                 tone: CodeLabFormNoteTone.error,
               ),
             ),
@@ -998,7 +1033,7 @@ class _McpEditorState extends State<_McpEditor> {
           children: [
             CodeLabButton(
               key: widget.saveKey,
-              label: 'Save',
+              label: l10n.commonSave,
               emphasis: CodeLabButtonEmphasis.primary,
               onPressed: busy ? null : () => unawaited(_save()),
             ),
@@ -1021,6 +1056,7 @@ class _McpEditorState extends State<_McpEditor> {
     String? server,
   ) {
     final row = rows[i];
+    final l10n = context.l10n;
     final mono = CodeLabText.styleOf(context, CodeLabTextRole.mono);
     final serverName = server ?? _name.text.trim();
     final key = row.key.text.trim();
@@ -1039,7 +1075,7 @@ class _McpEditorState extends State<_McpEditor> {
                 child: TextBox(
                   key: ValueKey('mcp-draft-key-$i'),
                   controller: row.key,
-                  placeholder: 'Name',
+                  placeholder: l10n.mcpFieldName,
                   style: mono,
                   onChanged: (_) => setState(() {}),
                 ),
@@ -1052,15 +1088,15 @@ class _McpEditorState extends State<_McpEditor> {
                         key: ValueKey('mcp-draft-value-$i'),
                         controller: row.value,
                         placeholder: row.storedRef == null
-                            ? 'Secret value'
-                            : 'stored',
+                            ? l10n.mcpValueSecretPlaceholder
+                            : l10n.mcpValueStored,
                       )
                     : TextBox(
                         key: ValueKey('mcp-draft-value-$i'),
                         controller: row.value,
                         placeholder: row.keepRaw != null
                             ? _hiddenHint
-                            : 'Value',
+                            : l10n.mcpValuePlaceholder,
                         style: mono,
                       ),
               ),
@@ -1087,15 +1123,21 @@ class _McpEditorState extends State<_McpEditor> {
                   })
                 : null,
             content: Flexible(
+              // Одно сообщение каталога; имя секрета — моноширинное значение
+              // внутри него (D5, правило 7).
               child: Text.rich(
                 TextSpan(
-                  children: [
-                    TextSpan(text: 'Secret — stored in ${storage.backendId}'),
-                    if (secretName != null) ...[
-                      const TextSpan(text: ' as '),
-                      TextSpan(text: secretName, style: mono),
-                    ],
-                  ],
+                  children: secretName == null
+                      ? [
+                          TextSpan(
+                            text: l10n.mcpSecretStoredIn(storage.backendId),
+                          ),
+                        ]
+                      : messageSpans(
+                          (m) =>
+                              l10n.mcpSecretStoredInAs(storage.backendId, m[0]),
+                          [TextSpan(text: secretName, style: mono)],
+                        ),
                 ),
               ),
             ),
@@ -1109,6 +1151,7 @@ class _McpEditorState extends State<_McpEditor> {
   /// явному выбору (SETUP-5).
   Widget _replaceQuestion(McpReplaceQuestion question, Color secondary) {
     final cubit = context.read<McpSettingsCubit>();
+    final l10n = context.l10n;
     final mono = CodeLabText.styleOf(context, CodeLabTextRole.mono);
     return Padding(
       padding: const EdgeInsets.only(top: 10),
@@ -1116,20 +1159,14 @@ class _McpEditorState extends State<_McpEditor> {
         key: const ValueKey('mcp-replace-secret'),
         severity: InfoBarSeverity.warning,
         isLong: true,
-        title: const Text('A secret with this name is already stored'),
+        title: Text(l10n.mcpReplaceTitle),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (final name in question.names) Text(name, style: mono),
             const SizedBox(height: 4),
-            const Text(
-              'The new value replaces the secret for every server that '
-              'refers to it.',
-            ),
-            const Text(
-              'A running agent keeps the old value until the server '
-              'reconnects.',
-            ),
+            Text(l10n.mcpReplaceNewValue),
+            Text(l10n.mcpReplaceRunning),
           ],
         ),
         action: Row(
@@ -1137,14 +1174,14 @@ class _McpEditorState extends State<_McpEditor> {
           children: [
             CodeLabButton(
               key: const ValueKey('mcp-replace-confirm'),
-              label: 'Replace it',
+              label: l10n.mcpReplaceConfirm,
               onPressed: () =>
                   unawaited(_save(replace: question.names.toSet())),
             ),
             const SizedBox(width: 8),
             CodeLabButton(
               key: const ValueKey('mcp-replace-keep'),
-              label: 'Keep it',
+              label: l10n.mcpReplaceKeep,
               onPressed: cubit.dismissReplaceQuestion,
             ),
           ],
@@ -1175,6 +1212,7 @@ class _StatusPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<McpSettingsCubit>();
+    final l10n = context.l10n;
     final secondary = FluentTheme.of(context).resources.textFillColorSecondary;
     final Widget? caption;
     final List<Widget> actions;
@@ -1184,33 +1222,42 @@ class _StatusPanel extends StatelessWidget {
         caption = null;
         actions = const [];
         body = CodeLabText(
-          'Open a session to see live status',
+          l10n.mcpStatusUnavailable,
           key: const ValueKey('mcp-status-unavailable'),
           color: secondary,
         );
       case McpAgentStatusLive(:final rows, :final updatedAt):
         caption = CodeLabStatusIndicator(
-          label: 'Live from the embedded agent · ${_clock(updatedAt)}',
+          label: l10n.mcpStatusLive(_clock(updatedAt)),
           tone: CodeLabStatusTone.active,
         );
         actions = [
           CodeLabButton(
             key: const ValueKey('mcp-status-reload-all'),
-            label: 'Reload all',
+            label: l10n.mcpReloadAll,
             onPressed: () => unawaited(cubit.reloadAll()),
           ),
         ];
         body = CodeLabStatusTable(
-          columns: const ['SERVER', 'STATE', 'TOOLS', 'LAST ERROR'],
-          // Веса под колонку страницы ~400 pt (окно 800 pt): при равных
-          // колонках «LAST ERROR» обрезалось, а «TOOLS» оставляло пустоту.
-          // Из 256 pt (400 минус поля и колонка действий) выходит около
-          // 64 / 48 / 48 / 96 pt. Заголовки в моноширинном шрифте занимают
-          // ~45 / 37 / 37 / 75 pt, отдельного зазора между колонками у
-          // таблицы нет, поэтому SERVER (имена серверов длиннее заголовка)
-          // получает запас, а LAST ERROR (самые длинные значения) — самую
-          // широкую колонку. Сверено на живом окне 800×600.
-          columnFlex: const [4, 3, 3, 6],
+          columns: [
+            l10n.mcpColServer,
+            l10n.mcpColState,
+            l10n.mcpColTools,
+            l10n.mcpColLastError,
+          ],
+          // Веса под колонку страницы ~400 pt (окно 800 pt), D8: из 400 pt
+          // остаётся около 226 pt после полей и колонки действий (150 pt) —
+          // примерно 30 / 60 / 75 / 60 pt. «Состояние», «Инструменты» и слова
+          // «Последняя ошибка» (перенос заголовка) по настоящему шрифту
+          // помещаются целиком; имена серверов и ошибки переносятся. Веса одни
+          // для en и ru. Проверка «целиком» — глазами на macOS: тестовый шрифт
+          // Ahem вдвое шире настоящего.
+          wrapHeaders: true,
+          // Кнопка строки «Переподключить» шире стандартных 120 pt и раньше
+          // обрезалась; колонке действий отдано под неё 150 pt (132 pt не хватило
+          // на несколько пикселей по проверке на macOS).
+          actionWidth: 150,
+          columnFlex: const [2, 4, 5, 4],
           rows: [
             for (final row in rows)
               CodeLabStatusTableRow(
@@ -1218,20 +1265,24 @@ class _StatusPanel extends StatelessWidget {
                 cells: [
                   CodeLabStatusTableCell(row.name, mono: true),
                   CodeLabStatusTableCell(
-                    row.stateLabel,
+                    mcpServerStateText(l10n, row.state, retryIn: row.retryIn),
                     tone: _tone(row.state),
                   ),
-                  CodeLabStatusTableCell(row.tools, muted: row.tools == '—'),
+                  // Прочерк при `null` рисует страница, а не состояние (D5).
                   CodeLabStatusTableCell(
-                    row.lastError,
-                    mono: row.lastError != '—',
-                    muted: row.lastError == '—',
+                    row.toolCount?.toString() ?? '—',
+                    muted: row.toolCount == null,
+                  ),
+                  CodeLabStatusTableCell(
+                    row.errorText ?? '—',
+                    mono: row.errorText != null,
+                    muted: row.errorText == null,
                   ),
                 ],
                 action: row.canReconnect
                     ? CodeLabStatusTableAction(
                         key: ValueKey('mcp-status-reconnect-${row.name}'),
-                        label: 'Reconnect',
+                        label: l10n.mcpReconnect,
                         onPressed: () =>
                             unawaited(cubit.reconnectServer(row.name)),
                       )
@@ -1239,7 +1290,7 @@ class _StatusPanel extends StatelessWidget {
               ),
           ],
         );
-      case McpAgentStatusText(:final text, :final canSend, :final notice):
+      case McpAgentStatusText(:final text, :final canSend, :final listFailed):
         caption = null;
         // Пара кнопок — одна группа с промежутком 8, чтобы Wrap заголовка
         // не растягивал её до 12 и мог перенести группу целиком.
@@ -1250,12 +1301,12 @@ class _StatusPanel extends StatelessWidget {
             children: [
               CodeLabButton(
                 key: const ValueKey('mcp-status-refresh'),
-                label: 'Refresh',
+                label: l10n.mcpRefresh,
                 onPressed: canSend ? () => unawaited(cubit.refresh()) : null,
               ),
               CodeLabButton(
                 key: const ValueKey('mcp-status-reload-all'),
-                label: 'Reload all',
+                label: l10n.mcpReloadAll,
                 onPressed: canSend ? () => unawaited(cubit.reloadAll()) : null,
               ),
             ],
@@ -1264,11 +1315,11 @@ class _StatusPanel extends StatelessWidget {
         body = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (notice != null)
+            if (listFailed)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: CodeLabText(
-                  notice,
+                  l10n.mcpListFailed,
                   key: const ValueKey('mcp-status-notice'),
                   role: CodeLabTextRole.caption,
                   color: secondary,
@@ -1298,10 +1349,10 @@ class _StatusPanel extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.only(top: 4, right: 12),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, right: 12),
                   child: CodeLabText(
-                    'Agent status',
+                    l10n.mcpStatusTitle,
                     role: CodeLabTextRole.strong,
                   ),
                 ),
@@ -1321,8 +1372,7 @@ class _StatusPanel extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: CodeLabText(
-              'From the embedded agent. For a stdio or remote agent this '
-              'panel shows the reply of /mcp list as text.',
+              l10n.mcpStatusFooter,
               role: CodeLabTextRole.caption,
               color: secondary,
             ),

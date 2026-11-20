@@ -55,7 +55,7 @@
 существующих виджетах: слоя локализации в app нет, и его введение — отдельное решение.
 
 **Слой локализации (D-19)** вводит change
-[`add-desktop-localization`](../../../../openspec/changes/add-desktop-localization/design.md):
+[`add-desktop-localization`](../../../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md):
 каталоги ARB `en` и `ru` у app и у `codelab_ui` (`flutter_localizations`, `gen-l10n`;
 `technology-stack.md` §20ж), выбор языка — строка «Language» страницы «Settings › General»
 (`System`, `English`, `Русский`; ключ `codelab.app.language` в `shared_preferences`).

@@ -3252,7 +3252,7 @@ abstract class AppLocalizations {
   /// **'(applies after restart)'**
   String get settingsGeneralAppliesAfterRestart;
 
-  /// Подпись строки, значение которой задаёт проектный файл. {source} — слой конфигурации (project, local), не переводить.
+  /// Подпись строки, значение которой задаёт проектный файл. {source} — подпись источника на языке интерфейса (по ConfigSourceKind, D7).
   ///
   /// In en, this message translates to:
   /// **'This project overrides it ({source}).'**
@@ -3270,7 +3270,7 @@ abstract class AppLocalizations {
   /// **'This value contains a secret; change it in the config file.'**
   String get settingsGeneralRefusalMasked;
 
-  /// Причина, по которой строку нельзя править здесь: значение пришло из окружения или файла --config. {source} — env или config, не переводить.
+  /// Причина, по которой строку нельзя править здесь: значение пришло из окружения или файла --config. {source} — подпись источника на языке интерфейса.
   ///
   /// In en, this message translates to:
   /// **'Set by {source}; it cannot be changed here.'**
@@ -3330,7 +3330,7 @@ abstract class AppLocalizations {
   /// **'Applies when the agent starts.'**
   String get settingsGeneralTailWhenStarts;
 
-  /// Баннер записи, значение которой перекрыто другим слоем. {source} — слой (local, project, env, config), {effective} — действующее значение; оба не переводить.
+  /// Баннер записи, значение которой перекрыто другим слоем. {source} — подпись источника на языке интерфейса, {effective} — действующее значение (не переводить).
   ///
   /// In en, this message translates to:
   /// **'Saved to all projects; {source} overrides it: the agent uses {effective}.'**
@@ -3575,6 +3575,1457 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Entries of the CodeLab third-party notices register, as kept in the repository.'**
   String get settingsGeneralAboutThirdPartyCaption;
+
+  /// Кнопка страницы MCP servers: открыть карточку нового сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'Add server'**
+  String get mcpAddServer;
+
+  /// Счётчик серверов над списком страницы MCP servers. Плейсхолдер count — число серверов.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} server} other{{count} servers}}'**
+  String mcpServerCount(int count);
+
+  /// Подпись индикатора над списком серверов: список собран из конфига, живое состояние — в панели ниже.
+  ///
+  /// In en, this message translates to:
+  /// **'Composition from the config · agent status below'**
+  String get mcpCompositionCaption;
+
+  /// Пустой список страницы MCP servers.
+  ///
+  /// In en, this message translates to:
+  /// **'No MCP servers yet.'**
+  String get mcpEmpty;
+
+  /// Заголовок карточки нового сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'New server'**
+  String get mcpNewServer;
+
+  /// Заголовок подтверждения удаления сервера. Плейсхолдер name — имя сервера, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {name}?'**
+  String mcpRemoveTitle(String name);
+
+  /// Текст подтверждения удаления сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'The server is removed from the config file.'**
+  String get mcpRemoveBody;
+
+  /// Подпись над списком секретов в подтверждении удаления сервера. Метка security: перевод не смягчает смысл. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'These stored secrets will be deleted if nothing else uses them:'**
+  String get mcpRemoveSecretsIntro;
+
+  /// Кнопка строки сервера: переподключить сервер агента (команда /mcp reload <имя>). Переходный глагол; не путать с «Переподключиться» для соединения клиента с агентом (глоссарий).
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect'**
+  String get mcpReconnect;
+
+  /// Кнопка панели состояния: переподключить все серверы агента (команда /mcp reload).
+  ///
+  /// In en, this message translates to:
+  /// **'Reload all'**
+  String get mcpReloadAll;
+
+  /// Кнопка панели состояния для агента вне процесса: запросить /mcp list.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get mcpRefresh;
+
+  /// Кнопка строки сервера из проектного файла: записать enabled: false в локальный файл проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable here'**
+  String get mcpDisableHere;
+
+  /// Кнопка строки сервера, отключённого в локальном файле проекта: снять переопределение.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable here'**
+  String get mcpEnableHere;
+
+  /// Подпись включённого переключателя сервера. Без точки.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get mcpOn;
+
+  /// Подпись выключенного переключателя сервера. Без точки.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get mcpOff;
+
+  /// Пояснение вместо редактора для сервера из проектного файла. Плейсхолдер name — имя сервера; enabled: false и путь файла не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} comes from the project file: it can\'t be edited or removed here; \"Disable here\" writes enabled: false to .codelab/config.local.yaml.'**
+  String mcpNoteProjectFile(String name);
+
+  /// Пояснение вместо редактора для сервера, отключённого локальным файлом проекта. Плейсхолдер name — имя сервера; путь файла не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is disabled in .codelab/config.local.yaml. \"Enable here\" removes this override.'**
+  String mcpNoteDisabledHere(String name);
+
+  /// Подпись поля имени сервера и placeholder имени ключа в строках env и headers.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get mcpFieldName;
+
+  /// Подпись поля типа сервера (stdio или http).
+  ///
+  /// In en, this message translates to:
+  /// **'Type'**
+  String get mcpFieldType;
+
+  /// Подпись поля команды stdio-сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'Command'**
+  String get mcpFieldCommand;
+
+  /// Подпись поля аргументов stdio-сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'Arguments'**
+  String get mcpFieldArguments;
+
+  /// Подпись поля адреса http-сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'URL'**
+  String get mcpFieldUrl;
+
+  /// Подпись таблицы headers http-сервера; имена заголовков не переводятся.
+  ///
+  /// In en, this message translates to:
+  /// **'Headers'**
+  String get mcpFieldHeaders;
+
+  /// Подпись таблицы env stdio-сервера; имена переменных не переводятся.
+  ///
+  /// In en, this message translates to:
+  /// **'Environment'**
+  String get mcpFieldEnvironment;
+
+  /// Подпись цели записи нового сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to'**
+  String get mcpFieldSaveTo;
+
+  /// Подсказка под полем аргументов: аргументы разделяются строками, а не пробелами.
+  ///
+  /// In en, this message translates to:
+  /// **'One argument per line.'**
+  String get mcpArgumentsNote;
+
+  /// Ссылка под таблицей headers: добавить строку.
+  ///
+  /// In en, this message translates to:
+  /// **'+ Add header'**
+  String get mcpAddHeader;
+
+  /// Ссылка под таблицей env: добавить строку.
+  ///
+  /// In en, this message translates to:
+  /// **'+ Add variable'**
+  String get mcpAddVariable;
+
+  /// Подсказка у цели записи существующего сервера: цель изменить нельзя.
+  ///
+  /// In en, this message translates to:
+  /// **'To move a server to another file, remove it and add it again.'**
+  String get mcpMoveNote;
+
+  /// Вариант цели записи: пользовательский config.yaml.
+  ///
+  /// In en, this message translates to:
+  /// **'User config'**
+  String get mcpTargetUser;
+
+  /// Вариант цели записи: локальный файл проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'This project only'**
+  String get mcpTargetProject;
+
+  /// Placeholder поля значения, помеченного как секрет.
+  ///
+  /// In en, this message translates to:
+  /// **'Secret value'**
+  String get mcpValueSecretPlaceholder;
+
+  /// Placeholder поля секрета, значение которого уже лежит в хранилище.
+  ///
+  /// In en, this message translates to:
+  /// **'stored'**
+  String get mcpValueStored;
+
+  /// Placeholder поля значения.
+  ///
+  /// In en, this message translates to:
+  /// **'Value'**
+  String get mcpValuePlaceholder;
+
+  /// Placeholder поля, значение которого список скрывает маской: пустое поле оставляет значение. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden — leave empty to keep'**
+  String get mcpHiddenHint;
+
+  /// Подпись флажка «Секрет», когда имя секрета ещё неизвестно. Плейсхолдер backend — id хранилища, не переводить. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Secret — stored in {backend}'**
+  String mcpSecretStoredIn(String backend);
+
+  /// Подпись флажка «Секрет» с именем секрета. Плейсхолдеры backend (id хранилища) и name (имя секрета) не переводить. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Secret — stored in {backend} as {name}'**
+  String mcpSecretStoredInAs(String backend, String name);
+
+  /// Заголовок вопроса о замене секрета. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'A secret with this name is already stored'**
+  String get mcpReplaceTitle;
+
+  /// Последствие замены секрета. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'The new value replaces the secret for every server that refers to it.'**
+  String get mcpReplaceNewValue;
+
+  /// Последствие замены секрета для работающего агента. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'A running agent keeps the old value until the server reconnects.'**
+  String get mcpReplaceRunning;
+
+  /// Кнопка вопроса о замене секрета: заменить значение. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace it'**
+  String get mcpReplaceConfirm;
+
+  /// Кнопка вопроса о замене секрета: оставить прежнее значение. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep it'**
+  String get mcpReplaceKeep;
+
+  /// Проблема черновика MCP-сервера по коду McpDraftProblemCode.nameInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a name without spaces, [, ] or \".'**
+  String get mcpProblemNameInvalid;
+
+  /// Проблема черновика MCP-сервера по коду McpDraftProblemCode.renameNotAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the server and add it again to rename it.'**
+  String get mcpProblemRenameNotAllowed;
+
+  /// Проблема черновика MCP-сервера по коду McpDraftProblemCode.nameTaken.
+  ///
+  /// In en, this message translates to:
+  /// **'A server with this name already exists.'**
+  String get mcpProblemNameTaken;
+
+  /// Проблема черновика MCP-сервера по коду McpDraftProblemCode.commandEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the command.'**
+  String get mcpProblemCommandEmpty;
+
+  /// Проблема черновика MCP-сервера по коду McpDraftProblemCode.urlInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an http or https URL.'**
+  String get mcpProblemUrlInvalid;
+
+  /// Проблема черновика MCP-сервера по коду McpDraftProblemCode.urlHasUserinfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the user name and password from the URL.'**
+  String get mcpProblemUrlHasUserinfo;
+
+  /// Проблема черновика MCP-сервера по коду McpDraftProblemCode.keyHasSpaces. Плейсхолдер key — имя ключа, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove spaces around the name {key}.'**
+  String mcpProblemKeyHasSpaces(String key);
+
+  /// Проблема черновика MCP-сервера по коду McpDraftProblemCode.keyDuplicate. Плейсхолдер key — имя ключа, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Two values are named {key}.'**
+  String mcpProblemKeyDuplicate(String key);
+
+  /// Проблема черновика MCP-сервера по коду McpDraftProblemCode.keyEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a name for every value.'**
+  String get mcpProblemKeyEmpty;
+
+  /// Проблема черновика MCP-сервера по коду McpDraftProblemCode.secretValueEmpty. Плейсхолдер key — имя ключа, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the secret value for {key}.'**
+  String mcpProblemSecretValueEmpty(String key);
+
+  /// Проблема черновика MCP-сервера по коду McpDraftProblemCode.secretNameCollision. Плейсхолдер key — имя ключа, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Two secret values get the same secret name; rename {key}.'**
+  String mcpProblemSecretNameCollision(String key);
+
+  /// Баннер после записи сервера. Плейсхолдер server — имя сервера, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Server {server} saved.'**
+  String mcpBannerSaved(String server);
+
+  /// Баннер после записи сервера, который агент применит после перезапуска. Плейсхолдер server — имя сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'Server {server} saved. It starts after Restart agent (Settings › Connection).'**
+  String mcpBannerSavedRestart(String server);
+
+  /// Баннер после включения сервера, который агент применит после перезапуска. Плейсхолдер server — имя сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'Server {server} enabled. It starts after Restart agent (Settings › Connection).'**
+  String mcpBannerEnabledRestart(String server);
+
+  /// Баннер после удаления сервера. Плейсхолдер server — имя сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'Server {server} removed.'**
+  String mcpBannerRemoved(String server);
+
+  /// Строка баннера об очистке секретов: секрет создан вручную и не удалён. Плейсхолдер name — имя секрета, не переводить. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is kept: it was not created by this page.'**
+  String mcpSecretKept(String name);
+
+  /// Строка баннера об очистке секретов: секрет ещё используется. Плейсхолдер name — имя секрета. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is kept because other settings still use it.'**
+  String mcpSecretStillUsed(String name);
+
+  /// Строка баннера: секрет не удалён, показана команда для ручного удаления. Плейсхолдер name — имя секрета; команда codelab secret delete не переводится. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} could not be deleted. Delete it with: codelab secret delete {name}'**
+  String mcpSecretDeleteFailed(String name);
+
+  /// Баннер: хранилище отказало в записи секрета. Плейсхолдер reason — текст хранилища как есть, не переводить. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'The secret was not stored, so nothing was saved: {reason}'**
+  String mcpSecretNotStored(String reason);
+
+  /// Строка баннера: откат не смог вернуть прежнее значение секрета. Плейсхолдер name — имя секрета. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'The stored value of {name} was already replaced and could not be restored.'**
+  String mcpSecretNotRestored(String name);
+
+  /// Баннер отказа моста: сервера нет, слой не читается или нет переопределения.
+  ///
+  /// In en, this message translates to:
+  /// **'The MCP settings changed. Review the page and try again.'**
+  String get mcpRefusalChanged;
+
+  /// Баннер отказа моста: сервер из файла, который клиент не пишет.
+  ///
+  /// In en, this message translates to:
+  /// **'This server is defined in a read-only file. Change it there.'**
+  String get mcpRefusalNotEditable;
+
+  /// Баннер отказа моста: «Отключить здесь» применимо к серверу слоя проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'Only a server from the project file can be disabled here.'**
+  String get mcpRefusalNotProject;
+
+  /// Баннер отказа моста: нет папки проекта. Путь файла не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'The project folder is not known, so nothing can be written to .codelab/config.local.yaml.'**
+  String get mcpRefusalNoProjectTarget;
+
+  /// Баннер: страница или подключение сменились, пока шёл ответ хранилища.
+  ///
+  /// In en, this message translates to:
+  /// **'The MCP server settings changed. Review the page and try again.'**
+  String get mcpFailSettingsChanged;
+
+  /// Баннер: сбой чтения хранилища секретов перед записью. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'The secret store could not be read, so nothing was saved.'**
+  String get mcpFailSecretStore;
+
+  /// Баннер: непредвиденная ошибка при записи сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'The change was not saved because of an error.'**
+  String get mcpFailChange;
+
+  /// Баннер: конфликт записи.
+  ///
+  /// In en, this message translates to:
+  /// **'The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.'**
+  String get mcpFailConflict;
+
+  /// Баннер: ядро агента отклонило конфиг. Плейсхолдер issues — тексты проверки ядра как есть, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'The config was not saved: {issues}'**
+  String mcpFailRejected(String issues);
+
+  /// Баннер: непредвиденная ошибка записи конфига.
+  ///
+  /// In en, this message translates to:
+  /// **'The config was not saved because of an error.'**
+  String get mcpFailConfig;
+
+  /// Заголовок InfoBar mcp-rejected после собственной записи.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved, but the agent rejected the new config'**
+  String get mcpRejectedAfterSave;
+
+  /// Заголовок InfoBar mcp-rejected при открытии страницы.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent rejects the current config'**
+  String get mcpRejectedOnOpen;
+
+  /// Строка InfoBar mcp-rejected над списком проблем ядра.
+  ///
+  /// In en, this message translates to:
+  /// **'Config: invalid'**
+  String get mcpConfigInvalid;
+
+  /// Подпись InfoBar mcp-rejected. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent keeps running on the previous config until this is fixed.'**
+  String get mcpKeepsRunning;
+
+  /// Кнопка InfoBar mcp-rejected: раскрыть редактор сервера. Плейсхолдер server — имя сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit {server}'**
+  String mcpEditServer(String server);
+
+  /// Заголовок панели состояния агента.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent status'**
+  String get mcpStatusTitle;
+
+  /// Колонка таблицы состояния: имя сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'SERVER'**
+  String get mcpColServer;
+
+  /// Колонка таблицы состояния: состояние сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'STATE'**
+  String get mcpColState;
+
+  /// Колонка таблицы состояния: число инструментов.
+  ///
+  /// In en, this message translates to:
+  /// **'TOOLS'**
+  String get mcpColTools;
+
+  /// Колонка таблицы состояния: последняя ошибка сервера.
+  ///
+  /// In en, this message translates to:
+  /// **'LAST ERROR'**
+  String get mcpColLastError;
+
+  /// Состояние сервера в таблице.
+  ///
+  /// In en, this message translates to:
+  /// **'connecting'**
+  String get mcpStateConnecting;
+
+  /// Состояние сервера в таблице.
+  ///
+  /// In en, this message translates to:
+  /// **'connected'**
+  String get mcpStateConnected;
+
+  /// Состояние сервера в таблице.
+  ///
+  /// In en, this message translates to:
+  /// **'disabled'**
+  String get mcpStateDisabled;
+
+  /// Состояние сервера в таблице без времени повтора.
+  ///
+  /// In en, this message translates to:
+  /// **'failed'**
+  String get mcpStateFailed;
+
+  /// Состояние сервера в таблице с временем до повтора. Плейсхолдер seconds — секунды, число.
+  ///
+  /// In en, this message translates to:
+  /// **'failed · retry in {seconds} s'**
+  String mcpStateFailedRetry(String seconds);
+
+  /// Подсказка панели состояния, когда сессии нет.
+  ///
+  /// In en, this message translates to:
+  /// **'Open a session to see live status'**
+  String get mcpStatusUnavailable;
+
+  /// Индикатор панели состояния. Плейсхолдер time — время HH:mm без зависимости от языка.
+  ///
+  /// In en, this message translates to:
+  /// **'Live from the embedded agent · {time}'**
+  String mcpStatusLive(String time);
+
+  /// Подвал панели состояния. Команда /mcp list не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'From the embedded agent. For a stdio or remote agent this panel shows the reply of /mcp list as text.'**
+  String get mcpStatusFooter;
+
+  /// Строка над прежним ответом /mcp, когда запрос не завершился. Команда /mcp list не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'/mcp list did not complete. Try Refresh again.'**
+  String get mcpListFailed;
+
+  /// Подпись источника значения конфигурации: значение задано умолчанием. Идентификаторы слоёв не переводятся в конфиге, а подпись — да (D7).
+  ///
+  /// In en, this message translates to:
+  /// **'default'**
+  String get configSourceDefault;
+
+  /// Подпись источника: пользовательский конфиг.
+  ///
+  /// In en, this message translates to:
+  /// **'user'**
+  String get configSourceUser;
+
+  /// Подпись источника: проектный файл (слой 3).
+  ///
+  /// In en, this message translates to:
+  /// **'project'**
+  String get configSourceProject;
+
+  /// Подпись источника: локальный файл проекта (config.local.yaml).
+  ///
+  /// In en, this message translates to:
+  /// **'local'**
+  String get configSourceLocal;
+
+  /// Подпись источника «Agents & modes»: файл --config.
+  ///
+  /// In en, this message translates to:
+  /// **'file'**
+  String get configSourceFile;
+
+  /// Подпись источника «General»: файл --config (CODELAB_CONFIG).
+  ///
+  /// In en, this message translates to:
+  /// **'config'**
+  String get configSourceConfig;
+
+  /// Подпись источника: переменные окружения CODELAB_*.
+  ///
+  /// In en, this message translates to:
+  /// **'env'**
+  String get configSourceEnv;
+
+  /// Подпись источника строки MCP-сервера: локальный файл проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'this project'**
+  String get mcpSourceThisProject;
+
+  /// Подпись источника строки MCP-сервера из слоя 3, файла --config или окружения. Плейсхолдер file — путь, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'defined in {file}'**
+  String mcpSourceDefinedIn(String file);
+
+  /// Подпись цели записи страницы Agents & modes.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to'**
+  String get agentsSaveToTitle;
+
+  /// Пояснение цели записи страницы Agents & modes.
+  ///
+  /// In en, this message translates to:
+  /// **'One target for the mode and the reasoning effort.'**
+  String get agentsSaveToDescription;
+
+  /// Цель записи: пользовательский config.yaml.
+  ///
+  /// In en, this message translates to:
+  /// **'All projects'**
+  String get agentsTargetAll;
+
+  /// Цель записи: локальный файл проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'This project only'**
+  String get agentsTargetProject;
+
+  /// Заголовок блока режима разрешений новой сессии.
+  ///
+  /// In en, this message translates to:
+  /// **'Default permission mode'**
+  String get agentsModeSection;
+
+  /// Подпись блока режима.
+  ///
+  /// In en, this message translates to:
+  /// **'New sessions start in it after Restart agent; change it for one session from the composer.'**
+  String get agentsModeCaption;
+
+  /// Итоговый режим. Плейсхолдер mode — id режима с пометкой, не переводить id.
+  ///
+  /// In en, this message translates to:
+  /// **'Effective: {mode}'**
+  String agentsModeEffective(String mode);
+
+  /// Источник режима. Плейсхолдер source — подпись источника на языке интерфейса.
+  ///
+  /// In en, this message translates to:
+  /// **'Source: {source}'**
+  String agentsModeSource(String source);
+
+  /// Режим ask с запретом правок и команд от plan. Плейсхолдер mode — id режима; plan — id режима, не переводить. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'{mode} (edits and commands blocked by plan)'**
+  String agentsModeBlocked(String mode);
+
+  /// Подсказка у недоступного режима autopilot. Команда и флаг не переводятся. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Only as a launch flag of the agent (codelab-agent serve --permission-mode autopilot); never saved in config.'**
+  String get agentsAutopilotHint;
+
+  /// InfoBar: режим сужен недоверенным проектом. Плейсхолдер mode — режим с пометкой. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'This project is not trusted, so its config can only make the mode stricter. New sessions here use {mode}.'**
+  String agentsModeNarrowed(String mode);
+
+  /// Заголовок строки уровня рассуждения. Плейсхолдер source — подпись источника.
+  ///
+  /// In en, this message translates to:
+  /// **'Reasoning effort · {source}'**
+  String agentsEffortTitle(String source);
+
+  /// Заголовок блока уровня рассуждения.
+  ///
+  /// In en, this message translates to:
+  /// **'Default reasoning effort'**
+  String get agentsEffortSection;
+
+  /// Пояснение уровня рассуждения.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent as a session option only if the model supports reasoning; change it for one session from the composer.'**
+  String get agentsEffortDescription;
+
+  /// Заголовок подтверждения режима bypass. bypass — id режима. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Use bypass for new sessions?'**
+  String get agentsBypassTitle;
+
+  /// Текст подтверждения режима bypass. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Only critical commands, changes to the agent\'s configuration and network tools still ask. Commands run without asking and can reach the network too. Use bypass only in a disposable checkout.'**
+  String get agentsBypassBody;
+
+  /// Кнопка подтверждения режима bypass. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Use bypass'**
+  String get agentsBypassConfirm;
+
+  /// Баннер записи режима или уровня: значение действует. select по when (now, afterRestart, whenAgentStarts), в каждой ветке целое предложение. Плейсхолдер value — значение с пометкой, id не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{when, select, now{Saved. New sessions use {value}.} afterRestart{Saved. New sessions use {value} after Restart agent.} whenAgentStarts{Saved. New sessions use {value} when the agent starts.} other{Saved. New sessions use {value}.}}'**
+  String agentsBannerSaved(String value, String when);
+
+  /// Баннер записи: значение перекрыто другим слоем. Плейсхолдеры: target — цель записи, source — подпись источника, value — значение, when — когда применится.
+  ///
+  /// In en, this message translates to:
+  /// **'{when, select, now{Saved to {target}; {source} overrides it: new sessions use {value}.} afterRestart{Saved to {target}; {source} overrides it: new sessions use {value} after Restart agent.} whenAgentStarts{Saved to {target}; {source} overrides it: new sessions use {value} when the agent starts.} other{Saved to {target}; {source} overrides it: new sessions use {value}.}}'**
+  String agentsBannerOverridden(
+    String target,
+    String source,
+    String value,
+    String when,
+  );
+
+  /// Баннер записи: режим сужен недоверенным проектом. Плейсхолдеры: target, value, when. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'{when, select, now{Saved to {target}; the untrusted project overrides it: new sessions use {value}.} afterRestart{Saved to {target}; the untrusted project overrides it: new sessions use {value} after Restart agent.} whenAgentStarts{Saved to {target}; the untrusted project overrides it: new sessions use {value} when the agent starts.} other{Saved to {target}; the untrusted project overrides it: new sessions use {value}.}}'**
+  String agentsBannerNarrowed(String target, String value, String when);
+
+  /// Баннер записи, когда перечитывание не удалось. Плейсхолдер target — цель записи.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to {target}.'**
+  String agentsBannerSavedOnly(String target);
+
+  /// Баннер: подтверждение bypass устарело, запись не выполнена. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings changed while the dialog was open; bypass was not saved.'**
+  String get agentsBannerBypassStale;
+
+  /// Баннер: конфликт записи.
+  ///
+  /// In en, this message translates to:
+  /// **'The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.'**
+  String get agentsBannerConflict;
+
+  /// Баннер: запись отклонена или не удалась.
+  ///
+  /// In en, this message translates to:
+  /// **'The config was not saved.'**
+  String get agentsBannerNotSaved;
+
+  /// Баннер: слой цели не прочитан, запись не начиналась.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot save: the target config file is not available.'**
+  String get agentsBannerTargetUnavailable;
+
+  /// Вторая часть InfoBar «только чтение» удалённого агента. Команды и путь не переводить. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Change its modes and agents on that host: codelab config set, .codelab/agents.'**
+  String get agentsReadOnlyHint;
+
+  /// InfoBar: сторонний агент. Плейсхолдер agent — имя агента.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent settings are managed by {agent}.'**
+  String agentsReadOnlyManaged(String agent);
+
+  /// Заголовок блока таблицы определений агентов.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent definitions'**
+  String get agentsDefinitionsSection;
+
+  /// Подпись блока определений.
+  ///
+  /// In en, this message translates to:
+  /// **'Definitions are read when a session is created; choose one for a single session in the composer agent menu.'**
+  String get agentsDefinitionsCaption;
+
+  /// Кнопка и меню открытия папки определений.
+  ///
+  /// In en, this message translates to:
+  /// **'Open folder'**
+  String get agentsOpenFolder;
+
+  /// Пункт меню: папка определений пользователя. Плейсхолдер folder — путь, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'User definitions ({folder})'**
+  String agentsOpenUserFolder(String folder);
+
+  /// Пункт меню: папка определений проекта. Путь не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'This project (.codelab/agents)'**
+  String get agentsOpenProjectFolder;
+
+  /// Подсказка недоступного пункта меню: папки проекта нет.
+  ///
+  /// In en, this message translates to:
+  /// **'Create .codelab/agents in the project to add definitions.'**
+  String get agentsOpenProjectMissing;
+
+  /// Кнопка блока определений: перечитать определения.
+  ///
+  /// In en, this message translates to:
+  /// **'Reload'**
+  String get agentsReload;
+
+  /// Колонка таблицы определений.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get agentsColName;
+
+  /// Колонка таблицы определений.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get agentsColDescription;
+
+  /// Колонка таблицы определений.
+  ///
+  /// In en, this message translates to:
+  /// **'Source'**
+  String get agentsColSource;
+
+  /// Колонка таблицы определений: где доступно определение (сессия, субагент).
+  ///
+  /// In en, this message translates to:
+  /// **'Available in'**
+  String get agentsColAvailableIn;
+
+  /// Колонка таблицы определений.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools'**
+  String get agentsColTools;
+
+  /// Колонка таблицы определений.
+  ///
+  /// In en, this message translates to:
+  /// **'Model'**
+  String get agentsColModel;
+
+  /// Колонка таблицы определений.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get agentsColStatus;
+
+  /// Колонка таблицы пути файла определения в InfoBar.
+  ///
+  /// In en, this message translates to:
+  /// **'PATH'**
+  String get agentsColPath;
+
+  /// Колонка таблицы текста ошибки определения в InfoBar.
+  ///
+  /// In en, this message translates to:
+  /// **'MESSAGE'**
+  String get agentsColMessage;
+
+  /// Источник строки: встроенный тип агента.
+  ///
+  /// In en, this message translates to:
+  /// **'built-in'**
+  String get agentsBuiltIn;
+
+  /// Инструменты загруженного определения без списка: доступны все.
+  ///
+  /// In en, this message translates to:
+  /// **'all'**
+  String get agentsAllTools;
+
+  /// Модель загруженного определения без модели: используется модель сессии.
+  ///
+  /// In en, this message translates to:
+  /// **'session model'**
+  String get agentsSessionModel;
+
+  /// Статус строки определения.
+  ///
+  /// In en, this message translates to:
+  /// **'Available'**
+  String get agentsStatusAvailable;
+
+  /// Статус строки: встроенный тип заменён определением.
+  ///
+  /// In en, this message translates to:
+  /// **'Overridden'**
+  String get agentsStatusOverridden;
+
+  /// Статус строки: встроенный тип заменён файлом. Плейсхолдер path — путь, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Overridden by {path}'**
+  String agentsStatusOverriddenBy(String path);
+
+  /// Статус строки: модель определения не настроена.
+  ///
+  /// In en, this message translates to:
+  /// **'Model not configured'**
+  String get agentsStatusModelNotConfigured;
+
+  /// Статус строки: ошибка определения без номера строки.
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get agentsStatusError;
+
+  /// Статус строки: ошибка определения. Плейсхолдер line — номер строки.
+  ///
+  /// In en, this message translates to:
+  /// **'Error · line {line}'**
+  String agentsStatusErrorLine(int line);
+
+  /// Статус строки: имя определения повторяется.
+  ///
+  /// In en, this message translates to:
+  /// **'Not loaded: duplicate name'**
+  String get agentsStatusDuplicate;
+
+  /// Статус строки: пользовательское определение заменено проектным.
+  ///
+  /// In en, this message translates to:
+  /// **'Shadowed by project'**
+  String get agentsStatusShadowed;
+
+  /// Статус строки: subagents.enabled: false.
+  ///
+  /// In en, this message translates to:
+  /// **'Subagents off'**
+  String get agentsStatusSubagentsOff;
+
+  /// Область определения: сессия.
+  ///
+  /// In en, this message translates to:
+  /// **'session'**
+  String get agentsScopeSession;
+
+  /// Область определения: субагент.
+  ///
+  /// In en, this message translates to:
+  /// **'subagent'**
+  String get agentsScopeSubagent;
+
+  /// Область определения: и сессия, и субагент.
+  ///
+  /// In en, this message translates to:
+  /// **'both'**
+  String get agentsScopeBoth;
+
+  /// Заголовок InfoBar файла с ошибкой без номера строки. Текст ошибки ядра под ним не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot load the definition'**
+  String get agentsErrorTitle;
+
+  /// Заголовок InfoBar файла с ошибкой. Плейсхолдер line — номер строки.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot load the definition · line {line}'**
+  String agentsErrorTitleLine(int line);
+
+  /// Заголовок InfoBar: проект не доверенный. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Project definitions are not read'**
+  String get agentsUntrustedTitle;
+
+  /// Текст InfoBar: проект не доверенный. Плейсхолдер project — путь проекта. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Definitions in {project}/.codelab/agents are not read: the project is not trusted.'**
+  String agentsUntrustedBody(String project);
+
+  /// Текст InfoBar, когда путь проекта неизвестен. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Project definitions in .codelab/agents are not read: the project is not trusted.'**
+  String get agentsUntrustedBodyNoPath;
+
+  /// InfoBar: чтение определений не уложилось в 5 секунд.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent definitions were not read within 5 s.'**
+  String get agentsTimedOut;
+
+  /// InfoBar: непредвиденный сбой чтения определений.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent definitions could not be read.'**
+  String get agentsFailed;
+
+  /// Заголовок InfoBar: платформа отказала в открытии папки.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot open the folder'**
+  String get agentsOpenFailedTitle;
+
+  /// Текст InfoBar. Плейсхолдер label — путь или название папки.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open {label}.'**
+  String agentsOpenFailedBody(String label);
+
+  /// Подсказка кнопки «Open .codelab folder» без папки проекта. Плейсхолдер home — путь.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the CodeLab home folder: {home}'**
+  String skillsOpenCodelabTooltipHome(String home);
+
+  /// Подсказка кнопки «Open .codelab folder», когда домашняя папка неизвестна.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the CodeLab home folder'**
+  String get skillsOpenCodelabTooltipDefault;
+
+  /// Подсказка кнопки «Open .codelab folder»: открывается папка .codelab проекта. Плейсхолдер folder — путь.
+  ///
+  /// In en, this message translates to:
+  /// **'Open {folder}'**
+  String skillsOpenCodelabTooltip(String folder);
+
+  /// Подсказка кнопки «Open .codelab folder» с запасной папкой. Плейсхолдеры folder и home — пути.
+  ///
+  /// In en, this message translates to:
+  /// **'Open {folder}, or {home} if it does not exist'**
+  String skillsOpenCodelabTooltipOr(String folder, String home);
+
+  /// Кнопка заголовка страницы Skills & extensions. .codelab не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Open .codelab folder'**
+  String get skillsOpenCodelabButton;
+
+  /// Кнопка заголовка страницы Skills & extensions: перечитать вид.
+  ///
+  /// In en, this message translates to:
+  /// **'Reload'**
+  String get skillsReload;
+
+  /// Текст страницы без папки проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'Open a project folder to see the context files, skills and prompt templates the agent uses there.'**
+  String get skillsNoFolder;
+
+  /// Вторая часть InfoBar «только чтение» удалённого агента. Команда не переводится. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Its skills, context files and prompt templates are read on that host: codelab-agent config check.'**
+  String get skillsReadOnlyHint;
+
+  /// InfoBar: сторонний агент. Плейсхолдер agent — имя агента.
+  ///
+  /// In en, this message translates to:
+  /// **'Skills are managed by {agent}.'**
+  String skillsReadOnlyManaged(String agent);
+
+  /// Заголовок баннера успешной записи списка навыков.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved'**
+  String get skillsBannerSaved;
+
+  /// Заголовок баннера отказа или сбоя записи списка навыков.
+  ///
+  /// In en, this message translates to:
+  /// **'Not saved'**
+  String get skillsBannerNotSaved;
+
+  /// Заголовок баннера: платформа отказала в открытии папки.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot open the folder'**
+  String get skillsBannerCannotOpen;
+
+  /// Текст баннера. Плейсхолдер path — путь, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open {path}.'**
+  String skillsMsgOpenFailed(String path);
+
+  /// Текст баннера успешной записи списка навыков.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved. New sessions use it; open sessions keep their skills.'**
+  String get skillsMsgSaved;
+
+  /// Текст баннера: конфликт записи.
+  ///
+  /// In en, this message translates to:
+  /// **'The config changed on disk, so nothing was saved. The page was reloaded; review it and try again.'**
+  String get skillsMsgConflict;
+
+  /// Текст баннера: ядро отклонило конфиг. Плейсхолдер issues — тексты ядра как есть.
+  ///
+  /// In en, this message translates to:
+  /// **'The config was not saved: {issues}'**
+  String skillsMsgRejected(String issues);
+
+  /// Текст баннера: непредвиденный сбой записи.
+  ///
+  /// In en, this message translates to:
+  /// **'The config was not saved.'**
+  String get skillsMsgNotSaved;
+
+  /// Отказ записи списка навыков: список задан слоем, который клиент не пишет. Плейсхолдер source — путь файла или имя переменной. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Set in {source}; edit that file.'**
+  String skillsRefusalNotEditable(String source);
+
+  /// Отказ записи: имя отключено проектом, включить нельзя. Плейсхолдер source — путь файла. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled by the project config ({source}).'**
+  String skillsRefusalDisabledByProject(String source);
+
+  /// Отказ согласия на относительную папку в недоверенном проекте. Плейсхолдер element — элемент skills.extra_roots. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Trust this project to read {element}.'**
+  String skillsRefusalUntrusted(String element);
+
+  /// Отказ согласия, когда элемент папки неизвестен. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Trust this project to read this folder.'**
+  String get skillsRefusalUntrustedFolder;
+
+  /// Отказ записи: слой не читается. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'The config file of this layer cannot be read. Fix it first.'**
+  String get skillsRefusalLayerUnreadable;
+
+  /// InfoBar skills-untrusted: проект не доверенный. trusted_projects и AGENTS.md не переводить. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'This project is not in trusted_projects, so the agent does not read its skills and prompt templates. Your own skills and AGENTS.md files are shown.'**
+  String get skillsUntrustedTitle;
+
+  /// Подсказка InfoBar skills-untrusted. Плейсхолдер path — путь файла. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Trust is set in trusted_projects of {path}.'**
+  String skillsUntrustedHint(String path);
+
+  /// Заголовок раздела цепочки AGENTS.md.
+  ///
+  /// In en, this message translates to:
+  /// **'Context files'**
+  String get skillsSectionContext;
+
+  /// Заголовок раздела шаблонов промптов.
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt templates'**
+  String get skillsSectionTemplates;
+
+  /// Заголовок раздела навыков.
+  ///
+  /// In en, this message translates to:
+  /// **'Skills'**
+  String get skillsSectionSkills;
+
+  /// Пустой раздел файлов контекста.
+  ///
+  /// In en, this message translates to:
+  /// **'No AGENTS.md files for this folder.'**
+  String get skillsContextEmpty;
+
+  /// Колонка таблицы файлов контекста.
+  ///
+  /// In en, this message translates to:
+  /// **'FILE'**
+  String get skillsColFile;
+
+  /// Колонка таблицы файлов контекста.
+  ///
+  /// In en, this message translates to:
+  /// **'SIZE'**
+  String get skillsColSize;
+
+  /// Колонка таблицы шаблонов.
+  ///
+  /// In en, this message translates to:
+  /// **'COMMAND'**
+  String get skillsColCommand;
+
+  /// Колонка таблиц шаблонов и навыков.
+  ///
+  /// In en, this message translates to:
+  /// **'SOURCE'**
+  String get skillsColSource;
+
+  /// Колонка таблицы навыков.
+  ///
+  /// In en, this message translates to:
+  /// **'SKILL'**
+  String get skillsColSkill;
+
+  /// Колонка таблицы навыков: как вызвать навык (/skill:<имя>).
+  ///
+  /// In en, this message translates to:
+  /// **'INVOKE AS'**
+  String get skillsColInvokeAs;
+
+  /// Заголовок таблицы согласия на папки навыков других агентов.
+  ///
+  /// In en, this message translates to:
+  /// **'SKILLS OF OTHER AGENTS'**
+  String get skillsColOtherAgents;
+
+  /// Колонка таблицы сообщений баннера и предупреждений.
+  ///
+  /// In en, this message translates to:
+  /// **'MESSAGE'**
+  String get skillsColMessage;
+
+  /// Итог цепочки файлов контекста. Плейсхолдеры: count — число файлов, size — суммарный размер с единицей.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} file} other{{count} files}} · {size}'**
+  String skillsContextTotal(int count, String size);
+
+  /// Тег файла CLAUDE.md, взятого вместо AGENTS.md.
+  ///
+  /// In en, this message translates to:
+  /// **'used because this folder has no AGENTS.md'**
+  String get skillsContextClaudeAlias;
+
+  /// Тег файла, не попавшего в контекст из-за бюджета.
+  ///
+  /// In en, this message translates to:
+  /// **'not included (budget)'**
+  String get skillsContextOmitted;
+
+  /// Тег усечённого файла. Плейсхолдер size — размер с единицей.
+  ///
+  /// In en, this message translates to:
+  /// **'truncated to {size}'**
+  String skillsContextTruncated(String size);
+
+  /// Кнопка строки: открыть папку.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get skillsOpen;
+
+  /// Пустой раздел шаблонов.
+  ///
+  /// In en, this message translates to:
+  /// **'No prompt templates.'**
+  String get skillsTemplatesEmpty;
+
+  /// Пустой раздел навыков.
+  ///
+  /// In en, this message translates to:
+  /// **'No skills found.'**
+  String get skillsEmpty;
+
+  /// Подпись порядка поиска навыков. Пути и переменные не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Search order: .codelab/skills, then .agents/skills from this folder up to the repository root; then \$CODELAB_HOME/skills, ~/.agents/skills; extra roots last. The nearest overrides the farthest.'**
+  String get skillsSearchOrder;
+
+  /// Подпись под таблицей навыков.
+  ///
+  /// In en, this message translates to:
+  /// **'The list is fixed when a session opens: new and changed skills apply to new sessions.'**
+  String get skillsListFixed;
+
+  /// Тег навыка, который вызывается только командой.
+  ///
+  /// In en, this message translates to:
+  /// **'Command only'**
+  String get skillsTagCommandOnly;
+
+  /// Значение колонки «Вызов как» у навыка, который вызывает только модель.
+  ///
+  /// In en, this message translates to:
+  /// **'Model only'**
+  String get skillsInvokeModelOnly;
+
+  /// Семантическая подпись переключателя навыка. Плейсхолдер name — имя навыка.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled: {name}'**
+  String skillsToggleLabel(String name);
+
+  /// Тег навыка, перекрывшего навык пользователя.
+  ///
+  /// In en, this message translates to:
+  /// **'Overrides user skill'**
+  String get skillsOverridesUser;
+
+  /// Тег навыка, перекрывшего навык проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'Overrides project skill'**
+  String get skillsOverridesProject;
+
+  /// Тег навыка, перекрывшего навык из дополнительной папки skills.extra_roots.
+  ///
+  /// In en, this message translates to:
+  /// **'Overrides extra skill'**
+  String get skillsOverridesExtra;
+
+  /// Тег навыка, перекрывшего навык неизвестной области.
+  ///
+  /// In en, this message translates to:
+  /// **'Overrides another skill'**
+  String get skillsOverridesOther;
+
+  /// Подпись источника навыка из skills.extra_roots. Плейсхолдер entry — элемент списка, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{entry} (extra root)'**
+  String skillsExtraRoot(String entry);
+
+  /// Подпись источника навыка, чью папку не удалось определить.
+  ///
+  /// In en, this message translates to:
+  /// **'(unknown root)'**
+  String get skillsUnknownRoot;
+
+  /// Тег и заголовок InfoBar предупреждений ядра. Плейсхолдер count — число.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} warning} other{{count} warnings}}'**
+  String skillsWarningCount(int count);
+
+  /// Подпись согласия на папку навыков другого агента. Плейсхолдер entry — элемент skills.extra_roots, не переводить. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Read {entry}'**
+  String skillsConsentRead(String entry);
+
+  /// Подпись согласия: число найденных папок навыков.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} skill folder found.} other{{count} skill folders found.}}'**
+  String skillsConsentFound(int count);
+
+  /// Подпись согласия, когда число папок неизвестно.
+  ///
+  /// In en, this message translates to:
+  /// **'The number of skill folders is not counted.'**
+  String get skillsConsentNotCounted;
+
+  /// Подпись согласия на относительную папку. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Consent applies in every trusted project.'**
+  String get skillsConsentEveryProject;
+
+  /// Подпись согласия. Путь не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'The .agents/skills folder of a trusted project is read without consent.'**
+  String get skillsConsentAgentsFolder;
+
+  /// Исход фазы: чтение файлов контекста не уложилось в 5 секунд.
+  ///
+  /// In en, this message translates to:
+  /// **'Context files were not read within 5 s.'**
+  String get skillsPhaseTimedOutContext;
+
+  /// Исход фазы: чтение шаблонов не уложилось в 5 секунд.
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt templates were not read within 5 s.'**
+  String get skillsPhaseTimedOutTemplates;
+
+  /// Исход фазы: чтение навыков не уложилось в 5 секунд.
+  ///
+  /// In en, this message translates to:
+  /// **'Skills were not read within 5 s.'**
+  String get skillsPhaseTimedOutSkills;
+
+  /// Исход фазы: сбой чтения файлов контекста. Плейсхолдер errorType — имя типа ошибки, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Context files could not be read ({errorType}).'**
+  String skillsPhaseFailedContext(String errorType);
+
+  /// Исход фазы: сбой чтения шаблонов. Плейсхолдер errorType не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Prompt templates could not be read ({errorType}).'**
+  String skillsPhaseFailedTemplates(String errorType);
+
+  /// Исход фазы: сбой чтения навыков. Плейсхолдер errorType не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Skills could not be read ({errorType}).'**
+  String skillsPhaseFailedSkills(String errorType);
+
+  /// Исход фазы навыков: выключены конфигурацией. skills.enabled не переводить; source — путь файла.
+  ///
+  /// In en, this message translates to:
+  /// **'Skills are switched off: skills.enabled is false in {source}.'**
+  String skillsPhaseOff(String source);
+
+  /// Размер файла в байтах. Число с точкой по правилу D8.
+  ///
+  /// In en, this message translates to:
+  /// **'{size} B'**
+  String skillsSizeBytes(String size);
+
+  /// Размер файла в килобайтах. Число с точкой по правилу D8.
+  ///
+  /// In en, this message translates to:
+  /// **'{size} KB'**
+  String skillsSizeKilobytes(String size);
+
+  /// Размер файла в мегабайтах. Число с точкой по правилу D8.
+  ///
+  /// In en, this message translates to:
+  /// **'{size} MB'**
+  String skillsSizeMegabytes(String size);
+
+  /// Проблема списка нечитаемого вида страницы Skills & extensions.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot read the skills and extensions of this folder.'**
+  String get settingsProblemCannotReadExtensions;
+
+  /// Текст InfoBar ошибки определения, когда ядро не дало текста: модель не настроена.
+  ///
+  /// In en, this message translates to:
+  /// **'The model of this definition is not configured.'**
+  String get agentsErrorFallbackModel;
+
+  /// Текст InfoBar ошибки определения, когда ядро не дало текста: имя повторяется.
+  ///
+  /// In en, this message translates to:
+  /// **'Not loaded: another definition has the same name.'**
+  String get agentsErrorFallbackDuplicate;
+
+  /// Текст InfoBar ошибки определения, когда ядро не дало текста и причина неизвестна.
+  ///
+  /// In en, this message translates to:
+  /// **'The definition cannot be loaded.'**
+  String get agentsErrorFallbackOther;
 
   /// Заголовок страницы настроек «Keyboard».
   ///

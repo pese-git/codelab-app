@@ -39,6 +39,17 @@ final class PackageRule {
   final bool sealExclude;
 }
 
+/// Пакеты языка интерфейса: запрещены в ядре клиента.
+///
+/// Почему: ядро клиента общее с CLI, остаётся английским и без `intl`;
+/// текст по типизированным данным строит desktop. `webUnsafe` `intl` не
+/// ловит (он web-безопасен), поэтому нужен отдельный список.
+///
+/// Как использовать: добавляется к `webUnsafe` в правилах `codelab_client_core`
+/// и `codelab_client_acp` (change `add-desktop-localization`, D6, D10; spec
+/// workspace-architecture «intl в ядре клиента»).
+const uiLanguageForbidden = ['package:intl/', 'package:flutter_localizations/'];
+
 /// Транзитивные пакеты `gpt_markdown`, запрещённые в kit и app
 /// (design.md change `add-desktop-markdown`, D10).
 const _markdownTransitive = [
@@ -70,10 +81,20 @@ const rules = [
     forbidden: webUnsafe,
     exclude: ['lib/io.dart', 'lib/src/io/'],
   ),
-  PackageRule('packages/dart/codelab_client_acp', forbidden: webUnsafe),
+  // Протокольный клиент и ядро клиента не зависят от языка интерфейса: они
+  // общие с CLI и остаются английскими и без intl (design.md change
+  // `add-desktop-localization`, D6, D10; spec workspace-architecture).
+  // `webUnsafe` intl не ловит: он web-безопасен, правило фиксирует решение D6.
+  PackageRule(
+    'packages/dart/codelab_client_acp',
+    forbidden: [...webUnsafe, ...uiLanguageForbidden],
+  ),
   // Общий клиентский слой app и CLI — чистый Dart и web-безопасен; IO-адаптеры
   // клиента — в codelab_client_io (design D11 change `extract-acp-client-kit`).
-  PackageRule('packages/dart/codelab_client_core', forbidden: webUnsafe),
+  PackageRule(
+    'packages/dart/codelab_client_core',
+    forbidden: [...webUnsafe, ...uiLanguageForbidden],
+  ),
   // dart:io-адаптеры клиента для app и CLI: dart:io и IO-транспорты разрешены,
   // Flutter — нет (design D11 change `extract-acp-client-kit`).
   PackageRule(

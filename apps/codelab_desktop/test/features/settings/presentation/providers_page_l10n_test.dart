@@ -515,9 +515,34 @@ void main() {
 
       expect(find.text('Хранилище ключей: env'), findsOneWidget);
       expect(find.text('только чтение'), findsOneWidget);
+      // Заголовок InfoBar переведён, текст хранилища — как есть под ним в
+      // `content`, а не жирным заголовком (правило 4.5, D6).
+      final bar = _key('providers-store-unavailable');
       expect(
-        find.textContaining('OS key stores are not available yet'),
+        find.descendant(
+          of: bar,
+          matching: find.text('Хранилище секретов доступно только для чтения.'),
+        ),
         findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: bar,
+          matching: find.text('OS key stores are not available yet'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .getTopLeft(
+              find.text('Хранилище секретов доступно только для чтения.'),
+            )
+            .dy,
+        lessThan(
+          tester
+              .getTopLeft(find.text('OS key stores are not available yet'))
+              .dy,
+        ),
       );
       await tearDownApp(tester);
     });
@@ -998,7 +1023,10 @@ void main() {
         'удалось. Удалите его командой: codelab secret delete '
         'codelab/anthropic',
       );
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      // `ignore: {'local'}`: id провайдера `local` — данные на экране,
+      // а не подпись источника «local» (итерация 5, D7); в остальных
+      // вызовах помощник строгий.
+      await expectNoStaleLanguage(tester, from: en, to: ru, ignore: {'local'});
 
       await selectLanguage(tester, binding, AppLanguagePreference.en);
       expect(
@@ -1031,7 +1059,7 @@ void main() {
         'Конфигурация не сохранена: providers.local.api_key не должен '
         'содержать секрет в открытом виде.',
       );
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      await expectNoStaleLanguage(tester, from: en, to: ru, ignore: {'local'});
       await tearDownApp(tester);
     });
 
@@ -1063,14 +1091,14 @@ void main() {
       );
       expect(store.snapshots, snapshots);
       expect(store.applied, isEmpty);
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      await expectNoStaleLanguage(tester, from: en, to: ru, ignore: {'local'});
 
       await selectLanguage(tester, binding, AppLanguagePreference.en);
       expect(
         find.text('anthropic · Anthropic · Key: in file · 1 model'),
         findsOneWidget,
       );
-      await expectNoStaleLanguage(tester, from: ru, to: en);
+      await expectNoStaleLanguage(tester, from: ru, to: en, ignore: {'local'});
       await tearDownApp(tester);
     });
 
@@ -1100,7 +1128,7 @@ void main() {
         isFalse,
       );
       expect(find.text('local/qwen'), findsWidgets);
-      await expectNoStaleLanguage(tester, from: en, to: ru);
+      await expectNoStaleLanguage(tester, from: en, to: ru, ignore: {'local'});
       await tester.tap(_key('providers-remove-cancel'));
       await tester.pumpAndSettle();
       await tearDownApp(tester);
