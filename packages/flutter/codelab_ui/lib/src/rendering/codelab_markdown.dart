@@ -29,6 +29,7 @@ class CodeLabMarkdown extends StatefulWidget {
     required this.text,
     this.streaming = false,
     this.config,
+    this.wrapTables = false,
     super.key,
   });
 
@@ -39,6 +40,11 @@ class CodeLabMarkdown extends StatefulWidget {
   /// Ответ ещё стримится (последний элемент идущего хода).
   final bool streaming;
   final CodeLabMarkdownConfig? config;
+
+  /// Таблицы переносят текст по ширине, а не прокручиваются (см.
+  /// `CodeLabMarkdownConfig.wrapTables`). Действует, когда [config] не
+  /// передан; с готовой конфигурацией решает она.
+  final bool wrapTables;
 
   @override
   State<CodeLabMarkdown> createState() => _CodeLabMarkdownState();
@@ -65,8 +71,12 @@ class _CodeLabMarkdownState extends State<CodeLabMarkdown> {
     final given = widget.config;
     if (given != null) return given;
     final own = _own;
-    if (own != null && own.theme == theme) return own;
-    return _own = CodeLabMarkdownConfig(theme);
+    if (own != null &&
+        own.theme == theme &&
+        own.wrapTables == widget.wrapTables) {
+      return own;
+    }
+    return _own = CodeLabMarkdownConfig(theme, wrapTables: widget.wrapTables);
   }
 
   @override

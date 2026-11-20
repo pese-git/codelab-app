@@ -25,7 +25,6 @@ final class AboutInfo {
     required this.licenseCopyright,
     required this.configHome,
     required this.logDirectory,
-    required this.thirdPartyNotices,
   });
 
   /// Версия сборки app.
@@ -52,9 +51,6 @@ final class AboutInfo {
   /// Каталог журналов app: путь для `LocalFolderOpener`, в диагностику не
   /// попадает.
   final String logDirectory;
-
-  /// Текст `THIRD_PARTY_NOTICES.md` из ресурсов сборки.
-  final String thirdPartyNotices;
 }
 
 /// Вид подключения окна.

@@ -33,7 +33,7 @@ flowchart LR
 | Слой (`lib/src/`) | Для чего | Примеры |
 |---|---|---|
 | `atomics/` | базовые элементы без составных частей кита | `CodeLabText` (роли `title`…`mono`), `CodeLabBadge`, `CodeLabButton`, `CodeLabIconButton`, `CodeLabIcon`, `CodeLabMonospaceBlock`, `CodeLabStatusIndicator`, `CodeLabResizeHandle`, `CodeLabDialogTitle`, `CodeLabProgressIndicator`, `CodeLabTone`, `CodeLabShortcut` (каталог сочетаний), `CodeLabKeycaps` |
-| `molecules/` | составные из атомов | `CodeLabKeyValueList`, `CodeLabStepBreadcrumb`, `CodeLabThoughtBlock`, `CodeLabToolCallSummary`, `CodeLabPromptComposer`, `CodeLabApprovalOptionGroup`, `CodeLabSessionStatusBar`, `CodeLabConnectionBanner`, `CodeLabForm`, `CodeLabSettingsRow`, `CodeLabSettingsSection`, `CodeLabExpanderCard` |
+| `molecules/` | составные из атомов | `CodeLabKeyValueList`, `CodeLabStepBreadcrumb`, `CodeLabThoughtBlock`, `CodeLabToolCallSummary`, `CodeLabPromptComposer`, `CodeLabApprovalOptionGroup`, `CodeLabSessionStatusBar`, `CodeLabConnectionBanner`, `CodeLabForm`, `CodeLabSettingsRow`, `CodeLabSettingsSection`, `CodeLabExpanderCard`, `CodeLabSelectorBar` |
 | `rendering/` | отрисовка ответа агента как markdown | `CodeLabMarkdown`, `CodeLabMarkdownConfig`, `CodeLabMarkdownScope`, `CodeLabCodeBlock`, `CodeLabCodeTheme`, `CodeLabCodeHighlighter`, `CodeLabMarkdownStats` |
 | `organisms/` | ленты, плитки, панели, экраны | `CodeLabTranscriptPanel`, `CodeLabToolCallTile`, `CodeLabApprovalPrompt`, `CodeLabStatusTable`, `CodeLabUsagePane`, `CodeLabTerminalPane`, `CodeLabAgentsPane`, `CodeLabToolDock`, `CodeLabSessionSidebar`, `CodeLabFileTree`, `CodeLabFilePreview`, `CodeLabProgressChecklist`, `CodeLabPromptQueuePanel`, `CodeLabSettingsNavigation`, `CodeLabConnectionScreen`, `CodeLabStartScreen`, `CodeLabWorkbenchLayout`, `CodeLabWorkbenchShortcuts`, `CodeLabShortcutTable` |
 
@@ -44,6 +44,8 @@ flowchart LR
 - `CodeLabTerminalPane` получает виджет терминала в слот `content`; сам `xterm2` в кит не импортируется.
 - `CodeLabSettingsRow` показывает описание под заголовком не длиннее двух строк с многоточием; параметр `descriptionMaxLines` меняет предел, `null` снимает ограничение (страница, которой важен весь текст, например «General» приложения).
 - `CodeLabSettingsRow.footer` рисует элемент под заголовком и описанием внутри той же карточки (переключатель с длинной подписью в узкой области); без него вёрстка прежняя.
+- `CodeLabSelectorBar<T>` — полоса вкладок с подчёркиванием выбранной: `items` (`CodeLabSelectorItem` со значением, подписью и ключом теста), `value`, `onChanged`, `semanticLabel`. Подписи не обрезаются, а при нехватке места ряд прокручивается по горизонтали; выбранную вкладку держит вызывающий, повторное нажатие на неё `onChanged` не вызывает. Ширина родителя должна быть ограниченной.
+- `CodeLabMarkdown(wrapTables: true)` — таблицы переносят текст ячеек по ширине вместо горизонтальной прокрутки (правовые документы Legal); по умолчанию `false`, лента агента прокручивает широкие таблицы.
 - `CodeLabStatusTable` рисует готовые строки и ячейки; действие строки — колбэк.
 - `CodeLabUsagePane` показывает уже отформатированные значения (`CodeLabUsageCard`, `CodeLabUsageRow`, `CodeLabUsageNote`); кит ничего не считает.
 

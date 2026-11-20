@@ -1,6 +1,7 @@
 import 'package:codelab_client_acp/codelab_client_acp.dart' show Logger;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../features/settings/application/legal_documents.dart' show LegalTab;
 import 'app_destination.dart';
 import 'settings_page.dart';
 import 'settings_page_store.dart';
@@ -92,7 +93,13 @@ class NavigationCubit extends Cubit<AppDestination> {
 
   /// Переключает страницу на экране настроек; скрытая или уже выбранная
   /// страница игнорируется.
-  Future<void> selectSettingsPage(SettingsPage page) async {
+  ///
+  /// [legalTab] — вкладка страницы «Legal» (D1 `add-app-legal-page`); для
+  /// других страниц отбрасывается, в `last_page` не пишется.
+  Future<void> selectSettingsPage(
+    SettingsPage page, {
+    LegalTab? legalTab,
+  }) async {
     final current = state;
     if (current is! SettingsDestination ||
         current.page == page ||
@@ -100,7 +107,13 @@ class NavigationCubit extends Cubit<AppDestination> {
       return;
     }
     _attempt++;
-    emit(SettingsDestination(page, returnTo: current.returnTo));
+    emit(
+      SettingsDestination(
+        page,
+        returnTo: current.returnTo,
+        legalTab: page == SettingsPage.legal ? legalTab : null,
+      ),
+    );
     _logger?.debug('settings.page_selected', context: {'page': page.slug});
     await _savePage(page);
   }

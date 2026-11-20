@@ -10,6 +10,7 @@ import 'package:codelab_desktop/core/platform/system_accent_source.dart'
 import 'package:codelab_desktop/core/platform/local_folder_opener.dart';
 import 'package:codelab_desktop/core/platform/startup_preferences.dart';
 import 'package:codelab_desktop/features/settings/application/about_diagnostics.dart';
+import 'package:codelab_desktop/features/settings/application/legal_ports.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart'
     show AppLanguagePreference, AppLanguagePreferences;
 import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snapshot_store.dart'
@@ -140,6 +141,9 @@ final class CodeLabTestBinding {
     StartupPreferences? startupPreferences,
     // Данные раздела «About» (D11): тесты задают версии и пути сами.
     AboutInfo? aboutInfo,
+    // Порты страницы «Legal» (`add-app-legal-page`, D7): тесты не читают
+    // `rootBundle` и реестр лицензий.
+    LegalPorts? legalPorts,
     LocalFolderOpener? localFolderOpener,
     // Часы рабочего места (задержки ответа сочетанием, D14): тест двигает их
     // явно, а не ждёт реальное время (`testing.md` §20).
@@ -171,6 +175,7 @@ final class CodeLabTestBinding {
       systemAccentSource: systemAccentSource,
       startupPreferences: startupPreferences,
       aboutInfo: aboutInfo,
+      legalPorts: legalPorts,
       localFolderOpener: localFolderOpener,
       language:
           languageStart ??

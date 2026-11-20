@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/foundation.dart' show LicenseRegistry;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -13,10 +12,10 @@ import '../../../core/platform/local_folder_opener.dart';
 import '../../../l10n/l10n.dart';
 import '../application/about_diagnostics.dart';
 import '../application/about_ports.dart';
-import '../application/third_party_notices.dart';
+import '../application/legal_documents.dart';
 
 /// Раздел «About» страницы «General»: версии, лицензия, папка настроек,
-/// диагностика, сторонние уведомления, заметки о выпуске и папка журналов
+/// диагностика, ссылки на страницу «Legal», заметки о выпуске и папка журналов
 /// (design.md change `add-app-general-page`, D11–D14; spec app-settings
 /// «Раздел «About» страницы «General»»).
 ///
@@ -34,9 +33,17 @@ import '../application/third_party_notices.dart';
 /// Как использовать: `GeneralPage` создаёт раздел, если ему передан
 /// [AboutPorts]; `AppLanguageCubit` берётся из ближайшего `BlocProvider`.
 class AboutSection extends StatefulWidget {
-  const AboutSection({required this.ports, super.key});
+  const AboutSection({
+    required this.ports,
+    required this.onOpenLegal,
+    super.key,
+  });
 
   final AboutPorts ports;
+
+  /// Переход на страницу «Legal» (D9): вкладку и источник знает раздел, а
+  /// `NavigationCubit` и журнал — хозяин страницы; виджет навигации не знает.
+  final void Function(LegalTab tab, LegalLinkSource from) onOpenLegal;
 
   @override
   State<AboutSection> createState() => _AboutSectionState();
@@ -138,14 +145,6 @@ class _AboutSectionState extends State<AboutSection> {
     }
   }
 
-  Future<void> _showThirdParty(AboutInfo about) async {
-    _log('third_party', 'opened');
-    await showDialog<void>(
-      context: context,
-      builder: (_) => _ThirdPartyDialog(notices: about.thirdPartyNotices),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -198,7 +197,16 @@ class _AboutSectionState extends State<AboutSection> {
                   children: [
                     _InfoRow(
                       label: l10n.settingsGeneralAboutLicense,
-                      value: about.licenseName,
+                      // `MIT` — ссылка на вкладку «License» (D9); само
+                      // название не переводится.
+                      valueWidget: HyperlinkButton(
+                        key: const ValueKey('settings-general-about-license'),
+                        onPressed: () => widget.onOpenLegal(
+                          LegalTab.license,
+                          LegalLinkSource.about,
+                        ),
+                        child: Text(about.licenseName),
+                      ),
                       detail: about.licenseCopyright,
                     ),
                     _InfoRow(
@@ -218,10 +226,29 @@ class _AboutSectionState extends State<AboutSection> {
                           child: Text(l10n.settingsGeneralAboutCopyDiagnostics),
                         ),
                         Button(
+                          key: const ValueKey('settings-general-about-privacy'),
+                          onPressed: () => widget.onOpenLegal(
+                            LegalTab.privacyPolicy,
+                            LegalLinkSource.about,
+                          ),
+                          child: Text(l10n.settingsLegalTabPrivacy),
+                        ),
+                        Button(
+                          key: const ValueKey('settings-general-about-terms'),
+                          onPressed: () => widget.onOpenLegal(
+                            LegalTab.termsOfUse,
+                            LegalLinkSource.about,
+                          ),
+                          child: Text(l10n.settingsLegalTabTerms),
+                        ),
+                        Button(
                           key: const ValueKey(
                             'settings-general-about-third-party',
                           ),
-                          onPressed: () => unawaited(_showThirdParty(about)),
+                          onPressed: () => widget.onOpenLegal(
+                            LegalTab.thirdPartyNotices,
+                            LegalLinkSource.about,
+                          ),
                           child: Text(l10n.settingsGeneralAboutThirdParty),
                         ),
                         Button(
@@ -291,10 +318,18 @@ class _AboutSectionState extends State<AboutSection> {
 /// Строка «подпись — значение» раздела; значения (`MIT`, путь, версии) не
 /// переводятся.
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value, this.detail});
+  const _InfoRow({
+    required this.label,
+    this.value,
+    this.valueWidget,
+    this.detail,
+  }) : assert(value != null || valueWidget != null);
 
   final String label;
-  final String value;
+  final String? value;
+
+  /// Значение виджетом (ссылка `MIT`); вместо [value].
+  final Widget? valueWidget;
   final String? detail;
 
   @override
@@ -308,7 +343,7 @@ class _InfoRow extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           CodeLabText(label, role: CodeLabTextRole.caption, color: secondary),
-          CodeLabText(value),
+          valueWidget ?? CodeLabText(value!),
           if (detail != null && detail!.isNotEmpty)
             CodeLabText(
               detail!,
@@ -317,110 +352,6 @@ class _InfoRow extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-/// Диалог `settings-general-third-party-dialog`: текст
-/// `THIRD_PARTY_NOTICES.md` из ресурсов сборки и лицензии пакетов из реестра
-/// Flutter (D13).
-///
-/// Почему не `showLicensePage`: он принадлежит Material и требует своих
-/// локализаций и темы, а app на Fluent. Работает без сети: оба источника —
-/// ресурсы сборки.
-class _ThirdPartyDialog extends StatefulWidget {
-  const _ThirdPartyDialog({required this.notices});
-
-  final String notices;
-
-  @override
-  State<_ThirdPartyDialog> createState() => _ThirdPartyDialogState();
-}
-
-class _ThirdPartyDialogState extends State<_ThirdPartyDialog> {
-  late final Future<Map<String, List<String>>> _licenses = _collect();
-
-  /// Записи реестра: выделяются один раз, а не при каждой перестройке диалога.
-  late final String _records = thirdPartyRecordsOf(widget.notices);
-
-  /// Лицензии пакетов по имени пакета; сбой реестра не мешает показать
-  /// уведомления — остаётся то, что успело собраться.
-  Future<Map<String, List<String>>> _collect() async {
-    final byPackage = <String, List<String>>{};
-    try {
-      await for (final entry in LicenseRegistry.licenses) {
-        final text = entry.paragraphs.map((p) => p.text).join('\n');
-        for (final package in entry.packages) {
-          byPackage.putIfAbsent(package, () => []).add(text);
-        }
-      }
-    } on Object {
-      // Реестр лицензий недоступен: показываем уведомления без списка.
-    }
-    return byPackage;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return ContentDialog(
-      key: const ValueKey('settings-general-third-party-dialog'),
-      title: Text(l10n.settingsGeneralAboutThirdParty),
-      constraints: const BoxConstraints(maxWidth: 720, maxHeight: 640),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Подпись объясняет, почему записи на русском при любом языке
-            // интерфейса: это юридический текст реестра, он не переводится
-            // (D13).
-            CodeLabText(
-              l10n.settingsGeneralAboutThirdPartyCaption,
-              role: CodeLabTextRole.caption,
-            ),
-            const SizedBox(height: 8),
-            CodeLabMarkdown(id: 'third-party-notices', text: _records),
-            const SizedBox(height: 16),
-            CodeLabText(
-              l10n.settingsGeneralAboutPackageLicenses,
-              role: CodeLabTextRole.strong,
-            ),
-            const SizedBox(height: 8),
-            FutureBuilder<Map<String, List<String>>>(
-              future: _licenses,
-              builder: (context, snapshot) {
-                final licenses = snapshot.data;
-                if (licenses == null) {
-                  return const Align(
-                    alignment: Alignment.centerLeft,
-                    child: ProgressRing(),
-                  );
-                }
-                final names = licenses.keys.toList()..sort();
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final name in names)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Expander(
-                          header: Text(name),
-                          content: SelectableText(licenses[name]!.join('\n\n')),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        Button(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(l10n.settingsGeneralAboutClose),
-        ),
-      ],
     );
   }
 }

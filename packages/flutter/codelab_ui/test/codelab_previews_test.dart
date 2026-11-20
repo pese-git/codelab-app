@@ -59,6 +59,12 @@ void main() {
     );
   });
 
+  testWidgets('selector bar preview renders without overflow', (tester) async {
+    await tester.pumpWidget(codelabSelectorBarPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabSelectorBar<String>), findsOneWidget);
+  });
+
   testWidgets('key-value list previews render in both themes', (tester) async {
     await tester.pumpWidget(codelabKeyValueListPreview());
     expect(tester.takeException(), isNull);

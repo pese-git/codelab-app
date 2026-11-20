@@ -41,8 +41,6 @@ const _about = AboutInfo(
   licenseCopyright: 'Copyright (c) 2026 alice',
   configHome: '/Users/alice/.codelab-test',
   logDirectory: '/Users/alice/Library/Application Support/CodeLab/logs',
-  thirdPartyNotices:
-      'See https://devbox:7420/acp?t=sk-test-leak-0123456789 MARKER_ENV',
 );
 
 DiagnosticsContext _context({
@@ -149,7 +147,6 @@ void main() {
         licenseCopyright: 'Copyright (c) 2026 x',
         configHome: '~/.codelab',
         logDirectory: '/var/log/x',
-        thirdPartyNotices: '',
       );
 
       final lines = _lines(diagnosticsReportOf(other, _context()));
@@ -244,7 +241,6 @@ void main() {
       expect(report, isNot(contains(_about.licenseCopyright)));
       expect(report, isNot(contains(_about.configHome)));
       expect(report, isNot(contains(_about.logDirectory)));
-      expect(report, isNot(contains(_about.thirdPartyNotices)));
       expect(report, isNot(contains('MIT')));
     });
   });
