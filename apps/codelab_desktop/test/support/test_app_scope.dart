@@ -3,6 +3,12 @@ import 'dart:convert';
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/appearance/app_appearance_start.dart';
 import 'package:codelab_desktop/app/language/app_language_start.dart';
+import 'package:codelab_desktop/app/onboarding/onboarding_start.dart';
+import 'package:codelab_desktop/core/platform/onboarding_preferences.dart'
+    show OnboardingPreferences;
+import 'package:codelab_desktop/features/onboarding/application/onboarding_probe.dart'
+    show OnboardingProbe;
+import 'package:codelab_setup/codelab_setup.dart' show NoProviderConfigured;
 import 'package:codelab_desktop/core/platform/app_appearance_preferences.dart'
     show AppAppearancePreferences;
 import 'package:codelab_desktop/core/platform/system_accent_source.dart'
@@ -41,6 +47,7 @@ import 'package:flutter_test/flutter_test.dart'
     show TestWidgetsFlutterBinding, addTearDown;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'fake_onboarding.dart';
 import 'in_memory_profile_store.dart';
 
 /// stdio-профиль, который тестовая сборка делает профилем по умолчанию.
@@ -123,6 +130,13 @@ final class CodeLabTestBinding {
     AppLanguagePreference languagePreference = AppLanguagePreference.system,
     // Целиком начальный язык с диагностикой чтения (события `app.*`).
     AppLanguageStart? languageStart,
+    // Onboarding первого запуска (`add-app-onboarding`, D3): без шва он не
+    // показывается, и прежние тесты рабочего места не меняются. Порты фактов и
+    // флага подменены двойниками, чтобы тест не читал `~/.codelab` и
+    // `shared_preferences`.
+    OnboardingStart? onboarding,
+    OnboardingProbe? onboardingProbe,
+    OnboardingPreferences? onboardingPreferences,
     // Порт хранения языка: тесты сбоя записи подставляют двойник; без него
     // запись идёт в `shared_preferences` (мок в памяти).
     AppLanguagePreferences? languagePreferences,
@@ -172,6 +186,12 @@ final class CodeLabTestBinding {
       startupPreferences: startupPreferences,
       aboutInfo: aboutInfo,
       localFolderOpener: localFolderOpener,
+      onboarding: onboarding,
+      onboardingProbe:
+          onboardingProbe ??
+          FakeOnboardingProbe(onboardingFacts(const NoProviderConfigured())),
+      onboardingPreferences:
+          onboardingPreferences ?? FakeOnboardingPreferences(),
       language:
           languageStart ??
           AppLanguageStart(preference: languagePreference, locale: locale),

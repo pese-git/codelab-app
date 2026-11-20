@@ -62,25 +62,25 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 3. Итерация 3 — экран, мастер, старт рабочего места
 
-- [ ] 3.1 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_setup_steps_test.dart` — подписи, `✓` у пройденных, выделение текущего, перенос по ширине, семантика списка и текущего шага (D12).
-- [ ] 3.2 `[desktop]` Реализация 3.1: `lib/src/molecules/codelab_setup_steps.dart`, экспорт, пример в превью кита, строка в `AGENTS.md` кита. 3.1 зелёный.
-- [ ] 3.3 `[desktop]` Красный: widget-тесты `test/features/onboarding/presentation/onboarding_screen_test.dart` на `OnboardingCubit` с двойниками. Spec app-onboarding:
+- [x] 3.1 `[desktop]` Красный: `packages/flutter/codelab_ui/test/codelab_setup_steps_test.dart` — подписи, `✓` у пройденных, выделение текущего, перенос по ширине, семантика списка и текущего шага (D12).
+- [x] 3.2 `[desktop]` Реализация 3.1: `lib/src/molecules/codelab_setup_steps.dart`, экспорт, пример в превью кита, строка в `AGENTS.md` кита. 3.1 зелёный.
+- [x] 3.3 `[desktop]` Красный: widget-тесты `test/features/onboarding/presentation/onboarding_screen_test.dart` на `OnboardingCubit` с двойниками. Spec app-onboarding:
   - «Шаг «What CodeLab does»» — «Нет обещания связки ключей»;
   - «Шаг «Permissions»» — «Режим по умолчанию», «Режим из общего с CLI конфига», внешний профиль;
   - «Шаг «Choose a model» и мастер провайдера» — карточки по таблице пресетов мастера, «Только переменная окружения», «Битый конфиг» (кнопки неактивны), «Ключ не найден»;
   - «Шаг «Privacy»» — «Ключи из переменных окружения», «Ключи в файле», «Нечего принимать» (нет ссылок на документы);
   - «Локализация и доступность onboarding» — «Русский интерфейс», «Узкое окно», фокус на заголовке шага;
   - ключи тестов `onboarding-*`.
-- [ ] 3.4 `[desktop]` Реализация 3.3: `features/onboarding/presentation/` — `OnboardingScreen`, виджеты шагов, тексты по фактам (D9), ARB `en` и `ru` (`onboarding*`). 3.3 зелёный, `l10n:check` зелёный; русские тексты вычитывает пользователь по разделу «Onboarding» `l10n-glossary.md`.
-- [ ] 3.5 `[desktop]` Красный: `test/features/onboarding/presentation/onboarding_wizard_test.dart` на временном `CODELAB_HOME` с `secrets.backend: file` и тестовым сервером `/models` (образец — тесты мастера страницы Providers). Spec app-onboarding «Шаг «Choose a model» и мастер провайдера», сценарии «Провайдер с ключом в файле» (диалог начинается с «Base URL», `entry: onboarding`, «Make default» неснимаемый, нет «This project only»; маркер ключа не в журнале и не в состоянии onboarding) и «Отмена мастера».
-- [ ] 3.6 `[desktop]` Реализация 3.5: `OnboardingWizardOpener` в `app_scope.dart` (общий код с `EmbeddedWizardOpener`, `entry: onboarding`), `PresetChosen` после открытия, закрытие Cubit мастера после диалога (D8). 3.5 зелёный.
-- [ ] 3.7 `[desktop]` Красный: `test/app/codelab_app_onboarding_test.dart`. Spec app-onboarding:
+- [x] 3.4 `[desktop]` Реализация 3.3: `features/onboarding/presentation/` — `OnboardingScreen`, виджеты шагов, тексты по фактам (D9), ARB `en` и `ru` (`onboarding*`). 3.3 зелёный, `l10n:check` зелёный; русские тексты вычитывает пользователь по разделу «Onboarding» `l10n-glossary.md`.
+- [x] 3.5 `[desktop]` Красный: `test/features/onboarding/presentation/onboarding_wizard_test.dart` на временном `CODELAB_HOME` с `secrets.backend: file` и тестовым сервером `/models` (образец — тесты мастера страницы Providers). Spec app-onboarding «Шаг «Choose a model» и мастер провайдера», сценарии «Провайдер с ключом в файле» (диалог начинается с «Base URL», `entry: onboarding`, «Make default» неснимаемый, нет «This project only»; маркер ключа не в журнале и не в состоянии onboarding) и «Отмена мастера».
+- [x] 3.6 `[desktop]` Реализация 3.5: `OnboardingWizardOpener` в `app_scope.dart` (общий код с `EmbeddedWizardOpener`, `entry: onboarding`), `PresetChosen` после открытия, закрытие Cubit мастера после диалога (D8). 3.5 зелёный.
+- [x] 3.7 `[desktop]` Красный: `test/app/codelab_app_onboarding_test.dart`. Spec app-onboarding:
   - «Показ onboarding при первом запуске» — «Первый запуск» (в дереве нет `CodeLabShell`), «Onboarding пройден»;
   - «Завершение onboarding и старт рабочего места» — «Проект восстановлен, агент ждёт конца onboarding»: двойник открывателя встроенного агента не вызван до «Start using CodeLab», после — один раз с `/work/app`;
   - spec agent-workbench-ui «Агент стартует сам» — «Восстановленный проект при первом показе onboarding»;
   - без шва `onboarding:` прежние тесты рабочего места зелёные.
-- [ ] 3.8 `[desktop]` Реализация 3.7: чтение флага в `main.dart` до `runApp`, шов `createCodeLabRootScope(onboarding:)` и `CodeLabTestBinding(onboarding:)`, модуль с событиями чтения, ветка `OnboardingDestination` в `_CodeLabHome`, `startOnLaunch` при первом `WorkbenchDestination` (D3, D5). 3.7 зелёный.
-- [ ] 3.9 `codelab-architect` (условная): если к началу итерации 3 change `add-privacy-policy` уже влит и страница «Settings › Legal» есть в сборке, до кода дополнить design.md решением о переходе «onboarding → Legal → onboarding» в `NavigationCubit` и спецификацию шага «Privacy» сценариями ссылок (D10, D17); иначе ссылки включает `add-privacy-policy`, и задача закрывается без правок.
+- [x] 3.8 `[desktop]` Реализация 3.7: чтение флага в `main.dart` до `runApp`, шов `createCodeLabRootScope(onboarding:)` и `CodeLabTestBinding(onboarding:)`, модуль с событиями чтения, ветка `OnboardingDestination` в `_CodeLabHome`, `startOnLaunch` при первом `WorkbenchDestination` (D3, D5). 3.7 зелёный.
+- [x] 3.9 (не требуется: страницы «Settings › Legal» в сборке нет, `add-privacy-policy` не создан) `codelab-architect` (условная): если к началу итерации 3 change `add-privacy-policy` уже влит и страница «Settings › Legal» есть в сборке, до кода дополнить design.md решением о переходе «onboarding → Legal → onboarding» в `NavigationCubit` и спецификацию шага «Privacy» сценариями ссылок (D10, D17); иначе ссылки включает `add-privacy-policy`, и задача закрывается без правок.
 
 ## 4. Итерация 4 — интеграция, документация, проверки
 

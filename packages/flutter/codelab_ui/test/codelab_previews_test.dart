@@ -89,6 +89,21 @@ void main() {
     );
   });
 
+  // Задача 3.2 change `add-app-onboarding` (D12): превью строки шагов
+  // onboarding в светлой и тёмной теме.
+  testWidgets('setup steps previews render in both themes', (tester) async {
+    await tester.pumpWidget(codelabSetupStepsPreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabSetupSteps), findsOneWidget);
+
+    await tester.pumpWidget(codelabSetupStepsDarkPreview());
+    expect(tester.takeException(), isNull);
+    expect(
+      FluentTheme.of(tester.element(find.byType(CodeLabSetupSteps))).brightness,
+      Brightness.dark,
+    );
+  });
+
   // Задача 5.6 change `add-provider-setup-ui` (D19): превью организма
   // `CodeLabStatusTable` в светлой и тёмной теме — функции
   // `codelabStatusTablePreview` и `codelabStatusTableDarkPreview` в

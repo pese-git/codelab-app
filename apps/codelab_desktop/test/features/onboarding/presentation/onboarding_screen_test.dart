@@ -28,10 +28,8 @@
 // - «Next» на шаге модели есть только в `Saved`; до этого — «Set up later».
 
 import 'package:codelab_desktop/features/onboarding/application/onboarding_cubit.dart';
-import 'package:codelab_desktop/features/onboarding/application/onboarding_wizard_opener.dart';
 import 'package:codelab_desktop/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:codelab_desktop/features/settings/application/provider_wizard_cubit.dart';
-import 'package:codelab_desktop/features/settings/application/provider_wizard_view.dart';
 import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:fluent_ui/fluent_ui.dart';

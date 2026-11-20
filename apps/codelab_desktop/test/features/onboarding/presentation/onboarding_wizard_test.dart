@@ -18,14 +18,11 @@
 // отправляет автомату `PresetChosen(presetId)`, поэтому диалог начинается с
 // «Base URL». Закрывает Cubit владелец (экран после диалога).
 
-import 'dart:async';
 import 'dart:io';
 
-import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/embedded_logger.dart';
 import 'package:codelab_desktop/app/provider_settings_session.dart';
 import 'package:codelab_desktop/features/onboarding/application/onboarding_wizard_opener.dart';
-import 'package:codelab_desktop/features/settings/application/provider_wizard_cubit.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

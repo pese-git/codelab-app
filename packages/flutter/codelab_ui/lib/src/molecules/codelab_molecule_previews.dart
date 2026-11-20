@@ -9,6 +9,7 @@ import 'codelab_form.dart';
 import 'codelab_key_value_list.dart';
 import 'codelab_prompt_composer.dart';
 import 'codelab_session_status_bar.dart';
+import 'codelab_setup_steps.dart';
 import 'codelab_settings_row.dart';
 import 'codelab_settings_section.dart';
 import 'codelab_step_breadcrumb.dart';
@@ -435,6 +436,43 @@ class _BreadcrumbSample extends StatelessWidget {
     return const CodeLabStepBreadcrumb(
       steps: ['API type', 'Base URL', 'Key', 'Check', 'Model', 'Review'],
       current: 3,
+    );
+  }
+}
+
+/// Строка шагов onboarding: два пройденных шага и текущий (change
+/// `add-app-onboarding`, D12).
+@Preview(
+  name: 'Setup steps',
+  group: codelabMoleculePreviewGroup,
+  size: Size(720, 60),
+)
+Widget codelabSetupStepsPreview() {
+  return const _AcpPreviewSurface(child: _SetupStepsSample());
+}
+
+@Preview(
+  name: 'Setup steps (dark)',
+  group: codelabMoleculePreviewGroup,
+  size: Size(720, 60),
+  brightness: Brightness.dark,
+)
+Widget codelabSetupStepsDarkPreview() {
+  return const _AcpPreviewSurface(
+    brightness: Brightness.dark,
+    child: _SetupStepsSample(),
+  );
+}
+
+class _SetupStepsSample extends StatelessWidget {
+  const _SetupStepsSample();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CodeLabSetupSteps(
+      steps: ['What CodeLab does', 'Permissions', 'Choose a model', 'Privacy'],
+      current: 2,
+      done: {0, 1},
     );
   }
 }

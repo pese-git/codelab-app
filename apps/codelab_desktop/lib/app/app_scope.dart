@@ -45,6 +45,7 @@ import 'package:codelab_setup/codelab_setup.dart'
     show
         AgentLaunchKind,
         EditableSettings,
+        PresetChosen,
         ProviderWizardEntry,
         resolveSettingsAccess;
 import 'package:cherrypick/cherrypick.dart';
@@ -101,6 +102,12 @@ import 'default_settings_pages.dart';
 import 'about_ports_factory.dart';
 import 'build_version.dart';
 import 'embedded_logger.dart';
+import 'onboarding/onboarding_start.dart';
+import 'onboarding_probe.dart';
+import '../core/platform/onboarding_preferences.dart';
+import '../features/onboarding/application/onboarding_cubit.dart';
+import '../features/onboarding/application/onboarding_probe.dart';
+import '../features/onboarding/application/onboarding_wizard_opener.dart';
 import 'embedded_mcp_status_source.dart';
 import 'embedded_secret_migration_runner.dart';
 import 'embedded_transport_resolver.dart';
@@ -108,6 +115,7 @@ import 'agent_definitions_loader.dart';
 import 'provider_settings_session.dart';
 import 'provider_setup_offer.dart';
 import 'provider_setup_probe.dart';
+import 'navigation/app_destination.dart';
 import 'navigation/navigation_cubit.dart';
 import 'navigation/settings_page.dart';
 import 'navigation/settings_page_store.dart';
@@ -137,6 +145,12 @@ Scope createCodeLabRootScope({
   // языке. Без шва — `en` (тесты и хосты без предпочтения).
   AppLanguageStart? language,
   AppLanguagePreferences? languagePreferences,
+  // Шов onboarding первого запуска (`add-app-onboarding`, D3): `main` читает
+  // флаг до `runApp`. Без шва onboarding не показывается (тесты и хосты без
+  // него); порты фактов и флага — швы тестов.
+  OnboardingStart? onboarding,
+  OnboardingProbe? onboardingProbe,
+  OnboardingPreferences? onboardingPreferences,
   // Шов оформления (`add-app-appearance-page`, D13): `main` читает документ и
   // файлы тем до `runApp`. Без шва — значения по умолчанию.
   AppAppearanceStart? appearance,
@@ -205,6 +219,13 @@ Scope createCodeLabRootScope({
         language: language,
         preferences: languagePreferences,
       ),
+      CodeLabOnboardingModule(
+        start: onboarding,
+        probe: onboardingProbe,
+        preferences: onboardingPreferences,
+        environment: connectionEnvironment,
+        logDirectory: logDirectoryPath ?? Directory.systemTemp.path,
+      ),
       CodeLabAppearanceModule(
         appearance: appearance,
         preferences: appearancePreferences,
@@ -234,6 +255,7 @@ Scope createCodeLabRootScope({
             ? (projectFiles ?? const IoProjectFiles())
             : null,
         aboutInfo: aboutInfo,
+        onboardingStart: onboarding,
         // Тот же каталог, что получает `CodeLabLoggingModule` (D14).
         logDirectory: logDirectoryPath ?? Directory.systemTemp.path,
         clock: clock,
@@ -552,6 +574,80 @@ final class CodeLabLanguageModule extends Module {
   }
 }
 
+/// Регистрирует onboarding первого запуска (change `add-app-onboarding`,
+/// D2–D6, D13).
+///
+/// Почему отдельный модуль: флаг читается в `main` до `runApp`, а события о
+/// нём пишутся только после настройки журнала, как у языка (`CodeLabLanguageModule`).
+///
+/// Для чего: порты флага и фактов, фабрика `OnboardingCubit` (его закрывает
+/// экран) и события `onboarding.shown`, `onboarding.flag_invalid`,
+/// `onboarding.flag_unreadable {error_type}`. Значения ключа и текста ошибки в
+/// событиях нет.
+///
+/// Как использовать: `createCodeLabRootScope(onboarding:, onboardingProbe:,
+/// onboardingPreferences:)`; без [start] onboarding не показывается и событий
+/// нет. Адаптер фактов читает профиль по умолчанию лениво, при создании Cubit-а.
+final class CodeLabOnboardingModule extends Module {
+  CodeLabOnboardingModule({
+    required this.start,
+    required this.probe,
+    required this.preferences,
+    required this.environment,
+    required this.logDirectory,
+  });
+
+  final OnboardingStart? start;
+  final OnboardingProbe? probe;
+  final OnboardingPreferences? preferences;
+  final ConnectionEnvironment environment;
+  final String logDirectory;
+
+  @override
+  void builder(Scope currentScope) {
+    final logger = _onboardingLogger();
+    final start = this.start;
+    if (start != null) {
+      if (start.show) {
+        logger.info('onboarding.shown');
+      }
+      if (start.storedValueInvalid) {
+        logger.warning('onboarding.flag_invalid');
+      }
+      final failure = start.readFailure;
+      if (failure != null) {
+        logger.warning(
+          'onboarding.flag_unreadable',
+          context: {'error_type': failure},
+        );
+      }
+    }
+    final ports = preferences ?? const SharedPreferencesOnboardingPreferences();
+    bind<OnboardingPreferences>().toInstance(ports);
+    bind<OnboardingProbe>().toProvide(
+      () =>
+          probe ??
+          SetupOnboardingProbe(
+            resolveProfile: currentScope
+                .resolve<DefaultProfileResolver>()
+                .resolve,
+            codelabHome: environment.codelabHome ?? '',
+            logDirectory: logDirectory,
+            environment: environment.variables,
+            logger: CodeLabEmbeddedLogger(),
+          ),
+    );
+    bind<OnboardingCubit>().toProvide(
+      () => OnboardingCubit(
+        probe: currentScope.resolve<OnboardingProbe>(),
+        preferences: ports,
+        onFinished: currentScope.resolve<NavigationCubit>().finishOnboarding,
+        logger: logger,
+      ),
+    );
+  }
+}
+
 /// Регистрирует единственного владельца оформления app
 /// (`add-app-appearance-page`, D13).
 ///
@@ -850,8 +946,10 @@ final class CodeLabPresentationModule extends Module {
     ProviderSettingsOpener? providerSettingsOpener,
     ProjectFiles? projectFiles,
     AboutInfo? aboutInfo,
+    OnboardingStart? onboardingStart,
     DateTime Function()? clock,
   }) : _clock = clock,
+       _onboardingStart = onboardingStart,
        _logDirectory = logDirectory,
        _aboutInfo = aboutInfo,
        _settingsPages = settingsPages,
@@ -876,6 +974,10 @@ final class CodeLabPresentationModule extends Module {
   /// `add-app-settings-shell`, D3).
   final SettingsPages _settingsPages;
 
+  /// Решение о показе onboarding: начальное назначение навигации
+  /// (`add-app-onboarding`, D1, D3). `null` — onboarding не показывается.
+  final OnboardingStart? _onboardingStart;
+
   /// Часы рабочего места (`CodeLabShellParts.clock`); шов тестов
   /// (`createCodeLabRootScope(clock:)`).
   final DateTime Function()? _clock;
@@ -898,6 +1000,9 @@ final class CodeLabPresentationModule extends Module {
     bind<NavigationCubit>()
         .toProvide(
           () => NavigationCubit(
+            initial: _onboardingStart?.show == true
+                ? const OnboardingDestination()
+                : const WorkbenchDestination(),
             store: currentScope.resolve<SettingsPageStore>(),
             pages: currentScope.resolve<SettingsPages>(),
             activeSessionId: () =>
@@ -1229,10 +1334,15 @@ final class CodeLabPresentationModule extends Module {
         logger: _settingsLogger(),
       );
     });
-    // Мастер из баннера «Встроенный агент без провайдера» (D26): сессия
+    // Мастер встроенного агента: из баннера «Встроенный агент без провайдера»
+    // (D26) и со второго шага onboarding (`add-app-onboarding`, D8). Сессия
     // настроек встроенного профиля — той же фабрикой, что у страницы
     // «Providers»; цель по умолчанию `user`, «Make default» не снимается.
-    bind<EmbeddedWizardOpener>().toInstance(({required String cwd}) async {
+    Future<ProviderWizardCubit?> openEmbeddedWizardFor({
+      required String cwd,
+      required ProviderWizardEntry entry,
+      required bool Function() isAgentConnected,
+    }) async {
       final environment = currentScope.resolve<ConnectionEnvironment>();
       final access = resolveSettingsAccess(
         kind: AgentLaunchKind.embedded,
@@ -1244,17 +1354,13 @@ final class CodeLabPresentationModule extends Module {
       }
       try {
         final session = await openSettings(access, environment.variables);
-        final flow = await session.openWizard(
-          forceDefault: true,
-          entry: ProviderWizardEntry.banner,
-        );
+        final flow = await session.openWizard(forceDefault: true, entry: entry);
         return ProviderWizardCubit(
           flow: flow,
           access: access,
           backendId: session.backend.id,
           forceDefault: true,
-          // Баннер виден, пока агент не открылся: подключения нет.
-          isAgentConnected: () => false,
+          isAgentConnected: isAgentConnected,
           logger: _settingsLogger(),
           strings: currentScope.resolve<AppStrings>(),
         );
@@ -1265,6 +1371,29 @@ final class CodeLabPresentationModule extends Module {
         );
         return null;
       }
+    }
+
+    bind<EmbeddedWizardOpener>().toInstance(
+      ({required String cwd}) => openEmbeddedWizardFor(
+        cwd: cwd,
+        entry: ProviderWizardEntry.banner,
+        // Баннер виден, пока агент не открылся: подключения нет.
+        isAgentConnected: () => false,
+      ),
+    );
+    // Onboarding: проекта и агента ещё нет (D5), поэтому папка пустая и
+    // подключения нет; пресет выбран на карточке, и диалог начинается с
+    // «Base URL» (D8).
+    bind<OnboardingWizardOpener>().toInstance(({
+      required String presetId,
+    }) async {
+      final wizard = await openEmbeddedWizardFor(
+        cwd: '',
+        entry: ProviderWizardEntry.onboarding,
+        isAgentConnected: () => false,
+      );
+      wizard?.dispatch(PresetChosen(presetId));
+      return wizard;
     });
   }
 }
@@ -1296,6 +1425,12 @@ List<TransportResolver> _transportResolvers(Scope scope) => [
 Logger _usageLogger() => StructuredLogLogger(
   'codelab_desktop.usage',
 ).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'usage'});
+
+/// Логгер событий onboarding (`add-app-onboarding`, D13): категория
+/// `application`, компонент `onboarding`.
+Logger _onboardingLogger() => StructuredLogLogger(
+  'codelab_desktop.onboarding',
+).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'onboarding'});
 
 /// Структурный логгер событий настроек (design.md change
 /// `add-app-settings-shell`, D17): категория `application`, компонент
@@ -1657,6 +1792,8 @@ final class CodeLabDependencies {
     required this.createAppearanceSettingsCubit,
     required this.aboutPorts,
     required this.openEmbeddedWizard,
+    required this.createOnboardingCubit,
+    required this.openOnboardingWizard,
     this.projectFilesCubit,
   });
 
@@ -1728,6 +1865,13 @@ final class CodeLabDependencies {
   /// D26).
   final EmbeddedWizardOpener openEmbeddedWizard;
 
+  /// Создаёт Cubit onboarding; экран владеет им и закрывает (change
+  /// `add-app-onboarding`, D4).
+  final OnboardingCubit Function() createOnboardingCubit;
+
+  /// Открывает мастер провайдера для шага «Choose a model» (D8).
+  final OnboardingWizardOpener openOnboardingWizard;
+
   /// Отдаёт Cubit панели Files — один на окно, создаётся лениво при первом
   /// вызове; панель его только читает и не закрывает. `null` — хост не
   /// привязал `ProjectFiles`, панель не предлагается (design.md change
@@ -1770,6 +1914,7 @@ class CodeLabBootstrap extends StatefulWidget {
     this.profileSecrets,
     this.profileSecretsOpener,
     this.language,
+    this.onboarding,
     this.appearance,
     this.systemAccentSource,
     this.themeLibrary,
@@ -1780,6 +1925,10 @@ class CodeLabBootstrap extends StatefulWidget {
 
   /// Начальное состояние языка из `main` (D2); без него — `en`.
   final AppLanguageStart? language;
+
+  /// Решение о показе onboarding, прочитанное в `main` (`add-app-onboarding`,
+  /// D3); без него onboarding не показывается.
+  final OnboardingStart? onboarding;
 
   /// Начальное оформление из `main` (`add-app-appearance-page`, D13); без него
   /// — `Match system` и встроенные темы.
@@ -1818,6 +1967,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
         profileSecrets: widget.profileSecrets,
         profileSecretsOpener: widget.profileSecretsOpener,
         language: widget.language,
+        onboarding: widget.onboarding,
         appearance: widget.appearance,
         systemAccentSource: widget.systemAccentSource,
         themeLibrary: widget.themeLibrary,
@@ -1843,6 +1993,8 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     createAppearanceSettingsCubit: _scope.resolve<AppearanceSettingsCubit>,
     aboutPorts: _scope.resolve<AboutPorts>(),
     openEmbeddedWizard: _scope.resolve<EmbeddedWizardOpener>(),
+    createOnboardingCubit: _scope.resolve<OnboardingCubit>,
+    openOnboardingWizard: _scope.resolve<OnboardingWizardOpener>(),
     projectFilesCubit: _projectFilesCubitOf(_scope),
   );
 

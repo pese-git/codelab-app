@@ -3660,4 +3660,328 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsKeyboardWhereApprovalPending =>
       'Workbench, while an approval is pending';
+
+  @override
+  String get onboardingHeader => 'Welcome to CodeLab';
+
+  @override
+  String get onboardingStepWelcome => 'What CodeLab does';
+
+  @override
+  String get onboardingStepPermissions => 'Permissions';
+
+  @override
+  String get onboardingStepModel => 'Choose a model';
+
+  @override
+  String get onboardingStepPrivacy => 'Privacy';
+
+  @override
+  String get onboardingBack => 'Back';
+
+  @override
+  String get onboardingNext => 'Next';
+
+  @override
+  String get onboardingFinish => 'Start using CodeLab';
+
+  @override
+  String get onboardingWelcomeTitle =>
+      'An AI coding agent that works in your project';
+
+  @override
+  String get onboardingWelcomeIntro =>
+      'Ask in plain words. The agent reads your code, proposes edits and runs commands in the project folder, and shows each step in the conversation.';
+
+  @override
+  String get onboardingCardFolderTitle => 'Works in one project folder';
+
+  @override
+  String get onboardingCardFolderBody =>
+      'Open a folder, start a session. Files, commands and search stay inside it.';
+
+  @override
+  String get onboardingCardApproveTitle => 'You approve the changes';
+
+  @override
+  String get onboardingCardApproveBody =>
+      'Edits and commands wait for your decision, with the diff or the exact command.';
+
+  @override
+  String get onboardingCardKeyTitle => 'Your model, your key';
+
+  @override
+  String get onboardingCardKeyBody =>
+      'Connect a cloud provider or a local model. The key stays on this computer.';
+
+  @override
+  String get onboardingCardBuiltInTitle => 'The agent runs inside the app';
+
+  @override
+  String get onboardingCardBuiltInBody =>
+      'Nothing else to install. An external agent over stdio or WebSocket can be added later in Settings › Connection.';
+
+  @override
+  String get onboardingBuiltInTag => 'Built-in';
+
+  @override
+  String get onboardingWelcomeFootnote =>
+      'Setup takes four short steps. You can change every choice later in Settings.';
+
+  @override
+  String get onboardingPermissionsTitle =>
+      'The agent asks before it changes anything';
+
+  @override
+  String get onboardingPermissionsIntro =>
+      'Approvals appear in the conversation next to the action, with the exact command or diff. A decision applies to that one call only.';
+
+  @override
+  String get onboardingPermReadLabel => 'Read files in the project';
+
+  @override
+  String get onboardingPermReadHint =>
+      'Search and read anything under the project folder';
+
+  @override
+  String get onboardingPermEditLabel => 'Edit and create files';
+
+  @override
+  String get onboardingPermEditHint => 'You see the diff before it is written';
+
+  @override
+  String get onboardingPermRunLabel => 'Run commands';
+
+  @override
+  String get onboardingPermRunHint =>
+      'You see the full command and working folder';
+
+  @override
+  String get onboardingPermOutsideLabel =>
+      'Anything outside the project folder';
+
+  @override
+  String get onboardingPermOutsideHint =>
+      'Paths are confined to the session\'s working folder';
+
+  @override
+  String get onboardingPermNoPrompt => 'No prompt';
+
+  @override
+  String get onboardingPermAsks => 'Asks each time';
+
+  @override
+  String get onboardingPermBlocked => 'Blocked';
+
+  @override
+  String onboardingModeTitle(String mode) {
+    return 'New sessions start in $mode mode';
+  }
+
+  @override
+  String get onboardingModeStandardBody =>
+      'Reads run freely; edits, commands and web access ask. Change the default in Settings › Agents & modes, or per session from the composer.';
+
+  @override
+  String get onboardingModeOtherBody =>
+      'Your config sets this; the table above describes standard mode. Change it in Settings › Agents & modes.';
+
+  @override
+  String get onboardingModeExternal =>
+      'Your default connection is an external agent. It applies its own rules; approvals still appear in the conversation.';
+
+  @override
+  String get onboardingModelTitle => 'Choose where the model runs';
+
+  @override
+  String get onboardingModelIntro =>
+      'Pick a provider. CodeLab checks the address and the key, lists the models and saves the choice as your default.';
+
+  @override
+  String get onboardingModelProviderLabel => 'Provider';
+
+  @override
+  String onboardingPresetHostKey(String host) {
+    return '$host · key';
+  }
+
+  @override
+  String onboardingPresetHostOptionalKey(String host) {
+    return '$host · optional key';
+  }
+
+  @override
+  String get onboardingPresetLocalNoKey => 'Local, no key';
+
+  @override
+  String get onboardingPresetCustomUrl => 'Your server URL, optional key';
+
+  @override
+  String get onboardingSetUp => 'Set up…';
+
+  @override
+  String onboardingSetUpPreset(String preset) {
+    return 'Set up $preset…';
+  }
+
+  @override
+  String get onboardingSetUpAgain => 'Set up again…';
+
+  @override
+  String get onboardingSetUpLater => 'Set up later';
+
+  @override
+  String get onboardingModelWizardHintTitle => 'Opens the provider wizard';
+
+  @override
+  String get onboardingModelWizardHintBody =>
+      'Base URL, key, a live check and the model list, the same steps as Settings › Providers › Add provider.';
+
+  @override
+  String onboardingModelWizardHintStored(String backend) {
+    return 'The key is stored in $backend or read from an environment variable.';
+  }
+
+  @override
+  String get onboardingModelWizardHintEnvOnly =>
+      'The key is read from an environment variable.';
+
+  @override
+  String get onboardingModelSkippedNote =>
+      'This step is skipped when a provider is already set up and its key is found.';
+
+  @override
+  String onboardingNoticeKeySecret(
+    String provider,
+    String name,
+    String backend,
+  ) {
+    return 'Provider \"$provider\" is set up, but its key \"$name\" is not in $backend. Add it in Settings › Providers › Edit.';
+  }
+
+  @override
+  String onboardingNoticeKeyEnv(String provider, String variable) {
+    return 'Provider \"$provider\" reads its key from $variable, which is not set where CodeLab was started.';
+  }
+
+  @override
+  String onboardingNoticeConfigBroken(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'The agent\'s config has $count problems. Fix them in Settings › Providers or run codelab config check.',
+      one:
+          'The agent\'s config has $count problem. Fix it in Settings › Providers or run codelab config check.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingNoticeUnavailable =>
+      'Agent settings could not be read. You can set up a provider later in Settings › Providers.';
+
+  @override
+  String onboardingConnectedTitle(String preset) {
+    return '$preset is connected';
+  }
+
+  @override
+  String onboardingConnectedSecret(String model, String backend, String name) {
+    return 'Default model $model. The key is in $backend as $name. Change it later in Settings › Providers.';
+  }
+
+  @override
+  String onboardingConnectedEnv(String model, String variable) {
+    return 'Default model $model. The key is read from $variable. Change it later in Settings › Providers.';
+  }
+
+  @override
+  String onboardingConnectedNoKey(String model) {
+    return 'Default model $model. No key is needed. Change it later in Settings › Providers.';
+  }
+
+  @override
+  String get onboardingConnectedAgainNote =>
+      'Picking another provider opens the wizard again; the saved one stays in the config.';
+
+  @override
+  String get onboardingPrivacyTitle => 'What leaves this computer';
+
+  @override
+  String get onboardingPrivacyIntro =>
+      'Only what the agent needs for the work you ask for, and only to services you set up. CodeLab itself collects nothing.';
+
+  @override
+  String get onboardingPrivacyProviderLabel => 'Your model provider';
+
+  @override
+  String get onboardingPrivacyProviderBody =>
+      'Every turn: your prompt, the session history, files and command output the agent read';
+
+  @override
+  String get onboardingPrivacyProviderTag => 'Every turn';
+
+  @override
+  String get onboardingPrivacyToolsLabel => 'MCP servers and web tools';
+
+  @override
+  String get onboardingPrivacyToolsBody =>
+      'Tool arguments, a URL or a search query — web access asks you first';
+
+  @override
+  String get onboardingPrivacyToolsTag => 'When used';
+
+  @override
+  String get onboardingPrivacyTelemetryLabel =>
+      'Telemetry, crash reports, usage analytics';
+
+  @override
+  String get onboardingPrivacyTelemetryBody =>
+      'Not collected by the app, the CLI or the embedded agent';
+
+  @override
+  String get onboardingPrivacyTelemetryTag => 'Never';
+
+  @override
+  String get onboardingPrivacyStaysLabel => 'Stays here';
+
+  @override
+  String get onboardingPrivacyStaysTag => 'Local';
+
+  @override
+  String onboardingStaysEnv(String home, String logs) {
+    return 'Config and sessions in $home; app logs in $logs; API keys are read from environment variables, CodeLab does not store them';
+  }
+
+  @override
+  String onboardingStaysFile(String home, String logs, String path) {
+    return 'Config and sessions in $home; app logs in $logs; API keys in $path, an unencrypted file';
+  }
+
+  @override
+  String onboardingStaysKeychain(String home, String logs, String backend) {
+    return 'Config and sessions in $home; app logs in $logs; API keys in the system keychain ($backend)';
+  }
+
+  @override
+  String onboardingStaysOther(String home, String logs, String backend) {
+    return 'Config and sessions in $home; app logs in $logs; API keys in the agent\'s secret store ($backend)';
+  }
+
+  @override
+  String onboardingStaysExternal(String logs) {
+    return 'Config and sessions of the external agent are managed by that agent; app logs in $logs';
+  }
+
+  @override
+  String get onboardingStaysUnavailable =>
+      'App logs stay on this computer; the agent\'s config and keys stay on this computer too';
+
+  @override
+  String get onboardingNothingToAgreeTitle => 'Nothing to agree to';
+
+  @override
+  String get onboardingNothingToAgreeBody =>
+      'CodeLab asks you to accept nothing and keeps no record of consent.';
 }

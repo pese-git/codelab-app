@@ -83,6 +83,11 @@ final class SetupOnboardingProbe implements OnboardingProbe {
       return OnboardingFacts.external(logsLabel: logsLabel);
     }
     final home = access.paths.codelabHome;
+    if (home.isEmpty) {
+      // Без `CODELAB_HOME` читать нечего: Cubit покажет «настройки недоступны»
+      // (D6), а не будет угадывать каталог.
+      throw StateError('CODELAB_HOME is not available');
+    }
     final secrets = await setup.ClientSecretAccess.open(
       codelabHome: home,
       environment: _environment,
