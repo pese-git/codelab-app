@@ -59,7 +59,9 @@ Onboarding SHALL состоять из четырёх шагов в порядк
 
 ### Requirement: Шаг «Permissions»
 Шаг SHALL показывать заголовок `The agent asks before it changes anything`, текст об одобрениях в разговоре и таблицу режима `standard` по артборду 07: «Read files in the project» — `No prompt`; «Edit and create files» — `Asks each time`; «Run commands» — `Asks each time`; «Anything outside the project folder» — `Blocked`. InfoBar под таблицей SHALL зависеть от действующего режима новой сессии (`sessionDefaultsOf` моста, правило страницы «Agents & modes»; design.md change `add-app-onboarding`, D7):
-- режим `standard` или факты недоступны — `New sessions start in standard mode` и текст артборда со ссылкой на «Settings › Agents & modes»;
+- факты ещё читаются — InfoBar режима НЕ SHALL показываться; на его месте — индикатор и `Reading the agent settings…`;
+- факты недоступны (сбой или таймаут чтения) — `Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes.`; шаг НЕ SHALL утверждать режим `standard`;
+- режим `standard` — `New sessions start in standard mode` и текст артборда со ссылкой на «Settings › Agents & modes»;
 - настраиваемый агент с другим режимом — `New sessions start in <mode> mode` с пометкой `Your config sets this; the table above describes standard mode.`;
 - профиль по умолчанию — внешний агент — `Your default connection is an external agent. It applies its own rules; approvals still appear in the conversation.`
 
@@ -67,12 +69,20 @@ Onboarding SHALL состоять из четырёх шагов в порядк
 - **WHEN** `CODELAB_HOME` пуст
 - **THEN** InfoBar — `New sessions start in standard mode`
 
+#### Scenario: Настройки не прочитаны
+- **WHEN** чтение фактов завершилось ошибкой или таймаутом, а `~/.codelab/config.yaml` задаёт `permissions.mode: bypass`
+- **THEN** InfoBar шага — `Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes.`, текста `New sessions start in standard mode` на шаге нет
+
+#### Scenario: Настройки ещё читаются
+- **WHEN** пользователь открыл шаг «Permissions», а чтение фактов ещё идёт
+- **THEN** InfoBar режима нет, показан индикатор `Reading the agent settings…`; после чтения он заменяется InfoBar по действующему режиму
+
 #### Scenario: Режим из общего с CLI конфига
 - **WHEN** `~/.codelab/config.yaml` задаёт `permissions.mode: bypass`
 - **THEN** InfoBar называет `bypass` и содержит `the table above describes standard mode`
 
 ### Requirement: Пропуск шага выбора модели
-При создании onboarding SHALL один раз читать факты для шагов через порт `OnboardingProbe` с таймаутом 5 с (design.md change `add-app-onboarding`, D6). Доступ к настройкам SHALL определяться по профилю по умолчанию (`DefaultProfileResolver`, `resolveSettingsAccess` моста `codelab_setup`) без папки проекта. Для `EditableSettings` готовность SHALL вычислять функция моста `checkProviderReadiness` (spec client-agent-setup «Готовность провайдера»); значения ключей НЕ SHALL читаться.
+При создании onboarding SHALL один раз читать факты для шагов через порт `OnboardingProbe` с таймаутом 5 с (design.md change `add-app-onboarding`, D6). Доступ к настройкам SHALL определяться по профилю по умолчанию (`DefaultProfileResolver`, `resolveSettingsAccess` моста `codelab_setup`) без папки проекта: снимок конфига SHALL читаться с той же рабочей папкой, что у мастера провайдера (`CODELAB_HOME` доступа), поэтому проектный слой папки процесса в него НЕ SHALL попадать. Для `EditableSettings` готовность SHALL вычислять функция моста `checkProviderReadiness` (spec client-agent-setup «Готовность провайдера»); значения ключей НЕ SHALL читаться.
 
 Шаг «Choose a model» SHALL:
 - пропускаться при `ProviderReady` (журнал — `onboarding.model_step_skipped {reason: ready}`);
@@ -89,12 +99,16 @@ Onboarding SHALL состоять из четырёх шагов в порядк
 - **WHEN** профиль по умолчанию — WebSocket-профиль
 - **THEN** шаг «Choose a model» пропущен с `reason: external`, конфиг агента не читается
 
+#### Scenario: Конфиг папки процесса не учитывается
+- **WHEN** `CODELAB_HOME` пуст, а в папке, из которой запущен app, лежит `.codelab/config.yaml` с готовым провайдером
+- **THEN** шаг «Choose a model» показан (`NoProviderConfigured`), а не пропущен
+
 #### Scenario: Медленное хранилище
 - **WHEN** чтение фактов не завершается за 5 с, и пользователь на шаге «Permissions» нажимает «Next»
 - **THEN** через 5 с от начала чтения показан шаг «Choose a model» с пояснением `Agent settings could not be read.`, журнал содержит `onboarding.facts_unavailable` с `timeout: true`; результат чтения, пришедший позже, шаг не меняет
 
 ### Requirement: Шаг «Choose a model» и мастер провайдера
-Шаг SHALL показывать заголовок `Choose where the model runs`, карточки пресетов (ключи `onboarding-preset-<id>`) из той же таблицы, что шаг «API type» мастера, с подписями мастера, и кнопку «Set up <preset>…» (`onboarding-model-setup`) для выбранной карточки. Кнопка SHALL открывать `ProviderWizardDialog` (spec app-settings «Мастер провайдера в app») для встроенного профиля с целью `user`, неснимаемым «Make default», без «This project only», с `entry: onboarding` и уже выбранным пресетом: первым показанным шагом диалога SHALL быть «Base URL» (design.md change `add-app-onboarding`, D8, D11).
+Шаг SHALL показывать заголовок `Choose where the model runs`, карточки пресетов (ключи `onboarding-preset-<id>`) из той же таблицы, что шаг «API type» мастера, с подписями мастера, и кнопку «Set up <preset>…» (`onboarding-model-setup`) для выбранной карточки. Кнопка SHALL открывать `ProviderWizardDialog` (spec app-settings «Мастер провайдера в app») по тому же доступу к настройкам (`EditableSettings`), по которому прочитаны факты шага, с целью `user`, неснимаемым «Make default», без «This project only», с `entry: onboarding` и уже выбранным пресетом: первым показанным шагом диалога SHALL быть «Base URL» (design.md change `add-app-onboarding`, D8, D11).
 
 Ключ SHALL вводиться и сохраняться только мастером: хранилище секретов агента, порядок «секрет → конфиг», откат секрета при неудачной записи (SETUP-1, SETUP-5). Состояние onboarding, его события и журнал НЕ SHALL содержать значения ключа.
 
@@ -114,6 +128,20 @@ InfoBar о мастере SHALL называть хранилище по фак�
 #### Scenario: Только переменная окружения
 - **WHEN** бэкенд секретов — `env`
 - **THEN** InfoBar шага — `The key is read from an environment variable.`; в мастере нет варианта «Store in …»
+
+Пока мастер открывается или открыт, «Back», «Next», «Set up later» и повторное «Set up <preset>…» НЕ SHALL действовать. Если к моменту, когда мастер готов к показу, шаг уже не «Choose a model» или onboarding закрыт, диалог НЕ SHALL показываться и ничего НЕ SHALL записываться (design.md change `add-app-onboarding`, D8, ревью п. 6).
+
+#### Scenario: Мастер и конфиг stdio-профиля
+- **WHEN** профиль по умолчанию — stdio-профиль `codelab-agent` с `CODELAB_HOME=/tmp/agent-home` в `env`, конфиг там пуст, и пользователь сохраняет провайдера в мастере шага «Choose a model»
+- **THEN** провайдер записан в `/tmp/agent-home/config.yaml`, а конфиг встроенного агента app не изменён
+
+#### Scenario: Навигация во время открытия мастера
+- **WHEN** пользователь нажал «Set up <preset>…», и пока мастер открывается (хранилище секретов отвечает медленно), нажимает «Set up later»
+- **THEN** шаг остаётся «Choose a model»; после открытия показан диалог мастера; «Set up later» снова действует после закрытия диалога
+
+#### Scenario: Мастер не показывается вне шага модели
+- **WHEN** открыватель мастера возвращает Cubit мастера после того, как onboarding закрыт
+- **THEN** диалога нет, Cubit мастера закрыт, файлы конфига и хранилище секретов не изменены
 
 #### Scenario: Отмена мастера
 - **WHEN** пользователь открывает мастер на шаге «Choose a model» и нажимает Cancel на шаге ключа
@@ -138,13 +166,17 @@ InfoBar о мастере SHALL называть хранилище по фак�
 - «Telemetry, crash reports, usage analytics» — `Never`;
 - «Stays here» — `Local`.
 
-Текст строки «Stays here» SHALL строиться по фактам сборки, а не по артборду (design.md change `add-app-onboarding`, D9): каталог конфига и сессий (`CODELAB_HOME` с `~` вместо домашнего каталога), каталог логов app и способ хранения ключей по `id` бэкенда секретов. Шаг НЕ SHALL называть системную связку ключей, если бэкенд — не хранилище ОС.
+Текст строки «Stays here» SHALL строиться по фактам сборки, а не по артборду (design.md change `add-app-onboarding`, D9): каталог конфига и сессий (`CODELAB_HOME` с `~` вместо домашнего каталога), каталог логов app (известен без чтения фактов и SHALL показываться всегда, в том числе при недоступных фактах) и способ хранения ключей по `id` бэкенда секретов. Шаг НЕ SHALL называть системную связку ключей, если бэкенд — не хранилище ОС.
 
 Шаг НЕ SHALL просить принять условия и НЕ SHALL записывать согласие ни в `shared_preferences`, ни в файлы (D-29, §12.7.7а); InfoBar — `Nothing to agree to`. Ссылки на «Privacy policy» и «Terms of use» НЕ SHALL показываться, пока в сборке нет страницы «Settings › Legal» (SETUP-17; design.md change `add-app-onboarding`, D10).
 
 #### Scenario: Ключи из переменных окружения
 - **WHEN** бэкенд секретов — `env`, `CODELAB_HOME` — `~/.codelab`
 - **THEN** строка «Stays here» содержит `~/.codelab`, каталог логов app и `API keys are read from environment variables`, и не содержит `keychain`
+
+#### Scenario: Факты недоступны
+- **WHEN** чтение фактов завершилось таймаутом
+- **THEN** строка «Stays here» содержит подпись каталога логов app и `the agent's config and keys stay on this computer`, но не путь `CODELAB_HOME`
 
 #### Scenario: Ключи в файле
 - **WHEN** бэкенд секретов — `file`
@@ -155,11 +187,15 @@ InfoBar о мастере SHALL называть хранилище по фак�
 - **THEN** на шаге нет флажка или кнопки согласия и ссылок на документы; после завершения в `shared_preferences` новых ключей, кроме `codelab.app.onboarding_done`, нет
 
 ### Requirement: Завершение onboarding и старт рабочего места
-Пока показан onboarding, app НЕ SHALL строить рабочее место и НЕ SHALL запускать агента окна, в том числе для проекта, восстановленного из снимка прошлого запуска. «Start using CodeLab» SHALL записывать `codelab.app.onboarding_done: true`, переводить навигацию на рабочее место и запускать триггер старта при запуске (spec agent-workbench-ui «Агент стартует сам», триггер 1) ровно один раз (design.md change `add-app-onboarding`, D5). Повторное нажатие во время записи НЕ SHALL давать второй записи и второго перехода. Сбой записи флага SHALL давать событие `onboarding.save_failed` с именем типа ошибки и НЕ SHALL мешать переходу на рабочее место.
+Пока показан onboarding, app НЕ SHALL строить рабочее место и НЕ SHALL запускать агента окна, в том числе для проекта, восстановленного из снимка прошлого запуска. «Start using CodeLab» SHALL записывать `codelab.app.onboarding_done: true`, переводить навигацию на рабочее место и запускать триггер старта при запуске (spec agent-workbench-ui «Агент стартует сам», триггер 1) ровно один раз (design.md change `add-app-onboarding`, D5). Повторное нажатие во время записи НЕ SHALL давать второй записи и второго перехода. Если onboarding закрыт, пока флаг пишется, перехода и событий после закрытия НЕ SHALL быть. Сбой записи флага SHALL давать событие `onboarding.save_failed` с именем типа ошибки и НЕ SHALL мешать переходу на рабочее место.
 
 #### Scenario: Проект восстановлен, агент ждёт конца onboarding
 - **WHEN** снимок прошлого запуска содержит проект `/work/app`, флага нет, и пользователь проходит onboarding с сохранением провайдера
 - **THEN** до «Start using CodeLab» открыватель встроенного агента не вызывался; после — вызван один раз с папкой `/work/app`, баннера «Add provider» нет
+
+#### Scenario: Закрытие во время записи флага
+- **WHEN** запись флага ещё идёт, и onboarding закрывается (закрытие root scope)
+- **THEN** навигация не меняется и не получает `emit` после закрытия, `onboarding.completed` не записано, исключений нет
 
 #### Scenario: Двойное нажатие
 - **WHEN** пользователь дважды быстро нажимает «Start using CodeLab»

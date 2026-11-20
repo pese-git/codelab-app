@@ -38,7 +38,7 @@ Onboarding app (D-11) описан в §12.4.9 [`12-4-first-run-and-settings.md`
 
 ### D1. Ветка `OnboardingDestination` вводится здесь, а не в `add-app-navigation-shell`
 
-`AppDestination` получает ветку `OnboardingDestination` без полей: шаг — состояние `OnboardingCubit`, а не навигации. `NavigationCubit` получает начальное назначение параметром конструктора (`initial`) и метод `finishOnboarding()`. Метод переводит `OnboardingDestination` → `WorkbenchDestination`, из других назначений ничего не делает. Пока открыт onboarding, `openSettings` ничего не делает (журнал `settings.open_skipped` уровня debug с `reason: onboarding`). Поэтому Cmd/Ctrl+, и пункт меню macOS «Preferences…» не уводят с onboarding.
+`AppDestination` получает ветку `OnboardingDestination` без полей: шаг — состояние `OnboardingCubit`, а не навигации. `NavigationCubit` получает начальное назначение параметром конструктора (`initial`) и метод `finishOnboarding()`. Метод переводит `OnboardingDestination` → `WorkbenchDestination`, из других назначений ничего не делает. Пока открыт onboarding, `openSettings` ничего не делает (журнал `settings.open_skipped` уровня debug с `reason: onboarding`; поле обязательно — ревью 2026-11-21, п. 5, исправляется в коде, решение не меняется). Поэтому Cmd/Ctrl+, и пункт меню macOS «Preferences…» не уводят с onboarding.
 
 Почему здесь: в дорожной карте (§10.3) `add-app-navigation-shell` — не отдельный шаг перед экранами, а «остальные ветки … вместе с их экранами». Пустых веток «на вырост» нет (AGENTS.md §13, SETUP-17). Значит, ветку Onboarding вводит change экрана onboarding, а Boot и ProjectPicker остаются своим changes. Решение Q3 `add-provider-setup-ui` («после `add-app-navigation-shell`») требовало `OnboardingDestination`, и этот change его вводит (решение пользователя 2026-11-20, Q1 (а)). Строка `add-app-navigation-shell` в §10.3 дорожной карты больше не содержит ветку Onboarding (задача 0.2).
 
@@ -117,6 +117,8 @@ Esc и закрытие окна onboarding не завершают. Закры�
 3. при сбое записи пишет `onboarding.save_failed {error_type}` и не останавливается: onboarding покажется при следующем запуске, а это лучше, чем запереть пользователя на шаге 4;
 4. зовёт `NavigationCubit.finishOnboarding()` (в Cubit — колбэк `onFinished`) при любом исходе записи, в том числе после сбоя шага 3.
 
+Закрытие во время записи (ревью 2026-11-21, п. 7): после `await markDone()` при `isClosed` метод выходит без `onFinished` и без событий — итог записи после закрытия не публикуется (CON-005). Отдельно `NavigationCubit.finishOnboarding()` на закрытом Cubit — no-op, без `emit`: колбэк может пережить владельца экрана при закрытии root scope.
+
 Когда назначение впервые становится `WorkbenchDestination`, `_CodeLabHome` вызывает `startOnLaunch()` ровно один раз за жизнь app: так же, как сейчас после первого кадра при запуске без onboarding.
 
 Почему: провайдер, сохранённый на шаге 3, должен действовать при первом же старте агента. Иначе агент восстановленного проекта стартовал бы под onboarding без провайдера и упал бы, а пользователь вернулся бы к баннеру «Add provider». Живое перечитывание конфига (§17.5.6) тут не помогает: агент без провайдера не открывается совсем.
@@ -134,9 +136,13 @@ Esc и закрытие окна onboarding не завершают. Закры�
 Порт `OnboardingProbe` (`features/onboarding/application/`) — одна операция `Future<OnboardingFacts> read()`. Адаптер `lib/app/onboarding_probe.dart` собирает факты так:
 
 1. Профиль по умолчанию — `DefaultProfileResolver`; доступ — `resolveSettingsAccess` моста без папки проекта (`cwd: null`): при первом запуске проекта нет, проектные слои применяются только к доверенному проекту, а onboarding его не выбирает. Не `EditableSettings` (внешний stdio-агент, WebSocket) → `OnboardingFacts.external`: шаг 3 `Skipped(external)`, шаг 2 — D7.
-2. `EditableSettings` → `ClientSecretAccess.open`, `FileAgentConfigStore.snapshot` и `checkProviderReadiness(snapshot, providerKeysOf(...), environment)`. Это то же правило, что у первого запуска CLI и баннера D26. Второй копии правила нет (SETUP-8).
+2. `EditableSettings` → `ClientSecretAccess.open`, `FileAgentConfigStore.snapshot(cwd: access.paths.codelabHome)` и `checkProviderReadiness(snapshot, providerKeysOf(...), environment)`. Это то же правило, что у первого запуска CLI и баннера D26. Второй копии правила нет (SETUP-8).
 3. Режим — `sessionDefaultsOf(snapshot, access).mode` моста, правило страницы «Agents & modes».
-4. Подписи путей — `homePathLabel` для `CODELAB_HOME` и каталога логов app (`<support>/logs`).
+4. Подпись пути — `homePathLabel` для `CODELAB_HOME` доступа. Каталог логов app в факты не входит (D9, п. 4 ревью).
+
+**Только user-слой (ревью 2026-11-21, п. 3).** Снимок зонда берётся с `cwd: access.paths.codelabHome` — тем же, что у `openWizard` (`_access.cwd ?? codelabHome`), а не с пустой строкой: иначе загрузчик прочитал бы `<cwd процесса>/.codelab/config*.yaml` как проектный слой, и шаг 3 судил бы о готовности по чужому конфигу. Под «без папки проекта» понимается именно это: проектного слоя в снимке нет.
+
+**Один доступ для зонда и мастера (ревью 2026-11-21, п. 2).** `OnboardingFacts` несёт `EditableSettings` (тип основного бареля моста, без IO), по которому прочитан снимок. `OnboardingWizardOpener` получает этот доступ параметром (`({required String presetId, required EditableSettings access})`) и открывает сессию настроек по нему, а не по встроенному профилю. Поэтому для stdio-профиля `codelab-agent` со своим `CODELAB_HOME` или `--config` шаг 3 проверяет и мастер пишет один и тот же конфиг — как страница «Providers», которая тоже работает по профилю по умолчанию. Альтернатива *считать такой профиль `Skipped(external)`* отклонена: `codelab-agent` настраивается из app (`EditableSettings`), и пользователь потерял бы мастер без причины.
 
 `OnboardingCubit` вызывает `read()` один раз, при создании, с таймаутом 5 с. Это время шага `stores` сторожа (§12.4.7), а хранилище секретов в худшем случае отвечает не дольше 10 с. Итоги:
 
@@ -149,7 +155,7 @@ Esc и закрытие окна onboarding не завершают. Закры�
 | `ConfigBroken` | `Choose(configBroken)` |
 | таймаут или исключение | `Choose(unavailable)`, `facts: Unavailable`; событие `onboarding.facts_unavailable {error_type \| timeout}` |
 
-Поздний итог после таймаута или `close()` отбрасывается по номеру попытки (CON-002). Повторного чтения нет: onboarding — однократный экран.
+Итог принимается один раз: признак `_factsResolved` ставит первый из исходов (факты, ошибка, таймаут), и поздний итог после него только пишется событием `onboarding.facts_late`; после `close()` итог отбрасывается по `isClosed` (CON-002). Номера попытки нет: чтение одно. `close()` завершает ожидание фактов (`_factsDone`), чтобы `next()`, ждущий его на шаге 2, вышел по `isClosed`, а не висел (ревью 2026-11-21, п. 8). Повторного чтения нет: onboarding — однократный экран.
 
 Почему один порт, а не три: все факты читаются из одного снимка и одного открытого хранилища, а `codelab_setup/io.dart` пускается только в `lib/app/` (D20 `add-provider-setup-ui`, SETUP-9). Отдельные порты дали бы три открытия хранилища.
 
@@ -161,12 +167,14 @@ Esc и закрытие окна onboarding не завершают. Закры�
 - команды с полной командой и папкой спрашиваются;
 - всё вне папки проекта заблокировано.
 
-Это совпадает с `permissions.md` (раздел о режимах: «Новая сессия стартует в `standard`») и containment `BoundedEnv`. InfoBar под таблицей:
-- режим `standard` или факты недоступны → `New sessions start in standard mode` (текст артборда);
+Это совпадает с `permissions.md` (раздел о режимах: «Новая сессия стартует в `standard`») и containment `BoundedEnv`. InfoBar под таблицей (ревью 2026-11-21, п. 1):
+- факты ещё читаются (`FactsLoading`) → InfoBar режима нет; на его месте строка с индикатором `Reading the agent settings…`. Утверждать режим до чтения нельзя;
+- факты недоступны (`FactsUnavailable`) → нейтральный текст `Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes.` Без утверждения `standard`: в общем конфиге может быть `bypass`;
+- режим `standard` → `New sessions start in standard mode` (текст артборда);
 - `EditableSettings` с другим режимом → `New sessions start in <mode> mode`. Режим назван по подписи страницы «Agents & modes», к ней добавлено `Your config sets this; the table above describes standard mode.` и та же ссылка на «Settings › Agents & modes»;
 - внешний профиль по умолчанию → `Your default connection is an external agent. It applies its own rules; approvals still appear in the conversation.`
 
-Почему: `config.yaml` общий с CLI (`~/.codelab`). Пользователь CLI мог задать `bypass`, и текст «Asks each time» был бы для него неправдой (AGENTS.md §2: безопасность выше UX). Перестраивать таблицу под каждый из пяти режимов — лишняя сложность для однократного экрана. Достаточно честной пометки.
+Почему: `config.yaml` общий с CLI (`~/.codelab`). Пользователь CLI мог задать `bypass`, и текст «Asks each time» был бы для него неправдой (AGENTS.md §2: безопасность выше UX). Перестраивать таблицу под каждый из пяти режимов — лишняя сложность для однократного экрана. Достаточно честной пометки. По той же причине при непрочитанных фактах шаг не называет режим вовсе: неизвестное нельзя выдавать за умолчание (AGENTS.md §2).
 
 ### D8. Шаг «Choose a model» и мастер
 
@@ -179,6 +187,7 @@ Esc и закрытие окна onboarding не завершают. Закры�
   Сразу после открытия presentation отправляет автомату `PresetChosen(<id>)`, и диалог начинается с «Base URL» с отмеченным «API type» (артборд 07c.1). «Back» на «Base URL» возвращает в «API type» внутри диалога, как в автомате. Это отступление от артборда, где Back с первого шага не показан: автомат не меняется (SETUP-8).
 - **«This project only»** не показывается: папки проекта на onboarding нет. Диалог уже скрывает переключатель без папки (spec app-settings «Мастер провайдера в app»).
 - **После `ConfigSaved`** (`Done(plan, committed)`) шаг переходит в `Saved(summary)` (артборд 07c.5). `summary` — `OnboardingSavedSummary`: id провайдера, модель по умолчанию `<id>/<m>` и способ хранения ключа (`secret <имя> in <backend.id>`, `env <VAR>` или `no key`). Значения ключа в сводке нет (SETUP-1). Next активна. «Set up again…» открывает мастер снова; прежний провайдер остаётся в конфиге (текст артборда). Баннер `saved` страницы «Providers» и кнопки «Retry»/«Connect» на onboarding не показываются: агент ещё не стартовал и стартует после onboarding (D5).
+- **Мастер и навигация шага (ревью 2026-11-21, п. 6).** Открытие мастера асинхронно: composition root открывает хранилище секретов и снимок. `OnboardingCubit` получает переход `wizardStarted()` → `wizardEnded()`; между ними шаг модели помечен активным мастером (поле `wizard: idle | active` у `Choose` и `Saved`, а не отдельный флаг состояния). Пока мастер активен, «Back», «Next» и «Set up later» игнорируются Cubit-ом и неактивны в UI; повторное «Set up <preset>…» тоже. Если открыватель вернул Cubit мастера, а шаг уже не «Choose a model» или onboarding закрыт, диалог НЕ показывается, Cubit мастера сразу закрывается — ничего не записано. Поэтому провайдер не может записаться, пока onboarding на другом шаге и затем быть проигнорирован с `model_step: later`.
 - **Cancel, Esc, закрытие диалога** — шаг остаётся в прежнем состоянии, ничего не записано. Это свойство мастера (spec app-settings «Мастер провайдера в app»). Cubit мастера закрывает `OnboardingScreen` после диалога, как `addProviderFromBanner`.
 - **«Set up later»** (`onboarding-model-later`) доступна в любом `Choose(…)` и ведёт на шаг 4 без записи. Отступление от артборда, где выхода без провайдера нет. Без этой кнопки пользователь внешнего агента или без ключа под рукой не прошёл бы onboarding, а закрыть его нельзя (D4). Баннер «Add provider» рабочего места остаётся запасным путём.
 - **`Choose(keyMissing)`** — InfoBar по ссылке (тексты по образцу §12.4.3, п. 4):
@@ -196,13 +205,15 @@ Esc и закрытие окна onboarding не завершают. Закры�
 
 - **07b, карточка «Your model, your key»** — `Connect a cloud provider or a local model. The key stays on this computer.` Без названия хранилища: факты на шаге 1 могут ещё читаться.
 - **07a, строка «Stays here»** — из `OnboardingFacts`:
-  - `Config and sessions in <home>; app logs in <logs>;` и подпись ключей по `SecretBackendInfo.id`:
+  - `Config and sessions in <home>; app logs in <logs>;` (`<home>` — из фактов, `<logs>` — из composition root) и подпись ключей по `SecretBackendInfo.id`:
     - `env` → `API keys are read from environment variables; CodeLab does not store them`;
     - `file` → `API keys in <home>/secrets.yaml, an unencrypted file`;
     - `keychain-*`, `secret-service`, `wincred` (после 1.0) → `API keys in the system keychain (<id>)`;
     - другой → `API keys in the agent's secret store (<id>)`;
   - внешний профиль → `Config and sessions of the external agent are managed by that agent; app logs in <logs>`;
   - факты недоступны → `App logs in <logs>; the agent's config and keys stay on this computer`.
+
+  Каталог логов app (`<logs>`) не зависит от IO-зонда: его подпись composition root передаёт экрану отдельно (зависимость `onboardingAppLogsLabel` в `CodeLabDependencies`, вычисляется из `logDirectoryPath` `main` и `homePathLabel`), поэтому он есть во всех трёх вариантах строки, в том числе при недоступных фактах (ревью 2026-11-21, п. 4).
 - **07a, строки сети** — по артборду и §12.7.7, п. 2:
   - провайдер модели — каждый ход;
   - MCP-серверы и web-инструменты — при вызове; web-доступ спрашивается в любом режиме, кроме флага `autopilot` (`permissions.md`);
@@ -331,6 +342,19 @@ Presentation не обращается к файлам, связке ключе�
 | Q5. Тексты о хранении ключей | (а) по фактическому бэкенду секретов | D9 |
 | Q6. Режим не `standard` на шаге 2 | (а) InfoBar называет действующий режим | D7 |
 | Q7. Веха | (б) M4 (1.0), против рекомендации (а) | D17; §4.5, §6.1, §10.1, §10.3 дорожной карты; строка D-11 матрицы |
+
+## Решения по двойному ревью 2026-11-21
+
+| № | Замечание | Решение | Где |
+|---|---|---|---|
+| 1 | Шаг 2 утверждает `standard` при непрочитанных фактах | `FactsLoading` — индикатор без режима; `FactsUnavailable` — нейтральный текст со ссылкой на «Agents & modes» | D7; spec «Шаг «Permissions»» |
+| 2 | Зонд и мастер видят разные конфиги | мастер открывается по тому же `EditableSettings`, что у зонда (поле `OnboardingFacts`) | D6, D8; spec «Шаг «Choose a model» и мастер провайдера» |
+| 3 | Зонд читает проектный слой `cwd` процесса | снимок зонда с `cwd: codelabHome`, как у мастера: только слои без проекта | D6; spec «Пропуск шага выбора модели» |
+| 4 | Нет пути логов при недоступных фактах | подпись каталога логов — из composition root, вне фактов | D9; spec «Шаг «Privacy»» |
+| 5 | `settings.open_skipped` без `reason` | design не меняется, код приводится к D1 | D1 |
+| 6 | Мастер появляется после ухода с шага 3 | `wizardStarted`/`wizardEnded`: навигация шага блокируется; диалог не показывается, если шаг уже другой | D8; spec «Шаг «Choose a model» и мастер провайдера» |
+| 7 | `onFinished` после `close()` | после `await` при `isClosed` — выход; `finishOnboarding` на закрытом Cubit — no-op | D5; spec «Завершение onboarding…» |
+| 8 | Формулировки о позднем итоге и `close()` | признак `_factsResolved` + `isClosed`; `close()` завершает ожидание фактов | D6; `concurrency.md` §47в |
 
 ## Open Questions
 
