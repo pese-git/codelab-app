@@ -17,6 +17,8 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         AcpClientBackend,
         ClientWorkspace,
         ConfigTransportResolver,
+        InMemoryThemeLibrary,
+        ThemeLibrary,
         ProfileSecretSource,
         ProfileSecrets,
         ProfileStore,
@@ -111,6 +113,10 @@ import 'navigation/settings_page_store.dart';
 import 'connection_environment.dart';
 import 'secret_migration_offer.dart';
 
+import 'appearance/app_appearance_cubit.dart';
+import 'appearance/app_appearance_start.dart';
+import '../core/platform/app_appearance_preferences.dart';
+import '../core/platform/system_accent_source.dart';
 import 'language/app_language_cubit.dart' show AppLanguageCubit, AppStrings;
 import 'language/app_language_start.dart';
 import '../core/platform/app_language_preferences.dart';
@@ -125,6 +131,12 @@ Scope createCodeLabRootScope({
   // языке. Без шва — `en` (тесты и хосты без предпочтения).
   AppLanguageStart? language,
   AppLanguagePreferences? languagePreferences,
+  // Шов оформления (`add-app-appearance-page`, D13): `main` читает документ и
+  // файлы тем до `runApp`. Без шва — значения по умолчанию.
+  AppAppearanceStart? appearance,
+  AppAppearancePreferences? appearancePreferences,
+  ThemeLibrary? themeLibrary,
+  SystemAccentSource? systemAccentSource,
   // Шов порта настроек запуска (D9).
   StartupPreferences? startupPreferences,
   // Данные раздела «About» (D11): шов тестов, без него — версия сборки,
@@ -181,6 +193,12 @@ Scope createCodeLabRootScope({
       CodeLabLanguageModule(
         language: language,
         preferences: languagePreferences,
+      ),
+      CodeLabAppearanceModule(
+        appearance: appearance,
+        preferences: appearancePreferences,
+        library: themeLibrary,
+        accentSource: systemAccentSource,
       ),
       CodeLabPlatformModule(
         directoryExists: directoryExists ?? ioDirectoryExists,
@@ -518,6 +536,37 @@ final class CodeLabLanguageModule extends Module {
     }
     bind<AppLanguageCubit>().toInstance(cubit);
     bind<AppStrings>().toInstance(cubit);
+  }
+}
+
+/// Регистрирует владельца оформления app (`add-app-appearance-page`, D13).
+///
+/// ЗАГЛУШКА для красных тестов 4.5/4.7: биндит [AppAppearanceCubit] без
+/// событий журнала и без применения к `FluentApp`; настоящий модуль — 4.8.
+final class CodeLabAppearanceModule extends Module {
+  CodeLabAppearanceModule({
+    AppAppearanceStart? appearance,
+    this.preferences,
+    this.library,
+    this.accentSource,
+  }) : appearance = appearance ?? AppAppearanceStart.defaults;
+
+  final AppAppearanceStart appearance;
+  final AppAppearancePreferences? preferences;
+  final ThemeLibrary? library;
+  final SystemAccentSource? accentSource;
+
+  @override
+  void builder(Scope currentScope) {
+    bind<AppAppearanceCubit>().toInstance(
+      AppAppearanceCubit(
+        preferences:
+            preferences ?? const SharedPreferencesAppAppearancePreferences(),
+        library: library ?? InMemoryThemeLibrary(),
+        accentSource: accentSource ?? const UnsupportedSystemAccentSource(),
+        start: appearance,
+      ),
+    );
   }
 }
 
@@ -1262,6 +1311,8 @@ final class CodeLabRootLifecycle implements Disposable {
     required NavigationCubit navigationCubit,
     required TerminalTabsCubit terminalTabsCubit,
     AppLanguageCubit? languageCubit,
+    // Владелец оформления (D13): шаг выхода `appearance` — задача 4.8.
+    AppAppearanceCubit? appearanceCubit,
     Logger? logger,
   }) : _logger = logger ?? codeLabAppLogger(),
        _application = application,
