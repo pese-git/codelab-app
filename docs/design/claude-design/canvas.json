@@ -2063,6 +2063,14 @@
    "w": 1000,
    "x": 3240,
    "y": 9120
+  },
+  "NavTabletOnboarding.dc.html": {
+   "h": 1300,
+   "page": "tablet",
+   "title": "Navigation graph — tablet first run and provider wizard",
+   "w": 2960,
+   "x": 0,
+   "y": 7800
   }
  },
  "createdOnFiles": {
@@ -2143,7 +2151,8 @@
   "p-row5f",
   "t-row5f",
   "c-row9",
-  "c-row9s"
+  "c-row9s",
+  "t-row6"
  ],
  "notes": {
   "c-row1": {
@@ -2831,7 +2840,7 @@
    "w": 460,
    "x": 11340,
    "y": 5620,
-   "text": "Онбординг на планшете (D-11, §12.4.9, §12.8.5): T11 → T12 → T13 → мастер T13a–T13d диалогом поверх шага 3 → T13e → T14 → T1.\nКак на десктопе (07b–07a), с ограничениями профиля mobile: в T12 команд нет, в T13b ключ — Keychain или «No key». Отказ проверки — как 06.\nКнопки и строки ≥ 44 px. Граф переходов — NavOnboarding."
+   "text": "Онбординг на планшете (D-11, §12.4.9, §12.8.5): T11 → T12 → T13 → мастер T13a–T13d диалогом поверх шага 3 → T13e → T14 → T1.\nКак на десктопе (07b–07a), с ограничениями профиля mobile: в T12 команд нет, в T13b ключ — Keychain или «No key». Отказ проверки — как 06.\nКнопки и строки ≥ 44 px. Граф переходов — NavTabletOnboarding (ряд ниже)."
   },
   "p-row5f": {
    "fill": "orange",
@@ -2849,7 +2858,7 @@
    "w": 460,
    "x": 12600,
    "y": 6580,
-   "text": "Отказ проверки на планшете (§12.4.4, шаги 4–5), под T13b–T13c: T13f — 401, Back → T13b; T13g — недоступен или таймаут, Back → T13a, «Save without check…»; T13h — подтверждение; T13i — модель вручную; T13j — Review с «Not verified: timeout», Save → T13k: шаг 3 с «Not verified», Next → T14. 404 — как 06."
+   "text": "Отказ проверки на планшете (§12.4.4, шаги 4–5), под T13b–T13c: T13f — 401, Back → T13b; T13g — недоступен или таймаут, Back → T13a, «Save without check…»; T13h — подтверждение; T13i — модель вручную; T13j — Review с «Not verified: timeout», Save → T13k: шаг 3 с «Not verified», Next → T14. 404 — как 06. Все переходы — граф NavTabletOnboarding."
   },
   "c-row9": {
    "kind": "title1",
@@ -2868,6 +2877,14 @@
    "x": 4320,
    "y": 9120,
    "text": "§12.4.3–12.4.4 (U-17, L-24). Основной путь — C5.\nC5a — 401/403: «Enter the key again» (Back к ключу), Retry, Cancel.\nC5b — недоступен или таймаут: Retry, «Change the base URL», «Save without check» с подтверждением [y/N]; модель и окно контекста вручную, в итоге «Not verified: timeout».\nC5c — ProviderKeyMissing: мастер не запускается, конфиг не меняется; три случая ключа.\nC5d — без TTY или с -p мастер не запускается (SETUP-7): нет провайдера — код 64; битый конфиг — код 64 и пути ключей, файл не трогается; нет ключа — ошибка первого хода, код 1.\nТексты C5c — из §12.4.3 дословно; вопросы C5a–C5b и сообщения C5d — образец, точная формулировка не задана."
+  },
+  "t-row6": {
+   "kind": "title1",
+   "page": "tablet",
+   "w": 240,
+   "x": 0,
+   "y": 7540,
+   "text": "Планшет: граф первого запуска"
   }
  },
  "order": [
@@ -3117,7 +3134,8 @@
   "CliSetupUnauthorized.dc.html",
   "CliSetupUnreachable.dc.html",
   "CliSetupKeyMissing.dc.html",
-  "CliSetupNoTty.dc.html"
+  "CliSetupNoTty.dc.html",
+  "NavTabletOnboarding.dc.html"
  ],
  "pages": [
   {
