@@ -57,7 +57,7 @@
 Страница «General» группы «App» SHALL показывать блоки в таком порядке (артборд «26 Settings — General»; design.md change `add-app-general-page`, D17; design.md change `add-app-legal-page`, D9):
 1. InfoBar `settings-general-shared-info` и блок «Agent defaults» (`settings-general-agent-defaults`) — требования «Умолчания агента на странице «General»: …»;
 2. блок «Interface» со строкой «Language» (`settings-general-language`, spec app-settings «Язык интерфейса app»); строка и её поведение этим требованием не меняются;
-3. блок «Startup and files» со строками «Reopen the last project and its tabs» (`settings-general-reopen-last-project`) и «Show ignored files» (`settings-general-show-ignored`);
+3. блок «Startup and files» со строкой «Reopen the last project and its tabs» (`settings-general-reopen-last-project`);
 4. блок «Privacy» (`settings-general-privacy`) со строкой «No telemetry» (`settings-general-no-telemetry`): описание `The app, the CLI and the agent send no usage analytics or crash reports. Prompts and files go only to the provider and tools you set up.` и ссылка «Privacy policy» (`settings-general-privacy-policy`), которая открывает страницу «Legal» на вкладке «Privacy policy»;
 5. раздел «About» (`settings-general-about`).
 

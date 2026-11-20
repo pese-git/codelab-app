@@ -237,6 +237,14 @@ Widget-тесты не трогают настоящую файловую сис
 
 Артборд не правится этим change.
 
+### D14. Строка «Show ignored files» на странице «General» (перенесено из `add-app-general-page`)
+
+**Происхождение.** Строку проектировал change `add-app-general-page` (его D10 и задачи 4.1–4.2). Его остальной объём слит, а `ShowIgnoredFilesCubit` появляется только в задаче 3.4 этого change. Решением пользователя 2026-11-20 при архивации `add-app-general-page` требование, сценарий и задачи строки перенесены сюда, чтобы основная spec не требовала строки, которой нет в app.
+
+**Решение.** Строка `settings-general-show-ignored` в блоке «Startup and files» после «Reopen the last project and its tabs» читает и пишет того же владельца `ShowIgnoredFilesCubit` из root scope, что переключатель `file-tree-show-ignored` панели. Второго ключа, порта и Cubit нет. Страница «General» не создаёт `ProjectFilesCubit` и не обращается к файловой системе. Строка появляется вместе с фильтром `.gitignore` (итерация 3), до этого её нет (SETUP-17). Тексты — ARB `en` и `ru` по `l10n-glossary.md` («Показывать игнорируемые файлы»). Ключевые слова поиска `ignored` и `игнорируемые` уже есть в `settingsSearchKeywordsGeneral`.
+
+**Альтернатива** — оставить требование в `add-app-general-page` и архивировать его с незакрытыми задачами. Отклонена: основная spec требовала бы строку, которой в app нет.
+
 ## Risks / Trade-offs
 
 - **[TOCTOU по символическим ссылкам]** Между проверкой realpath и открытием файла ссылку могут подменить. Дескриптор в Dart нельзя проверить на realpath. → Окно узкое, читаем только на чтение, лимит размера; остаточный риск принят и записан здесь. Агент и так может прочитать любой файл своими инструментами в пределах своей политики.
@@ -251,7 +259,7 @@ Widget-тесты не трогают настоящую файловую сис
 
 ## Migration Plan
 
-Миграции данных нет. Новый ключ `shared_preferences` не вводится до итерации 3 (`codelab.file_browser.show_ignored`). Владелец значения — `ShowIgnoredFilesCubit` в root scope поверх порта `FileBrowserPreferences`: его же использует строка «Show ignored files» страницы «General» (change `add-app-general-page`, D10; уточнение 2026-11-19). Ключ `codelab.sidebar.tab` из прежней редакции §12.6.8 не вводится: сайдбар остаётся списком сессий.
+Миграции данных нет. Новый ключ `shared_preferences` не вводится до итерации 3 (`codelab.file_browser.show_ignored`). Владелец значения — `ShowIgnoredFilesCubit` в root scope поверх порта `FileBrowserPreferences`: его же использует строка «Show ignored files» страницы «General» (D14; перенесено из `add-app-general-page`, D10, 2026-11-20). Ключ `codelab.sidebar.tab` из прежней редакции §12.6.8 не вводится: сайдбар остаётся списком сессий.
 
 ## Open Questions
 
