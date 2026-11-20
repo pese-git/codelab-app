@@ -1424,6 +1424,40 @@
    "expand": "fill",
    "page": "dark",
    "title": "35c Third-party notices, no packages match — dark"
+  },
+  "OnboardingWelcome.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07b Onboarding — step 1 What CodeLab does",
+   "w": 1440,
+   "x": 0,
+   "y": 19100
+  },
+  "OnboardingModel.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c Onboarding — step 3 Choose a model (opens 06 wizard)",
+   "w": 1440,
+   "x": 1520,
+   "y": 19100
+  },
+  "OnboardingWelcome-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "page": "dark",
+   "title": "07b Onboarding welcome — dark",
+   "w": 1440,
+   "x": 0,
+   "y": 19100
+  },
+  "OnboardingModel-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "page": "dark",
+   "title": "07c Onboarding model — dark",
+   "w": 1440,
+   "x": 1520,
+   "y": 19100
   }
  },
  "createdOnFiles": {
@@ -1491,7 +1525,10 @@
   "rowT",
   "row10",
   "row10s",
-  "d-row10"
+  "d-row10",
+  "row11",
+  "d-row11",
+  "row11s"
  ],
  "notes": {
   "c-row1": {
@@ -2101,6 +2138,31 @@
    "size": 24,
    "page": "tablet-dark",
    "text": "Те же файлы планшета, открытые с theme = dark: правка светлого экрана сразу видна здесь. Граф навигации не тематизируется и остаётся только на странице «Планшет»."
+  },
+  "row11": {
+   "kind": "title1",
+   "maxW": 3040,
+   "w": 240,
+   "x": 0,
+   "y": 18840,
+   "text": "Первый запуск: шаги onboarding"
+  },
+  "d-row11": {
+   "kind": "title1",
+   "maxW": 3040,
+   "page": "dark",
+   "w": 240,
+   "x": 0,
+   "y": 18840,
+   "text": "Тёмная тема — первый запуск"
+  },
+  "row11s": {
+   "fill": "purple",
+   "size": 24,
+   "w": 460,
+   "x": 3040,
+   "y": 19100,
+   "text": "Onboarding app (D-11, §12.4.9): 07b → 07 → 07c → 07a, после BootReady, флаг onboarding_done.\n07b — шаг 1 «What CodeLab does»: проектная папка, одобрения, своя модель и ключ; встроенный агент по умолчанию. Back нет.\n07 — шаг 2 «Permissions» (ряд «Настройка и запуск»).\n07c — шаг 3 «Choose a model»: пресеты ProviderPresets.all; кнопка открывает ProviderWizardDialog (06, тот же ProviderSetupFlow). Шаг пропускается при ProviderReady.\n07a — шаг 4 «Privacy» (ряд «Правовые документы»), «Start using CodeLab» → 01."
   }
  },
  "order": [
@@ -2271,7 +2333,11 @@
   "NoticesMatch.dc.html",
   "NoticesMatch-dark.dc.html",
   "NoticesEmpty.dc.html",
-  "NoticesEmpty-dark.dc.html"
+  "NoticesEmpty-dark.dc.html",
+  "OnboardingWelcome.dc.html",
+  "OnboardingModel.dc.html",
+  "OnboardingWelcome-dark.dc.html",
+  "OnboardingModel-dark.dc.html"
  ],
  "pages": [
   {

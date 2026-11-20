@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Onboarding — what CodeLab does</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.root{min-height:900px;display:flex;flex-direction:column}
+.step{display:flex;gap:12px;align-items:center;color:var(--text2)}
+.step i{width:24px;height:24px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;font-weight:600;border:1px solid var(--strong);box-sizing:border-box}
+.step.done i{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.step.cur{color:var(--text);font-weight:600}
+.step.cur i{border:2px solid var(--accent);color:var(--accent-text)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.fc{display:flex;flex-direction:column;gap:8px;padding:20px}
+.fc .f-sci{color:var(--accent-text)}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="f-appbar"><span class="f-logo">CL</span><span class="t-cap">Welcome to CodeLab</span></header>
+  <section class="f-content" style="border-left: 0; border-top-left-radius: 0; align-items: center; padding: 48px 24px">
+    <div style="width: 100%; max-width: 920px; display: flex; flex-direction: column; gap: 24px">
+      <ol aria-label="Setup steps" style="list-style: none; margin: 0; padding: 0; display: flex; gap: 28px; flex-wrap: wrap">
+        <li class="step cur" aria-current="step"><i>1</i>What CodeLab does</li>
+        <li class="step"><i>2</i>Permissions</li>
+        <li class="step"><i>3</i>Choose a model</li>
+        <li class="step"><i>4</i>Privacy</li>
+      </ol>
+      <div>
+        <h1 class="t-tl" style="margin: 0 0 8px">An AI coding agent that works in your project</h1>
+        <p class="t-bl t2" style="margin: 0; max-width: 720px">Ask in plain words. The agent reads your code, proposes edits and runs commands in the project folder, and shows each step in the conversation.</p>
+      </div>
+      <div class="cards">
+        <div class="f-card fc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="t-strong">Works in one project folder</span><span class="t-cap t2">Open a folder, start a session. Files, commands and search stay inside it.</span></div>
+        <div class="f-card fc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg><span class="t-strong">You approve the changes</span><span class="t-cap t2">Edits and commands wait for your decision, with the diff or the exact command.</span></div>
+        <div class="f-card fc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg><span class="t-strong">Your model, your key</span><span class="t-cap t2">Connect a cloud provider or a local model. Keys go to the system keychain.</span></div>
+      </div>
+      <div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="12" rx="2"/><path d="M9 21h6M12 17v4"/></svg><div style="flex: 1"><div>The agent runs inside the app</div><div class="t-cap t2">Nothing else to install. An external agent over stdio or WebSocket can be added later in Settings › Connection.</div></div><span class="tag">Built-in</span></div>
+      <p class="t-cap t2" style="margin: 0">Setup takes four short steps. You can change every choice later in Settings.</p>
+      <div style="display: flex; gap: 8px; justify-content: flex-end">
+        <a href="Onboarding.dc.html" class="f-btn accent" style="min-width: 120px; text-decoration: none">Next</a>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>
