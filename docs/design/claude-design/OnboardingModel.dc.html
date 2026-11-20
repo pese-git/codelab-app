@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Onboarding — choose a model</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.root{min-height:900px;display:flex;flex-direction:column}
+.step{display:flex;gap:12px;align-items:center;color:var(--text2)}
+.step i{width:24px;height:24px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;font-weight:600;border:1px solid var(--strong);box-sizing:border-box}
+.step.done i{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.step.cur{color:var(--text);font-weight:600}
+.step.cur i{border:2px solid var(--accent);color:var(--accent-text)}
+.grid{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px}
+.grid legend{grid-column:1/-1}
+.pr{cursor:pointer;min-height:64px}
+.pr.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.pri{appearance:none;-webkit-appearance:none;margin:0;width:20px;height:20px;border-radius:50%;border:1px solid var(--strong);background:var(--control);flex:none;box-sizing:border-box}
+.pri:checked{border:5px solid var(--accent);background:var(--on-accent)}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="f-appbar"><span class="f-logo">CL</span><span class="t-cap">Welcome to CodeLab</span></header>
+  <section class="f-content" style="border-left: 0; border-top-left-radius: 0; align-items: center; padding: 48px 24px">
+    <div style="width: 100%; max-width: 920px; display: flex; flex-direction: column; gap: 24px">
+      <ol aria-label="Setup steps" style="list-style: none; margin: 0; padding: 0; display: flex; gap: 28px; flex-wrap: wrap">
+        <li class="step done"><i>✓</i>What CodeLab does</li>
+        <li class="step done"><i>✓</i>Permissions</li>
+        <li class="step cur" aria-current="step"><i>3</i>Choose a model</li>
+        <li class="step"><i>4</i>Privacy</li>
+      </ol>
+      <div>
+        <h1 class="t-tl" style="margin: 0 0 8px">Choose where the model runs</h1>
+        <p class="t-bl t2" style="margin: 0; max-width: 720px">Pick a provider. CodeLab checks the address and the key, lists the models and saves the choice as your default.</p>
+      </div>
+      <fieldset class="grid" data-fluent="RadioButtons (presets, ProviderPresets.all)">
+        <legend class="t-strong" style="margin-bottom: 8px">Provider</legend>
+        <label class="f-sc pr"><input type="radio" name="preset" class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg><div style="flex: 1"><div>OpenAI</div><div class="t-cap t2">api.openai.com · key</div></div></label>
+        <label class="f-sc pr on"><input type="radio" name="preset" checked class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 5 20M12 4l7 16M8 14h8"/></svg><div style="flex: 1"><div>Anthropic</div><div class="t-cap t2">api.anthropic.com · key</div></div></label>
+        <label class="f-sc pr"><input type="radio" name="preset" class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h16M14 6l6 6-6 6"/></svg><div style="flex: 1"><div>OpenRouter</div><div class="t-cap t2">Many models through one key</div></div></label>
+        <label class="f-sc pr"><input type="radio" name="preset" class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="12" rx="2"/><path d="M9 21h6"/></svg><div style="flex: 1"><div>Ollama</div><div class="t-cap t2">Local, no key</div></div></label>
+        <label class="f-sc pr"><input type="radio" name="preset" class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><div style="flex: 1"><div>Custom OpenAI-compatible</div><div class="t-cap t2">Your server URL, optional key</div></div></label>
+        <label class="f-sc pr"><input type="radio" name="preset" class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><div style="flex: 1"><div>Custom Anthropic-compatible</div><div class="t-cap t2">Your server URL, optional key</div></div></label>
+      </fieldset>
+      <div class="f-ib" data-fluent="InfoBar (informational)">
+        <span class="f-ibi" aria-hidden="true">i</span>
+        <div><span class="ttl">Opens the provider wizard</span>Base URL, key, a live check and the model list, the same steps as Settings › Providers › Add provider. The key is stored in the system keychain or read from an environment variable.</div>
+      </div>
+      <p class="t-cap t2" style="margin: 0">This step is skipped when a provider is already set up and its key is found.</p>
+      <div style="display: flex; gap: 8px; justify-content: flex-end">
+        <a href="Onboarding.dc.html" class="f-btn" style="min-width: 120px; text-decoration: none">Back</a>
+        <a href="Wizard.dc.html" class="f-btn accent" style="min-width: 160px; text-decoration: none">Set up Anthropic…</a>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>
