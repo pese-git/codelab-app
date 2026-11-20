@@ -168,7 +168,8 @@ void main() {
   // macOS, change `add-app-keyboard-page`).
   group('символы клавиш и буквы', () {
     TextStyle styleOf(WidgetTester tester, String text) {
-      final style = tester.widget<Text>(find.text(text)).style;
+      // Знак может стоять в нескольких плашках: стиль у всех одинаков.
+      final style = tester.widgetList<Text>(find.text(text)).first.style;
       expect(style, isNotNull, reason: text);
       return style!;
     }
@@ -311,44 +312,55 @@ void main() {
       expect(primary == null || !inTable(primary), isTrue);
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-    testWidgets('ширина 400 px: горизонтальная прокрутка без переполнения, '
-        'кейкапы не переносятся, текст действия переносится', (tester) async {
-      await tester.pumpWidget(_enHost(_table(), width: 400));
+    testWidgets(
+      'ширина 340 px (уже minWidth 380): горизонтальная прокрутка без переполнения, '
+      'кейкапы не переносятся, текст действия переносится',
+      (tester) async {
+        // Шрифт тестов (Ahem) широкий: перенос делает таблицу выше окна 600 px.
+        tester.view.physicalSize = const Size(800, 4000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(_enHost(_table(), width: 340));
 
-      expect(tester.takeException(), isNull);
-      final scrolls = tester
-          .widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView))
-          .where((s) => s.scrollDirection == Axis.horizontal);
-      expect(scrolls, isNotEmpty, reason: 'горизонтальная прокрутка');
+        expect(tester.takeException(), isNull);
+        final scrolls = tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .where((s) => s.scrollDirection == Axis.horizontal);
+        expect(scrolls, isNotEmpty, reason: 'горизонтальная прокрутка');
 
-      // Кейкапы одной строки стоят на одной линии и не сжаты до переноса.
-      final allowRow = find.byKey(const ValueKey('row-allow-always'));
-      final caps = [
-        for (final label in const ['Ctrl', 'Alt', 'Enter'])
-          find.descendant(of: allowRow, matching: find.text(label)),
-      ];
-      final tops = [for (final f in caps) tester.getRect(f).center.dy];
-      expect(tops.toSet(), hasLength(1), reason: 'кейкапы на одной линии');
+        // Кейкапы одной строки стоят на одной линии и не сжаты до переноса.
+        final allowRow = find.byKey(const ValueKey('row-allow-always'));
+        final caps = [
+          for (final label in const ['Ctrl', 'Alt', 'Enter'])
+            find.descendant(of: allowRow, matching: find.text(label)),
+        ];
+        final tops = [for (final f in caps) tester.getRect(f).center.dy];
+        expect(tops.toSet(), hasLength(1), reason: 'кейкапы на одной линии');
 
-      // Длинное «действие» переносится: выше однострочного «Allow always».
-      final longAction = tester.getSize(
-        find.text('Close the command palette, a dialog or a sliding panel'),
-      );
-      final shortAction = tester.getSize(find.text('Allow always'));
-      expect(longAction.height, greaterThan(shortAction.height));
-
-      // После прокрутки все кейкапы строки видны целиком.
-      await tester.ensureVisible(caps.last);
-      await tester.pump();
-      final viewport = tester.getRect(find.byType(CodeLabShortcutTable));
-      for (final f in caps) {
-        expect(
-          tester.getRect(f).right,
-          lessThanOrEqualTo(viewport.right),
-          reason: 'кейкап виден после прокрутки',
+        // Длинное «действие» переносится: выше однострочного «Allow always».
+        final longAction = tester.getSize(
+          find.text('Close the command palette, a dialog or a sliding panel'),
         );
-      }
-      expect(tester.takeException(), isNull);
-    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+        final shortAction = tester.getSize(find.text('Allow always'));
+        expect(longAction.height, greaterThan(shortAction.height));
+
+        // После прокрутки все кейкапы строки видны целиком.
+        await tester.ensureVisible(caps.last);
+        await tester.pump();
+        final viewport = tester.getRect(find.byType(CodeLabShortcutTable));
+        for (final f in caps) {
+          expect(
+            tester.getRect(f).right,
+            lessThanOrEqualTo(viewport.right),
+            reason: 'кейкап виден после прокрутки',
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.linux),
+    );
   });
 }

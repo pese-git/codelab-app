@@ -51,6 +51,54 @@ class CodeLabKeycaps extends StatelessWidget {
         .reduce(strings.codeLabShortcutAlternatives);
   }
 
+  /// Ширина ряда плашек [combos] при текущих шрифтах и масштабе текста.
+  ///
+  /// Почему: колонка клавиш таблицы должна быть ровно по самой широкой
+  /// строке, а не константой: плашки не сжимаются и не переносятся (D9), а
+  /// ширина зависит от шрифта и платформы. Для чего: `CodeLabShortcutTable`
+  /// берёт максимум по строкам. Как использовать: вызывать в `build` с тем же
+  /// [combos], что у виджета; размеры повторяют раскладку `_Keycap`.
+  static double widthOf(BuildContext context, List<CodeLabKeyCombo> combos) {
+    final platform = defaultTargetPlatform;
+    final scaler = MediaQuery.textScalerOf(context);
+    double textWidth(String text, TextStyle? style) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      return width;
+    }
+
+    var total = 0.0;
+    for (var i = 0; i < combos.length; i++) {
+      if (i > 0) {
+        total +=
+            12 +
+            textWidth(
+              '/',
+              CodeLabText.styleOf(context, CodeLabTextRole.caption),
+            );
+      }
+      final caps = combos[i].capsFor(platform);
+      for (var j = 0; j < caps.length; j++) {
+        if (j > 0) total += 4;
+        total += 14 + textWidth(caps[j], _capStyle(context, caps[j]));
+      }
+    }
+    return total;
+  }
+
+  static bool _isSymbol(String cap) => cap.runes.any((rune) => rune > 0x7f);
+
+  static TextStyle? _capStyle(BuildContext context, String cap) =>
+      _isSymbol(cap)
+      ? CodeLabText.symbolStyleOf(context, CodeLabTextRole.mono)
+      : CodeLabText.styleOf(context, CodeLabTextRole.mono);
+
   @override
   Widget build(BuildContext context) {
     final muted = FluentTheme.of(context).resources.textFillColorSecondary;
@@ -103,13 +151,23 @@ class _Keycap extends StatelessWidget {
           bottom: BorderSide(color: stroke, width: 2),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        child: CodeLabText(
-          text,
-          role: CodeLabTextRole.mono,
-          maxLines: 1,
-          overflow: TextOverflow.visible,
+      // Минимальная высота выравнивает плашки букв и знаков: у шрифтов разная
+      // высота строки.
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 22),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          child: Center(
+            widthFactor: 1,
+            // Знаки (не ASCII) — системным шрифтом: в `Menlo` они мельче.
+            child: CodeLabText(
+              text,
+              role: CodeLabTextRole.mono,
+              symbols: CodeLabKeycaps._isSymbol(text),
+              maxLines: 1,
+              overflow: TextOverflow.visible,
+            ),
+          ),
         ),
       ),
     );

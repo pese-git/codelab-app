@@ -14,6 +14,7 @@ class CodeLabText extends StatelessWidget {
     this.maxLines,
     this.overflow,
     this.color,
+    this.symbols = false,
     super.key,
   });
 
@@ -33,9 +34,31 @@ class CodeLabText extends StatelessWidget {
   static TextStyle? styleOf(BuildContext context, CodeLabTextRole role) =>
       _styleForRole(FluentTheme.of(context).typography, role);
 
+  /// Стиль знаков клавиш: системный шрифт темы с кеглем роли [role] (для
+  /// измерения ширины плашек без построения виджета, `CodeLabKeycaps.widthOf`).
+  static TextStyle? symbolStyleOf(BuildContext context, CodeLabTextRole role) {
+    final typography = FluentTheme.of(context).typography;
+    return typography.body?.copyWith(
+      fontSize: _styleForRole(typography, role)?.fontSize,
+      fontFamilyFallback: _symbolFallback,
+    );
+  }
+
+  /// Набрать [data] знаками системным шрифтом, а не шрифтом роли.
+  ///
+  /// Почему: в моноширинном шрифте роли [CodeLabTextRole.mono] (`Menlo`)
+  /// знаки клавиш ⌘ ⇧ ⌥ ⏎ ⌫ и стрелки нарисованы заметно мельче букв (ручная
+  /// проверка на macOS, change `add-app-keyboard-page`). Для чего: плашки
+  /// клавиш. Как использовать: `symbols: true` с ролью [CodeLabTextRole.mono];
+  /// кегль берётся у роли, шрифт — системный стиль темы (знаки есть в SF и
+  /// Segoe UI), запасные шрифты символов перечислены в `_symbolFallback`.
+  final bool symbols;
+
   @override
   Widget build(BuildContext context) {
-    final style = styleOf(context, role);
+    final style = symbols
+        ? symbolStyleOf(context, role)
+        : styleOf(context, role);
     return Text(
       data,
       maxLines: maxLines,
@@ -69,4 +92,13 @@ const _monoFallback = [
   'DejaVu Sans Mono',
   'Courier New',
   'monospace',
+];
+
+/// Запасные шрифты со знаками клавиш: на Windows и Linux системный шрифт
+/// может не содержать ⏎ и ⌫.
+const _symbolFallback = [
+  'Apple Symbols',
+  'Segoe UI Symbol',
+  'Noto Sans Symbols 2',
+  'DejaVu Sans',
 ];

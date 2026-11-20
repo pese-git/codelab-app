@@ -92,12 +92,16 @@ class CodeLabShortcutTable extends StatefulWidget {
   /// решает app, таблица только раскладывает их (AGENTS кита §2).
   final List<CodeLabShortcutTableGroup> groups;
 
-  /// Минимальная ширина таблицы: уже неё включается горизонтальная прокрутка.
-  static const minWidth = 780.0;
-
-  /// Ширина колонки клавиш: самая широкая строка (`Ctrl Alt Backspace`)
-  /// помещается без переноса.
-  static const _shortcutWidth = 260.0;
+  /// Минимальная ширина таблицы: уже неё включается горизонтальная
+  /// прокрутка.
+  ///
+  /// Почему 380: при минимальном окне app (800 px) тело страницы — окно минус
+  /// навигация настроек (около 320 px) и поля 2 × 40, то есть около 400 px, и
+  /// все три колонки должны быть видны без прокрутки: «Action» и «Where»
+  /// гибкие и переносят текст, колонка клавиш занимает ширину самой широкой
+  /// строки (D9; ручная проверка на macOS). Прокрутка нужна только для
+  /// действительно узкой области (уже 380 px).
+  static const minWidth = 380.0;
 
   @override
   State<CodeLabShortcutTable> createState() => _CodeLabShortcutTableState();
@@ -112,7 +116,7 @@ class _CodeLabShortcutTableState extends State<CodeLabShortcutTable> {
     super.dispose();
   }
 
-  Widget _table(BuildContext context) {
+  Widget _table(BuildContext context, double shortcutWidth) {
     final resources = FluentTheme.of(context).resources;
     final divider = BorderSide(color: resources.dividerStrokeColorDefault);
     return DecoratedBox(
@@ -125,7 +129,7 @@ class _CodeLabShortcutTableState extends State<CodeLabShortcutTable> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _cells(
-            context,
+            shortcutWidth,
             CodeLabText(widget.actionHeader, role: CodeLabTextRole.strong),
             CodeLabText(widget.shortcutHeader, role: CodeLabTextRole.strong),
             CodeLabText(widget.whereHeader, role: CodeLabTextRole.strong),
@@ -168,7 +172,7 @@ class _CodeLabShortcutTableState extends State<CodeLabShortcutTable> {
                   ].join(', '),
                   excludeSemantics: true,
                   child: _cells(
-                    context,
+                    shortcutWidth,
                     CodeLabText(row.action),
                     CodeLabKeycaps(combos: row.combos),
                     CodeLabText(
@@ -185,10 +189,11 @@ class _CodeLabShortcutTableState extends State<CodeLabShortcutTable> {
     );
   }
 
-  /// Три колонки: действие и место делят остаток 3:2, клавиши — фиксированная
-  /// ширина, чтобы плашки не переносились.
+  /// Три колонки: действие и место делят остаток 3:2, клавиши — ширина
+  /// самой широкой строки ([shortcutWidth]), чтобы плашки не переносились и
+  /// не сжимались.
   Widget _cells(
-    BuildContext context,
+    double shortcutWidth,
     Widget action,
     Widget shortcut,
     Widget where,
@@ -201,7 +206,7 @@ class _CodeLabShortcutTableState extends State<CodeLabShortcutTable> {
           Expanded(flex: 3, child: action),
           const SizedBox(width: 12),
           SizedBox(
-            width: CodeLabShortcutTable._shortcutWidth,
+            width: shortcutWidth,
             child: Align(
               alignment: AlignmentDirectional.centerStart,
               child: shortcut,
@@ -216,12 +221,22 @@ class _CodeLabShortcutTableState extends State<CodeLabShortcutTable> {
 
   @override
   Widget build(BuildContext context) {
+    // Колонка клавиш — по самой широкой строке при текущих шрифтах.
+    var shortcutWidth = 0.0;
+    for (final group in widget.groups) {
+      for (final row in group.rows) {
+        final width = CodeLabKeycaps.widthOf(context, row.combos);
+        if (width > shortcutWidth) shortcutWidth = width;
+      }
+    }
+    shortcutWidth = shortcutWidth.ceilToDouble() + 2;
+    const minWidth = CodeLabShortcutTable.minWidth;
     // Строки только для чтения: ни одной остановки обхода Tab (D9).
     return ExcludeFocus(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          if (constraints.maxWidth >= CodeLabShortcutTable.minWidth) {
-            return _table(context);
+          if (constraints.maxWidth >= minWidth) {
+            return _table(context, shortcutWidth);
           }
           return Scrollbar(
             controller: _scroll,
@@ -229,8 +244,8 @@ class _CodeLabShortcutTableState extends State<CodeLabShortcutTable> {
               controller: _scroll,
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: CodeLabShortcutTable.minWidth,
-                child: _table(context),
+                width: minWidth,
+                child: _table(context, shortcutWidth),
               ),
             ),
           );
