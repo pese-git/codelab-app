@@ -46,6 +46,17 @@ flowchart LR
 - `CodeLabStatusTable` рисует готовые строки и ячейки; действие строки — колбэк.
 - `CodeLabUsagePane` показывает уже отформатированные значения (`CodeLabUsageCard`, `CodeLabUsageRow`, `CodeLabUsageNote`); кит ничего не считает.
 
+## Одобрение: фокус и переход
+
+`CodeLabApprovalPrompt` (полоса решения) не берёт клавиатурный фокус сама. Сочетания ответа (⌘⏎, ⌥⌘⏎, ⌘⌫, ⌥⌘⌫ на macOS; `Ctrl` вместо ⌘ на Windows и Linux) действуют, только когда фокус внутри полосы: клик, Tab или переход. Без этого запрос не получил бы ответа от случайного нажатия.
+
+- **Переход.** `CodeLabWorkbenchShortcuts.onGoToApproval` привязывает `CodeLabShortcut.goToApproval` (⇧⌘A, `Ctrl+Shift+A`). Какое одобрение показать, решает app. Он просит ленту показать цель с `CodeLabTranscriptShowRequest.focusApproval`, и лента ставит фокус на полосу.
+- **Вид.** Фокус на полосе виден рамкой (`focusFrameKey`); Tab идёт сразу к кнопкам, Enter и Space на самой полосе ничего не выбирают. Пока у активного одобрения фокус вне полосы, внизу стоит подпись «Press {shortcut} to answer from the keyboard».
+- **Возврат.** Когда полоса с фокусом уходит, она вызывает `onApprovalFocusReleased`; хост возвращает фокус.
+- **Ключ.** Полоса получает ключ по id запроса: новый запрос не наследует фокус прежнего.
+
+`CodeLabApprovalOptionGroup` тоже без `autofocus`.
+
 ## Тема и тоны
 
 Своей темы у пакета нет: виджеты берут цвета и типографику из `FluentTheme.of(context)`, поэтому ими управляет `FluentApp` приложения (`apps/codelab_desktop/lib/app/codelab_app_widget.dart`). Светлую и тёмную тему проверяют превью.
