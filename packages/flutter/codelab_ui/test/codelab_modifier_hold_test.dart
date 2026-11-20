@@ -10,6 +10,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/layout_keys.dart';
+
 void main() {
   var now = DateTime.utc(2026, 11, 20, 12);
   final reported = <Duration?>[];
@@ -88,4 +90,25 @@ void main() {
     expect(reported, [null]);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
   }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+  // Итерация 8 `fix-approval-focus` (задача 8.1, D16): при русской раскладке
+  // Alt+Shift+Y приходит как «н» на физической Y; срок зажатия сообщается так
+  // же, как для латинской Y. Красный до задачи 8.2.
+  testWidgets('русская раскладка: Alt+Shift+«н» — срок передаётся так же', (
+    tester,
+  ) async {
+    await pumpShortcuts(tester);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    now = now.add(const Duration(milliseconds: 200));
+    await simulateLayoutKey(
+      tester,
+      russianKeyFor(comboOf(TargetPlatform.windows).key),
+    );
+
+    expect(reported, [const Duration(milliseconds: 200)]);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 }

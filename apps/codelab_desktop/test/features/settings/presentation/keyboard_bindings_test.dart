@@ -50,6 +50,7 @@ import '../../../support/fake_agents_modes_cubit.dart';
 import '../../../support/fake_profile_secrets.dart';
 import '../../../support/fake_provider_settings.dart';
 import '../../../support/in_memory_profile_store.dart';
+import '../../../support/layout_keys.dart';
 import '../../../support/l10n_app.dart';
 import '../../../support/press_shortcut.dart';
 import '../../../support/start_agent.dart';
@@ -250,6 +251,60 @@ void main() {
       expect(find.byType(CodeLabCommandPaletteSurface), findsNothing);
       await tearDownApp(tester);
     });
+
+    // Итерация 8 `fix-approval-focus` (задача 8.3, D16; spec
+    // agent-workbench-ui «Сочетания app не зависят от раскладки ввода»):
+    // русская раскладка отдаёт «л» на физической K и «б» на физической «,».
+    // Красные до реализации 8.2.
+    testWidgets('русская раскладка macOS: ⌘«л» открывает палитру, ⌘«б» — '
+        'настройки', (tester) async {
+      await pumpConnected(tester);
+      await frames(tester, 3);
+
+      await pressLayoutKey(
+        tester,
+        russianKey(LogicalKeyboardKey.keyK),
+        meta: true,
+      );
+      await shortFrames(tester);
+      expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
+
+      await pressShortcut(tester, CodeLabShortcut.closeOverlay);
+      await shortFrames(tester);
+      expect(find.byType(CodeLabCommandPaletteSurface), findsNothing);
+
+      await pressLayoutKey(
+        tester,
+        russianKey(LogicalKeyboardKey.comma),
+        meta: true,
+      );
+      await shortFrames(tester);
+      expect(_key('settings-nav-connection'), findsOneWidget);
+      await tearDownApp(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets(
+      'русская раскладка Windows и Linux: Ctrl+«л» открывает '
+      'палитру',
+      (tester) async {
+        await pumpConnected(tester);
+        await frames(tester, 3);
+
+        await pressLayoutKey(
+          tester,
+          russianKey(LogicalKeyboardKey.keyK),
+          control: true,
+        );
+        await shortFrames(tester);
+
+        expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
+        await tearDownApp(tester);
+      },
+      variant: TargetPlatformVariant({
+        TargetPlatform.windows,
+        TargetPlatform.linux,
+      }),
+    );
 
     for (final useMeta in const [false, true]) {
       final modifier = useMeta ? 'Cmd' : 'Ctrl';
