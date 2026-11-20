@@ -212,6 +212,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     Logger? usageLogger,
     Logger? approvalLogger,
     DateTime Function()? clock,
+    DateTime Function()? wallClock,
   }) : _workspace = workspace,
        _diagnostics = diagnostics,
        _usageCsvSaver = usageCsvSaver,
@@ -219,6 +220,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
        _usageLogger = usageLogger,
        _approvalLogger = approvalLogger,
        _clock = clock ?? DateTime.now,
+       _wallClock = wallClock ?? clock ?? DateTime.now,
        super(const ActiveSessionState()) {
     activation = ApprovalActivationTracker(clock: _clock);
     _languageSubscription = strings.changes.listen(_handleLanguage);
@@ -249,6 +251,9 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   /// команды, заголовка и подписей вариантов агента.
   final Logger? _approvalLogger;
   final DateTime Function() _clock;
+
+  /// Время стены для имени CSV; отсчёты задержек идут по [_clock] (монотонным).
+  final DateTime Function() _wallClock;
 
   /// Момент, с которого активное одобрение показанной сессии стало активным
   /// (D14, п. 2). Владелец — этот Cubit: он сообщает трекеру каждый снимок
@@ -785,7 +790,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     UsageCsvSaveResult result;
     try {
       result = await _usageCsvSaver.save(
-        suggestedName: _csvNameOf(id, _clock()),
+        suggestedName: _csvNameOf(id, _wallClock()),
         csv: buildUsageCsv(data),
       );
     } on Object catch (error) {

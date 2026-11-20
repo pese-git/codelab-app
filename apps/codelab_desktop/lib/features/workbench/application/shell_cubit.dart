@@ -82,6 +82,23 @@ export 'ui_mappers.dart'
 /// перезапуска агента (D17). [clock] — часы задержек ответа сочетанием.
 /// Выбор проекта стартует агента: сборка связывает
 /// `SettingsCubit.onProjectSelected` с `ConnectionCubit.startAgent` (D13).
+/// Монотонные часы для отсчётов безопасности (D14).
+///
+/// Почему: пороги 150 мс (зажатие Alt и Shift) и 500 мс (свежесть запроса)
+/// защищают от случайного ответа; прыжок системного времени вперёд по
+/// `DateTime.now` сократил бы их. Здесь «сейчас» = момент создания + `Stopwatch`,
+/// поэтому часы не убывают и не зависят от перевода системных часов.
+///
+/// Как использовать: вызвать один раз на сборку (`CodeLabShellParts.build`) и
+/// раздавать одну и ту же функцию — стабильная идентичность не даёт
+/// `CodeLabWorkbenchShortcuts` пересоздавать трекер. Для меток журнала и дат
+/// на экране не годятся: там нужен `DateTime.now`.
+DateTime Function() createMonotonicClock() {
+  final epoch = DateTime.now();
+  final stopwatch = Stopwatch()..start();
+  return () => epoch.add(stopwatch.elapsed);
+}
+
 final class CodeLabShellParts {
   CodeLabShellParts._({
     required this.strings,
@@ -116,7 +133,7 @@ final class CodeLabShellParts {
     Logger? appLogger,
     DateTime Function()? clock,
   }) {
-    final now = clock ?? DateTime.now;
+    final now = clock ?? createMonotonicClock();
     final changes = ShellChanges();
     final diagnostics = ShellDiagnostics(logger: logger);
     final settings = SettingsCubit(
@@ -138,6 +155,8 @@ final class CodeLabShellParts {
       usageLogger: usageLogger,
       approvalLogger: appLogger,
       clock: now,
+      // Имя CSV — настоящее время стены; монотонные часы нужны только отсчётам.
+      wallClock: clock ?? DateTime.now,
     );
     final connection = ConnectionCubit(
       changes: changes,
