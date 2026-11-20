@@ -209,3 +209,44 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - узел, которому Flutter отдал фокус, внутри другой полосы — перевод в композер или на рабочее место сразу, в микротаске; сценарий «Flutter вернул фокус на кнопку другого одобрения», D5;
   - одна транзитивная функция порядка «самое раннее ожидающее» для строки вызова и признака `focused` (`codelab_client_core`, `[client]`), D13;
   - документация: убран «клик» как способ поставить фокус (кнопка Fluent `HoverButton` фокус по клику не берёт); уточнены подсказки и «только у самого раннего одобрения».
+
+## 7. Итерация 7 — глобальные сочетания ответа (решение пользователя 2026-11-20; design.md D14, D15)
+
+Сначала красные тесты, затем реализация. Прежние сценарии, которые нажимали ⌘⏎, ⌥⌘⏎, ⌘⌫ или ⌥⌘⌫ в полосе, переписываются под новые требования, а не удаляются: их ожидание теперь — «ответа нет» (spec agent-workbench-ui «Одобрение получает клавиатурный фокус только по действию пользователя», сценарий «Прежние клавиши одобрения не отвечают и при фокусе в полосе»).
+
+- [x] 7.0 `[desktop]` `docs/architecture/proposals/dart-agent-and-clients/12-3-desktop-display.md`: A9 (сочетания ответа, локальных клавиш нет), A11 (Cmd/Ctrl+Enter больше не одобряет), DSK-18 (решение пользователя 2026-11-20) — обновлены при подготовке итерации.
+- [ ] 7.1 `[desktop]` Красный, кит (D15; spec agent-workbench-ui «Ответ на одобрение сочетанием с любого места рабочего места», «Approval options are rendered and bound to shortcuts by kind»; app-settings «Страница «Keyboard»: обозначения клавиш»):
+  - `codelab_shortcuts_test.dart`: 20 записей; `allowOnce`, `allowAlways`, `rejectOnce`, `rejectAlways` с комбинациями по платформе; `capsFor`/`compactFor`/`spokenFor` — `⌘ Y`, `⌥⌘Y`, `Option+Cmd+Z`, `⌥ ⇧ ⌘ Z` на macOS и `Alt Shift Y`, `Alt+Shift+Q`, `Alt+Shift+X`, `Alt+Shift+W` на Linux; ⇧⌘Z и ⌘Z не привязаны; `searchNotations` содержит комбинации обеих платформ; на macOS активатор только `meta` (без Ctrl+Y), на Linux — только Alt+Shift;
+  - `codelab_shortcut_bindings_test.dart`: сценарии сторожа 2 для записей ответа через `CodeLabWorkbenchShortcuts.onAnswerApproval` при платформе macOS и Linux; чужие клавиши (Ctrl+Y и Cmd+Y на Linux, Ctrl+Y на macOS) не вызывают колбэк; автоповтор не вызывает;
+  - `codelab_approval_focus_test.dart`: в полосе ⌘⏎, ⌥⌘⏎, ⌘⌫, ⌥⌘⌫ ничего не выбирают; подсказки кнопок активного одобрения — клавиши ответа, включая `⌥⇧⌘Z` у «Reject» при охвате «Always»; подписи `codeLabApprovalGoToHint` нет; семантика `Allow once: Cmd+Y`;
+  - `codelab_transcript_show_request_test.dart` (или новый файл ленты): лента сообщает видимость полосы по `keyFor(sessionId, approvalId)` — построена и целиком в области прокрутки; вне области и при открытой выдвижной панели — не видна.
+- [ ] 7.2 `[desktop]` Реализация 7.1 в ките: комбинации по платформе в каталоге (D15), `onAnswerApproval` в `CodeLabWorkbenchShortcuts` (`includeRepeats: false`), локальные привязки полосы и `CodeLabApprovalOptionGroup` убраны (`CodeLabApprovalShortcuts` даёт только подсказки и вариант по `kind`), запрос видимости полосы у ленты, удаление `codeLabApprovalGoToHint` из ARB кита, превью, doc-комментарии (`AGENTS.md` §15). 7.1, прежние тесты кита и `l10n:check` зелёные.
+- [ ] 7.3 `[desktop]` Красный, app, application: `apps/codelab_desktop/test/features/workbench/application/approval_shortcut_decision_test.dart` — чистая функция решения по нажатию (D14) с внедряемыми часами:
+  - нет цели, соединение не `Connected`, сессия `detached` — `no_target`, ответа нет;
+  - нет варианта этого `kind`, неизвестный `kind` — `no_option`;
+  - полоса не видна — показать без ответа (`not_visible`);
+  - цель активна меньше 500 мс — показать без ответа (`settling`); ровно 500 мс и больше — ответ;
+  - отсчёт начинается заново, когда активным становится другой id; ответ несёт id запроса и `optionId` цели в момент нажатия.
+- [ ] 7.4 `[desktop]` Красный, app, дерево `CodeLabApp` (`approval_focus_test.dart`, новый `approval_shortcuts_test.dart`): все сценарии требования «Ответ на одобрение сочетанием с любого места рабочего места», включая журнал `workbench.approval_answer` и `workbench.approval_shortcut_skipped` без сырых аргументов и команды, терминал пользователя и Ctrl+Z/Ctrl+Y в композере на Windows; переписанные сценарии требований «Одобрение получает клавиатурный фокус…», «Переход к ожидающему одобрению с клавиатуры» (ответ ⌥⌘Z после перехода, `reject_always` кнопкой после выбора охвата, подсказки кнопок, чтение с экрана), «Фокус после ухода одобрения» (ответ ⌘Y, «Flutter вернул фокус на кнопку другого одобрения» с Enter), MODIFIED «Approval card inside the tool call row» («Shortcut of an always option», «Shortcut hints of the always scope»), сценарии «Отклонить всегда» и «Отмена и повтор правки на macOS не отвечают».
+- [ ] 7.5 `[desktop]` Реализация 7.3 и 7.4 в app:
+  - функция решения в `features/workbench/application/`, учёт момента активации цели (часы — параметр, как в `WorkbenchUsagePane`);
+  - `onAnswerApproval` в `workbench_shell.dart`; показ полосы — `TranscriptViewCubit.requestShow` без фокуса;
+  - ответ — тот же путь, что у кнопки (`respondToApproval`) с источником `shortcut`; события журнала;
+  - терминал пользователя поглощает клавиши ответа, они не всплывают до рабочего места.
+
+  7.3, 7.4 и прежние тесты app зелёные.
+- [ ] 7.6 `[desktop]` Красный, страница «Keyboard» (spec app-settings MODIFIED «…строки таблицы», «…обозначения клавиш», «Сочетания app и страница «Keyboard» не расходятся»):
+  - `keyboard_page_test.dart`: 20 строк, клавиши четырёх строк ответа для macOS и Windows (`reject-always` — `⌥ ⇧ ⌘ Z` и `Alt Shift W`), место `Workbench, earliest pending approval, if it offers this option`;
+  - `keyboard_shortcut_search_test.dart`: `alt shift y` на macOS находит только `allow-once`;
+  - `keyboard_page_l10n_test.dart`: русские тексты нового места;
+  - `keyboard_bindings_test.dart`: сценарий «Отправка и одобрение на разных клавишах»;
+  - `test/support/keyboard_rows.dart`: эталон 20 строк.
+- [ ] 7.7 `[desktop]` Реализация 7.6: `settingsKeyboardWhereApprovalAnywhere` в `app_en.arb` и `app_ru.arb` с меткой `security`; удаление `settingsKeyboardWhereApproval` (`settingsKeyboardActionRejectAlways` остаётся); ветки `switch` в `keyboard_page.dart`. 7.6, сторожа 1 и 2 и `l10n:check` зелёные.
+- [x] 7.8 `[desktop]` Вычитка пользователем русского текста с меткой `security` (Q7): текст принят как есть (решение пользователя 2026-11-20).
+- [ ] 7.9 `[desktop]` `docs-writer`: `apps/codelab_desktop/doc/user-guide.md` — таблица сочетаний одобрения (⌘Y, ⌥⌘Y, ⌥⌘Z, ⌥⇧⌘Z; Alt+Shift+Y, Q, X, W), где они действуют, первое нажатие показывает невидимый запрос, задержка 500 мс после появления, ⌘⏎ — только отправка, «Go to approval» — для чтения и охвата; раздел «Сочетания клавиш».
+- [ ] 7.10 `[desktop]` `docs-writer`: `docs/architecture/l10n-glossary.md` — новое место строк ответа; удалить `Pending approval with keyboard focus, …` и `Press {shortcut} to answer from the keyboard`.
+- [ ] 7.11 `[desktop]` `docs-writer`: `packages/flutter/codelab_ui/AGENTS.md` и `README.md` (клавиши по платформе в каталоге, у полосы нет локальных клавиш, видимость полосы у ленты); `apps/codelab_desktop/AGENTS.md` (решение по нажатию в application, задержка, журнал источника).
+- [ ] 7.12 `[desktop]` Проверка фактов документов 7.9–7.11 (`architecture-reviewer`), исправления.
+- [ ] 7.13 `[desktop]` Проверки затронутого (`AGENTS.md` §21): format, `fvm flutter analyze` и `fvm flutter test` в `packages/flutter/codelab_ui` и `apps/codelab_desktop`, `melos run l10n:check`, компиляция `integration_test`, `openspec validate fix-approval-focus --strict`. Ручная проверка: macOS — ⌘Y из композера, ⌘Z/⇧⌘Z правят текст и не отвечают; Windows — Alt+Shift+Y не переключает раскладку, Ctrl+Y повторяет правку; Linux — Alt+Shift+Q и Alt+Shift+W не перехватывает оконный менеджер; macOS — ⌥⇧⌘Z не занят системой; набор через IME в композере не отвечает на запрос (D14, Risks; при конфликте — вопрос пользователю до PR).
+- [ ] 7.14 `[desktop]` Повторное двойное ревью (`architecture-reviewer`, `acp-safety-reviewer`): ответ сочетанием только активному, видимому и не только что появившемуся одобрению; нет пути ответа из настроек, диалогов, палитры и терминала; журнал без сырых данных.
+- [ ] 7.15 `[desktop]` Описание PR #376: глобальные сочетания ответа и их клавиши по платформам; убраны локальные ⌘⏎/⌥⌘⏎/⌘⌫/⌥⌘⌫ и подсказка перехода; четыре сочетания, включая `reject_always` ⌥⇧⌘Z / Alt+Shift+W; какие проверки запускались, полный `melos run check` не запускался.
