@@ -780,6 +780,34 @@ void main() {
         await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
       });
 
+      testWidgets('кириллица при зажатом ⌘ на физической позиции буквы '
+          'сочетания не совпадает: сравнивается только логическая клавиша', (
+        tester,
+      ) async {
+        final palette = CodeLabShortcut.commandPalette
+            .combosFor(TargetPlatform.macOS)
+            .first;
+        final answer = CodeLabShortcut.allowOnce
+            .combosFor(TargetPlatform.macOS)
+            .first;
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+        expect(
+          palette.accepts(
+            down(LogicalKeyboardKey(0x043b), PhysicalKeyboardKey.keyK), // л
+            HardwareKeyboard.instance,
+          ),
+          isFalse,
+        );
+        expect(
+          answer.accepts(
+            down(LogicalKeyboardKey(0x043d), PhysicalKeyboardKey.keyY), // н
+            HardwareKeyboard.instance,
+          ),
+          isFalse,
+        );
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      });
+
       testWidgets('кириллица без модификатора не совпадает', (tester) async {
         final combo = _combo(CodeLabShortcut.commandPalette);
         expect(

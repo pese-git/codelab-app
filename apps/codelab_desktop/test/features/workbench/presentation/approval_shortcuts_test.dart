@@ -816,6 +816,38 @@ void main() {
       expect(chosenOption(given.single), 'reject-once');
       await tearDownApp(tester);
     }, variant: macOS);
+
+    // Только macOS: симулятор flutter_test не знает кириллицы в таблицах
+    // кодов Windows и Linux (`keyCode != null`).
+    testWidgets('Кириллица без модификаторов не отвечает: «нйлф»', (
+      tester,
+    ) async {
+      await pumpConnected(tester);
+      await sessionWithApproval(tester, 864);
+      await focusComposer(tester);
+      await afterSettling(tester);
+
+      // Логическая клавиша раскладки на физической позиции US: так её
+      // отдаёт ОС при русской раскладке.
+      for (final (logical, physical) in [
+        (0x043d, PhysicalKeyboardKey.keyY), // н
+        (0x0439, PhysicalKeyboardKey.keyQ), // й
+        (0x043b, PhysicalKeyboardKey.keyK), // л
+        (0x0444, PhysicalKeyboardKey.keyA), // ф
+      ]) {
+        final key = LogicalKeyboardKey(logical);
+        await tester.sendKeyDownEvent(key, physicalKey: physical);
+        await tester.sendKeyUpEvent(key, physicalKey: physical);
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await settle(tester);
+
+      expect(answers(), isEmpty);
+      expect(find.byType(CodeLabCommandPaletteSurface), findsNothing);
+      expect(prompts, findsOneWidget);
+      expect(focusInside<CodeLabPromptComposer>(), isTrue);
+      await tearDownApp(tester);
+    }, variant: macOS);
   });
 
   // ---------------------------------------------------------------------
@@ -1031,6 +1063,17 @@ void main() {
       await sessionWithApproval(tester, 861);
       await afterSettling(tester);
       await focusScopeItself(tester);
+      // Слушатель скоупа переводит фокус с самого скоупа на узел-хозяин
+      // сочетаний (`Focus(autofocus)` внутри `CodeLabWorkbenchShortcuts`).
+      final primary = FocusManager.instance.primaryFocus!;
+      expect(primary, isNot(same(workbenchScope())));
+      expect(
+        primary.context
+            ?.findAncestorWidgetOfExactType<CodeLabWorkbenchShortcuts>(),
+        isNotNull,
+      );
+      expect(primary.context!.widget, isA<Focus>());
+      expect((primary.context!.widget as Focus).autofocus, isTrue);
 
       await pressShortcut(tester, CodeLabShortcut.commandPalette);
       await shortFrames(tester);
@@ -1046,6 +1089,22 @@ void main() {
       final given = answers();
       expect(given, hasLength(1));
       expect(chosenOption(given.single), 'allow-once');
+      await tearDownApp(tester);
+    }, variant: macOS);
+
+    testWidgets('фокус в композере остаётся в композере: перевод фокуса '
+        'срабатывает только когда primary — сам скоуп', (tester) async {
+      await pumpConnected(tester);
+      await sessionWithApproval(tester, 865);
+      await focusComposer(tester);
+      await afterSettling(tester);
+
+      final before = FocusManager.instance.primaryFocus;
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(FocusManager.instance.primaryFocus, same(before));
+      expect(focusInside<CodeLabPromptComposer>(), isTrue);
       await tearDownApp(tester);
     }, variant: macOS);
 
@@ -1115,6 +1174,12 @@ void main() {
 
       expect(answers(), isEmpty);
       expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
+      // Молчаливый выход закрыт: нажатие оставляет след (D9, §16).
+      final skipped = journal(_skippedEvent);
+      expect(skipped, hasLength(1));
+      expect(skipped.single['reason'], 'palette_open');
+      expect(skipped.single['session_id'], isNotNull);
+      expect(skipped.single.containsKey('request_id'), isFalse);
       await tearDownApp(tester);
     }, variant: macOS);
 
@@ -1180,6 +1245,10 @@ void main() {
       await settle(tester);
       expect(answers(), isEmpty, reason: 'диалог закрывает рабочее место');
       expect(cubit.state.pendingRootSession, isNotNull);
+      // Оба нажатия оставили след с причиной `root_dialog` (D9, §16).
+      final skipped = journal(_skippedEvent);
+      expect(skipped, hasLength(2));
+      expect(skipped.map((e) => e['reason']), everyElement('root_dialog'));
       await tearDownApp(tester);
     }, variant: macOS);
 
