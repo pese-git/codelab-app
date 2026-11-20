@@ -603,7 +603,7 @@ void main() {
     for (final (name, activate) in [
       ('Enter', LogicalKeyboardKey.enter),
       ('Space', LogicalKeyboardKey.space),
-    ])
+    ]) {
       testWidgets('ссылка доступна как ссылка и открывается с клавиатуры '
           '(Tab, $name)', (tester) async {
         final handle = tester.ensureSemantics();
@@ -638,6 +638,7 @@ void main() {
         expect(_selected(tester, 'third-party-notices'), isTrue);
         handle.dispose();
       });
+    }
 
     testWidgets('абзац «Third-party components» со ссылкой на вкладку '
         'уведомлений', (tester) async {
