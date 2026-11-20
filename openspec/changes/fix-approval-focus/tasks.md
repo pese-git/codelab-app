@@ -179,11 +179,11 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - `packages/flutter/codelab_ui/AGENTS.md` §4: виджеты одобрения не берут фокус сами (`autofocus` запрещён), ключ полосы — id запроса, `onGoToApproval`, `focusApproval`, `onApprovalFocusReleased`;
   - `packages/flutter/codelab_ui/README.md`: раздел про одобрение — фокус и переход;
   - `apps/codelab_desktop/AGENTS.md`: цель перехода выбирает application по признаку `focused` модели; возврат фокуса в композер с проверкой свободного фокуса.
-- [ ] 5.4 `[desktop]` Проверка фактов документов 5.1–5.3 (`architecture-reviewer`), исправления.
+- [x] 5.4 `[desktop]` Проверка фактов документов 5.1–5.3 (`architecture-reviewer`), исправления.
 
 ## 6. Проверки и PR
 
-- [ ] 6.1 `[desktop]` Проверки затронутого (`AGENTS.md` §21):
+- [x] 6.1 `[desktop]` Проверки затронутого (`AGENTS.md` §21):
   - `fvm dart format --set-exit-if-changed` изменённых файлов;
   - `fvm flutter analyze` в `packages/flutter/codelab_ui` и `apps/codelab_desktop`;
   - `fvm flutter test` обоих пакетов;
@@ -195,7 +195,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
 - [ ] 6.2 `[desktop]` Ручная проверка app:
   - на macOS — появление одобрения после клика по пустой ленте, затем ⌘⏎: ответа нет; ⇧⌘A и ⌘⏎: ответ; VoiceOver на полосе;
   - на Windows — Ctrl+Shift+A не переключает раскладку и доходит до app (D3, Risks). При конфликте — решение по Q1 до PR.
-- [ ] 6.3 `[desktop]` Двойное ревью (`architecture-reviewer`, `acp-safety-reviewer`): ни одного пути к ответу на `session/request_permission` без явного действия пользователя.
+- [x] 6.3 `[desktop]` Двойное ревью (`architecture-reviewer`, `acp-safety-reviewer`): ни одного пути к ответу на `session/request_permission` без явного действия пользователя.
 - [ ] 6.4 `[desktop]` Архивация — только после архивации `add-app-keyboard-page`: MODIFIED-дельта app-settings опирается на его требования (proposal, «Зависимость»).
 - [ ] 6.5 `[desktop]` PR в `develop`. В описании:
   - какие проверки запускались локально, и что полный `melos run check` не запускался;
