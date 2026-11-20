@@ -23,7 +23,7 @@ import 'connection_environment.dart';
 ///
 /// Для чего: [fixed] — шов тестов, готовые данные без чтения ресурсов; без
 /// него версия берётся из `build_version.dart`, ОС и архитектура — из
-/// `BuildInfo`, лицензия и уведомления — из ресурсов `assets/legal/` (читаются
+/// `BuildInfo`, лицензия — из ресурса `assets/legal/LICENSE` (читается
 /// лениво, один раз, без сети). [logDirectory] — тот же каталог, что у
 /// `CodeLabLoggingModule`.
 AboutPorts buildAboutPorts({
@@ -63,9 +63,6 @@ Future<AboutInfo> _loadInfo({
   required AssetBundle bundle,
 }) async {
   final license = await bundle.loadString('assets/legal/LICENSE');
-  final notices = await bundle.loadString(
-    'assets/legal/THIRD_PARTY_NOTICES.md',
-  );
   final summary = licenseSummaryOf(license);
   final build = BuildInfo.current();
   final home = environment.codelabHome;
@@ -80,7 +77,6 @@ Future<AboutInfo> _loadInfo({
         ? '~/.codelab'
         : homePathLabel(home, environment.variables),
     logDirectory: logDirectory,
-    thirdPartyNotices: notices,
   );
 }
 

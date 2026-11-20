@@ -98,6 +98,8 @@ Future<void> _openNotices(
     locale: locale,
     size: const Size(1400, 3000),
   );
+  // На русском вкладки длиннее окна и прокручиваются по горизонтали (D6).
+  await tester.ensureVisible(_key('settings-legal-tab-third-party-notices'));
   await tester.tap(_key('settings-legal-tab-third-party-notices'));
   await tester.pumpAndSettle();
   _binding = binding;
@@ -323,7 +325,14 @@ void main() {
 
       await _type(tester, 'a\u202Eb');
 
-      expect(find.textContaining('\u202E'), findsNothing);
+      // Сырого символа нет в блоке; в самом поле он остаётся, это ввод.
+      expect(
+        find.descendant(
+          of: _key('settings-legal-packages-empty'),
+          matching: find.textContaining('\u202E'),
+        ),
+        findsNothing,
+      );
       expect(
         find.text(
           'No package name contains “a\\u202eb”. The notices register above '

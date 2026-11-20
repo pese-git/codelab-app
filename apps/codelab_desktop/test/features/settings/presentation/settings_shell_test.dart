@@ -571,6 +571,7 @@ void main() {
       SettingsPage.general,
       SettingsPage.appearance,
       SettingsPage.keyboard,
+      SettingsPage.legal,
     ]);
   });
 
@@ -627,6 +628,7 @@ void main() {
       SettingsPage.general,
       SettingsPage.appearance,
       SettingsPage.keyboard,
+      SettingsPage.legal,
     ]);
   });
 

@@ -31,7 +31,8 @@ void main() {
             available: {...defaultSettingsPages.available}
               ..remove(SettingsPage.general)
               ..remove(SettingsPage.appearance)
-              ..remove(SettingsPage.keyboard),
+              ..remove(SettingsPage.keyboard)
+              ..remove(SettingsPage.legal),
           ),
           selected: SettingsPage.connection,
           onSelected: (_) {},
@@ -57,6 +58,7 @@ void main() {
       SettingsPage.general,
       SettingsPage.appearance,
       SettingsPage.keyboard,
+      SettingsPage.legal,
     ]);
     expect(settingsPageBuilders, contains(SettingsPage.skillsAndExtensions));
   });

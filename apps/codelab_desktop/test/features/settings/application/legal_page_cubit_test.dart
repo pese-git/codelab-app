@@ -412,6 +412,7 @@ void main() {
       expect(selected['source'], 'link');
       final link = events('legal.link_opened').single;
       expect(link['target'], 'tab');
+      expect(link['outcome'], 'opened');
     });
 
     test('https вызывает порт открытия ссылок', () async {

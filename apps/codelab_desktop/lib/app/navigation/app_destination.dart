@@ -1,3 +1,4 @@
+import '../../features/settings/application/legal_documents.dart' show LegalTab;
 import 'settings_page.dart';
 
 /// Экран приложения, который показывает `CodeLabAppWidget`.
@@ -34,20 +35,27 @@ final class WorkbenchDestination extends AppDestination {
 ///
 /// Как использовать: создаёт только `NavigationCubit` (`openSettings`,
 /// `selectSettingsPage`); UI читает [page] для выбора пункта навигации.
-/// Равенство по [page] и [returnTo] позволяет Cubit-у не выпускать
-/// одинаковые состояния.
+/// Равенство по [page], [returnTo] и [legalTab] позволяет Cubit-у не
+/// выпускать одинаковые состояния.
+///
+/// [legalTab] — вкладка страницы «Legal», названная ссылкой со страницы
+/// «General» (design.md change `add-app-legal-page`, D1). Только для
+/// `SettingsPage.legal`; `null` значит «Privacy policy». В `last_page` не
+/// сохраняется: хранится только страница.
 final class SettingsDestination extends AppDestination {
-  const SettingsDestination(this.page, {this.returnTo});
+  const SettingsDestination(this.page, {this.returnTo, this.legalTab});
 
   final SettingsPage page;
   final String? returnTo;
+  final LegalTab? legalTab;
 
   @override
   bool operator ==(Object other) =>
       other is SettingsDestination &&
       other.page == page &&
-      other.returnTo == returnTo;
+      other.returnTo == returnTo &&
+      other.legalTab == legalTab;
 
   @override
-  int get hashCode => Object.hash(page, returnTo);
+  int get hashCode => Object.hash(page, returnTo, legalTab);
 }

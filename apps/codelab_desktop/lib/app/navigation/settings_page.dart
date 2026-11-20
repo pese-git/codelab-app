@@ -8,7 +8,7 @@ enum SettingsGroup { agent, app }
 
 /// Страницы настроек codelab-app в фиксированном порядке §12.4.9.
 ///
-/// Почему enum всех одиннадцати страниц, хотя в сборке видны не все: порядок,
+/// Почему enum всех двенадцати страниц, хотя в сборке видны не все: порядок,
 /// группа, заголовок и ключ теста — свойства страницы, а не сборки; набор
 /// видимых страниц отдельно задаёт [SettingsPages] composition root
 /// (design.md change `add-app-settings-shell`, D3).
@@ -31,7 +31,11 @@ enum SettingsPage {
   codeAndWeb(SettingsGroup.agent, 'code-and-web'),
   general(SettingsGroup.app, 'general'),
   appearance(SettingsGroup.app, 'appearance'),
-  keyboard(SettingsGroup.app, 'keyboard');
+  keyboard(SettingsGroup.app, 'keyboard'),
+
+  /// Правовая информация: последняя страница группы «App» (design.md change
+  /// `add-app-legal-page`, D1).
+  legal(SettingsGroup.app, 'legal');
 
   const SettingsPage(this.group, this.slug);
 

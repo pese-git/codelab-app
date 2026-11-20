@@ -18,6 +18,23 @@ enum LegalTab {
   final String logName;
 }
 
+/// Откуда пользователь ушёл со страницы «General» на «Legal» (D9, D11).
+///
+/// Почему enum: значение идёт в поле `from` события `settings.legal_link`, и
+/// опечатка в строке не должна проходить компиляцию. [logName] — значение
+/// поля в `snake_case`.
+enum LegalLinkSource {
+  /// Блок «Privacy», ссылка «Privacy policy».
+  privacyBlock('privacy_block'),
+
+  /// Раздел «About»: кнопки и ссылка `MIT`.
+  about('about');
+
+  const LegalLinkSource(this.logName);
+
+  final String logName;
+}
+
 /// Путь ресурса документа вкладки [tab] для языка интерфейса [languageCode]
 /// (D2).
 ///

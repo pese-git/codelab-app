@@ -3426,7 +3426,7 @@ abstract class AppLocalizations {
   /// **'Copy diagnostics'**
   String get settingsGeneralAboutCopyDiagnostics;
 
-  /// Кнопка раздела About и заголовок диалога со сторонними уведомлениями и лицензиями пакетов.
+  /// Кнопка раздела About, которая открывает вкладку Third-party notices страницы Legal.
   ///
   /// In en, this message translates to:
   /// **'Third-party notices'**
@@ -3467,18 +3467,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t open the log folder.'**
   String get settingsGeneralAboutLogsFailed;
-
-  /// Заголовок списка лицензий пакетов в диалоге сторонних уведомлений.
-  ///
-  /// In en, this message translates to:
-  /// **'Package licenses'**
-  String get settingsGeneralAboutPackageLicenses;
-
-  /// Кнопка закрытия диалога сторонних уведомлений.
-  ///
-  /// In en, this message translates to:
-  /// **'Close'**
-  String get settingsGeneralAboutClose;
 
   /// Причина в InfoBar блока Agent defaults: сессия настроек или снимок конфигурации агента не открылись.
   ///
@@ -3543,7 +3531,7 @@ abstract class AppLocalizations {
   /// Ключевые слова поиска «Find a setting» для страницы General: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять. Ключи конфигурации, имена протоколов и файлов (stdio, websocket, mcp, agents.md) не переводятся и в перевод не включаются: английские слова ищутся всегда.
   ///
   /// In en, this message translates to:
-  /// **'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics'**
+  /// **'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics, telemetry'**
   String get settingsSearchKeywordsGeneral;
 
   /// Подзаголовок группы строк Agent defaults: раздел реестра настроек агента Budget (ключи budget.*). Английский текст равен имени раздела реестра.
@@ -3569,12 +3557,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Logging'**
   String get settingsGeneralGroupLogging;
-
-  /// Подпись над записями в диалоге Third-party notices: сами записи показываются как есть, на языке реестра (русский), и не переводятся; подпись объясняет это при любом языке интерфейса. CodeLab — название продукта, не переводить.
-  ///
-  /// In en, this message translates to:
-  /// **'Entries of the CodeLab third-party notices register, as kept in the repository.'**
-  String get settingsGeneralAboutThirdPartyCaption;
 
   /// Кнопка страницы MCP servers: открыть карточку нового сервера.
   ///
@@ -5802,6 +5784,210 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Missing roles come from extends: \"{base}\" ({builtIn}).'**
   String appearanceIssuesHintExtends(String base, String builtIn);
+
+  /// Пункт навигации и заголовок страницы настроек Legal: политика конфиденциальности, условия, лицензия и сторонние уведомления.
+  ///
+  /// In en, this message translates to:
+  /// **'Legal'**
+  String get settingsPageLegalTitle;
+
+  /// Ключевые слова поиска «Find a setting» для страницы Legal: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять.
+  ///
+  /// In en, this message translates to:
+  /// **'legal, privacy, terms, license, notices, third-party, telemetry, packages'**
+  String get settingsSearchKeywordsLegal;
+
+  /// Доступное имя группы вкладок страницы Legal для программ чтения с экрана.
+  ///
+  /// In en, this message translates to:
+  /// **'Legal documents'**
+  String get settingsLegalTabsLabel;
+
+  /// Вкладка Legal, ссылка блока Privacy и кнопка раздела About на страницу General: одно имя на всех страницах. Подпись не обрезается.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy policy'**
+  String get settingsLegalTabPrivacy;
+
+  /// Вкладка Legal и кнопка раздела About страницы General.
+  ///
+  /// In en, this message translates to:
+  /// **'Terms of use'**
+  String get settingsLegalTabTerms;
+
+  /// Вкладка Legal с лицензией CodeLab.
+  ///
+  /// In en, this message translates to:
+  /// **'License'**
+  String get settingsLegalTabLicense;
+
+  /// Вкладка Legal со сторонними уведомлениями и лицензиями пакетов; совпадает с кнопкой раздела About.
+  ///
+  /// In en, this message translates to:
+  /// **'Third-party notices'**
+  String get settingsLegalTabNotices;
+
+  /// Подпись источника под вкладками Legal. {version} — версия сборки, {asset} — путь ресурса документа; оба не переводятся. CodeLab — название продукта.
+  ///
+  /// In en, this message translates to:
+  /// **'Bundled with CodeLab {version} as {asset} · readable offline'**
+  String settingsLegalSource(String version, String asset);
+
+  /// InfoBar на месте документа Legal, если ресурс не прочитался. Путь и текст исключения не показываются.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load this document.'**
+  String get settingsLegalLoadFailed;
+
+  /// InfoBar Legal, если порт не открыл ссылку https из документа. Адрес не показывается.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open the link.'**
+  String get settingsLegalLinkFailed;
+
+  /// Подпись строки краткого содержания MIT на вкладке License.
+  ///
+  /// In en, this message translates to:
+  /// **'Allowed'**
+  String get settingsLegalLicenseAllowed;
+
+  /// Значение строки Allowed краткого содержания MIT; не юридический текст, вычитывает пользователь.
+  ///
+  /// In en, this message translates to:
+  /// **'Use, copy, modify, merge, publish, distribute, sublicense and sell copies'**
+  String get settingsLegalLicenseAllowedValue;
+
+  /// Подпись строки краткого содержания MIT на вкладке License.
+  ///
+  /// In en, this message translates to:
+  /// **'Condition'**
+  String get settingsLegalLicenseCondition;
+
+  /// Значение строки Condition краткого содержания MIT; вычитывает пользователь.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the copyright and license notice in copies or substantial portions'**
+  String get settingsLegalLicenseConditionValue;
+
+  /// Подпись строки краткого содержания MIT на вкладке License.
+  ///
+  /// In en, this message translates to:
+  /// **'No warranty'**
+  String get settingsLegalLicenseNoWarranty;
+
+  /// Значение строки No warranty краткого содержания MIT; вычитывает пользователь.
+  ///
+  /// In en, this message translates to:
+  /// **'Provided “as is”; the authors are not liable for damages'**
+  String get settingsLegalLicenseNoWarrantyValue;
+
+  /// Оговорка под кратким содержанием MIT на вкладке License.
+  ///
+  /// In en, this message translates to:
+  /// **'This summary is not the license. The full text below is what applies.'**
+  String get settingsLegalLicenseSummaryNote;
+
+  /// Заголовок абзаца вкладки License о пакетах с собственными лицензиями.
+  ///
+  /// In en, this message translates to:
+  /// **'Third-party components'**
+  String get settingsLegalComponentsTitle;
+
+  /// Абзац вкладки License. {link} — название вкладки Third-party notices, оно становится ссылкой и подставляется как есть. CodeLab — название продукта.
+  ///
+  /// In en, this message translates to:
+  /// **'Open-source packages bundled with CodeLab keep their own licenses. They are listed in {link}.'**
+  String settingsLegalComponentsText(String link);
+
+  /// Заголовок раздела с записями реестра THIRD_PARTY_NOTICES.md на вкладке Third-party notices.
+  ///
+  /// In en, this message translates to:
+  /// **'Notices register'**
+  String get settingsLegalNoticesRegister;
+
+  /// Подпись над записями реестра на вкладке Third-party notices: сами записи показываются как есть, на языке реестра (русский), и не переводятся; подпись объясняет это при любом языке интерфейса. CodeLab — название продукта, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Entries of the CodeLab third-party notices register, as kept in the repository.'**
+  String get settingsLegalNoticesCaption;
+
+  /// Заголовок раздела со списком лицензий пакетов на вкладке Third-party notices.
+  ///
+  /// In en, this message translates to:
+  /// **'Package licenses'**
+  String get settingsLegalPackageLicenses;
+
+  /// InfoBar над списком пакетов: список может быть шире состава сборки, и это безопасно.
+  ///
+  /// In en, this message translates to:
+  /// **'Every package the build collected, including development tools of the workspace. A longer list is safe; a missing license would not be.'**
+  String get settingsLegalPackagesInfo;
+
+  /// Подсказка поля поиска по именам пакетов на вкладке Third-party notices.
+  ///
+  /// In en, this message translates to:
+  /// **'Search packages'**
+  String get settingsLegalSearchHint;
+
+  /// Доступное имя поля поиска пакетов для программ чтения с экрана.
+  ///
+  /// In en, this message translates to:
+  /// **'Search packages by name'**
+  String get settingsLegalSearchLabel;
+
+  /// Доступное имя крестика поля поиска пакетов и текст кнопки пустого блока.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get settingsLegalClearSearch;
+
+  /// Счётчик пакетов при пустом запросе; ICU plural, {count} — число пакетов.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} package} other{{count} packages}}'**
+  String settingsLegalPackagesCount(int count);
+
+  /// Счётчик пакетов при непустом запросе: {matched} показано из {total}. После «из» — родительный падеж; ICU plural по {total}.
+  ///
+  /// In en, this message translates to:
+  /// **'{matched} of {total, plural, one{{total} package} other{{total} packages}}'**
+  String settingsLegalPackagesMatched(int matched, int total);
+
+  /// Число лицензий в заголовке пакета; ICU plural, {count} — число текстов лицензий.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} license} other{{count} licenses}}'**
+  String settingsLegalLicensesCount(int count);
+
+  /// Заголовок блока, когда ни одно имя пакета не содержит запрос.
+  ///
+  /// In en, this message translates to:
+  /// **'No packages match'**
+  String get settingsLegalEmptyTitle;
+
+  /// Текст пустого блока поиска пакетов. {query} — запрос пользователя, уже экранированный; кавычки по языку (в русском «ёлочки»).
+  ///
+  /// In en, this message translates to:
+  /// **'No package name contains “{query}”. The notices register above is not affected by search.'**
+  String settingsLegalEmptyText(String query);
+
+  /// Заголовок блока Privacy страницы General со справкой об отсутствии телеметрии.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy'**
+  String get settingsGeneralSectionPrivacy;
+
+  /// Строка блока Privacy страницы General: справка, а не настройка.
+  ///
+  /// In en, this message translates to:
+  /// **'No telemetry'**
+  String get settingsGeneralNoTelemetry;
+
+  /// Описание строки No telemetry. CLI — имя терминального клиента, не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'The app, the CLI and the agent send no usage analytics or crash reports. Prompts and files go only to the provider and tools you set up.'**
+  String get settingsGeneralNoTelemetryDescription;
 }
 
 class _AppLocalizationsDelegate

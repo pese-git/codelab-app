@@ -43,6 +43,8 @@ import 'dart:ui' show Tristate;
 
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/language/app_language_cubit.dart';
+import 'package:codelab_desktop/app/legal_ports_factory.dart';
+import 'package:codelab_desktop/features/settings/application/legal_ports.dart';
 import 'package:codelab_desktop/app/navigation/app_destination.dart';
 import 'package:codelab_desktop/app/navigation/navigation_cubit.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
@@ -262,6 +264,15 @@ void main() {
       aboutInfo: aboutInfo,
       externalLinkOpener: externalLinkOpener,
       localFolderOpener: localFolderOpener,
+      // Настоящие тексты документов с диска и настоящий `LicenseRegistry`, но
+      // без `rootBundle`: чтение ресурса в fake-async зоне теста не
+      // завершается. Тот же `externalLinkOpener`, что видит тест: «сеть не
+      // используется» проверяется по его журналу.
+      legalPorts: LegalPorts(
+        readAsset: (asset) async => File(asset).readAsStringSync(),
+        packageLicenses: () => collectPackageLicenses(LicenseRegistry.licenses),
+        externalLinks: externalLinkOpener ?? FakeExternalLinkOpener(),
+      ),
     );
     await tester.pumpWidget(
       binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
@@ -1422,8 +1433,10 @@ void main() {
               BlocProvider<StartupSettingsCubit>.value(value: startup),
             ],
             child: localizedFluentApp(
-              const ScaffoldPage(
-                content: SingleChildScrollView(child: GeneralPage()),
+              ScaffoldPage(
+                content: SingleChildScrollView(
+                  child: GeneralPage(onOpenLegal: (tab, from) {}),
+                ),
               ),
             ),
           ),
@@ -1718,8 +1731,10 @@ void main() {
                   value: StartupSettingsCubit(preferences: _StartupPort()),
                 ),
               ],
-              child: const ScaffoldPage(
-                content: SingleChildScrollView(child: GeneralPage()),
+              child: ScaffoldPage(
+                content: SingleChildScrollView(
+                  child: GeneralPage(onOpenLegal: (tab, from) {}),
+                ),
               ),
             ),
           ),

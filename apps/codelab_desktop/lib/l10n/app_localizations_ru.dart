@@ -2175,12 +2175,6 @@ class AppLocalizationsRu extends AppLocalizations {
       'Не удалось открыть папку журналов.';
 
   @override
-  String get settingsGeneralAboutPackageLicenses => 'Лицензии пакетов';
-
-  @override
-  String get settingsGeneralAboutClose => 'Закрыть';
-
-  @override
   String get settingsGeneralUnreadableCannotRead =>
       'Не удаётся прочитать настройки агента.';
 
@@ -2220,7 +2214,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsSearchKeywordsGeneral =>
-      'язык, бюджет, шаги, сжатие, субагент, уровень журнала, запуск, открывать, игнорируемые, о программе, версия, лицензия, диагностика';
+      'язык, бюджет, шаги, сжатие, субагент, уровень журнала, запуск, открывать, игнорируемые, о программе, версия, лицензия, диагностика, телеметрия';
 
   @override
   String get settingsGeneralGroupBudget => 'Бюджет';
@@ -2233,10 +2227,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsGeneralGroupLogging => 'Журнал агента';
-
-  @override
-  String get settingsGeneralAboutThirdPartyCaption =>
-      'Записи реестра сторонних уведомлений CodeLab в том виде, в каком они хранятся в репозитории.';
 
   @override
   String get mcpAddServer => 'Добавить сервер';
@@ -3711,4 +3701,150 @@ class AppLocalizationsRu extends AppLocalizations {
   String appearanceIssuesHintExtends(String base, String builtIn) {
     return 'Недостающие роли берутся из extends: «$base» ($builtIn).';
   }
+
+  @override
+  String get settingsPageLegalTitle => 'Правовая информация';
+
+  @override
+  String get settingsSearchKeywordsLegal =>
+      'правовая, конфиденциальность, условия, лицензия, уведомления, телеметрия, пакеты';
+
+  @override
+  String get settingsLegalTabsLabel => 'Правовые документы';
+
+  @override
+  String get settingsLegalTabPrivacy => 'Политика конфиденциальности';
+
+  @override
+  String get settingsLegalTabTerms => 'Условия использования';
+
+  @override
+  String get settingsLegalTabLicense => 'Лицензия';
+
+  @override
+  String get settingsLegalTabNotices => 'Сторонние уведомления';
+
+  @override
+  String settingsLegalSource(String version, String asset) {
+    return 'Поставляется с CodeLab $version как $asset · доступно без сети';
+  }
+
+  @override
+  String get settingsLegalLoadFailed => 'Не удалось загрузить документ.';
+
+  @override
+  String get settingsLegalLinkFailed => 'Не удалось открыть ссылку.';
+
+  @override
+  String get settingsLegalLicenseAllowed => 'Разрешено';
+
+  @override
+  String get settingsLegalLicenseAllowedValue =>
+      'Использовать, копировать, изменять, объединять, публиковать, распространять, сублицензировать и продавать копии';
+
+  @override
+  String get settingsLegalLicenseCondition => 'Условие';
+
+  @override
+  String get settingsLegalLicenseConditionValue =>
+      'Сохранять уведомление об авторском праве и текст лицензии во всех копиях и существенных частях';
+
+  @override
+  String get settingsLegalLicenseNoWarranty => 'Без гарантий';
+
+  @override
+  String get settingsLegalLicenseNoWarrantyValue =>
+      'Предоставляется «как есть»; авторы не отвечают за ущерб';
+
+  @override
+  String get settingsLegalLicenseSummaryNote =>
+      'Это краткое содержание, а не лицензия. Действует полный текст ниже.';
+
+  @override
+  String get settingsLegalComponentsTitle => 'Сторонние компоненты';
+
+  @override
+  String settingsLegalComponentsText(String link) {
+    return 'Пакеты с открытым исходным кодом в составе CodeLab сохраняют свои лицензии. Они перечислены на вкладке «$link».';
+  }
+
+  @override
+  String get settingsLegalNoticesRegister => 'Реестр уведомлений';
+
+  @override
+  String get settingsLegalNoticesCaption =>
+      'Записи реестра сторонних уведомлений CodeLab в том виде, в каком они хранятся в репозитории.';
+
+  @override
+  String get settingsLegalPackageLicenses => 'Лицензии пакетов';
+
+  @override
+  String get settingsLegalPackagesInfo =>
+      'Все пакеты, которые собрала сборка, включая инструменты разработки рабочего пространства. Лишние строки в списке безопасны, пропущенная лицензия — нет.';
+
+  @override
+  String get settingsLegalSearchHint => 'Поиск пакетов';
+
+  @override
+  String get settingsLegalSearchLabel => 'Поиск пакетов по имени';
+
+  @override
+  String get settingsLegalClearSearch => 'Очистить поиск';
+
+  @override
+  String settingsLegalPackagesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count пакета',
+      many: '$count пакетов',
+      few: '$count пакета',
+      one: '$count пакет',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settingsLegalPackagesMatched(int matched, int total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '$total пакета',
+      many: '$total пакетов',
+      few: '$total пакетов',
+      one: '$total пакета',
+    );
+    return '$matched из $_temp0';
+  }
+
+  @override
+  String settingsLegalLicensesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count лицензии',
+      many: '$count лицензий',
+      few: '$count лицензии',
+      one: '$count лицензия',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsLegalEmptyTitle => 'Нет подходящих пакетов';
+
+  @override
+  String settingsLegalEmptyText(String query) {
+    return 'Ни одно имя пакета не содержит «$query». Поиск не меняет реестр уведомлений выше.';
+  }
+
+  @override
+  String get settingsGeneralSectionPrivacy => 'Конфиденциальность';
+
+  @override
+  String get settingsGeneralNoTelemetry => 'Без телеметрии';
+
+  @override
+  String get settingsGeneralNoTelemetryDescription =>
+      'Приложение, CLI и агент не отправляют аналитику использования и отчёты о сбоях. Промпты и файлы уходят только провайдеру и инструментам, которые вы настроили.';
 }

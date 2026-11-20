@@ -75,7 +75,11 @@ final class LegalPageCubit extends Cubit<LegalPageState> {
       case LegalLinkNone():
         return;
       case LegalLinkTab(:final tab):
-        _ports.logger?.info('legal.link_opened', context: {'target': 'tab'});
+        // Переход на вкладку всегда удаётся: исход фиксирован (D11).
+        _ports.logger?.info(
+          'legal.link_opened',
+          context: {'target': 'tab', 'outcome': 'opened'},
+        );
         await selectTab(tab, source: 'link');
       case LegalLinkExternal(:final uri):
         final outcome = await _ports.externalLinks.open(uri);

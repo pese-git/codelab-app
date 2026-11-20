@@ -15,12 +15,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../app/app_scope.dart';
 import '../../../app/language/app_language_cubit.dart';
+import '../../../app/navigation/navigation_cubit.dart';
+import '../../../app/navigation/settings_page.dart';
 import '../../../core/platform/app_language_preferences.dart';
 import '../../../l10n/l10n.dart';
 import 'config_source_label.dart';
 import '../application/agent_defaults_cubit.dart';
 import '../application/startup_settings_cubit.dart';
 import '../application/about_ports.dart';
+import '../application/legal_documents.dart';
 import 'about_section.dart';
 import 'agent_setting_labels.dart';
 
@@ -77,8 +80,28 @@ class _GeneralPageHostState extends State<GeneralPageHost> {
       BlocProvider<AgentDefaultsCubit>.value(value: _cubit!),
       BlocProvider<StartupSettingsCubit>.value(value: _startup!),
     ],
-    child: GeneralPage(about: codeLabDependenciesOf(context).aboutPorts),
+    child: GeneralPage(
+      about: codeLabDependenciesOf(context).aboutPorts,
+      onOpenLegal: _openLegal,
+    ),
   );
+
+  /// Ссылка на страницу «Legal» (design.md change `add-app-legal-page`, D9,
+  /// D11): пишет `settings.legal_link` и просит `NavigationCubit` открыть
+  /// страницу на вкладке. Событие — только `from` и `tab`, без путей.
+  void _openLegal(LegalTab tab, LegalLinkSource from) {
+    final dependencies = codeLabDependenciesOf(context);
+    dependencies.aboutPorts.logger?.info(
+      'settings.legal_link',
+      context: {'from': from.logName, 'tab': tab.logName},
+    );
+    unawaited(
+      context.read<NavigationCubit>().selectSettingsPage(
+        SettingsPage.legal,
+        legalTab: tab,
+      ),
+    );
+  }
 }
 
 /// Страница настроек «General»: умолчания агента и язык интерфейса (артборд
@@ -96,7 +119,8 @@ class _GeneralPageHostState extends State<GeneralPageHost> {
 /// перезапуска (spec app-settings «Язык интерфейса app»); сбой записи
 /// показывается предупреждением, язык при этом остаётся применённым. Порядок
 /// блоков: InfoBar и «Agent defaults», «Interface», «Startup and files»,
-/// «About» (раздел показывается, если передан [about]). Строка «Show ignored
+/// «Privacy» (справка «No telemetry» со ссылкой на «Legal», D9), «About»
+/// (раздел показывается, если передан [about]). Строка «Show ignored
 /// files» появится после итерации 3 `add-file-preview-and-tree` (D10): строка
 /// без поведения не показывается (SETUP-17).
 ///
@@ -105,7 +129,12 @@ class _GeneralPageHostState extends State<GeneralPageHost> {
 /// ближайших `BlocProvider`. Названия `English` и `Русский` — эндонимы, они не
 /// переводятся.
 class GeneralPage extends StatelessWidget {
-  const GeneralPage({this.about, super.key});
+  const GeneralPage({this.about, required this.onOpenLegal, super.key});
+
+  /// Переход на страницу «Legal» на вкладке [LegalTab]; хозяин страницы
+  /// связывает его с навигацией и журналом (D9). Виджет `NavigationCubit` не
+  /// знает.
+  final void Function(LegalTab tab, LegalLinkSource from) onOpenLegal;
 
   /// Данные и порты раздела «About»; `null` — раздел не показывается (тесты
   /// блоков «Agent defaults» на Cubit-двойниках).
@@ -178,7 +207,9 @@ class GeneralPage extends StatelessWidget {
             ],
           ),
           const _StartupSection(),
-          if (about case final ports?) AboutSection(ports: ports),
+          _PrivacySection(onOpenLegal: onOpenLegal),
+          if (about case final ports?)
+            AboutSection(ports: ports, onOpenLegal: onOpenLegal),
         ],
       ),
     );
@@ -746,6 +777,45 @@ class _StartupSection extends StatelessWidget {
             trailing: ToggleSwitch(
               checked: state.reopenLastProject,
               onChanged: (value) => unawaited(cubit.select(value)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Блок «Privacy»: справка «No telemetry» со ссылкой на политику (design.md
+/// change `add-app-legal-page`, D9; артборд «26 Settings — General»).
+///
+/// Почему строка без переключателя: телеметрии нет (E-21 — Won't), выключать
+/// нечего; строка не выдаёт себя за настройку, это справка со ссылкой
+/// (SETUP-17).
+class _PrivacySection extends StatelessWidget {
+  const _PrivacySection({required this.onOpenLegal});
+
+  final void Function(LegalTab tab, LegalLinkSource from) onOpenLegal;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return KeyedSubtree(
+      key: const ValueKey('settings-general-privacy'),
+      child: CodeLabSettingsSection(
+        title: l10n.settingsGeneralSectionPrivacy,
+        children: [
+          CodeLabSettingsRow(
+            key: const ValueKey('settings-general-no-telemetry'),
+            title: l10n.settingsGeneralNoTelemetry,
+            description: l10n.settingsGeneralNoTelemetryDescription,
+            descriptionMaxLines: null,
+            trailing: HyperlinkButton(
+              key: const ValueKey('settings-general-privacy-policy'),
+              onPressed: () => onOpenLegal(
+                LegalTab.privacyPolicy,
+                LegalLinkSource.privacyBlock,
+              ),
+              child: Text(l10n.settingsLegalTabPrivacy),
             ),
           ),
         ],

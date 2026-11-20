@@ -35,6 +35,7 @@ import 'package:codelab_desktop/app/navigation/navigation_cubit.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
 import 'package:codelab_desktop/core/platform/external_link_opener.dart';
 import 'package:codelab_desktop/features/settings/application/package_license_search.dart';
+import 'package:codelab_ui/codelab_ui.dart' show CodeLabImagePlaceholder;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -68,6 +69,8 @@ bool _selected(WidgetTester tester, String slug) =>
 Finder _text(String value) => find.textContaining(value, findRichText: true);
 
 Future<void> _pick(WidgetTester tester, String slug) async {
+  // На русском вкладки длиннее окна и прокручиваются по горизонтали (D6).
+  await tester.ensureVisible(_tab(slug));
   await tester.tap(_tab(slug));
   await tester.pumpAndSettle();
 }
@@ -279,8 +282,15 @@ void main() {
       final bar = tester.widget<InfoBar>(_key('settings-legal-load-failed'));
       expect(bar.severity, InfoBarSeverity.warning);
       expect(find.text("Couldn't load this document."), findsOneWidget);
+      // Путь есть только в подписи источника; в самом InfoBar его нет.
       expect(find.textContaining('/secret/path'), findsNothing);
-      expect(find.textContaining('TERMS.md'), findsNothing);
+      expect(
+        find.descendant(
+          of: _key('settings-legal-load-failed'),
+          matching: find.textContaining('TERMS'),
+        ),
+        findsNothing,
+      );
       expect(_text('terms-en-body'), findsNothing);
       await _pick(tester, 'privacy-policy');
       expect(_text('privacy-en-body'), findsWidgets);
@@ -369,6 +379,29 @@ void main() {
         expect(_key('settings-legal-link-failed'), findsNothing);
       });
     }
+  });
+
+  // D8: изображения в правовых текстах не загружаются, а заглушка не
+  // предлагает «Show image» (`canLoadImage` страницы всегда `false`).
+  group('изображения в документах', () {
+    testWidgets('https-изображение — заглушка без «Show image»; порт '
+        'ссылок и загрузка не вызываются', (tester) async {
+      final fixture = LegalFixture(
+        assets: {
+          ...legalFixtureAssets,
+          'assets/legal/PRIVACY.md':
+              '# Privacy EN\n\nimage-doc-body\n\n'
+              '![x](https://example.com/a.png)\n',
+        },
+      );
+      await openLegalPage(tester, fixture);
+
+      expect(_text('image-doc-body'), findsWidgets);
+      expect(find.byType(CodeLabImagePlaceholder), findsOneWidget);
+      expect(find.text('Show image'), findsNothing);
+      expect(find.byType(Image), findsNothing);
+      expect(fixture.links.opened, isEmpty);
+    });
   });
 
   group('вкладка «License»', () {
