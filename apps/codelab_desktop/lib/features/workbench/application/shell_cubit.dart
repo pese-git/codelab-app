@@ -34,6 +34,7 @@ import '../../../core/platform/usage_csv_saver.dart';
 import '../../settings/application/default_profile_resolver.dart';
 import 'agents_pane_data.dart' show AgentsShowTarget;
 import 'approval_go_to_target.dart';
+import 'approval_shortcut_decision.dart';
 import 'active_session_cubit.dart';
 import 'connection_cubit.dart';
 import 'layout_cubit.dart';
@@ -131,6 +132,7 @@ final class CodeLabShellParts {
       usageCsvSaver: usageCsvSaver,
       strings: strings,
       usageLogger: usageLogger,
+      approvalLogger: appLogger,
     );
     final connection = ConnectionCubit(
       changes: changes,
@@ -625,6 +627,58 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       target: target,
       focusApproval: true,
     );
+  }
+
+  /// Сочетание ответа на активное одобрение (⌘Y, ⌥⌘Y, ⌥⌘Z, ⌥⇧⌘Z; Alt+Shift+Y,
+  /// Q, X, W): решение — `approvalShortcutDecisionOf` (D14). Отвечает только
+  /// активному, видимому и не только что появившемуся одобрению; иначе —
+  /// событие `workbench.approval_shortcut_skipped` и, где решено, показ полосы
+  /// без фокуса. [isVisible] — ручка ленты (`CodeLabApprovalVisibility`),
+  /// виджет решения не принимает (AGENTS.md §10).
+  void answerApprovalByShortcut(
+    CodeLabApprovalOptionKind kind, {
+    required bool Function(String sessionId, String approvalId) isVisible,
+  }) {
+    // Палитра закрывает рабочее место: ответ из неё не уходит (D14).
+    if (state.isCommandPaletteOpen) {
+      return;
+    }
+    final sessionId = _parts.activeSession.state.sessionId;
+    final decision = approvalShortcutDecisionOf(
+      connectionStatus: state.connectionStatus,
+      view: sessionId == null
+          ? null
+          : _workspace.session(SessionId(sessionId))?.current,
+      kind: kind,
+      isVisible: isVisible,
+      activation: _parts.activeSession.activation,
+    );
+    switch (decision) {
+      case ApprovalShortcutAnswer():
+        unawaited(
+          _parts.activeSession.respondToApproval(
+            approvalId: decision.approvalId,
+            sessionId: SessionId(decision.sessionId),
+            optionId: decision.optionId.value,
+            source: 'shortcut',
+          ),
+        );
+      case ApprovalShortcutSkipped():
+        _parts.activeSession.logApprovalShortcutSkipped(decision);
+        if (decision.show && sessionId != null) {
+          final target = goToApprovalTargetOf(
+            connectionStatus: state.connectionStatus,
+            view: _workspace.session(SessionId(sessionId))?.current,
+            rows: state.transcriptRows,
+          );
+          if (target != null) {
+            _parts.transcriptView.requestShow(
+              sessionId: sessionId,
+              target: target,
+            );
+          }
+        }
+    }
   }
 
   /// Лента закончила показ запроса [serial]: запрос разовый и гасится.

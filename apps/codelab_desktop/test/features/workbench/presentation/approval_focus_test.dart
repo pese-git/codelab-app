@@ -390,9 +390,10 @@ void main() {
       expect(find.text('⌥⌘Z'), findsOneWidget);
 
       await tester.tap(find.byKey(CodeLabApprovalPrompt.scopeKey));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.tap(find.text('Always').last);
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.text('⌥⌘Y'), findsOneWidget);
       expect(find.text('⌥⇧⌘Z'), findsOneWidget);

@@ -10,6 +10,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 import '../../../app/app_scope.dart';
 import '../../../app/navigation/navigation_cubit.dart';
 import '../../../app/navigation/settings_page.dart';
+import 'workbench_focus.dart';
 import '../../../l10n/l10n.dart';
 import '../../project_files/presentation/project_files_pane.dart';
 import '../../terminal/application/terminal_tabs_cubit.dart';
@@ -102,6 +103,15 @@ class CodeLabShell extends StatelessWidget {
           // привязка появлялась бы и пропадала с каждым снимком
           // (`fix-approval-focus`, D4, п. 1).
           onGoToApproval: cubit.goToApproval,
+          // Ответ сочетанием (D14): кит сообщает только нажатие, решение —
+          // application (`answerApprovalByShortcut`); видимость полосы
+          // отвечает лента через ручку хоста, без неё — «не видна».
+          onAnswerApproval: (kind) => cubit.answerApprovalByShortcut(
+            kind,
+            isVisible:
+                WorkbenchFocus.maybeOf(context)?.approvalVisibility.isVisible ??
+                (_, _) => false,
+          ),
           onOpenSettings: () =>
               _openSettings(context, SettingsOpenSource.shortcut),
           onToggleFiles: state.projectFilesAvailable

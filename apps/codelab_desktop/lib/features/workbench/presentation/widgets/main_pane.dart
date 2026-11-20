@@ -111,6 +111,9 @@ class WorkbenchMainPane extends StatelessWidget {
           onApprovalFocusReleased: WorkbenchFocus.maybeOf(
             context,
           )?.onApprovalFocusReleased,
+          approvalVisibility: WorkbenchFocus.maybeOf(
+            context,
+          )?.approvalVisibility,
           onExpansionChanged: (change) =>
               cubit.setTranscriptRowExpanded(change.rowId, change.expanded),
           emptyLabel: state.activeSessionId == null

@@ -8,7 +8,6 @@
   "codeLabApprovalViewRawInput": "Показать исходные параметры",
   "codeLabApprovalHideRawInput": "Скрыть исходные параметры",
   "codeLabApprovalNoSuchOption": "Агент не предлагает такого варианта",
-  "codeLabApprovalGoToHint": "Нажмите {shortcut}, чтобы ответить с клавиатуры",
   "codeLabApprovalSelected": "Выбрано",
   "codeLabApprovalToneInfo": "Сведения",
   "codeLabApprovalToneOption": "Вариант",

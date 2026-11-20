@@ -331,8 +331,7 @@ void main() {
           find.descendant(
             of: _row(id),
             matching: find.text(
-              'Pending approval with keyboard focus, when the agent offers '
-              'this option',
+              'Workbench, earliest pending approval, if it offers this option',
             ),
           ),
           findsOneWidget,
@@ -528,7 +527,7 @@ void main() {
   group('доступность и узкое окно', () {
     testWidgets(
       'окно 440 px (тело уже 380): таблица прокручивается по горизонтали, '
-      'переполнения нет, кейкапы allow-always видны после прокрутки',
+      'переполнения нет, кейкапы allow-always (Alt Shift Q) видны после прокрутки',
       (tester) async {
         await _pumpPage(tester, size: const Size(440, 900));
 
@@ -546,7 +545,7 @@ void main() {
 
         final last = find.descendant(
           of: _row('allow-always'),
-          matching: find.text('Enter'),
+          matching: find.text('Q'),
         );
         await tester.ensureVisible(last);
         await tester.pump();

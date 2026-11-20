@@ -861,7 +861,7 @@
   "settingsKeyboardWhereTurnRunning": "Рабочее место или поле ввода, пока идёт ход",
   "settingsKeyboardWhereComposer": "Поле ввода",
   "settingsKeyboardWhereCommandMenu": "Меню команд после /",
-  "settingsKeyboardWhereApproval": "Ожидающее одобрение с фокусом клавиатуры, когда агент предлагает этот вариант",
+  "settingsKeyboardWhereApprovalAnywhere": "Рабочее место, самое раннее ожидающее одобрение, если в нём есть этот вариант",
   "settingsSearchKeywordsKeyboard": "сочетание, горячие клавиши, клавиатура, клавиша",
   "settingsKeyboardActionGoToApproval": "Перейти к одобрению",
   "settingsKeyboardWhereApprovalPending": "Рабочее место, пока ждёт одобрение"

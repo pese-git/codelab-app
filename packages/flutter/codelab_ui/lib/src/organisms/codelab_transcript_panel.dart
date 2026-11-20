@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart' show HitTestResult;
+
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
@@ -106,8 +108,6 @@ class CodeLabTranscriptPanel extends StatefulWidget {
   /// спрашивает, видна ли полоса цели. Без ручки лента видимость не
   /// сообщает.
   ///
-  /// ЗАГЛУШКА красных тестов 7.1: параметр принят, лента ручку не подключает;
-  /// реализация — 7.2.
   final CodeLabApprovalVisibility? approvalVisibility;
 
   /// Показ с этим номером закончен: цель показана или шаги исчерпаны. Не
@@ -192,10 +192,14 @@ final class CodeLabTranscriptShowRequest {
 /// прямоугольник целиком внутри области прокрутки, и в её центре событие
 /// указателя доходит до неё, а не до панели поверх ленты.
 ///
-/// ЗАГЛУШКА красных тестов 7.1: всегда `false`; реализация — 7.2.
+/// Лента подключает ручку в `initState` и отключает в `dispose`; пока ленты
+/// нет, полоса считается невидимой (безопасная сторона, §10).
 final class CodeLabApprovalVisibility {
+  bool Function(String sessionId, String approvalId)? _resolver;
+
   /// Видна ли полоса одобрения [approvalId] сессии [sessionId] целиком.
-  bool isVisible(String sessionId, String approvalId) => false;
+  bool isVisible(String sessionId, String approvalId) =>
+      _resolver?.call(sessionId, approvalId) ?? false;
 }
 
 /// Состояние ленты: владеет `ScrollController` и решает, когда двигать
@@ -256,6 +260,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   @override
   void initState() {
     super.initState();
+    widget.approvalVisibility?._resolver = _isApprovalBarVisible;
 
     // Панель может появиться сразу с pending approval в первых записях (хост
     // обычно подставляет ленту, только когда записи уже есть) — предыдущей
@@ -270,6 +275,9 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
 
   @override
   void dispose() {
+    if (widget.approvalVisibility?._resolver == _isApprovalBarVisible) {
+      widget.approvalVisibility?._resolver = null;
+    }
     _showToken++;
     _highlightTimer?.cancel();
     _controller.dispose();
@@ -279,6 +287,11 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   @override
   void didUpdateWidget(covariant CodeLabTranscriptPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.approvalVisibility != widget.approvalVisibility) {
+      oldWidget.approvalVisibility?._resolver = null;
+      widget.approvalVisibility?._resolver = _isApprovalBarVisible;
+    }
 
     // Запрос показа важнее следования за хвостом: он сам переводит ленту в
     // режим чтения истории (D49 Т7), иначе обновление строк ниже вернуло бы
@@ -498,6 +511,72 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
       );
     }
     _scheduleShowStep(request, token, attempt + 1);
+  }
+
+  /// Видна ли полоса одобрения целиком (D14, п. 1): построена, её
+  /// прямоугольник внутри области ленты, и в центре полосы указатель доходит
+  /// до неё, а не до панели поверх ленты. Только читает дерево, ничего не
+  /// меняет.
+  bool _isApprovalBarVisible(String sessionId, String approvalId) {
+    if (!mounted) return false;
+    final prompt = _findKeyed(
+      CodeLabApprovalPrompt.keyFor(sessionId, approvalId),
+    );
+    if (prompt is! Element || !prompt.mounted) return false;
+    final bar = prompt.renderObject;
+    final viewport = context.findRenderObject();
+    if (bar is! RenderBox ||
+        viewport is! RenderBox ||
+        !bar.attached ||
+        !viewport.attached ||
+        !bar.hasSize ||
+        !viewport.hasSize) {
+      return false;
+    }
+    final barRect = bar.localToGlobal(Offset.zero) & bar.size;
+    final viewRect = viewport.localToGlobal(Offset.zero) & viewport.size;
+    const epsilon = 0.5;
+    if (barRect.left < viewRect.left - epsilon ||
+        barRect.top < viewRect.top - epsilon ||
+        barRect.right > viewRect.right + epsilon ||
+        barRect.bottom > viewRect.bottom + epsilon) {
+      return false;
+    }
+    // Полосу закрывает то, что получает указатель в её прямоугольнике и не
+    // лежит ни внутри полосы, ни среди её предков (выдвижная панель поверх
+    // ленты — соседнее поддерево). Пробел между кнопками указатель не
+    // принимает вовсе, поэтому проверяем несколько точек.
+    final ancestors = <RenderObject>{};
+    for (RenderObject? up = bar.parent; up != null; up = up.parent) {
+      ancestors.add(up);
+    }
+    bool inside(RenderObject target) {
+      for (RenderObject? node = target; node != null; node = node.parent) {
+        if (identical(node, bar)) return true;
+      }
+      return false;
+    }
+
+    final viewId = View.of(context).viewId;
+    for (final point in [
+      barRect.center,
+      barRect.topLeft + const Offset(4, 4),
+      barRect.topRight + const Offset(-4, 4),
+      barRect.bottomLeft + const Offset(4, -4),
+      barRect.bottomRight + const Offset(-4, -4),
+    ]) {
+      final result = HitTestResult();
+      WidgetsBinding.instance.hitTestInView(result, point, viewId);
+      for (final entry in result.path) {
+        final target = entry.target;
+        if (target is RenderObject &&
+            !ancestors.contains(target) &&
+            !inside(target)) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   /// Ключ цели: строка верхнего уровня — её `rowKey`, иначе ключ цели внутри.

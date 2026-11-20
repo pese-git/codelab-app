@@ -226,6 +226,9 @@ void main() {
       find.descendant(of: find.byKey(key), matching: find.byType(Button)),
     );
 
+    // На macOS подсказки короткие (`⌘Y`, `⌥⌘Z`) и ряд умещается в одну строку
+    // колонки 720 px; длинные `Alt+Shift+Y` на других ОС ряд переносят —
+    // полоса для этого построена на `Wrap` (D14).
     testWidgets('one bar: Allow, Reject and the scope Only this time', (
       tester,
     ) async {
@@ -243,7 +246,7 @@ void main() {
       final allow = tester.getRect(find.byKey(CodeLabApprovalPrompt.allowKey));
       final scope = tester.getRect(find.byKey(CodeLabApprovalPrompt.scopeKey));
       expect((allow.center.dy - scope.center.dy).abs(), lessThan(4));
-    });
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
     testWidgets('Allow answers allow_once by default', (tester) async {
       final selected = <String>[];

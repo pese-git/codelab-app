@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/widget_previews.dart';
 
 import '../atomics/atomics.dart';
@@ -1207,7 +1208,7 @@ List<CodeLabShortcutTableGroup> _shortcutTableGroups({
       CodeLabShortcutTableRow(
         key: const ValueKey('preview-row-allow-always'),
         action: allowAlways,
-        combos: CodeLabShortcut.allowAlways.combos,
+        combos: CodeLabShortcut.allowAlways.combosFor(defaultTargetPlatform),
         where: pendingApproval,
       ),
     ],

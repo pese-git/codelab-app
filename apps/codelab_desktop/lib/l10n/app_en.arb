@@ -4556,9 +4556,9 @@
   "@settingsKeyboardWhereCommandMenu": {
     "description": "Колонка «Где»: меню команд, открытое символом /. Символ / не переводится."
   },
-  "settingsKeyboardWhereApproval": "Pending approval with keyboard focus, when the agent offers this option",
-  "@settingsKeyboardWhereApproval": {
-    "description": "Колонка «Где» строк решения (разрешить/отклонить): клавиатурный фокус в полосе решения активного одобрения, а не признак модели (change fix-approval-focus, D7). Метка security (D14): перевод не смягчает смысл."
+  "settingsKeyboardWhereApprovalAnywhere": "Workbench, earliest pending approval, if it offers this option",
+  "@settingsKeyboardWhereApprovalAnywhere": {
+    "description": "Колонка «Где» строк ответа на одобрение (allow/reject, once/always): сочетания действуют с любого места рабочего места и отвечают самому раннему ожидающему одобрению активной сессии, если в нём есть такой вариант (change fix-approval-focus, итерация 7, D14; текст принят пользователем, Q7). Метка security (D14): перевод не смягчает смысл."
   },
   "settingsSearchKeywordsKeyboard": "shortcut, hotkey, keybinding, key",
   "@settingsSearchKeywordsKeyboard": {

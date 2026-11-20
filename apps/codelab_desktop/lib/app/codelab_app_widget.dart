@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:codelab_ui/codelab_ui.dart'
-    show CodeLabApprovalPrompt, CodeLabLocalizations;
+    show CodeLabApprovalPrompt, CodeLabApprovalVisibility, CodeLabLocalizations;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -102,6 +102,11 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
   /// Узел поля композера: принадлежит `State` рабочего места, чтобы после
   /// ухода полосы одобрения вернуть в него фокус (`fix-approval-focus`, D5).
   final _composerFocus = FocusNode(debugLabel: 'Composer');
+
+  /// Ручка видимости полос одобрения: лента подключает её к себе, сочетания
+  /// ответа спрашивают у неё, видна ли полоса (D14, п. 1). Принадлежит хосту,
+  /// как узел композера.
+  final _approvalVisibility = CodeLabApprovalVisibility();
 
   /// Узел, державший фокус в момент ухода в настройки.
   FocusNode? _returnFocus;
@@ -266,6 +271,7 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
                       child: WorkbenchFocus(
                         composerNode: _composerFocus,
                         onApprovalFocusReleased: _onApprovalFocusReleased,
+                        approvalVisibility: _approvalVisibility,
                         child: const CodeLabShell(),
                       ),
                     ),

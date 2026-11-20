@@ -1,6 +1,8 @@
+import 'package:codelab_ui/codelab_ui.dart' show CodeLabApprovalVisibility;
 import 'package:fluent_ui/fluent_ui.dart';
 
-/// Узел фокуса композера и обработчик ухода полосы одобрения, которые рабочее
+/// Узел фокуса композера, обработчик ухода полосы одобрения и ручка видимости
+/// полос, которые рабочее
 /// место отдаёт вниз по дереву.
 ///
 /// Почему `InheritedWidget`: узел принадлежит `State` рабочего места
@@ -19,6 +21,7 @@ class WorkbenchFocus extends InheritedWidget {
   const WorkbenchFocus({
     required this.composerNode,
     required this.onApprovalFocusReleased,
+    required this.approvalVisibility,
     required super.child,
     super.key,
   });
@@ -29,11 +32,16 @@ class WorkbenchFocus extends InheritedWidget {
   /// Полоса одобрения с фокусом ушла из ленты.
   final VoidCallback onApprovalFocusReleased;
 
+  /// Ручка видимости полос одобрения (D14, п. 1): лента подключается к ней,
+  /// сочетания ответа спрашивают у неё; принадлежит хосту.
+  final CodeLabApprovalVisibility approvalVisibility;
+
   static WorkbenchFocus? maybeOf(BuildContext context) =>
       context.getInheritedWidgetOfExactType<WorkbenchFocus>();
 
   @override
   bool updateShouldNotify(WorkbenchFocus oldWidget) =>
       composerNode != oldWidget.composerNode ||
-      onApprovalFocusReleased != oldWidget.onApprovalFocusReleased;
+      onApprovalFocusReleased != oldWidget.onApprovalFocusReleased ||
+      approvalVisibility != oldWidget.approvalVisibility;
 }

@@ -50,19 +50,18 @@ class CodeLabApprovalOption {
   final CodeLabTone tone;
 }
 
-/// Группа вариантов одобрения со всеми четырьмя сочетаниями по виду.
+/// Группа вариантов одобрения.
 ///
-/// Почему: публичная молекула кита; сочетания привязаны к ней так же, как к
-/// полосе решения. Прежний `autofocus` давал любому потребителю тот же риск:
-/// ответ на запрос разрешения без явного действия пользователя
-/// (`fix-approval-focus`, D1; AGENTS.md §10).
+/// Почему: публичная молекула кита. Прежние локальные сочетания и `autofocus`
+/// давали ответ на запрос разрешения без явного действия пользователя;
+/// итерация 7 `fix-approval-focus` убрала их: ответ с клавиатуры — только
+/// глобальные сочетания рабочего места (D14; AGENTS.md §10).
 ///
-/// Для чего: показать варианты и выбрать один кнопкой или сочетанием.
+/// Для чего: показать варианты и выбрать один кнопкой.
 ///
-/// Как использовать: группа НЕ берёт клавиатурный фокус сама. Сочетания
-/// действуют при `shortcutsEnabled`, только когда пользователь довёл фокус
-/// до группы или её кнопок (клик, Tab); владелец не должен ставить фокус
-/// программно без действия пользователя.
+/// Как использовать: группа НЕ берёт клавиатурный фокус сама и своих клавиш
+/// не привязывает. [shortcutsEnabled] оставлен для совместимости и ни на что
+/// не влияет.
 class CodeLabApprovalOptionGroup extends StatelessWidget {
   const CodeLabApprovalOptionGroup({
     required this.options,
@@ -85,12 +84,6 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shortcuts = CodeLabApprovalShortcuts(
-      options,
-      approveOptionId: approveOptionId,
-      rejectOptionId: rejectOptionId,
-    );
-
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -107,32 +100,14 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
       ],
     );
 
-    if (!shortcutsEnabled) {
-      return body;
-    }
-
-    return CallbackShortcuts(
-      bindings: shortcuts.bindings(_selectIfEnabled),
-      // Без `autofocus`: группа не берёт фокус сама (`fix-approval-focus`, D1).
-      child: Focus(child: body),
-    );
-  }
-
-  void _selectIfEnabled(String optionId) {
-    if (!enabled) {
-      return;
-    }
-
-    onSelected(optionId);
+    return body;
   }
 }
 
 /// Сочетания клавиш вариантов одобрения по их виду.
 ///
-/// Сами привязки ничего не фокусируют: виджеты, которые их ставят
-/// (`CodeLabApprovalPrompt`, `CodeLabApprovalOptionGroup`), не берут фокус
-/// сами, поэтому сочетание срабатывает только после явного действия
-/// пользователя (`fix-approval-focus`, D1, D2).
+/// Привязок у класса нет: сочетания ответа действуют глобально и привязаны в
+/// `CodeLabWorkbenchShortcuts.onAnswerApproval` (`fix-approval-focus`, D14).
 ///
 /// Почему: сочетание выбирается по `PermissionOptionKind`, а не по подписи
 /// агента (требование «Approval options are rendered and bound to shortcuts
@@ -142,13 +117,12 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
 /// варианта по виду и привязка вынесены из [CodeLabApprovalOptionGroup] в
 /// одно место.
 ///
-/// Для чего: какой вариант отвечает на какое сочетание, подсказка сочетания
-/// для кнопки или пункта меню и таблица привязок для `CallbackShortcuts`.
+/// Для чего: какой вариант отвечает на какое сочетание и подсказка сочетания
+/// для кнопки на платформе `defaultTargetPlatform` (D15).
 ///
 /// Как использовать: создать по списку вариантов
 /// (`CodeLabApprovalShortcuts(options)`), подсказку брать через
-/// [labelFor], привязки — `CallbackShortcuts(bindings:
-/// shortcuts.bindings(select))`. [approveOptionId] и [rejectOptionId]
+/// [labelFor] и [spokenFor]. [approveOptionId] и [rejectOptionId]
 /// подменяют варианты `allow_once` и `reject_once`, если владелец выбрал их
 /// сам.
 final class CodeLabApprovalShortcuts {
@@ -180,13 +154,17 @@ final class CodeLabApprovalShortcuts {
   /// `null` — у варианта нет сочетания.
   String? labelFor(String optionId) {
     final shortcut = _shortcutOf(optionId);
-    return shortcut?.combos.single.compactFor(defaultTargetPlatform);
+    return shortcut
+        ?.combosFor(defaultTargetPlatform)
+        .single
+        .compactFor(defaultTargetPlatform);
   }
 
   /// Сочетание варианта [optionId] словами для чтения с экрана
   /// (`spokenFor`: `Cmd+Enter`); `null` — у варианта нет сочетания.
-  String? spokenFor(String optionId) =>
-      _shortcutOf(optionId)?.combos.single.spokenFor(defaultTargetPlatform);
+  String? spokenFor(String optionId) => _shortcutOf(
+    optionId,
+  )?.combosFor(defaultTargetPlatform).single.spokenFor(defaultTargetPlatform);
 
   CodeLabShortcut? _shortcutOf(String optionId) {
     if (optionId == allowOnceId) return CodeLabShortcut.allowOnce;
@@ -194,25 +172,6 @@ final class CodeLabApprovalShortcuts {
     if (optionId == rejectOnceId) return CodeLabShortcut.rejectOnce;
     if (optionId == rejectAlwaysId) return CodeLabShortcut.rejectAlways;
     return null;
-  }
-
-  /// Привязки сочетаний к [select]; Ctrl и ⌘ равноправны на всех
-  /// платформах (активаторы дают записи каталога).
-  Map<ShortcutActivator, VoidCallback> bindings(
-    void Function(String optionId) select,
-  ) {
-    final map = <ShortcutActivator, VoidCallback>{};
-    void bind(String? optionId, CodeLabShortcut shortcut) {
-      if (optionId != null) {
-        map.addAll(shortcut.bind(() => select(optionId)));
-      }
-    }
-
-    bind(allowOnceId, CodeLabShortcut.allowOnce);
-    bind(allowAlwaysId, CodeLabShortcut.allowAlways);
-    bind(rejectOnceId, CodeLabShortcut.rejectOnce);
-    bind(rejectAlwaysId, CodeLabShortcut.rejectAlways);
-    return map;
   }
 
   static String? _idForKind(

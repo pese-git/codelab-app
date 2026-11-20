@@ -3346,8 +3346,8 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsKeyboardWhereCommandMenu => 'Меню команд после /';
 
   @override
-  String get settingsKeyboardWhereApproval =>
-      'Ожидающее одобрение с фокусом клавиатуры, когда агент предлагает этот вариант';
+  String get settingsKeyboardWhereApprovalAnywhere =>
+      'Рабочее место, самое раннее ожидающее одобрение, если в нём есть этот вариант';
 
   @override
   String get settingsSearchKeywordsKeyboard =>

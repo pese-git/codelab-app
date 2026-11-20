@@ -31,6 +31,7 @@ import '../../usage/application/usage_csv.dart';
 import '../../usage/application/usage_pane_data.dart';
 import 'agents_pane_data.dart';
 import 'shell_part.dart';
+import 'approval_shortcut_decision.dart';
 import 'ui_mappers.dart';
 
 /// Показываемая сессия: лента, инспектор, очередь, одобрения, опции, план.
@@ -209,14 +210,17 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     required UsageCsvSaver usageCsvSaver,
     required AppStrings strings,
     Logger? usageLogger,
+    Logger? approvalLogger,
     DateTime Function()? clock,
   }) : _workspace = workspace,
        _diagnostics = diagnostics,
        _usageCsvSaver = usageCsvSaver,
        _strings = strings,
        _usageLogger = usageLogger,
+       _approvalLogger = approvalLogger,
        _clock = clock ?? DateTime.now,
        super(const ActiveSessionState()) {
+    activation = ApprovalActivationTracker(clock: _clock);
     _languageSubscription = strings.changes.listen(_handleLanguage);
     // Исход хода любой сессии — отправленного отсюда и ушедшего из очереди
     // kit: очередь могла сдвинуться.
@@ -239,7 +243,16 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   /// События `usage_pane.refresh` и `usage_pane.export` (D13): логгер
   /// `codelab_desktop.usage`; без секретов, путей, подписей и чисел.
   final Logger? _usageLogger;
+
+  /// События `workbench.approval_answer` и
+  /// `workbench.approval_shortcut_skipped` (D9, D14): без сырых аргументов,
+  /// команды, заголовка и подписей вариантов агента.
+  final Logger? _approvalLogger;
   final DateTime Function() _clock;
+
+  /// Момент, с которого активное одобрение показанной сессии стало активным
+  /// (D14, п. 2). Cubit сообщает ему каждый снимок показанной сессии.
+  late final ApprovalActivationTracker activation;
   late final StreamSubscription<PromptOutcome> _outcomeSubscription;
   StreamSubscription<SessionView>? _viewSubscription;
   SessionHandle? _watchedHandle;
@@ -257,6 +270,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     final id = session.id.value;
     final view = _handle(id)?.current;
     _shown = session;
+    activation.observe(view);
     emit(
       state._copyWith(
         sessionId: id,
@@ -287,6 +301,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     final id = session.id.value;
     _shown = session;
     final view = _handle(id)?.current;
+    activation.observe(view);
     emit(
       state._copyWith(
         sessionId: id,
@@ -550,6 +565,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     required ApprovalRequestId approvalId,
     required SessionId sessionId,
     required String optionId,
+    String source = 'button',
   }) async {
     if (state.isRespondingToApproval) {
       return;
@@ -558,6 +574,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     if (handle == null) {
       return;
     }
+    _logApprovalAnswer(handle, approvalId, optionId, source);
 
     emit(state._copyWith(isRespondingToApproval: true));
     try {
@@ -579,6 +596,72 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         ? _rowsOf(shown, _handle(id)?.current, approvalsEnabled: true)
         : state.transcriptRows;
     emit(state._copyWith(isRespondingToApproval: false, transcriptRows: rows));
+  }
+
+  /// Пишет `workbench.approval_answer` (D9): каждый ответ с рабочего места —
+  /// кнопкой или сочетанием — с источником решения. Поля: `session_id`,
+  /// `request_id`, `tool_call_id`, `kind`, `source`; сырых данных вызова нет.
+  void _logApprovalAnswer(
+    SessionHandle handle,
+    ApprovalRequestId approvalId,
+    String optionId,
+    String source,
+  ) {
+    final logger = _approvalLogger;
+    if (logger == null) {
+      return;
+    }
+    PendingApprovalView? approval;
+    for (final candidate in handle.current.pendingApprovals) {
+      if (candidate.approvalId == approvalId) {
+        approval = candidate;
+      }
+    }
+    String? kind;
+    for (final option in approval?.options ?? const <PermissionOption>[]) {
+      if (option.optionId.value == optionId) {
+        kind = option.kind.wireName;
+      }
+    }
+    logger.info(
+      'workbench.approval_answer',
+      context: {
+        'session_id': handle.id.value,
+        'request_id': approvalId.value,
+        'tool_call_id': ?_toolCallIdOf(handle.id.value, approvalId),
+        'kind': ?kind,
+        'source': source,
+      },
+    );
+  }
+
+  /// `tool_call_id` запроса [approvalId] показанной сессии для журнала;
+  /// `null`, если сессия не показана или запроса нет.
+  String? _toolCallIdOf(String sessionId, ApprovalRequestId approvalId) {
+    final shown = _shown;
+    if (shown == null || shown.id.value != sessionId) {
+      return null;
+    }
+    for (final turn in shown.turns) {
+      final request = turn.approvals[approvalId];
+      if (request != null) {
+        return request.toolCall.id.value;
+      }
+    }
+    return null;
+  }
+
+  /// Пишет `workbench.approval_shortcut_skipped` (D9): нажатие сочетания
+  /// ответа, не давшее ответа. `request_id` — только если цель есть.
+  void logApprovalShortcutSkipped(ApprovalShortcutSkipped skipped) {
+    _approvalLogger?.info(
+      'workbench.approval_shortcut_skipped',
+      context: {
+        'session_id': ?skipped.sessionId,
+        'request_id': ?skipped.approvalId?.value,
+        'reason': skipped.reason.wireName,
+      },
+    );
   }
 
   /// Отправляет агенту выбор [value] опции [configId]. Показанные опции
@@ -904,6 +987,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     if (isClosed || state.sessionId != sessionId) {
       return;
     }
+    activation.observe(view);
     final data = sessionStatusDataOf(view, l10n: _l10n);
     final usage = _usageOf(sessionId, view, _shown?.cwd ?? '');
     if (data != state.statusBar || !identical(usage, state.usage)) {

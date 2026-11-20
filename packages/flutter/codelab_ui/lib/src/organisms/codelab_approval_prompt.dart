@@ -1,5 +1,4 @@
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 
 import '../atomics/atomics.dart';
 import '../l10n/codelab_localizations.dart';
@@ -81,8 +80,9 @@ enum _Scope { once, always }
 ///
 /// Для чего: кнопки «Allow» и «Reject» и выбор охвата «Only this time» /
 /// «Always»; кнопка отвечает вариантом агента по паре «решение × охват»
-/// (design D3). Сочетания всех четырёх видов привязаны здесь и не зависят
-/// от охвата (D2). «View raw input» — значок в полосе (D8). Команду полоса
+/// (design D3). Кнопки активного одобрения показывают сочетания ответа по
+/// платформе; привязаны они на рабочем месте и не зависят от охвата (D14).
+/// «View raw input» — значок в полосе (D8). Команду полоса
 /// не повторяет: она в шапке строки вызова.
 ///
 /// Как использовать: `CodeLabToolCallTile` кладёт её в тело строки, пока
@@ -95,17 +95,18 @@ enum _Scope { once, always }
 /// `fix-approval-focus`, D1, D2). Прежний `Focus(autofocus: true)` ловил
 /// фокус, когда он был потерян (клик по пустой ленте, закрытая палитра), и
 /// Cmd/Ctrl+Enter отвечал `allow_once` на запрос разрешения без явного
-/// действия пользователя (AGENTS.md §10). Теперь сочетания действуют, только
-/// когда пользователь сам довёл фокус до полосы или её кнопок: клик или Tab.
+/// действия пользователя (AGENTS.md §10). Итерация 7 убрала и локальные
+/// сочетания: ответ с клавиатуры даёт только рабочее место
+/// (`CodeLabWorkbenchShortcuts.onAnswerApproval`, D14), а у активного
+/// одобрения кнопки показывают его клавиши.
 ///
-/// Переход и вид: к полосе фокус приходит кликом, Tab или сочетанием «Go to
+/// Переход и вид: к полосе фокус приходит Tab или сочетанием «Go to
 /// approval» (лента ставит фокус на её узел, см. [barKey] и
 /// `CodeLabTranscriptShowRequest.focusApproval`, D4). Узел полосы с
 /// `skipTraversal`: Tab идёт сразу к кнопкам, а Enter и Space на самой полосе
 /// ничего не выбирают. Пока фокус в полосе, видна рамка [focusFrameKey]
 /// цветами темы; для чтения с экрана полоса — контейнер `Awaiting approval` с
-/// перечнем сочетаний словами. У активного одобрения без фокуса в конце стоит
-/// подпись `codeLabApprovalGoToHint` с обозначением сочетания перехода.
+/// перечнем сочетаний словами. Отдельной подсказки перехода нет (D14).
 /// Ключ полосы (`ValueKey` по id запроса) задаёт хост: новый запрос даёт новый
 /// `State` и новый узел, фокус к нему не переносится.
 class CodeLabApprovalPrompt extends StatefulWidget {
@@ -401,22 +402,6 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
             ),
           ),
         bar,
-        // Подсказка перехода: только у активного одобрения и пока фокус вне
-        // полосы (D4, п. 6). Стоит последней, чтобы её появление не сдвигало
-        // элементы выше и не пересоздавало кнопки (фокус на них не теряется).
-        if (widget.shortcutsEnabled && !_hasFocus)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-            child: CodeLabText(
-              strings.codeLabApprovalGoToHint(
-                CodeLabShortcut.goToApproval.combos.single.compactFor(
-                  defaultTargetPlatform,
-                ),
-              ),
-              role: CodeLabTextRole.caption,
-              color: muted,
-            ),
-          ),
       ],
     );
 
@@ -424,56 +409,53 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
     // `shortcutsEnabled` меняется (раннее решено, и это одобрение стало
     // активным), кнопки не пересоздаются, и фокус, который пользователь сам
     // поставил на них клавишей Tab, не теряется (design.md, D4, п. 4). От
-    // `shortcutsEnabled` зависит только набор привязок.
+    // `shortcutsEnabled` зависят только подсказки клавиш и подпись для чтения
+    // с экрана. Своих привязок у полосы нет: ответ с клавиатуры даёт только
+    // рабочее место (`CodeLabWorkbenchShortcuts.onAnswerApproval`, D14).
     //
     // Без `autofocus`: полоса не берёт фокус сама (`fix-approval-focus`, D1).
-    return CallbackShortcuts(
-      bindings: widget.shortcutsEnabled
-          ? shortcuts.bindings(_select)
-          : const <ShortcutActivator, VoidCallback>{},
-      child: Focus(
-        focusNode: _barNode,
-        skipTraversal: true,
-        onFocusChange: (focused) {
-          if (mounted && focused != _hasFocus) {
-            setState(() => _hasFocus = focused);
-          }
-        },
-        // Для чтения с экрана полоса — контейнер: название и перечень
-        // сочетаний словами (`spokenFor`), без символов клавиш (D4, п. 5).
-        //
-        // `explicitChildNodes`: без него подписи кнопок и подсказок сливаются в
-        // подпись контейнера, и «Awaiting approval» теряется среди них.
-        child: Semantics(
-          container: true,
-          explicitChildNodes: true,
-          focusable: true,
-          focused: _hasFocus,
-          label: strings.codeLabApprovalAwaiting,
-          hint: widget.shortcutsEnabled ? _spokenShortcuts(shortcuts) : null,
-          // Рамка — наложение поверх содержимого, а не обёртка вокруг него:
-          // содержимое остаётся на месте в дереве, пока рамка появляется и
-          // исчезает.
-          child: Stack(
-            children: [
-              KeyedSubtree(key: CodeLabApprovalPrompt.barKey, child: content),
-              if (_hasFocus)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      key: CodeLabApprovalPrompt.focusFrameKey,
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: theme.resources.focusStrokeColorOuter,
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(4),
+    return Focus(
+      focusNode: _barNode,
+      skipTraversal: true,
+      onFocusChange: (focused) {
+        if (mounted && focused != _hasFocus) {
+          setState(() => _hasFocus = focused);
+        }
+      },
+      // Для чтения с экрана полоса — контейнер: название и перечень
+      // сочетаний словами (`spokenFor`), без символов клавиш (D4, п. 5).
+      //
+      // `explicitChildNodes`: без него подписи кнопок и подсказок сливаются в
+      // подпись контейнера, и «Awaiting approval» теряется среди них.
+      child: Semantics(
+        container: true,
+        explicitChildNodes: true,
+        focusable: true,
+        focused: _hasFocus,
+        label: strings.codeLabApprovalAwaiting,
+        hint: widget.shortcutsEnabled ? _spokenShortcuts(shortcuts) : null,
+        // Рамка — наложение поверх содержимого, а не обёртка вокруг него:
+        // содержимое остаётся на месте в дереве, пока рамка появляется и
+        // исчезает.
+        child: Stack(
+          children: [
+            KeyedSubtree(key: CodeLabApprovalPrompt.barKey, child: content),
+            if (_hasFocus)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    key: CodeLabApprovalPrompt.focusFrameKey,
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: theme.resources.focusStrokeColorOuter,
+                        width: 2,
                       ),
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );

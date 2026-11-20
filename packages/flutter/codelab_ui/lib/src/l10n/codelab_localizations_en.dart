@@ -33,11 +33,6 @@ class CodeLabLocalizationsEn extends CodeLabLocalizations {
   String get codeLabApprovalNoSuchOption => 'The agent offers no such option';
 
   @override
-  String codeLabApprovalGoToHint(String shortcut) {
-    return 'Press $shortcut to answer from the keyboard';
-  }
-
-  @override
   String get codeLabApprovalSelected => 'Selected';
 
   @override

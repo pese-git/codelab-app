@@ -149,12 +149,6 @@ abstract class CodeLabLocalizations {
   /// **'The agent offers no such option'**
   String get codeLabApprovalNoSuchOption;
 
-  /// Приглушённая подпись полосы активного одобрения, пока фокус вне полосы: какое сочетание переводит к ней фокус. Плейсхолдер shortcut — сочетание перехода в обозначениях платформы (⇧⌘A или Ctrl+Shift+A), не переводить. Метка security (D14): перевод не смягчает смысл.
-  ///
-  /// In en, this message translates to:
-  /// **'Press {shortcut} to answer from the keyboard'**
-  String codeLabApprovalGoToHint(String shortcut);
-
   /// Бейдж выбранного варианта в группе вариантов одобрения.
   ///
   /// In en, this message translates to:

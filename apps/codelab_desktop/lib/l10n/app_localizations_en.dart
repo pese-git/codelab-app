@@ -3296,8 +3296,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsKeyboardWhereCommandMenu => 'Command menu after /';
 
   @override
-  String get settingsKeyboardWhereApproval =>
-      'Pending approval with keyboard focus, when the agent offers this option';
+  String get settingsKeyboardWhereApprovalAnywhere =>
+      'Workbench, earliest pending approval, if it offers this option';
 
   @override
   String get settingsSearchKeywordsKeyboard =>

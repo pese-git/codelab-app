@@ -8,11 +8,12 @@ import '../molecules/molecules.dart';
 ///
 /// Почему: активаторы берутся из каталога [CodeLabShortcut], а не объявляются
 /// здесь литералами, иначе страница «Keyboard» разошлась бы с привязками
-/// (change `add-app-keyboard-page`, D3). Параметры одобрения и навигации
-/// инспектора (`onApprove`, `onReject`, `onInspectorPrevious`,
-/// `onInspectorNext`) удалены: app их не передавал, одобрение привязывает свои
-/// клавиши само, а Alt+←/→ зарезервированы за инспектором (DSK-18), но не
-/// привязаны (решение пользователя Q2).
+/// (change `add-app-keyboard-page`, D3). Alt+←/→ зарезервированы за инспектором
+/// (DSK-18), но не привязаны (решение пользователя Q2).
+///
+/// Сочетания ответа на одобрение (`onAnswerApproval`, change
+/// `fix-approval-focus`, D14) привязаны здесь, а не к полосе: они действуют с
+/// любого элемента рабочего места, включая композер.
 ///
 /// Как использовать: хост передаёт колбэки только для доступных действий;
 /// без колбэка сочетание не привязано.
@@ -70,12 +71,19 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
   /// Alt+Shift+Y, Q, X, W на остальных ОС (change `fix-approval-focus`,
   /// D14, D15). Колбэк получает вид варианта; вариант, цель, видимость и
   /// задержку после появления решает хост (AGENTS.md §10), кит только
-  /// сообщает нажатие. Автоповтор не вызывает колбэк.
-  ///
-  /// ЗАГЛУШКА красных тестов 7.1: параметр принят, но не привязан;
-  /// реализация — 7.2.
+  /// сообщает нажатие. Автоповтор не вызывает колбэк (`includeRepeats:
+  /// false`): одно нажатие — не больше одного ответа. Клавиши зависят от
+  /// платформы (`CodeLabShortcut.combosFor`, D15).
   final ValueChanged<CodeLabApprovalOptionKind>? onAnswerApproval;
   final bool enabled;
+
+  /// Запись каталога и вид варианта, на который она отвечает (D14).
+  static const _answerKinds = [
+    (CodeLabShortcut.allowOnce, CodeLabApprovalOptionKind.allowOnce),
+    (CodeLabShortcut.allowAlways, CodeLabApprovalOptionKind.allowAlways),
+    (CodeLabShortcut.rejectOnce, CodeLabApprovalOptionKind.rejectOnce),
+    (CodeLabShortcut.rejectAlways, CodeLabApprovalOptionKind.rejectAlways),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -97,6 +105,12 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
         ...CodeLabShortcut.toggleFiles.bind(onToggleFiles!),
       if (onGoToApproval != null)
         ...CodeLabShortcut.goToApproval.bind(onGoToApproval!),
+      if (onAnswerApproval != null)
+        for (final (shortcut, kind) in _answerKinds)
+          ...shortcut.bind(
+            () => onAnswerApproval!(kind),
+            includeRepeats: false,
+          ),
     };
 
     return CallbackShortcuts(
