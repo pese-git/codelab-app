@@ -162,7 +162,12 @@ providers:
   test(
     'permissions.mode: bypass из общего с CLI конфига — режим bypass',
     () async {
-      config('permissions:\n  mode: bypass\n');
+      // Режим читается из разобранного конфига, а он без провайдера не
+      // разбирается (тогда действует умолчание standard): нужен годный конфиг.
+      config(
+        '${provider.replaceFirst('%KEY%', 'api_key_env: GW_KEY')}'
+        'permissions:\n  mode: bypass\n',
+      );
 
       final facts = await read();
 

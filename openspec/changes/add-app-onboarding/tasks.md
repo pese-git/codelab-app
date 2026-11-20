@@ -42,14 +42,14 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 2. Итерация 2 — `OnboardingCubit` и факты
 
-- [ ] 2.1 `[desktop]` Красный: `test/features/onboarding/application/onboarding_cubit_test.dart` на фиктивных часах и двойниках `OnboardingProbe`, `OnboardingPreferences`, `NavigationCubit`. Сценарии spec app-onboarding:
+- [x] 2.1 `[desktop]` Красный: `test/features/onboarding/application/onboarding_cubit_test.dart` на фиктивных часах и двойниках `OnboardingProbe`, `OnboardingPreferences`, `NavigationCubit`. Сценарии spec app-onboarding:
   - «Шаги onboarding и переходы»: «Проход без пропуска», «Back при пропущенном шаге модели»; таблица переходов D4 целиком; Next на шаге 2 при `Pending` ждёт итога, повторное нажатие не даёт второго перехода;
   - «Пропуск шага выбора модели»: «Провайдер уже настроен», «Внешний агент по умолчанию», «Медленное хранилище» (таймаут 5 с; поздний итог отброшен; итог после `close()` не даёт `emit`);
   - «Шаг «Choose a model» и мастер провайдера»: состояния `Choose(none|keyMissing|configBroken|unavailable)`, `Saved(summary)` из `Done(plan, committed)` без значения ключа (`toString()` состояния не содержит `sk-test-leak-…`), «Set up later», отмена мастера не меняет шаг;
   - «Завершение onboarding и старт рабочего места»: «Двойное нажатие», «Флаг не записался»;
   - события D13: набор и поля, без путей и имён секретов.
-- [ ] 2.2 `[desktop]` Реализация 2.1: `features/onboarding/application/` — `OnboardingCubit`, `OnboardingState` и закрытые иерархии D4, порт `OnboardingProbe` и `OnboardingFacts`, `OnboardingSavedSummary`. 2.1 зелёный.
-- [ ] 2.3 `[desktop]` Красный: `test/app/onboarding_probe_test.dart` на временном `CODELAB_HOME` (образец — `provider_setup_probe_test.dart`). Spec app-onboarding «Пропуск шага выбора модели» и «Шаг «Permissions»»:
+- [x] 2.2 `[desktop]` Реализация 2.1: `features/onboarding/application/` — `OnboardingCubit`, `OnboardingState` и закрытые иерархии D4, порт `OnboardingProbe` и `OnboardingFacts`, `OnboardingSavedSummary`. 2.1 зелёный.
+- [x] 2.3 `[desktop]` Красный: `test/app/onboarding_probe_test.dart` на временном `CODELAB_HOME` (образец — `provider_setup_probe_test.dart`). Spec app-onboarding «Пропуск шага выбора модели» и «Шаг «Permissions»»:
   - пустой дом → `NoProviderConfigured`, режим `standard`, бэкенд `env`;
   - провайдер с `api_key_env` и заданной переменной → `ProviderReady`;
   - `api_key_secret` без секрета при `secrets.backend: file` → `ProviderKeyMissing`, бэкенд `file`;
@@ -58,7 +58,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - WebSocket-профиль по умолчанию → `external`, конфиг не читается;
   - подписи путей с `~`;
   - значения ключей не читаются (двойник `ProviderKeys` без `read`).
-- [ ] 2.4 `[desktop]` Реализация 2.3: `lib/app/onboarding_probe.dart` поверх `DefaultProfileResolver`, `resolveSettingsAccess`, `ClientSecretAccess`, `FileAgentConfigStore`, `checkProviderReadiness`, `sessionDefaultsOf`, `homePathLabel` (D6). 2.3 зелёный.
+- [x] 2.4 `[desktop]` Реализация 2.3: `lib/app/onboarding_probe.dart` поверх `DefaultProfileResolver`, `resolveSettingsAccess`, `ClientSecretAccess`, `FileAgentConfigStore`, `checkProviderReadiness`, `sessionDefaultsOf`, `homePathLabel` (D6). 2.3 зелёный.
 
 ## 3. Итерация 3 — экран, мастер, старт рабочего места
 

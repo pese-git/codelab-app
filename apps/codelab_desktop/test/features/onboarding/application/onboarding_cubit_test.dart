@@ -345,6 +345,7 @@ void main() {
       probe.gate.complete(_facts(const ProviderReady('llm/m1')));
       await Future.wait([first, second]);
 
+      await settle(); // события потока доставляются асинхронно
       // Ровно один переход: permissions -> privacy (шаг model пропущен).
       expect(cubit.state.step, OnboardingStep.privacy);
       expect(steps, [OnboardingStep.permissions, OnboardingStep.privacy]);
