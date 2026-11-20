@@ -353,7 +353,7 @@
 | No shortcuts match "{query}" | Нет сочетаний по запросу «{query}» | `{query}` — плейсхолдер (§2); вычитано (2026-11-19) |
 | Go to approval | Перейти к одобрению | `security`; действие сочетания Cmd/Ctrl+Shift+A (`settingsKeyboardActionGoToApproval`); как «Go to approval» панели Agents (§5); вычитано (2026-11-20, change `fix-approval-focus`) |
 | Workbench, while an approval is pending | Рабочее место, пока ждёт одобрение | `security`; колонка «Где» строки «Go to approval» (`settingsKeyboardWhereApprovalPending`); вычитано (2026-11-20) |
-| Pending approval with keyboard focus, when the agent offers this option | Ожидающее одобрение с фокусом клавиатуры, когда агент предлагает этот вариант | `security`; колонка «Где» четырёх строк решения (`settingsKeyboardWhereApproval`); заменяет «Pending approval in focus…» / «Ожидающее одобрение в фокусе…»: «in focus» читалось и как признак модели, и как «сессия в фокусе»; вычитано (2026-11-20) |
+| Workbench, earliest pending approval, if it offers this option | Рабочее место, самое раннее ожидающее одобрение, если в нём есть этот вариант | `security`; колонка «Где» четырёх строк ответа (`settingsKeyboardWhereApprovalAnywhere`): сочетания действуют с любого места рабочего места; заменяет «Pending approval with keyboard focus…» / «Ожидающее одобрение с фокусом клавиатуры…» (итерация 7, D14) и ещё раньше «Pending approval in focus…»; вычитано (2026-11-20) |
 | Allow once | Разрешить только сейчас | `security`; опирается на «Allow» и «Only this time» (§5); вычитано (2026-11-19) |
 | Allow always | Всегда разрешать | `security`; вычитано (2026-11-19) |
 | Reject once | Отклонить только сейчас | `security`; вычитано (2026-11-19) |
@@ -574,7 +574,6 @@
 | Shell | Оболочка | вычитано (2026-11-18); «Оболочка» подтверждена пользователем |
 | Destructive | Разрушительное | вычитано (2026-11-18) |
 | Unknown risk | Неизвестный риск | вычитано (2026-11-18) |
-| Press {shortcut} to answer from the keyboard | Нажмите {shortcut}, чтобы ответить с клавиатуры | подпись полосы активного одобрения, пока фокус вне полосы (`codeLabApprovalGoToHint`); `{shortcut}` — плейсхолдер (§2), сочетание перехода в обозначениях платформы (`⇧⌘A`, `Ctrl+Shift+A`); вычитано (2026-11-20, change `fix-approval-focus`) |
 
 Подписи одобрения без метки `security`:
 
