@@ -2031,6 +2031,38 @@
    "w": 1180,
    "x": 11340,
    "y": 6580
+  },
+  "CliSetupUnauthorized.dc.html": {
+   "h": 720,
+   "page": "cli",
+   "title": "C5a First run — check failed: key rejected (401)",
+   "w": 1000,
+   "x": 0,
+   "y": 9120
+  },
+  "CliSetupUnreachable.dc.html": {
+   "h": 720,
+   "page": "cli",
+   "title": "C5b First run — unreachable, save without check",
+   "w": 1000,
+   "x": 1080,
+   "y": 9120
+  },
+  "CliSetupKeyMissing.dc.html": {
+   "h": 720,
+   "page": "cli",
+   "title": "C5c First run — provider without a key",
+   "w": 1000,
+   "x": 2160,
+   "y": 9120
+  },
+  "CliSetupNoTty.dc.html": {
+   "h": 720,
+   "page": "cli",
+   "title": "C5d First run — no wizard: headless, broken config",
+   "w": 1000,
+   "x": 3240,
+   "y": 9120
   }
  },
  "createdOnFiles": {
@@ -2109,7 +2141,9 @@
   "p-row5s",
   "t-row5s",
   "p-row5f",
-  "t-row5f"
+  "t-row5f",
+  "c-row9",
+  "c-row9s"
  ],
  "notes": {
   "c-row1": {
@@ -2161,7 +2195,7 @@
    "fill": "purple",
    "page": "cli",
    "size": 24,
-   "text": "C5 — §12.4.3–12.4.4: мастер провайдера вопросами в терминале, ключ без эха, проверка /models до сохранения.\nC6 — §12.6.3: /theme в TUI — SelectListModel; текущая отмечена *, у каждой образец accent success error warning. Строгий разбор: невалидная тема в списке не применяется. Выбор живёт до конца процесса. Кликните строку, чтобы сменить тему.\n\nТвик theme (dark / light) есть у C1–C5.\n\nЯзык: строки CLI английские по умолчанию, русский — каталог ru (display.language / --lang, §12.2.10). Экраны показывают en.",
+   "text": "C5 — §12.4.3–12.4.4: мастер провайдера вопросами в терминале, ключ без эха, проверка /models до сохранения.\nC6 — §12.6.3: /theme в TUI — SelectListModel; текущая отмечена *, у каждой образец accent success error warning. Строгий разбор: невалидная тема в списке не применяется. Выбор живёт до конца процесса. Кликните строку, чтобы сменить тему.\n\nТвик theme (dark / light) есть у C1–C5.\n\nЯзык: строки CLI английские по умолчанию, русский — каталог ru (display.language / --lang, §12.2.10). Экраны показывают en.\nДругие исходы первого запуска — ряд C5a–C5d.",
    "w": 460,
    "x": 2160,
    "y": 2280
@@ -2816,6 +2850,24 @@
    "x": 12600,
    "y": 6580,
    "text": "Отказ проверки на планшете (§12.4.4, шаги 4–5), под T13b–T13c: T13f — 401, Back → T13b; T13g — недоступен или таймаут, Back → T13a, «Save without check…»; T13h — подтверждение; T13i — модель вручную; T13j — Review с «Not verified: timeout», Save → T13k: шаг 3 с «Not verified», Next → T14. 404 — как 06."
+  },
+  "c-row9": {
+   "kind": "title1",
+   "maxW": 4320,
+   "page": "cli",
+   "w": 240,
+   "x": 0,
+   "y": 8820,
+   "text": "Первый запуск: другие исходы"
+  },
+  "c-row9s": {
+   "fill": "purple",
+   "size": 24,
+   "page": "cli",
+   "w": 460,
+   "x": 4320,
+   "y": 9120,
+   "text": "§12.4.3–12.4.4 (U-17, L-24). Основной путь — C5.\nC5a — 401/403: «Enter the key again» (Back к ключу), Retry, Cancel.\nC5b — недоступен или таймаут: Retry, «Change the base URL», «Save without check» с подтверждением [y/N]; модель и окно контекста вручную, в итоге «Not verified: timeout».\nC5c — ProviderKeyMissing: мастер не запускается, конфиг не меняется; три случая ключа.\nC5d — без TTY или с -p мастер не запускается (SETUP-7): нет провайдера — код 64; битый конфиг — код 64 и пути ключей, файл не трогается; нет ключа — ошибка первого хода, код 1.\nТексты C5c — из §12.4.3 дословно; вопросы C5a–C5b и сообщения C5d — образец, точная формулировка не задана."
   }
  },
  "order": [
@@ -3061,7 +3113,11 @@
   "PhoneOnbModelUnverified.dc.html",
   "PhoneOnbModelUnverified-dark.dc.html",
   "TabletOnbModelUnverified.dc.html",
-  "TabletOnbModelUnverified-dark.dc.html"
+  "TabletOnbModelUnverified-dark.dc.html",
+  "CliSetupUnauthorized.dc.html",
+  "CliSetupUnreachable.dc.html",
+  "CliSetupKeyMissing.dc.html",
+  "CliSetupNoTty.dc.html"
  ],
  "pages": [
   {
