@@ -118,7 +118,8 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `PhoneWizard.dc.html` | P11 Первый запуск — мастер провайдера |
 | `PhoneStates.dc.html` | P12 Состояния |
 | `PhoneLegal.dc.html` | P13 Настройки › Legal — Privacy policy |
-| `PhoneNotices.dc.html` | P14 Legal — Third-party notices, поиск по пакетам |
+| `PhoneNotices.dc.html` | P14 Legal — Third-party notices, поиск по пакетам: состояние «M of N» с подсветкой |
+| `PhoneNoticesEmpty.dc.html` | P14a Legal — Third-party notices, поиск: состояние «No packages match» с кнопкой «Clear search» |
 | `PhoneTerms.dc.html` | P15 Legal — Terms of use |
 | `PhoneLicense.dc.html` | P16 Legal — License |
 

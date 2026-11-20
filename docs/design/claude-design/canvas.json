@@ -1057,7 +1057,7 @@
    "w": 390,
    "h": 844,
    "page": "phone",
-   "title": "P14 Legal — Third-party notices, package search",
+   "title": "P14 Legal — Third-party notices, search: M of N",
    "is_interactive": true
   },
   "TabletLegal.dc.html": {
@@ -1288,7 +1288,7 @@
    "w": 390,
    "h": 844,
    "page": "phone-dark",
-   "title": "P14 Legal — Third-party notices, package search — dark"
+   "title": "P14 Legal — Third-party notices, search: M of N — dark"
   },
   "TabletLegal-dark.dc.html": {
    "x": 0,
@@ -1337,6 +1337,23 @@
    "h": 820,
    "page": "tablet-dark",
    "title": "T10 Tablet — Legal › Third-party notices — dark"
+  },
+  "PhoneNoticesEmpty.dc.html": {
+   "x": 1880,
+   "y": 4068,
+   "w": 390,
+   "h": 844,
+   "page": "phone",
+   "title": "P14a Legal — Third-party notices, no packages match",
+   "is_interactive": true
+  },
+  "PhoneNoticesEmpty-dark.dc.html": {
+   "x": 1880,
+   "y": 4068,
+   "w": 390,
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P14a Legal — Third-party notices, no packages match — dark"
   }
  },
  "createdOnFiles": {
@@ -1899,12 +1916,12 @@
    "x": 0,
    "y": 3808,
    "kind": "title1",
-   "maxW": 1800,
+   "maxW": 2270,
    "page": "phone",
    "text": "Смартфон: правовые документы"
   },
   "p-row4s": {
-   "x": 1880,
+   "x": 2350,
    "y": 4068,
    "w": 460,
    "size": "m",
@@ -1977,7 +1994,7 @@
    "x": 0,
    "y": 3808,
    "kind": "title1",
-   "maxW": 1800,
+   "maxW": 2270,
    "page": "phone-dark",
    "text": "Тёмная тема — смартфон: правовые документы"
   },
@@ -2174,7 +2191,9 @@
   "PhoneLicense-dark.dc.html",
   "TabletTerms-dark.dc.html",
   "TabletLicense-dark.dc.html",
-  "TabletNotices-dark.dc.html"
+  "TabletNotices-dark.dc.html",
+  "PhoneNoticesEmpty.dc.html",
+  "PhoneNoticesEmpty-dark.dc.html"
  ],
  "pages": [
   {
