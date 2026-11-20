@@ -18,6 +18,7 @@ export 'src/platform/text_file_io.dart';
 export 'src/platform/working_directory_provider.dart';
 export 'src/stores/json_file_profile_store.dart';
 export 'src/stores/json_file_recent_projects_store.dart';
+export 'src/themes/io_theme_library.dart';
 export 'src/transport/io_transport_resolver.dart';
 
 const acpClientIoPackageName = 'codelab_client_io';

@@ -92,6 +92,7 @@ class CodeLabFilePreview extends StatefulWidget {
     required this.content,
     this.maybeSecret = false,
     this.highlightLine,
+    this.warningLines = const {},
     this.onCopyPath,
     super.key,
   });
@@ -106,6 +107,10 @@ class CodeLabFilePreview extends StatefulWidget {
   final CodeLabFilePreviewContent content;
   final bool maybeSecret;
   final int? highlightLine;
+
+  /// ЗАГЛУШКА для красного теста 3.3: строки (с 1) с тоном `warning`; пока
+  /// не рисуются, реализация — задача 3.4 (design.md `add-app-appearance-page`, D10).
+  final Set<int> warningLines;
   final ValueChanged<String>? onCopyPath;
 
   @override
