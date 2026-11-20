@@ -828,6 +828,53 @@ void main() {
     );
   });
 
+  // Onboarding app (change `add-app-onboarding`, задача 1.7; design.md D15;
+  // spec workspace-architecture «Onboarding app без dart:io»). Красный до
+  // задачи 1.8: правила для каталога в `rules.dart` ещё нет, поэтому
+  // фикстура с `dart:io` не ловится.
+  group('onboarding desktop-клиента', () {
+    const onboardingDir = 'apps/codelab_desktop/lib/features/onboarding';
+
+    test('rules.dart содержит правило с запретом dart:io', () {
+      final matching = rules.where((r) => r.dir == onboardingDir);
+
+      expect(matching, hasLength(1), reason: 'нужно правило $onboardingDir');
+      expect(matching.single.forbidden, contains('dart:io'));
+    });
+
+    test('ловит dart:io в application и presentation onboarding, '
+        'не трогает чистый файл', () {
+      final tmp = Directory.systemTemp.createTempSync('guard_onboarding_');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      for (final layer in ['application', 'presentation']) {
+        final dir = Directory(p.join(tmp.path, 'lib', layer))
+          ..createSync(recursive: true);
+        File(
+          p.join(dir.path, 'bad.dart'),
+        ).writeAsStringSync("import 'dart:io';\n");
+        File(
+          p.join(dir.path, 'ok.dart'),
+        ).writeAsStringSync("import 'dart:async';\n");
+      }
+      // Правило берётся из rules.dart; пути правила относительны каталога.
+      final rule = rules.where((r) => r.dir == onboardingDir).toList();
+      expect(rule, hasLength(1), reason: 'нужно правило $onboardingDir');
+
+      final violations = scan(
+        tmp.path,
+        PackageRule('lib', forbidden: rule.single.forbidden),
+      );
+
+      expect(
+        violations,
+        unorderedEquals([
+          endsWith('lib/application/bad.dart:1 -> dart:io'),
+          endsWith('lib/presentation/bad.dart:1 -> dart:io'),
+        ]),
+      );
+    });
+  });
+
   // Встроенный агент `codelab_embedded` (design.md change
   // `add-embedded-agent-mode`, D3): основной барель чист и не знает IO-пакет
   // агента, `io.dart` и `testing.dart` вне запретов `webUnsafe`, но без ссылок
