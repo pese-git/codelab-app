@@ -14,6 +14,21 @@ sealed class AppDestination {
   const AppDestination();
 }
 
+/// Onboarding первого запуска вместо рабочего места.
+///
+/// Почему здесь: ветку вводит change `add-app-onboarding` (D1), а не
+/// `add-app-navigation-shell`. Выход — только `NavigationCubit.finishOnboarding`;
+/// Esc и настройки на onboarding не действуют.
+final class OnboardingDestination extends AppDestination {
+  const OnboardingDestination();
+
+  @override
+  bool operator ==(Object other) => other is OnboardingDestination;
+
+  @override
+  int get hashCode => (OnboardingDestination).hashCode;
+}
+
 /// Рабочее место: сайдбар, сессия, док. Остаётся смонтированным и под
 /// экраном настроек (D2).
 final class WorkbenchDestination extends AppDestination {

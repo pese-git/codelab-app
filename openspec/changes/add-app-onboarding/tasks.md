@@ -31,14 +31,14 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 1. Итерация 1 — флаг, навигация, значение `entry`
 
-- [ ] 1.1 `[agent]` Красный: `packages/dart/codelab_setup/test/provider_setup_flow_test.dart` — `ProviderSetupFlow(entry: ProviderWizardEntry.onboarding)` пишет `provider_wizard.started {entry: onboarding}`; переходы автомата совпадают с `entry: app` на одном сценарии (D11).
-- [ ] 1.2 `[agent]` Реализация 1.1: значение `onboarding('onboarding')` в `ProviderWizardEntry`; строка в `codelab_setup/AGENTS.md`. 1.1 зелёный, `web-compile` зелёный.
-- [ ] 1.3 `[desktop]` Красный: `apps/codelab_desktop/test/core/platform/onboarding_preferences_test.dart`. Spec app-onboarding «Показ onboarding при первом запуске»: нет ключа → показать; `true` → нет; «Повреждённое значение флага» (не перезаписан, `storedValueInvalid`); «Хранилище не читается» (`readFailure` — имя типа); `markDone` пишет `true`, ошибка записи пробрасывается (D2).
-- [ ] 1.4 `[desktop]` Реализация 1.3: `lib/core/platform/onboarding_preferences.dart` (`OnboardingPreferences`, `OnboardingLoad`, `SharedPreferencesOnboardingPreferences`). 1.3 зелёный.
-- [ ] 1.5 `[desktop]` Красный: `test/app/navigation/navigation_cubit_test.dart` — начальное `OnboardingDestination`; `openSettings` на onboarding ничего не меняет (`settings.open_skipped`); `finishOnboarding` → `WorkbenchDestination`, из других назначений — ничего; прежние сценарии навигации зелёные (spec app-onboarding «Шаги onboarding и переходы», сценарий «Esc и настройки на onboarding»; D1).
-- [ ] 1.6 `[desktop]` Реализация 1.5: `OnboardingDestination` в `app_destination.dart`, параметр `initial` и `finishOnboarding` у `NavigationCubit`. 1.5 зелёный.
-- [ ] 1.7 `[desktop]` Красный: `packages/dart/codelab_architecture_tests` — фикстура или проверка правила: `dart:io` в `apps/codelab_desktop/lib/features/onboarding/` — нарушение (spec workspace-architecture «Onboarding app без dart:io», оба сценария; D15).
-- [ ] 1.8 `[desktop]` Реализация 1.7: `PackageRule('apps/codelab_desktop/lib/features/onboarding', forbidden: ['dart:io'])` в `test/support/rules.dart`. 1.7 зелёный, `guard` зелёный.
+- [x] 1.1 `[agent]` Красный: `packages/dart/codelab_setup/test/provider_setup_flow_test.dart` — `ProviderSetupFlow(entry: ProviderWizardEntry.onboarding)` пишет `provider_wizard.started {entry: onboarding}`; переходы автомата совпадают с `entry: app` на одном сценарии (D11).
+- [x] 1.2 `[agent]` Реализация 1.1: значение `onboarding('onboarding')` в `ProviderWizardEntry`; строка в `codelab_setup/AGENTS.md`. 1.1 зелёный, `web-compile` зелёный.
+- [x] 1.3 `[desktop]` Красный: `apps/codelab_desktop/test/core/platform/onboarding_preferences_test.dart`. Spec app-onboarding «Показ onboarding при первом запуске»: нет ключа → показать; `true` → нет; «Повреждённое значение флага» (не перезаписан, `storedValueInvalid`); «Хранилище не читается» (`readFailure` — имя типа); `markDone` пишет `true`, ошибка записи пробрасывается (D2).
+- [x] 1.4 `[desktop]` Реализация 1.3: `lib/core/platform/onboarding_preferences.dart` (`OnboardingPreferences`, `OnboardingLoad`, `SharedPreferencesOnboardingPreferences`). 1.3 зелёный.
+- [x] 1.5 `[desktop]` Красный: `test/app/navigation/navigation_cubit_test.dart` — начальное `OnboardingDestination`; `openSettings` на onboarding ничего не меняет (`settings.open_skipped`); `finishOnboarding` → `WorkbenchDestination`, из других назначений — ничего; прежние сценарии навигации зелёные (spec app-onboarding «Шаги onboarding и переходы», сценарий «Esc и настройки на onboarding»; D1).
+- [x] 1.6 `[desktop]` Реализация 1.5: `OnboardingDestination` в `app_destination.dart`, параметр `initial` и `finishOnboarding` у `NavigationCubit`. 1.5 зелёный.
+- [x] 1.7 `[desktop]` Красный: `packages/dart/codelab_architecture_tests` — фикстура или проверка правила: `dart:io` в `apps/codelab_desktop/lib/features/onboarding/` — нарушение (spec workspace-architecture «Onboarding app без dart:io», оба сценария; D15).
+- [x] 1.8 `[desktop]` Реализация 1.7: `PackageRule('apps/codelab_desktop/lib/features/onboarding', forbidden: ['dart:io'])` в `test/support/rules.dart`. 1.7 зелёный, `guard` зелёный.
 
 ## 2. Итерация 2 — `OnboardingCubit` и факты
 
