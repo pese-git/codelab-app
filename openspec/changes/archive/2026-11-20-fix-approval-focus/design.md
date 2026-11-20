@@ -5,7 +5,7 @@
 - Спецификации:
   - `agent-workbench-ui`: «Паттерны взаимодействия agent workbench» (сценарий «Клавиатурные approve/reject применяются к самому раннему pending approval»), «Approval options are rendered and bound to shortcuts by kind», «Approval card inside the tool call row», «Клавиатурный десктопный UX», «Messages queue instead of failing when the session is busy», «Запрос одобрения от субагента под строкой корня», панель Agents («Go to approval»);
   - `app-settings`: «Рабочее место недоступно с клавиатуры из настроек», «Ожидающее одобрение видно из настроек».
-- Активный change [`add-app-keyboard-page`](../add-app-keyboard-page/design.md): каталог `CodeLabShortcut` (D2, D3), страница «Keyboard», сценарий «Отправка и одобрение на одной клавише», правило «новое сочетание — запись каталога, ARB и сценарий нажатия в одном change».
+- Активный change [`add-app-keyboard-page`](../2026-11-20-add-app-keyboard-page/design.md): каталог `CodeLabShortcut` (D2, D3), страница «Keyboard», сценарий «Отправка и одобрение на одной клавише», правило «новое сочетание — запись каталога, ARB и сценарий нажатия в одном change».
 - Архив:
   - `2026-09-03-embed-approval-in-thread` — Decision 6: сочетания только у самого раннего одобрения; Open Questions о распределении фокуса;
   - `2026-10-28-lighten-approval-block` — D2: сочетания всех четырёх видов в полосе; Open Questions: сочетания из композера и Zed ⌘Y.

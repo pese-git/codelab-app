@@ -113,7 +113,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 5. Проверки и PR
 
-- [ ] 5.1 `[desktop]` Проверки затронутого (`AGENTS.md` §21):
+- [x] 5.1 `[desktop]` Проверки затронутого (`AGENTS.md` §21): Выполнено в ветке `feature/fix-approval-focus` (PR #376, вместе с полным `melos run check` на c6d36bda).
   - `fvm dart format --set-exit-if-changed` изменённых файлов;
   - `fvm flutter analyze` в `packages/flutter/codelab_ui` и `apps/codelab_desktop`;
   - `fvm flutter test` обоих пакетов;
@@ -121,9 +121,9 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - `fvm flutter analyze` для `apps/codelab_desktop/integration_test` (только компиляция, `feature/*`);
   - `openspec validate add-app-keyboard-page --strict`;
   - если правились опубликованные на сайте документы и установлен Node — `cd site && npm ci && npm run verify`.
-- [ ] 5.2 `[desktop]` Ручная проверка app на macOS: кейкапы ⌘, поиск `⌘K` и `ctrl k`, русский интерфейс, минимальное окно 800 px. Каждая строка таблицы нажимается в своём месте.
-- [ ] 5.3 `[desktop]` При архивации: если `add-app-skills-page` и `add-desktop-localization` уже в архиве, свести фразу «остальные страницы остаются скрытыми» требования «Страницы Providers и MCP servers в навигации» с перечнем видимых страниц, включая «General» и «Keyboard» (D7).
-- [ ] 5.4 `[desktop]` PR в `develop`. В описании:
+- [x] 5.2 `[desktop]` Ручная проверка app на macOS: кейкапы ⌘, поиск `⌘K` и `ctrl k`, русский интерфейс, минимальное окно 800 px. Каждая строка таблицы нажимается в своём месте. Перенесено в ручную приёмку выпуска (`release/*`) решением пользователя 2026-11-20 при архивации.
+- [x] 5.3 `[desktop]` При архивации: если `add-app-skills-page` и `add-desktop-localization` уже в архиве, свести фразу «остальные страницы остаются скрытыми» требования «Страницы Providers и MCP servers в навигации» с перечнем видимых страниц, включая «General» и «Keyboard» (D7). Не применимо: `add-app-skills-page` ещё не в архиве — сводка перечня видимых страниц остаётся за ним.
+- [x] 5.4 `[desktop]` PR в `develop`. В описании: Слито в `develop` в составе PR #376 (`fix-approval-focus` строился на этой ветке).
   - какие проверки запускались локально, и что полный `melos run check` не запускался;
   - смена подсказки `Ctrl+Alt+⏎` на Windows и Linux (решение пользователя Q4, 2026-11-19);
   - удалённые параметры `CodeLabWorkbenchShortcuts` (решение пользователя Q2, 2026-11-19).
