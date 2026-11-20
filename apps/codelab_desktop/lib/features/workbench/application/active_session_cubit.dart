@@ -570,7 +570,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     // а лента пересобирается только по `sessionChanges`. Если после ответа
     // нового кадра нет, оставшееся одобрение так и осталось бы выключенным и
     // не отвечало бы на сочетание: лента пересобирается здесь же
-    // (`fix-approval-focus`, design.md, Risks).
+    // (`fix-approval-focus`, design.md, D4, п. 4).
     // Один `emit`: два подряд дали бы промежуточный кадр с включёнными
     // кнопками и старой лентой.
     final id = state.sessionId;

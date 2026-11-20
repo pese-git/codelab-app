@@ -579,7 +579,7 @@ void main() {
 
   // `didUpdateWidget` полосы: кнопка в фокусе гаснет (`enabled: false`, хост
   // блокирует ответы на время ответа другому одобрению) — фокус остаётся в
-  // полосе, на её узле (design.md, Risks).
+  // полосе, на её узле (design.md, D4, п. 4).
   group('a focused button gets disabled', () {
     Widget host({required bool enabled}) => FluentApp(
       home: Center(
@@ -607,6 +607,35 @@ void main() {
         tester.element(find.byKey(CodeLabApprovalPrompt.barKey)),
       );
       expect(FocusManager.instance.primaryFocus, same(barNode));
+    });
+
+    // Сценарий спеки «Кнопка с фокусом выключается»: Enter и Space на узле
+    // полосы ничего не выбирают (design.md, D4, п. 4).
+    testWidgets('Enter and Space do not select an option', (tester) async {
+      final selected = <Object?>[];
+      Widget hostWith({required bool enabled}) => FluentApp(
+        home: Center(
+          child: SizedBox(
+            width: 720,
+            child: CodeLabApprovalPrompt(
+              options: options,
+              enabled: enabled,
+              onOptionSelected: selected.add,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(hostWith(enabled: true));
+      await tabTo(tester, find.byKey(CodeLabApprovalPrompt.allowKey));
+      await tester.pumpWidget(hostWith(enabled: false));
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.pump();
+
+      expect(selected, isEmpty);
     });
   });
 }

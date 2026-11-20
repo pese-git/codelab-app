@@ -202,7 +202,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - изменение поведения: одобрение больше не берёт фокус само, новый переход Cmd/Ctrl+Shift+A;
   - исправление ядра: повторный `session/request_permission` того же вызова виден в строке вызова (D13), затрагивает и CLI;
   - зависимость от `add-app-keyboard-page`.
-- [ ] 6.6 `[desktop]` `[client]` Исправления по двойному ревью (без CRITICAL и HIGH):
+- [x] 6.6 `[desktop]` `[client]` Исправления по двойному ревью (без CRITICAL и HIGH):
   - пересборка ленты одним `emit` после ответа (`ActiveSessionCubit.respondToApproval`), D4, п. 4;
   - фокус с выключенной кнопки полосы переходит на узел самой полосы (`didUpdateWidget`), не покидая её; сценарий «Кнопка с фокусом выключается», D4, п. 4;
   - запрос показа несёт `approvalId`, лента фокусирует только полосу с ключом `CodeLabApprovalPrompt.keyFor(sessionId, approvalId)`; ключ включает id сессии; повторное нажатие при фокусе в цели ничего не меняет, D4, пп. 2, 4;
