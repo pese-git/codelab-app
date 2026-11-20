@@ -1,7 +1,8 @@
 ## Исполнители
 
 - `[desktop]` — `packages/flutter/codelab_ui`, `apps/codelab_desktop`;
-- `[protocol]`, `[agent]`, `[client]` — задач нет: ACP, клиентское ядро, Dart-пакеты и CLI не меняются (design.md, D11).
+- `[client]` — `packages/dart/codelab_client_core`: только выбор одобрения элемента вызова (итерация 3а, design.md D13);
+- `[protocol]`, `[agent]` — задач нет: ACP, ядро агента и код CLI не меняются (design.md, D11).
 
 TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
 - красный тест — отдельная задача и отдельный коммит до кода; коммит — только по просьбе пользователя;
@@ -16,7 +17,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
 - тесты пакета;
 - `melos run l10n:check` — при правке ARB.
 
-`guard` и `web-compile` не нужны (design.md, D11).
+`guard` не нужен. `web-compile`, `conformance:client` и `test:e2e:cli:dart-agent` — только для итерации 3а (design.md, D11).
 
 ## 0. Документы (выполнено при подготовке change)
 
@@ -127,13 +128,26 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
     - «Новый запрос того же вызова»;
     - переключение сессии при фокусе в полосе — фокус в композере новой сессии;
     - пользователь кликнул в дерево Files в том же кадре, что и ответ, — фокус в дереве, а не в композере;
-    - композер выключен — фокус на рабочем месте.
+  - app, модульный тест функции выбора цели возврата фокуса (`apps/codelab_desktop/test/features/workbench/application/approval_focus_return_test.dart`; D5): композер включён и фокус свободен — композер; композер выключен — рабочее место; фокус уже занят — не трогать. Ветка «композер выключен» проверяется здесь, а не в дереве app: `isPromptEnabled` в `shell_cubit.dart` всегда `true`.
+
+  Сценарий «Новый запрос того же вызова» станет зелёным только после 3.4.
 - [ ] 3.2 `[desktop]` Реализация 3.1:
   - `onApprovalFocusReleased` в `CodeLabApprovalPrompt` и ленте;
   - параметр `textFocusNode` у `CodeLabPromptComposer`; узел принадлежит `State` рабочего места app и освобождается в `dispose`;
-  - возврат фокуса в следующем кадре с проверкой, что фокус свободен (§12).
+  - функция выбора цели возврата фокуса в `features/workbench/application/` (D5); виджет в следующем кадре только исполняет её результат (§12).
 
-  3.1 зелёный, прежние тесты композера зелёные.
+  3.1 зелёный (сценарий «Новый запрос того же вызова» — после 3.4), прежние тесты композера зелёные.
+
+## 3а. Итерация 3а — ожидающее одобрение видно в строке своего вызова (`[client]`)
+
+- [ ] 3.3 `[client]` Красный: `packages/dart/codelab_client_core/test/transcript/approval_in_row_test.dart` (design.md D13; spec acp-client-kit «Одобрение в элементе вызова транскрипта», все сценарии):
+  - «Повторный запрос после ответа»;
+  - «После ответа на повторный запрос»;
+  - «Повторный запрос вызова без `tool_call`»;
+  - «Два ожидающих запроса одного вызова»;
+  - «Один запрос — без изменений»;
+  - инвариант: для каждого `PendingApprovalView` с `focused == true` корня в `pendingApprovals` есть элемент вызова транскрипта с этим одобрением; `childApprovals` строки `agent` не изменились.
+- [ ] 3.4 `[client]` Реализация 3.3: правило выбора в `transcript_projector.dart` — `_approvalFor` и `_unannouncedApprovalItems` (одно правило, один элемент на `toolCallId`); doc-комментарии (`AGENTS.md` §15). 3.3 зелёный; прежние тесты `codelab_client_core` и `apps/codelab_cli` зелёные без изменения сценариев; `web-compile`, `conformance:client`, `test:e2e:cli:dart-agent` зелёные.
 
 ## 4. Итерация 4 — страница «Keyboard» и тексты
 
@@ -174,6 +188,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - `fvm flutter test` обоих пакетов;
   - `melos run l10n:check`;
   - `fvm flutter analyze` для `apps/codelab_desktop/integration_test` (только компиляция, `feature/*`);
+  - для 3а: `fvm dart analyze` и `fvm dart test` в `packages/dart/codelab_client_core` и `apps/codelab_cli`, `melos run web-compile`, `melos run conformance:client`, `melos run test:e2e:cli:dart-agent`;
   - `openspec validate fix-approval-focus --strict`;
   - если правились опубликованные на сайте документы и установлен Node — `cd site && npm ci && npm run verify`.
 - [ ] 6.2 `[desktop]` Ручная проверка app:
@@ -184,4 +199,5 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
 - [ ] 6.5 `[desktop]` PR в `develop`. В описании:
   - какие проверки запускались локально, и что полный `melos run check` не запускался;
   - изменение поведения: одобрение больше не берёт фокус само, новый переход Cmd/Ctrl+Shift+A;
+  - исправление ядра: повторный `session/request_permission` того же вызова виден в строке вызова (D13), затрагивает и CLI;
   - зависимость от `add-app-keyboard-page`.
