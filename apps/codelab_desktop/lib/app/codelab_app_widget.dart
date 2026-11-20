@@ -9,6 +9,8 @@ import 'language/app_language_cubit.dart';
 import '../features/settings/presentation/settings_shell.dart';
 import '../features/workbench/application/shell_cubit.dart';
 import '../features/workbench/presentation/widgets/restart_confirmation_dialog.dart';
+import '../features/workbench/application/approval_focus_return.dart';
+import '../features/workbench/presentation/workbench_focus.dart';
 import '../features/workbench/presentation/workbench_shell.dart';
 import 'app_scope.dart';
 import 'navigation/app_destination.dart';
@@ -96,6 +98,10 @@ class _CodeLabHome extends StatefulWidget {
 class _CodeLabHomeState extends State<_CodeLabHome> {
   final _workbenchScope = FocusScopeNode(debugLabel: 'Workbench');
 
+  /// Узел поля композера: принадлежит `State` рабочего места, чтобы после
+  /// ухода полосы одобрения вернуть в него фокус (`fix-approval-focus`, D5).
+  final _composerFocus = FocusNode(debugLabel: 'Composer');
+
   /// Узел, державший фокус в момент ухода в настройки.
   FocusNode? _returnFocus;
 
@@ -121,7 +127,44 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
   @override
   void dispose() {
     _workbenchScope.dispose();
+    _composerFocus.dispose();
     super.dispose();
+  }
+
+  /// Полоса одобрения с клавиатурным фокусом ушла из ленты (ответ, отмена
+  /// хода, снятие запроса, смена сессии): возвращает фокус в композер, иначе на
+  /// рабочее место (`fix-approval-focus`, D5).
+  ///
+  /// Вызывается из `dispose` полосы, поэтому дерево не трогает. Микротаск
+  /// после освобождения записывает узел, которому Flutter сам отдал фокус; в
+  /// следующем кадре фокус возвращается, только если он всё ещё на этом узле,
+  /// то есть никто его за это время не взял (§12: устаревший результат не
+  /// отбирает фокус у пользователя).
+  void _onApprovalFocusReleased() {
+    scheduleMicrotask(() {
+      final settled = FocusManager.instance.primaryFocus;
+      WidgetsBinding.instance
+        ..addPostFrameCallback((_) {
+          if (!mounted) {
+            return;
+          }
+          final shell = context.read<CodeLabShellCubit>();
+          final target = approvalFocusReturnOf(
+            hasComposer: _composerFocus.context != null,
+            composerEnabled: shell.state.isPromptEnabled,
+            focusTaken: FocusManager.instance.primaryFocus != settled,
+          );
+          switch (target) {
+            case ApprovalFocusReturn.composer:
+              _composerFocus.requestFocus();
+            case ApprovalFocusReturn.workbench:
+              _workbenchScope.requestFocus();
+            case ApprovalFocusReturn.none:
+              break;
+          }
+        })
+        ..scheduleFrame();
+    });
   }
 
   void _onNavigation(AppDestination current) {
@@ -200,7 +243,11 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
                     excluding: settings != null,
                     child: FocusScope(
                       node: _workbenchScope,
-                      child: const CodeLabShell(),
+                      child: WorkbenchFocus(
+                        composerNode: _composerFocus,
+                        onApprovalFocusReleased: _onApprovalFocusReleased,
+                        child: const CodeLabShell(),
+                      ),
                     ),
                   ),
                 ),

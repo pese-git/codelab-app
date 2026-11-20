@@ -109,7 +109,9 @@ class CodeLabTranscriptPanel extends StatefulWidget {
   /// Полоса одобрения с клавиатурным фокусом исчезла из ленты (ответ, отмена
   /// хода, снятие запроса, смена сессии): хост возвращает фокус (change
   /// `fix-approval-focus`, D5). ЗАГЛУШКА задачи 3.1: параметр принят, но не
-  /// вызывается — поведение добавляет задача 3.2.
+  /// Колбэк идёт от полосы через строку вызова; вызывается один раз и только
+  /// если фокус был в полосе, когда она уходила. Хост возвращает фокус в
+  /// следующем кадре и только если его никто не взял (§12).
   final VoidCallback? onApprovalFocusReleased;
 
   final List<CodeLabTranscriptRow> rows;
@@ -590,6 +592,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
                           widget.expansionOverrides[id] ?? false,
                       onNestedToggle: _toggle,
                       highlightedId: _highlightId,
+                      onApprovalFocusReleased: widget.onApprovalFocusReleased,
                     ),
                   ),
                 ),
@@ -619,9 +622,11 @@ class _TranscriptRowView extends StatelessWidget {
     required this.nestedExpanded,
     required this.onNestedToggle,
     this.highlightedId,
+    this.onApprovalFocusReleased,
   });
 
   final String? highlightedId;
+  final VoidCallback? onApprovalFocusReleased;
   final CodeLabTranscriptRow row;
   final CodeLabMarkdownConfig markdownConfig;
   final bool expanded;
@@ -657,6 +662,7 @@ class _TranscriptRowView extends StatelessWidget {
         nestedExpanded: nestedExpanded,
         onNestedToggle: onNestedToggle,
         highlightedId: highlightedId,
+        onApprovalFocusReleased: onApprovalFocusReleased,
       ),
       final CodeLabNoticeRow notice => CodeLabTranscriptNotice(row: notice),
       CodeLabTaskOpsRow(:final text) => CodeLabTaskOpsLine(text: text),

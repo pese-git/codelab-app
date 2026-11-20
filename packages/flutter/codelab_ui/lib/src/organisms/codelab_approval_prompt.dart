@@ -158,8 +158,16 @@ class CodeLabApprovalPrompt extends StatefulWidget {
 
   /// Полоса с клавиатурным фокусом уходит (`dispose` или смена ключа):
   /// хост возвращает фокус в композер (change `fix-approval-focus`, D5).
-  /// ЗАГЛУШКА задачи 3.1: параметр принят, но не вызывается — поведение
-  /// добавляет задача 3.2.
+  ///
+  /// Почему: когда полоса с фокусом исчезает, Flutter отдаёт фокус ближайшей
+  /// области или никому, и пользователь теряет место на клавиатуре. Полоса
+  /// знает, что фокус был у неё, а выбрать, куда его вернуть, может только
+  /// хост (композер, иначе рабочее место).
+  ///
+  /// Как использовать: вызывается синхронно из `dispose` и ровно один раз;
+  /// хост не должен трогать дерево сразу, а переносит фокус в следующем кадре
+  /// и только если за это время его никто не взял (§12). Полоса без фокуса
+  /// колбэк не вызывает.
   final VoidCallback? onApprovalFocusReleased;
 
   @override
@@ -186,6 +194,23 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
   /// перехода. Это отображение, а не источник истины о сессии (§8).
   bool _hasFocus = false;
 
+  /// Фокус был на полосе или внутри неё в момент, когда её убирают из дерева.
+  /// Запоминается в `deactivate`: к `dispose` узел детей уже отсоединён и
+  /// `hasFocus` ложен (дети освобождаются раньше родителя).
+  bool _hadFocusOnLeave = false;
+
+  @override
+  void deactivate() {
+    _hadFocusOnLeave = _barNode.hasFocus;
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _hadFocusOnLeave = false;
+  }
+
   @override
   void didUpdateWidget(CodeLabApprovalPrompt oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -205,6 +230,9 @@ class _CodeLabApprovalPromptState extends State<CodeLabApprovalPrompt> {
 
   @override
   void dispose() {
+    if (_hadFocusOnLeave) {
+      widget.onApprovalFocusReleased?.call();
+    }
     _barNode.dispose();
     super.dispose();
   }

@@ -10,6 +10,7 @@ import '../../application/shell_cubit.dart';
 import '../../application/ui_mappers.dart' show projectNameOf;
 import '../workbench_shell.dart'
     show openConnectionSettings, selectPaletteCommand;
+import '../workbench_focus.dart';
 import 'provider_setup_banner.dart';
 
 class WorkbenchMainPane extends StatelessWidget {
@@ -107,6 +108,9 @@ class WorkbenchMainPane extends StatelessWidget {
           expansionOverrides: state.transcriptExpansion,
           showRequest: state.transcriptShowRequest,
           onShowRequestDone: cubit.finishTranscriptShow,
+          onApprovalFocusReleased: WorkbenchFocus.maybeOf(
+            context,
+          )?.onApprovalFocusReleased,
           onExpansionChanged: (change) =>
               cubit.setTranscriptRowExpanded(change.rowId, change.expanded),
           emptyLabel: state.activeSessionId == null
@@ -159,6 +163,7 @@ class WorkbenchMainPane extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         CodeLabPromptComposer(
+          textFocusNode: WorkbenchFocus.maybeOf(context)?.composerNode,
           enabled: state.isPromptEnabled,
           isSubmitting: state.isPromptSubmitting,
           canCancel: state.canCancel,

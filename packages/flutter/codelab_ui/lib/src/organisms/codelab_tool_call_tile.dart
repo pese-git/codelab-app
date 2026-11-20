@@ -44,6 +44,7 @@ class CodeLabToolCallTile extends StatefulWidget {
     this.onNestedToggle,
     this.depth = 0,
     this.highlightedId,
+    this.onApprovalFocusReleased,
     super.key,
   });
 
@@ -77,6 +78,11 @@ class CodeLabToolCallTile extends StatefulWidget {
   /// Id цели показа, которая подсвечена сейчас (вложенная строка или блок
   /// одобрения потомка внутри этой строки); `null` — подсветки нет (D49 Т7).
   final String? highlightedId;
+
+  /// Полоса одобрения этой строки (и блоков потомков под ней) с клавиатурным
+  /// фокусом исчезла: лента передаёт хосту, чтобы тот вернул фокус
+  /// (`fix-approval-focus`, D5).
+  final VoidCallback? onApprovalFocusReleased;
 
   @override
   State<CodeLabToolCallTile> createState() => _CodeLabToolCallTileState();
@@ -137,6 +143,7 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
                   _RequesterHeader(line: line, hint: pending.requesterHint),
                 CodeLabApprovalPrompt(
                   key: _promptKeyOf(pending.targetId),
+                  onApprovalFocusReleased: widget.onApprovalFocusReleased,
                   reason: pending.reason,
                   diffSummary: pending.diffSummary,
                   rawInput: pending.rawInput,
@@ -199,7 +206,13 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
       children: [
         card,
         for (final child in row.childApprovals)
-          _targetOf(child.targetId, _ChildApprovalBlock(approval: child)),
+          _targetOf(
+            child.targetId,
+            _ChildApprovalBlock(
+              approval: child,
+              onApprovalFocusReleased: widget.onApprovalFocusReleased,
+            ),
+          ),
       ],
     );
   }
@@ -238,6 +251,7 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
                     onNestedToggle: widget.onNestedToggle,
                     depth: widget.depth + 1,
                     highlightedId: widget.highlightedId,
+                    onApprovalFocusReleased: widget.onApprovalFocusReleased,
                   ),
                 ),
                 CodeLabTaskOpsRow(:final text) => CodeLabTaskOpsLine(
@@ -466,9 +480,13 @@ class _RequesterHeader extends StatelessWidget {
 /// одобрения от субагента под строкой корня»). Решение уходит тем же
 /// обработчиком запроса, что и у обычного одобрения (PERM-4).
 class _ChildApprovalBlock extends StatelessWidget {
-  const _ChildApprovalBlock({required this.approval});
+  const _ChildApprovalBlock({
+    required this.approval,
+    this.onApprovalFocusReleased,
+  });
 
   final CodeLabTranscriptApproval approval;
+  final VoidCallback? onApprovalFocusReleased;
 
   @override
   Widget build(BuildContext context) {
@@ -530,6 +548,7 @@ class _ChildApprovalBlock extends StatelessWidget {
             ),
           CodeLabApprovalPrompt(
             key: _promptKeyOf(p.targetId),
+            onApprovalFocusReleased: onApprovalFocusReleased,
             reason: p.reason,
             diffSummary: p.diffSummary,
             rawInput: p.rawInput,

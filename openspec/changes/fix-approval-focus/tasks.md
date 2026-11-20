@@ -120,7 +120,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
 
 ## 3. Итерация 3 — фокус после ухода полосы
 
-- [ ] 3.1 `[desktop]` Красный (D5; spec «Фокус после ухода одобрения»):
+- [x] 3.1 `[desktop]` Красный (D5; spec «Фокус после ухода одобрения»):
   - кит, `codelab_approval_focus_test.dart` и `codelab_transcript_show_request_test.dart`: полоса с фокусом при `dispose` и при смене ключа вызывает `onApprovalFocusReleased` один раз; полоса без фокуса — ни разу;
   - app, `approval_focus_test.dart`:
     - «Ответ клавишами возвращает фокус в композер»;
@@ -131,7 +131,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - app, модульный тест функции выбора цели возврата фокуса (`apps/codelab_desktop/test/features/workbench/application/approval_focus_return_test.dart`; D5): композер включён и фокус свободен — композер; композер выключен — рабочее место; фокус уже занят — не трогать. Ветка «композер выключен» проверяется здесь, а не в дереве app: `isPromptEnabled` в `shell_cubit.dart` всегда `true`.
 
   Сценарий «Новый запрос того же вызова» станет зелёным только после 3.4.
-- [ ] 3.2 `[desktop]` Реализация 3.1:
+- [x] 3.2 `[desktop]` Реализация 3.1:
   - `onApprovalFocusReleased` в `CodeLabApprovalPrompt` и ленте;
   - параметр `textFocusNode` у `CodeLabPromptComposer`; узел принадлежит `State` рабочего места app и освобождается в `dispose`;
   - функция выбора цели возврата фокуса в `features/workbench/application/` (D5); виджет в следующем кадре только исполняет её результат (§12).

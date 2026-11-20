@@ -63,8 +63,8 @@ class CodeLabPromptComposer extends StatefulWidget {
 
   /// Узел фокуса поля ввода, которым владеет хост (change
   /// `fix-approval-focus`, D5): через него хост возвращает фокус в композер
-  /// после ухода полосы одобрения. ЗАГЛУШКА задачи 3.1: параметр принят, но
-  /// композер по-прежнему использует свой узел — поведение добавляет 3.2.
+  /// после ухода полосы одобрения (узел принадлежит хосту: он создаёт и
+  /// освобождает его сам). Без параметра композер заводит свой узел.
   final FocusNode? textFocusNode;
   final bool shortcutsEnabled;
 
@@ -104,7 +104,13 @@ class CodeLabPromptComposer extends StatefulWidget {
 
 class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
   late final TextEditingController _controller;
-  late final FocusNode _textFocusNode;
+
+  /// Собственный узел поля: заводится только без `textFocusNode` хоста и
+  /// освобождается здесь; узел хоста композер не освобождает.
+  FocusNode? _ownFocusNode;
+
+  FocusNode get _textFocusNode =>
+      widget.textFocusNode ?? (_ownFocusNode ??= FocusNode());
   final LayerLink _composerLayerLink = LayerLink();
   final OverlayPortalController _paletteOverlayController =
       OverlayPortalController();
@@ -128,7 +134,6 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
     super.initState();
     _controller = TextEditingController(text: widget.initialPrompt);
     _controller.addListener(_handleTextChanged);
-    _textFocusNode = FocusNode();
   }
 
   @override
@@ -147,7 +152,7 @@ class _AcpPromptComposerState extends State<CodeLabPromptComposer> {
     _controller
       ..removeListener(_handleTextChanged)
       ..dispose();
-    _textFocusNode.dispose();
+    _ownFocusNode?.dispose();
     super.dispose();
   }
 
