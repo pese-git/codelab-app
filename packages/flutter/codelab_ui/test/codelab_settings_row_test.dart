@@ -178,4 +178,86 @@ void main() {
       expect(descriptionOf(tester).maxLines, 3);
     });
   });
+
+  // `footer` (ручная проверка macOS, change `add-app-appearance-page`): элемент
+  // под строкой заголовка рисуется внутри карточки, а не отдельным блоком под
+  // ней.
+  group('footer', () {
+    Finder card() => find
+        .ancestor(
+          of: find.text('Row title'),
+          matching: find.byType(DecoratedBox),
+        )
+        .last;
+
+    testWidgets('рисуется внутри карточки строки, под заголовком и описанием', (
+      tester,
+    ) async {
+      await pumpRow(
+        tester,
+        const CodeLabSettingsRow(
+          title: 'Row title',
+          description: 'Row description',
+          footer: Text('Footer content', key: ValueKey('row-footer')),
+        ),
+      );
+
+      expect(
+        find.descendant(
+          of: card(),
+          matching: find.byKey(const ValueKey('row-footer')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('row-footer'))).dy,
+        greaterThan(tester.getBottomLeft(find.text('Row description')).dy),
+      );
+      // Та же горизонтальная подложка 16, что у заголовка.
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('row-footer'))).dx,
+        tester.getTopLeft(find.text('Row title')).dx,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('без footer высота строки прежняя', (tester) async {
+      await pumpRow(
+        tester,
+        const CodeLabSettingsRow(title: 'Row title', description: 'Row text'),
+      );
+      final before = tester.getSize(card()).height;
+
+      await pumpRow(
+        tester,
+        const CodeLabSettingsRow(
+          title: 'Row title',
+          description: 'Row text',
+          footer: SizedBox(height: 30),
+        ),
+      );
+
+      expect(tester.getSize(card()).height, greaterThan(before));
+      await pumpRow(
+        tester,
+        const CodeLabSettingsRow(title: 'Row title', description: 'Row text'),
+      );
+      expect(tester.getSize(card()).height, before);
+    });
+
+    testWidgets('footer и trailing вместе не переполняют строку', (
+      tester,
+    ) async {
+      await pumpRow(
+        tester,
+        CodeLabSettingsRow(
+          title: 'Row title',
+          trailing: ToggleSwitch(checked: false, onChanged: (_) {}),
+          footer: const Text('Footer'),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+    });
+  });
 }

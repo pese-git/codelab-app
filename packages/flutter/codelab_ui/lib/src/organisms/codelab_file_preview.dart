@@ -92,6 +92,7 @@ class CodeLabFilePreview extends StatefulWidget {
     required this.content,
     this.maybeSecret = false,
     this.highlightLine,
+    this.warningLines = const {},
     this.onCopyPath,
     super.key,
   });
@@ -106,6 +107,10 @@ class CodeLabFilePreview extends StatefulWidget {
   final CodeLabFilePreviewContent content;
   final bool maybeSecret;
   final int? highlightLine;
+
+  /// Строки (с 1), выделяемые тоном `warning`: предупреждения разбора файла
+  /// темы (`add-app-appearance-page`, D10). Выбор строк делает app.
+  final Set<int> warningLines;
   final ValueChanged<String>? onCopyPath;
 
   @override
@@ -218,13 +223,15 @@ class _CodeLabFilePreviewState extends State<CodeLabFilePreview> {
           color: muted,
         );
       case CodeLabFilePreviewFailed(:final message):
-        return _Notice(message, color: Colors.warningPrimaryColor);
+        return _Notice(message, color: CodeLabPalette.of(theme).warning);
       case CodeLabFilePreviewText():
         break;
     }
     final gutter = '${_lines.length}'.length;
     final mono = CodeLabText.styleOf(context, CodeLabTextRole.mono);
-    final highlight = theme.accentColor.withValues(alpha: 0.18);
+    final palette = CodeLabPalette.of(theme);
+    final highlight = palette.selection;
+    final warningFill = palette.warning.withValues(alpha: 0.18);
     final line = widget.highlightLine;
     return SelectionArea(
       child: ListView.builder(
@@ -264,6 +271,12 @@ class _CodeLabFilePreviewState extends State<CodeLabFilePreview> {
                 ? DecoratedBox(
                     key: const ValueKey('file-preview-highlighted-line'),
                     decoration: BoxDecoration(color: highlight),
+                    child: row,
+                  )
+                : widget.warningLines.contains(number)
+                ? DecoratedBox(
+                    key: const ValueKey('file-preview-warning-line'),
+                    decoration: BoxDecoration(color: warningFill),
                     child: row,
                   )
                 : row,

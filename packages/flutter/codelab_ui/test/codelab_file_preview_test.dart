@@ -23,6 +23,7 @@ void main() {
     required CodeLabFilePreviewContent content,
     bool maybeSecret = false,
     int? highlightLine,
+    Set<int> warningLines = const {},
     ValueChanged<String>? onCopyPath,
     double height = 400,
   }) => tester.pumpWidget(
@@ -37,6 +38,7 @@ void main() {
             content: content,
             maybeSecret: maybeSecret,
             highlightLine: highlightLine,
+            warningLines: warningLines,
             onCopyPath: onCopyPath,
           ),
         ),
@@ -240,5 +242,76 @@ void main() {
       find.byKey(const ValueKey('file-preview-copy-path')),
       findsOneWidget,
     );
+  });
+
+  // Красный тест 3.3 change `add-app-appearance-page` (design.md D10): строки
+  // с предупреждениями файла темы выделяются тоном `warning`. Реализация —
+  // задача 3.4; до неё `warningLines` принимается, но не рисуется.
+  group('warningLines (D10)', () {
+    const nine = 'a\nb\nc\nd\ne\nf\ng\nh\ni';
+    Finder marked(int n) => find.descendant(
+      of: find.byKey(ValueKey('file-preview-line-$n')),
+      matching: find.byKey(const ValueKey('file-preview-warning-line')),
+    );
+
+    testWidgets('строки 6 и 9 выделены тоном warning, остальные нет', (
+      tester,
+    ) async {
+      await pumpPreview(
+        tester,
+        content: const CodeLabFilePreviewContent.text(nine),
+        warningLines: const {6, 9},
+      );
+
+      expect(marked(6), findsOneWidget);
+      expect(marked(9), findsOneWidget);
+      for (final n in [1, 5, 7, 8]) {
+        expect(marked(n), findsNothing, reason: 'строка $n');
+      }
+      final fill =
+          (tester.widget<DecoratedBox>(marked(6)).decoration as BoxDecoration)
+              .color;
+      expect(fill, isNotNull);
+      expect(
+        fill!.withAlpha(255),
+        Colors.warningPrimaryColor,
+        reason: 'тон warning',
+      );
+    });
+
+    testWidgets('highlightLine работает как раньше и не смешивается с '
+        'warningLines', (tester) async {
+      await pumpPreview(
+        tester,
+        content: const CodeLabFilePreviewContent.text(nine),
+        highlightLine: 2,
+        warningLines: const {6},
+      );
+
+      expect(
+        find.byKey(const ValueKey('file-preview-highlighted-line')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('file-preview-line-2')),
+          matching: find.byKey(const ValueKey('file-preview-highlighted-line')),
+        ),
+        findsOneWidget,
+      );
+      expect(marked(2), findsNothing);
+      expect(marked(6), findsOneWidget);
+    });
+
+    testWidgets('без warningLines предупреждающих строк нет', (tester) async {
+      await pumpPreview(
+        tester,
+        content: const CodeLabFilePreviewContent.text(nine),
+      );
+      expect(
+        find.byKey(const ValueKey('file-preview-warning-line')),
+        findsNothing,
+      );
+    });
   });
 }

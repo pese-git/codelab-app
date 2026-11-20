@@ -18,7 +18,11 @@ import 'package:codelab_embedded/codelab_embedded.dart'
     show EmbeddedAgent, LogLevel, Logger;
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/embedded_transport_resolver.dart';
+import 'package:codelab_desktop/app/appearance/app_appearance_cubit.dart';
+import 'package:codelab_desktop/app/appearance/app_appearance_start.dart';
 import 'package:codelab_desktop/app/language/app_language_cubit.dart';
+import 'package:codelab_desktop/core/platform/app_appearance_preferences.dart';
+import 'package:codelab_desktop/core/platform/system_accent_source.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:codelab_desktop/app/secret_migration_offer.dart';
@@ -135,6 +139,18 @@ final class _HangingLanguagePreferences implements AppLanguagePreferences {
 
   @override
   Future<void> save(AppLanguagePreference preference) => gate.future;
+}
+
+/// Порт оформления, у которого запись зависает до `gate`.
+final class _HangingAppearancePreferences implements AppAppearancePreferences {
+  final gate = Completer<void>();
+
+  @override
+  Future<AppAppearanceLoad> load() async =>
+      const AppAppearanceLoad(AppAppearanceSettings());
+
+  @override
+  Future<void> save(AppAppearanceSettings settings) => gate.future;
 }
 
 void main() {
@@ -385,6 +401,78 @@ void main() {
 
       expect(withLanguage.pendingSteps.last, 'language');
       expect(withLanguage.pendingSteps, hasLength(8));
+      return disposing;
+    });
+  });
+
+  // `add-app-appearance-page`, D13 (задача 4.7): `AppAppearanceCubit.close()`
+  // ждёт запись выбора до 3 с, поэтому шаг `appearance` идёт той же
+  // параллельной веткой, что `language`: зависшая запись не задерживает
+  // workspace, агента и транспорт.
+  group('шаг appearance (D13)', () {
+    late _HangingAppearancePreferences preferences;
+    late AppAppearanceCubit appearanceCubit;
+    late CodeLabRootLifecycle withAppearance;
+
+    setUp(() {
+      preferences = _HangingAppearancePreferences();
+      appearanceCubit = AppAppearanceCubit(
+        preferences: preferences,
+        library: InMemoryThemeLibrary(),
+        accentSource: const UnsupportedSystemAccentSource(),
+        start: AppAppearanceStart.defaults,
+        closeWriteTimeout: const Duration(seconds: 30),
+      );
+      final scope = binding.scope;
+      withAppearance = CodeLabRootLifecycle(
+        application: AcpClientApplication(transport: transport),
+        transport: transport,
+        workspace: workspace,
+        embedded: scope.resolve<EmbeddedTransportResolver>(),
+        embeddedCloseSettings: scope.resolve<EmbeddedCloseSettings>(),
+        shellCubit: scope.resolve<CodeLabShellCubit>(),
+        secretMigrationCubit: scope.resolve<SecretMigrationCubit>(),
+        secretMigrationOffer: scope.resolve<SecretMigrationOffer>(),
+        navigationCubit: scope.resolve<NavigationCubit>(),
+        terminalTabsCubit: tabs,
+        appearanceCubit: appearanceCubit,
+        logger: logger,
+      );
+      tabs.gate.complete();
+    });
+
+    tearDown(() async {
+      if (!preferences.gate.isCompleted) preferences.gate.complete();
+      await withAppearance.dispose();
+    });
+
+    test('зависшая запись оформления не задерживает workspace, агента и '
+        'транспорт; pendingSteps называет appearance', () async {
+      unawaited(appearanceCubit.setMode(AppearanceMode.dark));
+
+      final disposing = withAppearance.dispose();
+      await pumpEventQueue();
+
+      expect(workspace.disposeCalls, 1);
+      expect(transport.state, AcpTransportState.closed);
+      expect(withAppearance.pendingSteps, ['appearance']);
+
+      preferences.gate.complete();
+      await disposing.timeout(const Duration(seconds: 5));
+      expect(withAppearance.pendingSteps, isEmpty);
+    });
+
+    test('без Cubit оформления шага appearance нет', () {
+      final disposing = lifecycle.dispose();
+
+      expect(lifecycle.pendingSteps, isNot(contains('appearance')));
+      return disposing;
+    });
+
+    test('сразу после dispose() appearance — в закрытом наборе последним', () {
+      final disposing = withAppearance.dispose();
+
+      expect(withAppearance.pendingSteps.last, 'appearance');
       return disposing;
     });
   });

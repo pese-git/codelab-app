@@ -30,6 +30,7 @@ void main() {
           pages: SettingsPages(
             available: {...defaultSettingsPages.available}
               ..remove(SettingsPage.general)
+              ..remove(SettingsPage.appearance)
               ..remove(SettingsPage.keyboard),
           ),
           selected: SettingsPage.connection,
@@ -54,6 +55,7 @@ void main() {
       SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
       SettingsPage.general,
+      SettingsPage.appearance,
       SettingsPage.keyboard,
     ]);
     expect(settingsPageBuilders, contains(SettingsPage.skillsAndExtensions));

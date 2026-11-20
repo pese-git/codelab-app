@@ -3205,6 +3205,352 @@ class AppLocalizationsRu extends AppLocalizations {
   String get agentsErrorFallbackOther => 'Определение не удаётся загрузить.';
 
   @override
+  String get settingsSearchKeywordsAppearance =>
+      'тема, тёмная, светлая, режим, цвет, акцент, контраст, оформление, json';
+
+  @override
+  String get appearanceModeTitle => 'Режим';
+
+  @override
+  String get appearanceModeDescription => 'Светлая, тёмная или как в системе';
+
+  @override
+  String get appearanceModeLight => 'Светлая';
+
+  @override
+  String get appearanceModeDark => 'Тёмная';
+
+  @override
+  String appearanceModeSystem(String current) {
+    return 'Как в системе ($current)';
+  }
+
+  @override
+  String get appearanceSystemLight => 'светлая';
+
+  @override
+  String get appearanceSystemDark => 'тёмная';
+
+  @override
+  String get appearanceAccentTitle => 'Цвет акцента';
+
+  @override
+  String get appearanceAccentDescription =>
+      'Кнопки, выделение и фокус используют системный акцент';
+
+  @override
+  String get appearanceAccentToggle => 'Использовать системный акцент';
+
+  @override
+  String get appearanceThemesTitle => 'Цветовая тема';
+
+  @override
+  String get appearanceThemeFluentLight => 'Fluent Light';
+
+  @override
+  String get appearanceThemeFluentDark => 'Fluent Dark';
+
+  @override
+  String get appearanceThemeHighContrast => 'Высокий контраст';
+
+  @override
+  String get appearanceKindBuiltInDefault => 'Встроенная · по умолчанию';
+
+  @override
+  String get appearanceKindBuiltIn => 'Встроенная';
+
+  @override
+  String appearanceKindCustom(String base) {
+    return 'Своя · основа $base';
+  }
+
+  @override
+  String get appearanceKindCustomUnknown => 'Своя';
+
+  @override
+  String get appearanceTagLightMode => 'Светлый режим';
+
+  @override
+  String get appearanceTagDarkMode => 'Тёмный режим';
+
+  @override
+  String get appearanceTagInvalid => 'С ошибкой';
+
+  @override
+  String appearanceWarningsBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count предупреждения',
+      many: '$count предупреждений',
+      few: '$count предупреждения',
+      one: '$count предупреждение',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appearanceCustomTitle => 'Свои темы';
+
+  @override
+  String get appearanceImportButton => 'Импорт JSON…';
+
+  @override
+  String appearanceIssuesSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count предупреждения',
+      many: '$count предупреждений',
+      few: '$count предупреждения',
+      one: '$count предупреждение',
+    );
+    return '$name: загружена, $_temp0';
+  }
+
+  @override
+  String appearanceIssuesError(String name) {
+    return '$name: не удалось загрузить';
+  }
+
+  @override
+  String get appearanceOpenFolder => 'Открыть папку';
+
+  @override
+  String get appearanceReload => 'Перечитать';
+
+  @override
+  String appearanceIssueUnknownKey(
+    String file,
+    int line,
+    int column,
+    String key,
+  ) {
+    return '$file:$line:$column неизвестный ключ «$key»';
+  }
+
+  @override
+  String appearanceIssueUnknownKeyHint(String role) {
+    return 'Пропущен. Возможно, «$role»?';
+  }
+
+  @override
+  String get appearanceIssueUnknownKeyNoHint => 'Пропущен — это не роль темы.';
+
+  @override
+  String appearanceIssueDuplicateKey(
+    String file,
+    int line,
+    int column,
+    String key,
+  ) {
+    return '$file:$line:$column повтор ключа «$key»';
+  }
+
+  @override
+  String get appearanceIssueDuplicateKeyHint =>
+      'Используется последнее значение.';
+
+  @override
+  String appearanceIssueTerminalColor(
+    String file,
+    int line,
+    int column,
+    String value,
+  ) {
+    return '$file:$line:$column терминальный цвет «$value»';
+  }
+
+  @override
+  String get appearanceIssueTerminalColorHint =>
+      'Терминальные цвета app не использует; роль берётся из extends.';
+
+  @override
+  String appearanceIssueLowContrast(String role, String ratio) {
+    return 'Низкий контраст: $role, $ratio:1';
+  }
+
+  @override
+  String get appearanceIssueLowContrastHint =>
+      'Применяется как задано. Для текста нужно 4,5:1.';
+
+  @override
+  String get appearanceIssueTooLarge => 'Файл больше 64 КиБ.';
+
+  @override
+  String get appearanceIssueNotUtf8 => 'Файл не в кодировке UTF-8.';
+
+  @override
+  String get appearanceIssueInvalidJson => 'Файл не является корректным JSON.';
+
+  @override
+  String get appearanceIssueNotAnObject =>
+      'Верхний уровень должен быть объектом JSON.';
+
+  @override
+  String get appearanceIssueMissingName => 'Нет ключа «name».';
+
+  @override
+  String get appearanceIssueInvalidName =>
+      'Имя темы — от 1 до 32 символов: a–z, 0–9 и дефис.';
+
+  @override
+  String get appearanceIssueNameMismatch =>
+      'Значение «name» должно совпадать с именем файла.';
+
+  @override
+  String get appearanceIssueReservedName => 'Имя занято встроенной темой.';
+
+  @override
+  String get appearanceIssueInvalidExtends =>
+      '«extends» — light, dark или high-contrast.';
+
+  @override
+  String get appearanceIssueInvalidValue =>
+      'Недопустимое значение цвета: используйте #rrggbb, default, имя цвета ANSI или 256:n.';
+
+  @override
+  String get appearanceIssueUnreadable => 'Файл не удалось прочитать.';
+
+  @override
+  String appearanceIssueWithPosition(
+    String file,
+    int line,
+    int column,
+    String problem,
+  ) {
+    return '$file:$line:$column $problem';
+  }
+
+  @override
+  String appearanceUnsetRoles(int count, String base) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count роли не заданы',
+      many: '$count ролей не заданы',
+      few: '$count роли не заданы',
+      one: '$count роль не задана',
+    );
+    return '$_temp0 — берутся из «$base»';
+  }
+
+  @override
+  String get appearanceUnsetRolesNote => 'Для справки, не предупреждение';
+
+  @override
+  String get appearancePreviewTitle => 'Предпросмотр';
+
+  @override
+  String get appearancePreviewLink => 'Ссылка';
+
+  @override
+  String get appearancePreviewDone => 'Готово';
+
+  @override
+  String get appearancePreviewContext => '84 % контекста';
+
+  @override
+  String get appearancePreviewFailed => 'Ошибка';
+
+  @override
+  String get appearanceContrastTitle => 'Контраст на фоне кода';
+
+  @override
+  String get appearanceContrastText => 'Текст';
+
+  @override
+  String get appearanceContrastComment => 'Комментарий';
+
+  @override
+  String get appearanceContrastKeyword => 'Ключевое слово';
+
+  @override
+  String get appearanceContrastError => 'Ошибка';
+
+  @override
+  String get appearanceContrastPass => 'AA';
+
+  @override
+  String get appearanceContrastLow => 'Низкий';
+
+  @override
+  String get appearanceContrastNote =>
+      'Для текста нужно 4,5:1. Роль ниже порога всё равно применяется, с предупреждением на её карточке.';
+
+  @override
+  String get appearanceReset => 'Сбросить';
+
+  @override
+  String appearanceUse(String name) {
+    return 'Использовать $name';
+  }
+
+  @override
+  String appearanceFallback(String name, String builtIn) {
+    return '«$name» не удалось загрузить. Пока файл не исправлен, используется $builtIn.';
+  }
+
+  @override
+  String get appearanceSaveFailed =>
+      'Не удалось сохранить оформление. После перезапуска CodeLab будет использовать прежнее.';
+
+  @override
+  String get appearanceSaveRetry => 'Повторить';
+
+  @override
+  String appearanceImportFailed(String file, String problem) {
+    return 'Не удалось импортировать $file: $problem';
+  }
+
+  @override
+  String get appearanceImportFailedGeneric =>
+      'Не удалось импортировать тему. Проверьте, что файл читается, и повторите.';
+
+  @override
+  String appearanceReplaceTitle(String name) {
+    return 'Заменить тему «$name»?';
+  }
+
+  @override
+  String get appearanceReplaceBody =>
+      'Тема с таким именем уже есть в папке. Её файл будет заменён.';
+
+  @override
+  String get appearanceReplaceConfirm => 'Заменить';
+
+  @override
+  String appearanceIssuePosition(int line, int column, String problem) {
+    return '$line:$column $problem';
+  }
+
+  @override
+  String appearanceCatalogFailed(String path) {
+    return 'Не удалось прочитать $path. Свои темы не показаны.';
+  }
+
+  @override
+  String appearanceIssuesMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '… и ещё $count предупреждения',
+      many: '… и ещё $count предупреждений',
+      few: '… и ещё $count предупреждения',
+      one: '… и ещё $count предупреждение',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get appearanceImportPickerFailed =>
+      'Не удалось открыть диалог выбора файла.';
+
+  @override
+  String get appearanceImportSourceChanged =>
+      'Файл изменился после выбора. Выберите его снова.';
+
+  @override
   String get settingsKeyboardTitle => 'Сочетания клавиш';
 
   @override
@@ -3346,12 +3692,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsKeyboardWhereCommandMenu => 'Меню команд после /';
 
   @override
-  String get settingsKeyboardWhereApprovalAnywhere =>
-      'Рабочее место, самое раннее ожидающее одобрение, если в нём есть этот вариант';
-
-  @override
   String get settingsSearchKeywordsKeyboard =>
       'сочетание, горячие клавиши, клавиатура, клавиша';
+
+  @override
+  String get appearanceIssuesHintUnknownKeys =>
+      'Неизвестные ключи пропущены, тема применяется.';
+
+  @override
+  String get appearanceIssuesHintApplied =>
+      'Тема применяется с предупреждениями.';
+
+  @override
+  String appearanceIssuesHintExtends(String base, String builtIn) {
+    return 'Недостающие роли берутся из extends: «$base» ($builtIn).';
+  }
+
+  @override
+  String get settingsKeyboardWhereApprovalAnywhere =>
+      'Рабочее место, самое раннее ожидающее одобрение, если в нём есть этот вариант';
 
   @override
   String get settingsKeyboardActionGoToApproval => 'Перейти к одобрению';

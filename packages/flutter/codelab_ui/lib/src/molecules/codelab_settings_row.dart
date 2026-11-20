@@ -32,6 +32,7 @@ class CodeLabSettingsRow extends StatelessWidget {
     this.descriptionMaxLines = 2,
     this.leading,
     this.trailing,
+    this.footer,
     super.key,
   });
 
@@ -56,6 +57,21 @@ class CodeLabSettingsRow extends StatelessWidget {
   /// Элемент управления справа; состояние держит владелец.
   final Widget? trailing;
 
+  /// Элемент под строкой заголовка и описания внутри той же карточки.
+  ///
+  /// Почему: в узкой области переключатель с длинной подписью не помещается
+  /// справа, а отдельный блок под строкой выглядит оторванным от её фона и
+  /// рамки (ручная проверка macOS, change `add-app-appearance-page`).
+  ///
+  /// Для чего: владелец кладёт сюда управляющий элемент, который переносится
+  /// на ширину карточки (`Row` с `Expanded`-подписью); отступ сверху 8, боковые
+  /// поля те же, что у заголовка. Без [footer] вёрстка прежняя.
+  ///
+  /// Как использовать: `footer: Row(children: [ToggleSwitch(...),
+  /// SizedBox(width: 8), Expanded(child: Text(...))])`; можно вместе с
+  /// [trailing], но тогда [footer] остаётся под обоими.
+  final Widget? footer;
+
   static const _radius = 4.0;
   static const _gap = 16.0;
   static const _iconSize = 16.0;
@@ -74,6 +90,7 @@ class CodeLabSettingsRow extends StatelessWidget {
     final description = this.description;
     final leading = this.leading;
     final trailing = this.trailing;
+    final footer = this.footer;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -85,57 +102,65 @@ class CodeLabSettingsRow extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 56),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // Ширина строки без значка и промежутков вокруг трейлинга.
-              final free =
-                  constraints.maxWidth -
-                  (leading != null ? _iconSize + _gap : 0) -
-                  _gap;
-              final trailingMax = free.isFinite
-                  ? math.max(_minTrailingWidth, free - _minTextWidth)
-                  : double.infinity;
-              return Row(
-                children: [
-                  if (leading != null) ...[
-                    Icon(leading, size: _iconSize),
-                    const SizedBox(width: _gap),
-                  ],
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CodeLabText(title),
-                        if (description != null)
-                          CodeLabText(
-                            description,
-                            role: CodeLabTextRole.caption,
-                            maxLines: descriptionMaxLines,
-                            overflow: descriptionMaxLines == null
-                                ? TextOverflow.clip
-                                : TextOverflow.ellipsis,
-                            color: resources.textFillColorSecondary,
-                          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  // Ширина строки без значка и промежутков вокруг трейлинга.
+                  final free =
+                      constraints.maxWidth -
+                      (leading != null ? _iconSize + _gap : 0) -
+                      _gap;
+                  final trailingMax = free.isFinite
+                      ? math.max(_minTrailingWidth, free - _minTextWidth)
+                      : double.infinity;
+                  return Row(
+                    children: [
+                      if (leading != null) ...[
+                        Icon(leading, size: _iconSize),
+                        const SizedBox(width: _gap),
                       ],
-                    ),
-                  ),
-                  if (trailing != null) ...[
-                    const SizedBox(width: _gap),
-                    // Трейлинг фиксированной ширины (ComboBox 260 pt) на узкой
-                    // строке вытеснял заголовок, и тот ломался по буквам: при
-                    // окне 800 pt странице достаётся ~400 pt (окно
-                    // по умолчанию, `MainMenu.xib`). Заголовку оставляем минимум
-                    // [_minTextWidth], остальное — трейлингу, но не меньше
-                    // [_minTrailingWidth]. На широкой строке предел не действует.
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: trailingMax),
-                      child: trailing,
-                    ),
-                  ],
-                ],
-              );
-            },
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CodeLabText(title),
+                            if (description != null)
+                              CodeLabText(
+                                description,
+                                role: CodeLabTextRole.caption,
+                                maxLines: descriptionMaxLines,
+                                overflow: descriptionMaxLines == null
+                                    ? TextOverflow.clip
+                                    : TextOverflow.ellipsis,
+                                color: resources.textFillColorSecondary,
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (trailing != null) ...[
+                        const SizedBox(width: _gap),
+                        // Трейлинг фиксированной ширины (ComboBox 260 pt) на узкой
+                        // строке вытеснял заголовок, и тот ломался по буквам: при
+                        // окне 800 pt странице достаётся ~400 pt (окно
+                        // по умолчанию, `MainMenu.xib`). Заголовку оставляем минимум
+                        // [_minTextWidth], остальное — трейлингу, но не меньше
+                        // [_minTrailingWidth]. На широкой строке предел не действует.
+                        ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: trailingMax),
+                          child: trailing,
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+              if (footer != null)
+                Padding(padding: const EdgeInsets.only(top: 8), child: footer),
+            ],
           ),
         ),
       ),

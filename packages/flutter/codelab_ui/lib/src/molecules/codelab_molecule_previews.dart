@@ -190,6 +190,45 @@ Widget codelabConnectionBannerPreview() {
   );
 }
 
+/// Пример пользовательской палитры (`add-app-appearance-page`, D4): теги и
+/// значок берут цвета из `CodeLabPalette` в расширениях темы. Данные
+/// фиктивные.
+@Preview(
+  name: 'Custom palette tags',
+  group: codelabMoleculePreviewGroup,
+  size: Size(360, 120),
+)
+Widget codelabCustomPalettePreview() {
+  return FluentApp(
+    debugShowCheckedModeBanner: false,
+    theme: FluentThemeData(
+      extensions: const [
+        CodeLabPalette(
+          success: Color(0xFFA6E3A1),
+          warning: Color(0xFFF9E2AF),
+          danger: Color(0xFFF38BA8),
+          accent: Color(0xFF89B4FA),
+          info: Color(0xFF89B4FA),
+          diffAddBackground: Color(0x331E3A2A),
+          diffRemoveBackground: Color(0x333A1E26),
+          selection: Color(0x3345475A),
+        ),
+      ],
+    ),
+    home: const Padding(
+      padding: EdgeInsets.all(16),
+      child: Wrap(
+        spacing: 8,
+        children: [
+          CodeLabBadge(label: 'Done', tone: CodeLabTone.success),
+          CodeLabBadge(label: 'Failed', tone: CodeLabTone.danger),
+          CodeLabIcon(FluentIcons.info, tone: CodeLabTone.accent),
+        ],
+      ),
+    ),
+  );
+}
+
 @Preview(
   name: 'Approval option group',
   group: codelabMoleculePreviewGroup,
@@ -229,7 +268,7 @@ void codelabPreviewCancel() {}
 @Preview(
   name: 'Settings section with rows',
   group: codelabMoleculePreviewGroup,
-  size: Size(640, 220),
+  size: Size(640, 300),
 )
 Widget codelabSettingsSectionPreview() {
   return _AcpPreviewSurface(
@@ -247,6 +286,18 @@ Widget codelabSettingsSectionPreview() {
           title: 'Restart agent',
           description: 'Cancels running turns and reloads open sessions.',
           trailing: Button(onPressed: () {}, child: const Text('Restart')),
+        ),
+        // Элемент под описанием внутри карточки: узкая область, длинная подпись.
+        CodeLabSettingsRow(
+          title: 'Accent color',
+          description: 'Buttons, selection and focus use the system accent',
+          footer: Row(
+            children: [
+              ToggleSwitch(checked: false, onChanged: (_) {}),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Use system accent')),
+            ],
+          ),
         ),
       ],
     ),

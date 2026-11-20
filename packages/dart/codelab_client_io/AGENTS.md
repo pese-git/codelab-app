@@ -11,6 +11,7 @@
 * `ioTransportResolver` — `ConfigTransportResolver` kit с фабриками `StdioAcpTransport` и `WebSocketAcpTransport`;
 * `resolveCodelabHome` (`platform/codelab_home.dart`) — единственное правило `$CODELAB_HOME` для CLI и app (`~`, `~/…`, ошибка `CodelabHomeException`; design.md change `add-app-settings-shell`, D7);
 * `IoProjectFiles` — порт `ProjectFiles` kit для панели Files: граница рабочей папки по realpath до перечисления и чтения, перечисление одного уровня (лимит 5000, `.git` скрыт), чтение не больше `maxBytes + 1` байт; правила (нормализация пути, двоичный/большой файл, сортировка) — чистые функции kit (change `add-file-preview-and-tree`, D3, D4);
+* `IoThemeLibrary` (`themes/io_theme_library.dart`) — порт `ThemeLibrary` kit: каталог `<home>/themes/*.json` (чтение не больше 64 КиБ + 1 байт, ссылки читаются как файлы, сбой чтения — запись с ошибкой) и импорт файла темы байт в байт через `writeBytesAtomically` (`stores/json_file.dart`); путь назначения строится только из проверенного `name` (change `add-app-appearance-page`, D2, D9);
 * `JsonFileProfileStore` (`$CODELAB_HOME/profiles.json`, общий у CLI и app) и `JsonFileRecentProjectsStore` — порты хранилищ kit.
 
 Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) остаются в app.

@@ -332,6 +332,43 @@
 
 `Max …` переводится как «Лимит …», а не «Макс. …»: сокращения с точкой запрещены (§1 п. 9; решение пользователя 2026-11-19).
 
+### Страница «Appearance»
+
+Термины страницы «Settings › Appearance» (change [`add-app-appearance-page`](../../openspec/changes/add-app-appearance-page/design.md), D15; каталоги — сообщения `appearance*` в `app_en.arb`/`app_ru.arb`). Не переводятся (§2): имена тем (`acme-night`, `Fluent Light`, `Fluent Dark`), ключи и значения JSON (`extends`, `accent`, `#rrggbb`), роли (`code.number`), имя файла и путь, позиция `файл:строка:колонка`, отношение контраста (`4.8:1`), вердикт `AA`, `JSON` в «Import JSON…».
+
+| en | ru | Примечание |
+|---|---|---|
+| Appearance | Оформление | страница настроек |
+| Mode | Режим | заголовок строки |
+| Light / Dark | Светлая / Тёмная | значения «Mode»: согласуются с «тема» |
+| Match system ({current}) | Как в системе ({current}) | `{current}` — «светлая» или «тёмная» |
+| Accent color | Цвет акцента | |
+| Use system accent | Использовать системный акцент | |
+| Color theme | Цветовая тема | |
+| Built-in · default / Built-in | Встроенная · по умолчанию / Встроенная | вид карточки темы |
+| Custom · extends {base} | Своя · основа {base} | `extends` в тексте не переводится, если стоит как ключ JSON; в подписи карточки — «основа» |
+| Custom themes | Свои темы | не «Пользовательские темы»: короче и как «Свой адрес» мастера провайдера |
+| High contrast | Высокий контраст | название встроенной темы (переводится, в отличие от `Fluent Light`, `Fluent Dark`) |
+| Light mode / Dark mode (тег) | Светлый режим / Тёмный режим | тег режима, которому назначена тема |
+| Invalid (тег) | С ошибкой | тег темы, которая не загрузилась |
+| warning (N warnings) | предупреждение | ICU `plural`: «предупреждение / предупреждения / предупреждений» |
+| loaded with N warnings | загружена, N предупреждений | «{name}: загружена, …»: имя темы — плейсхолдер в начале |
+| couldn't be loaded | не удалось загрузить | |
+| unknown key / duplicate key / terminal color | неизвестный ключ / повтор ключа / терминальный цвет | строки проблем; ключ в «ёлочках» |
+| Ignored | Пропущен | неизвестный ключ темы |
+| Did you mean "{role}"? | Возможно, «{role}»? | |
+| roles not set — taken from "{base}" | роли не заданы — берутся из «{base}» | ICU `plural` |
+| For reference, not a warning | Для справки, не предупреждение | |
+| Preview | Предпросмотр | |
+| Contrast on code background | Контраст на фоне кода | |
+| Low (вердикт) / Low contrast | Низкий / Низкий контраст | вердикт `AA` не переводится |
+| Import JSON… | Импорт JSON… | |
+| Replace the theme "{name}"? / Replace | Заменить тему «{name}»? / Заменить | диалог импорта |
+| Reload | Перечитать | как у определений и навыков (§4, «Настройки II») |
+| Open folder | Открыть папку | |
+| Reset | Сбросить | возвращает режиму встроенную тему |
+| Use {name} | Использовать {name} | |
+
 ### Страница «Keyboard»
 
 Термины страницы «Settings › Keyboard» (change [`add-app-keyboard-page`](../../openspec/changes/add-app-keyboard-page/design.md), D5). Сообщения — `settingsKeyboard…` в `app_en.arb` и `app_ru.arb`. Обозначения клавиш (`⌘`, `Ctrl`, `Esc`, `⏎`) и `/` в «Command menu after /» не переводятся (§2): их выбирает каталог сочетаний кита по платформе. Строки одобрения несут метку `security`. Все термины вычитаны пользователем 2026-11-19 и приняты без правок (задача 3.6); строки «Go to approval» и места одобрения добавлены change [`fix-approval-focus`](../../openspec/changes/fix-approval-focus/design.md) (D7) и вычитаны 2026-11-20 (задача 4.3).

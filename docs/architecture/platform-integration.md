@@ -207,6 +207,20 @@ Flutter plugin
 * изолировать platform differences;
 * уменьшать coupling.
 
+
+### 8а. Нативное меню macOS и канал `codelab/app_menu`
+
+Источник — change [`add-app-appearance-page`](../../openspec/changes/add-app-appearance-page/design.md), D15а; spec `app-settings` «Открытие настроек из меню macOS».
+
+Главное меню macOS (`apps/codelab_desktop/macos/Runner/Base.lproj/MainMenu.xib`, переводы — `ru.lproj/MainMenu.strings`) обрабатывает `keyEquivalent` своих пунктов раньше Flutter. Поэтому:
+
+* пункт меню с сочетанием, которое app обрабатывает и в Dart, ДОЛЖЕН иметь action; пункт без action молча «съедает» сочетание;
+* action пункта, которому нужна логика app, передаёт команду в Dart по каналу `codelab/app_menu` (`AppDelegate`), а не выполняет её нативно. Сейчас канал несёт один метод — `openSettings` (пункт «Preferences…», ⌘,);
+* в Dart канал слушает только мост `AppMenuBridge` (`lib/core/platform/app_menu_bridge.dart`). Мост переводит метод в вызов application (`NavigationCubit.openSettings(source: shortcut)`) и не содержит своей логики. Владелец моста — `CodeLabBootstrap`: `attach()` при старте, `dispose()` при закрытии, после чего поздний вызов ничего не делает. Неизвестный метод — `MissingPluginException`;
+* проверок `Platform.isMacOS` для меню в Dart нет (§5): на других ОС канал просто не вызывается, сочетания обрабатывает `CallbackShortcuts`.
+
+Новый пункт меню с логикой app добавляет метод в этот же канал, а не новый канал.
+
 ---
 
 ## 9. Filesystem

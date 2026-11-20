@@ -203,6 +203,8 @@ JSON-файл.
 атрибутами). `dark` и `high-contrast` используют только 16 ANSI, поэтому уважают палитру
 терминала.
 
+**Формат и разбор — общие с app** (change [`add-app-appearance-page`](../../../../openspec/changes/add-app-appearance-page/design.md), D2; решение пользователя 2026-11-20, Q1 (а)). Формат файла, закрытый набор ролей и правила разбора — spec `client-themes`. Разбор — чистая функция `ThemeFile.parse` в `codelab_client_core` (`lib/src/themes/`): она возвращает тему, проблемы с кодами и позициями и список незаданных ролей; текста проблем ядро не строит. Каталог и чтение файлов — порт `ThemeLibrary` ядра клиента и адаптер `IoThemeLibrary` в `codelab_client_io`. CLI строит поверх них только своё: `CliTheme.sgr`, глубину цвета, `auto` и строгость (любая проблема — ошибка, шаг 3). Контракт ниже описывает эту часть CLI; `ThemeCatalog` CLI берёт записи из `ThemeLibrary`.
+
 **Контракт.**
 
 ```dart
@@ -244,7 +246,7 @@ abstract interface class ThemeCatalog {
    }
    ```
 
-   `extends` — встроенная тема (по умолчанию `dark`); цепочки между пользовательскими темами нет.
+   `extends` — `light`, `dark` или `high-contrast` (по умолчанию `dark`); `auto` и `mono` базой не бывают: `auto` — выбор темы, а не набор цветов, а `mono` в app нечем изобразить. Цепочки между пользовательскими темами нет. В `colors` кроме токенов таблицы допустим вложенный объект `code` — палитра подсветки кода (`background`, `keyword`, `string`, `comment`, `number`, `type`, `function`, `variable`, `operator`, `attribute`; spec `client-themes`). Для строгого разбора CLI `code` — известный ключ: CLI его принимает и пока не применяет, поэтому тема app с палитрой кода в CLI загружается.
    Строгий разбор: неизвестный ключ верхнего уровня или токен, неверное значение, `name` ≠ имени
    файла → тема не загружается; печатается `Theme "<name>" is invalid: <file>:<line>:<col>
    <issue>. Using "<fallback>".`, где `fallback` — `extends` или `dark`. Файл больше 64 КиБ —
@@ -255,10 +257,12 @@ abstract interface class ThemeCatalog {
    `ResizeMsg`). В файл выбор не пишется: CLI только читает `cli.yaml` (§12.2.10); строка
    `To keep it, set display.theme: <name> in ~/.codelab/cli.yaml.` При `none` —
    `Colors are disabled (NO_COLOR or non-TTY output).`
-5. Тема CLI не управляет app. У codelab-app свой каталог тем (D-20): те же роли цветов и тот же
-   формат файла `~/.codelab/themes/<name>.json`, плюс палитра подсветки кода для
-   `AcpCodeTheme` (§12.3). Встроенные `light` и `dark` в app — стандартная тема Fluent своего
-   режима.
+5. Тема CLI не управляет app, выбор у каждого клиента свой (app — `shared_preferences`, CLI —
+   `display.theme`), а каталог `~/.codelab/themes/` и формат файла общие (spec `client-themes`).
+   Палитра подсветки кода `colors.code` идёт в `CodeLabCodeTheme` app (§12.3). Роли `status_bg` и `approval_border` app разбирает, но не применяет: статус-строка TUI есть только у CLI, а акцентной рамки блока одобрения в app нет (change `lighten-approval-block`; решение пользователя Q8 change `add-app-appearance-page`). Встроенные `light` и
+   `dark` в app — стандартная тема Fluent своего режима, `high-contrast` — тёмная тема с явной
+   палитрой (change `add-app-appearance-page`, D6). App помнит тему светлого и тему тёмного режима,
+   «Mode» (`Light`, `Dark`, `Match system`) выбирает действующую (Q2 (а)).
 6. **Расхождение с CLI: разбор темы в app нестрогий.** Это сознательное решение, а не пробел:
 
    | Случай | CLI (U-18, шаг 3) | app (D-20) |

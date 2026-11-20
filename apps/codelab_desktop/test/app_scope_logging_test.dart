@@ -23,7 +23,10 @@ void main() {
   group('диагностика чтения языка (D13)', () {
     List<Map<String, Object?>> languageEvents(CodeLabTestBinding binding) => [
       for (final entry in binding.scope.resolve<LogBuffer>().entries.value)
-        if ('${entry['event']}'.startsWith('app.')) entry,
+        // Событие оформления (`app.appearance_resolved`) — не про язык.
+        if ('${entry['event']}'.startsWith('app.') &&
+            entry['event'] != 'app.appearance_resolved')
+          entry,
     ];
 
     test(
@@ -88,10 +91,15 @@ void main() {
       final buffer = binding.scope.resolve<LogBuffer>();
       // При сборке scope пишутся запись о языке интерфейса (change
       // `add-desktop-localization`, D13) и о бэкенде хранилища секретов
-      // (change `add-provider-setup-ui`, D18); событий соединения ещё нет.
+      // (change `add-provider-setup-ui`, D18), об оформлении (change
+      // `add-app-appearance-page`, D12); событий соединения ещё нет.
       expect(
         [for (final entry in buffer.entries.value) entry['event']],
-        ['app.locale_resolved', 'secrets.client.backend'],
+        [
+          'app.locale_resolved',
+          'app.appearance_resolved',
+          'secrets.client.backend',
+        ],
       );
 
       binding.transport.emitDiagnostic(

@@ -10,6 +10,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../l10n/app_localizations.dart';
+import 'appearance/app_appearance_cubit.dart';
 import 'language/app_language_cubit.dart';
 import '../features/settings/presentation/settings_shell.dart';
 import '../features/workbench/application/shell_cubit.dart';
@@ -51,25 +52,42 @@ class CodeLabApp extends StatelessWidget {
         // Панель Terminal дока читает вкладки сессии (D3).
         BlocProvider.value(value: dependencies.terminalTabsCubit),
         BlocProvider.value(value: dependencies.languageCubit),
+        BlocProvider.value(value: dependencies.appearanceCubit),
       ],
       // Язык читает только этот BlocBuilder, и меняется только `locale`:
       // `FluentApp` не пересоздаётся, поэтому State виджетов (ввод
       // композера, фокус, прокрутка) сохраняется (add-desktop-localization,
       // D2, R6). Остальные виджеты получают язык через `Localizations`.
+      //
+      // Оформление читает второй BlocBuilder внутри: он меняет только `theme`,
+      // `darkTheme` и `themeMode` (`add-app-appearance-page`, D13). Смена
+      // языка и смена оформления независимы и не пересоздают `FluentApp`.
       child: BlocBuilder<AppLanguageCubit, AppLanguageState>(
         buildWhen: (previous, current) => previous.locale != current.locale,
-        builder: (context, language) => FluentApp(
-          title: 'CodeLab',
-          locale: language.locale,
-          // Делегат кита рядом с делегатами app: тексты `codelab_ui` берутся из
-          // его каталога, а без делегата кит остался бы на английском (D4).
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            CodeLabLocalizations.delegate,
-          ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: _CodeLabHome(startOnLaunch: startOnLaunch),
-        ),
+        builder: (context, language) =>
+            BlocBuilder<AppAppearanceCubit, AppAppearanceState>(
+              // Запись выбора (`saveFailed`) вид app не меняет.
+              buildWhen: (previous, current) =>
+                  !identical(previous.resolvedLight, current.resolvedLight) ||
+                  !identical(previous.resolvedDark, current.resolvedDark) ||
+                  previous.themeMode != current.themeMode,
+              builder: (context, appearance) => FluentApp(
+                title: 'CodeLab',
+                locale: language.locale,
+                theme: appearance.resolvedLight,
+                darkTheme: appearance.resolvedDark,
+                themeMode: appearance.themeMode,
+                // Делегат кита рядом с делегатами app: тексты `codelab_ui`
+                // берутся из его каталога, а без делегата кит остался бы на
+                // английском (D4).
+                localizationsDelegates: const [
+                  ...AppLocalizations.localizationsDelegates,
+                  CodeLabLocalizations.delegate,
+                ],
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: _CodeLabHome(startOnLaunch: startOnLaunch),
+              ),
+            ),
       ),
     );
   }

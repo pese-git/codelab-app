@@ -1,7 +1,12 @@
 import 'dart:convert';
 
 import 'package:codelab_desktop/app/app_scope.dart';
+import 'package:codelab_desktop/app/appearance/app_appearance_start.dart';
 import 'package:codelab_desktop/app/language/app_language_start.dart';
+import 'package:codelab_desktop/core/platform/app_appearance_preferences.dart'
+    show AppAppearancePreferences;
+import 'package:codelab_desktop/core/platform/system_accent_source.dart'
+    show SystemAccentSource;
 import 'package:codelab_desktop/core/platform/local_folder_opener.dart';
 import 'package:codelab_desktop/core/platform/startup_preferences.dart';
 import 'package:codelab_desktop/features/settings/application/about_diagnostics.dart';
@@ -24,7 +29,7 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart'
     show codelabAgentStdioProfile;
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show ProfileSecrets, ProfileStore, ProjectFiles;
+    show ProfileSecrets, ProfileStore, ProjectFiles, ThemeLibrary;
 import 'package:codelab_desktop/features/settings/application/provider_settings_session.dart'
     show ProviderSettingsOpener;
 import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
@@ -121,6 +126,15 @@ final class CodeLabTestBinding {
     // Порт хранения языка: тесты сбоя записи подставляют двойник; без него
     // запись идёт в `shared_preferences` (мок в памяти).
     AppLanguagePreferences? languagePreferences,
+    // Оформление первого кадра (`add-app-appearance-page`, D13): по умолчанию
+    // `Match system` и встроенные темы, как без сохранённого выбора.
+    AppAppearanceStart? appearance,
+    // Порт хранения оформления: тесты сбоя записи подставляют двойник.
+    AppAppearancePreferences? appearancePreferences,
+    // Каталог пользовательских тем: по умолчанию пустой, в памяти.
+    ThemeLibrary? themeLibrary,
+    // Порт системного акцента: по умолчанию платформа без акцента.
+    SystemAccentSource? systemAccentSource,
     // Порт настроек запуска (D9): тесты сбоя чтения и записи подставляют
     // двойник; без него — `shared_preferences` (мок в памяти).
     StartupPreferences? startupPreferences,
@@ -151,6 +165,10 @@ final class CodeLabTestBinding {
     });
     scope = createCodeLabRootScope(
       languagePreferences: languagePreferences,
+      appearance: appearance,
+      appearancePreferences: appearancePreferences,
+      themeLibrary: themeLibrary,
+      systemAccentSource: systemAccentSource,
       startupPreferences: startupPreferences,
       aboutInfo: aboutInfo,
       localFolderOpener: localFolderOpener,

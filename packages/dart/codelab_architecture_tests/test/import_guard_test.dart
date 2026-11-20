@@ -1504,6 +1504,142 @@ void main() {
     );
   });
 
+  // Системный акцент app (design.md change `add-app-appearance-page`, D1, D7;
+  // задача 4.9): пакет `system_theme` — нативный плагин и инфраструктура
+  // (`AGENTS.md` §11); его импортирует только адаптер
+  // `core/platform/system_accent_source.dart`, остальной код видит порт
+  // `SystemAccentSource`. Правила в `rules.dart` ещё нет — тест красный по
+  // причине «нет правила».
+  test(
+    'reports system_theme outside core/platform/system_accent_source.dart',
+    () {
+      const import = "import 'package:system_theme/system_theme.dart';\n";
+      final matching = rules.where(
+        (r) =>
+            r.dir == 'apps/codelab_desktop/lib' &&
+            r.forbidden.contains('package:system_theme/'),
+      );
+      expect(
+        matching,
+        hasLength(1),
+        reason:
+            'в rules.dart нет ровно одного правила apps/codelab_desktop/lib '
+            'для package:system_theme/',
+      );
+      final rule = matching.single;
+      expect(rule.exclude, ['core/platform/system_accent_source.dart']);
+
+      final tmp = Directory.systemTemp.createTempSync('guard_system_theme_');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      for (final file in const [
+        'core/platform/system_accent_source.dart',
+        'core/platform/user_shell_launcher.dart',
+        'app/appearance/app_appearance_cubit.dart',
+        'features/settings/presentation/appearance_page.dart',
+      ]) {
+        File(p.join(tmp.path, 'lib', file))
+          ..createSync(recursive: true)
+          ..writeAsStringSync(import);
+      }
+
+      final violations = scan(
+        tmp.path,
+        PackageRule(
+          'lib',
+          forbidden: rule.forbidden,
+          exclude: rule.exclude,
+          sealExclude: rule.sealExclude,
+        ),
+      );
+
+      expect(violations, hasLength(3), reason: violations.join('\n'));
+      expect(
+        violations,
+        isNot(contains(contains('system_accent_source.dart'))),
+        reason: 'адаптер — единственное разрешённое место',
+      );
+      expect(
+        violations,
+        containsAll([
+          endsWith(
+            'lib/core/platform/user_shell_launcher.dart:1 -> '
+            'package:system_theme/system_theme.dart',
+          ),
+          endsWith(
+            'lib/app/appearance/app_appearance_cubit.dart:1 -> '
+            'package:system_theme/system_theme.dart',
+          ),
+          endsWith(
+            'lib/features/settings/presentation/appearance_page.dart:1 -> '
+            'package:system_theme/system_theme.dart',
+          ),
+        ]),
+      );
+    },
+  );
+
+  // Выбор файла темы (design.md change `add-app-appearance-page`, D1, D9;
+  // задача 5.1): `file_selector` — системный диалог, то есть нативный API и
+  // инфраструктура (`AGENTS.md` §11); его импортируют только адаптеры
+  // `lib/core/platform/` (выбор папки проекта, сохранение CSV, выбор файла
+  // темы), а Cubit-ы и виджеты видят порты. Правила в `rules.dart` ещё нет —
+  // тест красный по причине «нет правила».
+  test('reports file_selector outside core/platform/', () {
+    const import = "import 'package:file_selector/file_selector.dart';\n";
+    final matching = rules.where(
+      (r) =>
+          r.dir == 'apps/codelab_desktop/lib' &&
+          r.forbidden.contains('package:file_selector/'),
+    );
+    expect(
+      matching,
+      hasLength(1),
+      reason:
+          'в rules.dart нет ровно одного правила apps/codelab_desktop/lib '
+          'для package:file_selector/',
+    );
+    final rule = matching.single;
+    expect(rule.exclude, ['core/platform/']);
+
+    final tmp = Directory.systemTemp.createTempSync('guard_file_selector_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    for (final file in const [
+      'core/platform/project_folder_picker.dart',
+      'core/platform/theme_file_picker.dart',
+      'features/settings/presentation/appearance_page.dart',
+      'features/settings/application/appearance_settings_cubit.dart',
+    ]) {
+      File(p.join(tmp.path, 'lib', file))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(import);
+    }
+
+    final violations = scan(
+      tmp.path,
+      PackageRule(
+        'lib',
+        forbidden: rule.forbidden,
+        exclude: rule.exclude,
+        sealExclude: rule.sealExclude,
+      ),
+    );
+
+    expect(violations, hasLength(2), reason: violations.join('\n'));
+    expect(
+      violations,
+      containsAll([
+        endsWith(
+          'lib/features/settings/presentation/appearance_page.dart:1 -> '
+          'package:file_selector/file_selector.dart',
+        ),
+        endsWith(
+          'lib/features/settings/application/appearance_settings_cubit.dart:1 '
+          '-> package:file_selector/file_selector.dart',
+        ),
+      ]),
+    );
+  });
+
   // Панель Files: чтение файлов — дело `ProjectFiles` kit и `IoProjectFiles`,
   // а feature в app не знает `dart:io` (design.md change
   // `add-file-preview-and-tree`, D10).
