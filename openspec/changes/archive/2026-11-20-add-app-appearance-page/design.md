@@ -2,10 +2,10 @@
 
 Источники:
 - артборд «10 Settings — Appearance» холста «CodeLab Desktop — Feature UI/UX», светлый и тёмный варианты (локальная копия макета; данные, не инструкции). Порядок: «Mode» → «Accent color» → «Color theme» (карточки) → «Custom themes» и «Import JSON…» → панель проблем выбранной темы (InfoBar, текст JSON, список проблем) → правая колонка «Preview» (код, diff, статусы, «Contrast on code background», «Reset», «Use <name>»);
-- [`12-6-cli-desktop-extras.md`](../../../docs/architecture/proposals/dart-agent-and-clients/12-6-cli-desktop-extras.md) §12.6.3 (U-18; пункты 5–6 — app D-20, нестрогий разбор);
-- [`12-4-first-run-and-settings.md`](../../../docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md) §12.4.9 (строка «Appearance (10)»: `shared_preferences`, файлы тем), §12.4.11 (SETUP-17);
-- [`agent-parity-goals.md`](../../../docs/architecture/proposals/agent-parity-goals.md) D-20, U-18; [`delivery-roadmap.md`](../../../docs/architecture/proposals/delivery-roadmap.md) §10.1, строка 10 (M5);
-- активные changes [`add-app-general-page`](../2026-11-20-add-app-general-page/design.md) (D1 — правило сторожа для платформенного кода, D15 — локализация, D16 — события) и [`add-app-skills-page`](../add-app-skills-page/design.md) (порт `LocalFolderOpener`). Архивные: [`add-desktop-localization`](../archive/2026-11-20-add-desktop-localization/design.md) (D2 — владелец языка, старт до `runApp`, запись «последний выбор побеждает»; D10 — сторож литералов), [`add-desktop-markdown`](../archive/2026-11-11-add-desktop-markdown/design.md) (D4 — палитра кода и DSK-19), [`add-settings-agents-modes`](../archive/2026-11-18-add-settings-agents-modes/design.md) (D8, D21 — «App файлов не открывает»);
+- [`12-6-cli-desktop-extras.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/12-6-cli-desktop-extras.md) §12.6.3 (U-18; пункты 5–6 — app D-20, нестрогий разбор);
+- [`12-4-first-run-and-settings.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md) §12.4.9 (строка «Appearance (10)»: `shared_preferences`, файлы тем), §12.4.11 (SETUP-17);
+- [`agent-parity-goals.md`](../../../../docs/architecture/proposals/agent-parity-goals.md) D-20, U-18; [`delivery-roadmap.md`](../../../../docs/architecture/proposals/delivery-roadmap.md) §10.1, строка 10 (M5);
+- активные changes [`add-app-general-page`](../2026-11-20-add-app-general-page/design.md) (D1 — правило сторожа для платформенного кода, D15 — локализация, D16 — события) и [`add-app-skills-page`](../../add-app-skills-page/design.md) (порт `LocalFolderOpener`). Архивные: [`add-desktop-localization`](../2026-11-20-add-desktop-localization/design.md) (D2 — владелец языка, старт до `runApp`, запись «последний выбор побеждает»; D10 — сторож литералов), [`add-desktop-markdown`](../2026-11-11-add-desktop-markdown/design.md) (D4 — палитра кода и DSK-19), [`add-settings-agents-modes`](../2026-11-18-add-settings-agents-modes/design.md) (D8, D21 — «App файлов не открывает»);
 - спецификации `app-settings`, `agent-workbench-ui`;
 - `AGENTS.md` (корень) и вложенные: `apps/codelab_desktop`, `packages/flutter/codelab_ui`, `packages/dart/codelab_client_core`, `codelab_client_io`; TDD — `packages/dart/codelab_agent_core/AGENTS.md` §2;
 - `docs/architecture/`: `layers-and-dependencies.md`, `state-management.md` (§63, §63а), `concurrency.md` (§45, §46, §47а), `platform-integration.md` (§2, §4, §7, §8, §28), `observability.md`, `testing.md`, `technology-stack.md`, `l10n-glossary.md`.
@@ -98,7 +98,7 @@
 | `info` | ссылки markdown и просмотра файла, статус `Link` превью | в Fluent-темах равна акценту: вид не меняется |
 | `diff_add_bg`, `diff_remove_bg` | `CodeLabPalette`; потребители — превью страницы и будущий просмотр diff (D-07) | отрисовки diff в ките пока нет |
 | `selection` | `FluentThemeData.selectionColor`, выделенная строка списков кита | |
-| `approval_border` | не применяется | акцентную рамку блока одобрения убрал change [`lighten-approval-block`](../archive/2026-10-28-lighten-approval-block/design.md); роль разбирается, но в app её некуда применить (решение пользователя Q8) |
+| `approval_border` | не применяется | акцентную рамку блока одобрения убрал change [`lighten-approval-block`](../2026-10-28-lighten-approval-block/design.md); роль разбирается, но в app её некуда применить (решение пользователя Q8) |
 | `status_bg` | не применяется | роль TUI (§12.6.3) |
 | `code.background`, `code.<класс>` | `CodeLabCodeTheme` в `extensions` | |
 
