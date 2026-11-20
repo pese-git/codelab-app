@@ -33,7 +33,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - `README.md` ссылается на `PRIVACY.md` и `TERMS.md`.
 
   Сообщение называет файл и ожидаемый заголовок. Красный: файлов нет.
-- [ ] 1.2 `[desktop]` Реализация 1.1, `docs-writer`: черновики `PRIVACY.md`, `PRIVACY.ru.md`, `TERMS.md`, `TERMS.ru.md` в корне по D3:
+- [x] 1.2 `[desktop]` Реализация 1.1, `docs-writer`: черновики `PRIVACY.md`, `PRIVACY.ru.md`, `TERMS.md`, `TERMS.ru.md` в корне по D3:
   - дата редакции, заголовок, пометка о черновике;
   - разделы §12.7.7 и §12.7.7а; раздел 2 политики — только запросы текущей сборки (D3);
   - заполнители `<site>` и `<contact>`;
@@ -101,11 +101,11 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - `test/app/navigation/navigation_cubit_test.dart`: `selectSettingsPage(legal, legalTab: termsOfUse)` выпускает `SettingsDestination` с вкладкой; `last_page` хранит `legal`; повторное открытие даёт `legalTab: null`;
   - тест оболочки настроек: `settings-nav-legal` последний в «App», поиск `privacy` и `конфиденциальность` (на `ru`);
   - `defaultSettingsPages` содержит `legal`.
-- [ ] 4.2 `[desktop]` Реализация 4.1:
+- [x] 4.2 `[desktop]` Реализация 4.1:
   - `SettingsPage.legal`;
   - `SettingsDestination.legalTab`, `NavigationCubit.selectSettingsPage(…, legalTab:)`;
   - `settings_titles.dart` (заголовок и ключевые слова), значок в `settings_shell.dart`, запись в `settingsPageBuilders`;
-  - ARB `settingsPageLegal`, `settingsSearchKeywordsLegal`.
+  - ARB `settingsPageLegalTitle`, `settingsSearchKeywordsLegal`.
 
   4.1 зелёный.
 - [x] 4.3 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/legal_page_test.dart` (spec «Страница «Legal»: видимость и вкладки», «…документы на языке интерфейса», «…ссылки внутри документов», «…вкладка «License»», «…вкладка «Third-party notices»» — все сценарии, кроме поиска). Плюс:
@@ -122,7 +122,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - счётчик на `en` и `ru` (`5 из 21 пакета`);
   - записи реестра видны при каждом запросе;
   - «Запрос не сохраняется и не пишется в журнал»: уход со страницы и возврат через `NavigationCubit`, записывающий логгер, `SharedPreferences.setMockInitialValues`.
-- [ ] 4.5 `[desktop]` Реализация 4.3–4.4:
+- [x] 4.5 `[desktop]` Реализация 4.3–4.4:
   - `features/settings/presentation/legal_page.dart` (`buildLegalPage`, `LegalPage`): вкладки `CodeLabSelectorBar`, документы `CodeLabMarkdown` под `CodeLabMarkdownScope` страницы, «License» — `CodeLabKeyValueList` и `CodeLabMonospaceBlock`, «Third-party notices» — записи, InfoBar, поле, счётчик, список, пустой блок;
   - язык из `AppLanguageCubit` → `LegalPageCubit.setLanguage`;
   - ARB `en`/`ru` с `@description` и ICU `plural`.
@@ -132,7 +132,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 ## 5. Итерация 5 — ссылки «General» и удаление диалога
 
 - [x] 5.1 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/general_page_test.dart` (D9; spec «Страница «General»: состав и порядок» — сценарии «Порядок блоков», «No telemetry» ведёт на политику»; «Раздел «About» страницы «General»» — «Ссылки «About» открывают вкладки Legal», «Диалога сторонних уведомлений нет»; «События журнала страницы «General»» — «Переход на Legal в журнале»). Ожидания прежнего диалога `settings-general-third-party-dialog` в тесте заменяются ожиданием вкладки. Остальные сценарии «About» (версии, диагностика, сбои) зелёные без изменений.
-- [ ] 5.2 `[desktop]` Реализация 5.1:
+- [x] 5.2 `[desktop]` Реализация 5.1:
   - `general_page.dart` — блок «Privacy» и колбэк `onOpenLegal`;
   - `about_section.dart` — кнопки «Privacy policy», «Terms of use», ссылка `MIT`, «Third-party notices» на вкладку; `_ThirdPartyDialog` и импорт `LicenseRegistry` удалены;
   - `about_ports.dart` и `lib/app/about_ports_factory.dart` — без текста уведомлений в `AboutInfo`;
@@ -143,33 +143,34 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 6. Итерация 6 — документация (`docs-writer`)
 
-- [ ] 6.1 `[desktop]` `apps/codelab_desktop/doc/user-guide.md`:
+- [x] 6.1 `[desktop]` `apps/codelab_desktop/doc/user-guide.md`:
   - раздел о странице «Legal»: вкладки, язык документов, офлайн, поиск по пакетам, почему список лицензий шире сборки;
   - раздел «General»: блок «Privacy», ссылки «About», диалога больше нет.
 
   Скриншот — пометка `<!-- screenshot: … -->` по образцу.
-- [ ] 6.2 `[desktop]` `apps/codelab_desktop/AGENTS.md`:
+- [x] 6.2 `[desktop]` `apps/codelab_desktop/AGENTS.md`:
   - новый раздел «Страница «Legal»» (D1–D11): Cubit и время жизни, ресурсы по языку, `legal_ports_factory.dart` — единственное место `rootBundle`/`LicenseRegistry`, поиск — чистая функция, запрос не пишется в журнал, события, тесты;
   - раздел «Страница «General»»: блок «Privacy», диалога нет, `settings.legal_link`.
-- [ ] 6.3 `[desktop]` `packages/flutter/codelab_ui/AGENTS.md` §4 и `packages/flutter/codelab_ui/README.md` — `CodeLabSelectorBar` (D6).
-- [ ] 6.4 `[desktop]` `docs/user/README.md` — ссылка на `PRIVACY.md` и `TERMS.md` рядом с перечнем документов (документы общие для CLI и app). Сверка ARB с глоссарием 0.4: новые термины, найденные при реализации, дописываются в глоссарий.
+- [x] 6.3 `[desktop]` `packages/flutter/codelab_ui/AGENTS.md` §4 и `packages/flutter/codelab_ui/README.md` — `CodeLabSelectorBar` (D6).
+- [x] 6.4 `[desktop]` `docs/user/README.md` — ссылка на `PRIVACY.md` и `TERMS.md` рядом с перечнем документов (документы общие для CLI и app). Сверка ARB с глоссарием 0.4: новые термины, найденные при реализации, дописываются в глоссарий.
 
 ## 7. Итерация 7 — приёмка
 
-- [ ] 7.1 `[desktop]` `apps/codelab_desktop/integration_test/settings_legal_flow_test.dart` и скрипт `test:e2e:app:legal` в `melos:` корневого `pubspec.yaml` по образцу `test:e2e:app:appearance` (§12.7.10). Сценарий:
+- [x] 7.1 `[desktop]` `apps/codelab_desktop/integration_test/settings_legal_flow_test.dart` и скрипт `test:e2e:app:legal` в `melos:` корневого `pubspec.yaml` по образцу `test:e2e:app:appearance` (§12.7.10). Сценарий:
   - «General» → «About» → «Terms of use»: вкладка с текстом `assets/legal/TERMS.md`;
   - переход на «License» и «Third-party notices»;
   - поиск `flutter` → `M of N`, затем `reqwest` → «No packages match» → «Clear search»;
   - русский интерфейс: `TERMS.ru.md`.
 
   В `feature/*` только компилируется, запускается в `release/*` (§21).
-- [ ] 7.2 `[desktop]` Проверки затронутого (`AGENTS.md` §21):
+- [x] 7.2 `[desktop]` Проверки затронутого (`AGENTS.md` §21):
   - `fvm dart format --set-exit-if-changed` изменённых файлов;
   - `fvm flutter analyze` в `apps/codelab_desktop` и `packages/flutter/codelab_ui`, `fvm dart analyze` в `codelab_architecture_tests`;
   - тесты трёх пакетов;
   - `melos run l10n:check`, `melos run guard`;
   - `openspec validate add-app-legal-page --strict`;
   - `cd site && npm ci && npm run verify`, если установлен Node: правится опубликованный `README.md`.
+  - Итог 2026-11-20: всё перечисленное выше прошло; 7 info `use_null_aware_elements` в `apps/codelab_desktop` унаследованы от `develop`. `npm run verify` локально не запускался: `site/` требует Node 26.13.1, установлен 26.4.0, — проверит джоб `site` в CI.
 - [ ] 7.3 `[desktop]` Ручная проверка app на macOS:
   - четыре вкладки на `en` и `ru`;
   - смена языка при открытой странице;

@@ -24,7 +24,7 @@
 ## 3. Слои
 
 * `atomics/` — без составных частей кита: `CodeLabText` с ролями, `CodeLabBadge`, `CodeLabMonospaceBlock`, `CodeLabPressable` (нажимаемая область без таймеров кнопки Fluent: курсор, наведение, фокус, Enter/Space; внутренняя деталь — барелем не экспортируется, её используют `CodeLabAgentsPane`, `CodeLabUsagePane` и `CodeLabSessionStatusBar`).
-* `molecules/` — из атомов: `CodeLabKeyValueList`, `CodeLabStepBreadcrumb`, `CodeLabThoughtBlock`, `CodeLabToolCallSummary`.
+* `molecules/` — из атомов: `CodeLabKeyValueList`, `CodeLabStepBreadcrumb`, `CodeLabThoughtBlock`, `CodeLabToolCallSummary`, `CodeLabSelectorBar`.
 * `rendering/` — отрисовка ответа агента как markdown: `CodeLabMarkdown`, `CodeLabMarkdownConfig`, `CodeLabMarkdownScope`, `CodeLabCodeBlock`, счётчики `CodeLabMarkdownStats`. Импортирует только `atomics/`; его импортируют `organisms/`. Единственный слой, где разрешены `gpt_markdown` и `val_highlight`. `escapeForDisplay` (управляющие и bidi-символы → `\\uXXXX`) — публичное API: им пользуются кит и app для недоверенного текста (текст файла темы на странице «Appearance», `add-app-appearance-page`, D10).
 * `organisms/` — ленты, плитки, таблицы, панели: `CodeLabTranscriptPanel`, `CodeLabToolCallTile`, `CodeLabApprovalPrompt`, `CodeLabStatusTable`, `CodeLabUsagePane`.
 * Импорт — только вниз по слоям; экспорт — через барели слоёв (`atomics.dart`, `molecules.dart`, `organisms.dart`) и `lib/codelab_ui.dart`. Новый атом — при втором употреблении (как `CodeLabMonospaceBlock`, D19), не «на вырост» (корневой `AGENTS.md` §13).
@@ -32,6 +32,7 @@
 ## 4. Отдельные виджеты
 
 * **`CodeLabStatusTable`** — таблица «Agent status» и подобных панелей. Колонки и ячейки — готовые строки от вызывающего, действие строки — колбэк; виджет не знает `McpServerState` и не считает «retry in».
+* **`CodeLabSelectorBar<T>`** (`molecules/codelab_selector_bar.dart`) — полоса вкладок-переключателя разделов с подчёркиванием выбранной; значение — `T`, вкладки — `CodeLabSelectorItem<T>` (`value`, `label`, `key` задаёт вызывающий). Введён вместо `CodeLabSegmentedControl` (сжимает подписи с многоточием) и Fluent `TabView` (вкладки документов с закрытием и перетаскиванием): длинные подписи не обрезаются, а при нехватке места ряд прокручивается по горизонтали (D6 `add-app-legal-page`). Что выбрано, решает вызывающий (`value`); повторное нажатие на выбранную вкладку `onChanged` не вызывает. Семантика: контейнер с `semanticLabel`, у вкладки `button` и `selected`; фокус и Enter/Space — через `CodeLabPressable`. Употребление: вкладки страницы «Legal» app.
 * **`CodeLabMonospaceBlock`** — текст как есть, моноширинно (`CodeLabTextRole.mono`), с переносом, рамкой и выделением; не меняет и не разбирает текст. Употребление: ответ `/mcp` в панели «Agent status» (SETUP-11, Q34). Ответ агента в ленте он больше не рисует: огороженный ответ — блок кода `CodeLabCodeBlock` внутри markdown (D11).
 
 * **`CodeLabTerminalPane`** — панель Terminal дока: вкладки с тегом статуса, «+», пустое состояние, `InfoBar` предупреждения и слот `content`. Виджет терминала (рендер `xterm2`) в кит не импортируется — его передаёт app в слот; подпись и тон тега, состояние «нет сессии» и сами вкладки — готовые данные от вызывающего, процессов и логики в ките нет (`add-integrated-terminal`, D3).

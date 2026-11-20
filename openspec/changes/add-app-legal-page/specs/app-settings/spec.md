@@ -234,7 +234,7 @@
 
 #### Scenario: Ссылка условий на лицензию
 - **WHEN** на вкладке «Terms of use» пользователь нажимает ссылку на `LICENSE`
-- **THEN** выбрана вкладка `settings-legal-tab-license`, `ExternalLinkOpener.open` не вызывался
+- **THEN** выбрана вкладка `settings-legal-tab-license`, `ExternalLinkOpener.open` не вызывался, журнал содержит `legal.link_opened` с `target: tab` и `outcome: opened`
 
 #### Scenario: Ссылка на неизвестный файл неактивна
 - **WHEN** документ содержит ссылку `SECURITY.md`
@@ -321,7 +321,7 @@
 - `legal.tab_selected` (`tab: privacy_policy | terms_of_use | license | third_party_notices`, `source: open | tab | link`), уровень `debug`;
 - `legal.document_load_failed` (`tab`, `error_type` — имя типа исключения), уровень `warning`;
 - `legal.licenses_collected` (`packages` — число пакетов, `failed` — был ли сбой реестра), уровень `info`;
-- `legal.link_opened` (`target: tab | external`, `outcome: opened | failed | rejected_scheme`).
+- `legal.link_opened` (`target: tab | external`, `outcome: opened | failed | rejected_scheme`); переход по ссылке на вкладку пишется с `target: tab` и `outcome: opened`, исходы `failed` и `rejected_scheme` бывают только у `target: external`.
 
 События НЕ SHALL содержать запрос поиска, число совпадений, путей, URL, текстов документов и текстов исключений (AGENTS.md §16; design.md, D11).
 
