@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Legal, third-party notices</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}
+.bar{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.tbtn{min-height:44px;min-width:44px}
+.sel{display:flex;gap:2px;overflow-x:auto;flex:none;border-bottom:1px solid var(--stroke);background:var(--layer);padding:0 8px;scrollbar-width:none}
+.sel a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;white-space:nowrap;text-decoration:none;color:var(--text2);border-bottom:3px solid transparent;margin-bottom:-1px}
+.sel a.on{color:var(--text);font-weight:600;border-bottom-color:var(--accent)}
+.body{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:10px;padding:12px 16px}
+.body h2{margin:6px 0 0;font-size:16px;line-height:22px;font-weight:600}
+.body p{margin:0;font-size:14px;line-height:20px}
+.req{display:flex;flex-direction:column;gap:4px;padding:10px 12px;background:var(--card);border:1px solid var(--stroke);border-radius:6px;font-size:13px;line-height:18px}
+.req dl{display:grid;grid-template-columns:64px 1fr;gap:2px 8px;margin:0}
+.req dt{color:var(--text2)}
+.req dd{margin:0}
+.pk{width:100%;min-height:48px;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}.pk b{font-weight:700;background:var(--accent-weak);color:var(--text);border-radius:2px}.clear{border:0;background:none;color:var(--text2);display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer}.f-tb input{flex:1;min-width:0;border:0;outline:0;background:none}.toc{min-height:44px;justify-content:space-between}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <a href="PhoneSettings.dc.html" class="f-btn subtle icon tbtn" aria-label="Back to Settings"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+    <h1 class="t-strong" style="margin: 0; flex: 1; font-size: 16px">Legal</h1>
+    <button class="f-btn subtle icon tbtn" aria-label="Share link"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg></button>
+  </header>
+  <nav class="sel" role="tablist" aria-label="Legal documents" data-fluent="SelectorBar (scrolls)">
+    <a href="PhoneLegal.dc.html" role="tab" aria-selected="false">Privacy policy</a>
+    <a href="PhoneTerms.dc.html" role="tab" aria-selected="false">Terms of use</a>
+    <a href="PhoneLicense.dc.html" role="tab" aria-selected="false">License</a>
+    <a href="PhoneNotices.dc.html" class="on" role="tab" aria-selected="true">Third-party notices</a>
+  </nav>
+  <div class="body">
+    <div class="t-cap t2" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap"><span class="tag ok">Offline</span>Bundled THIRD_PARTY_NOTICES.md · licenses from the build</div>
+    <h2>1. Notices register</h2>
+    <p class="t2" style="font-size: 13px">Entries of the CodeLab third-party notices register, as kept in the repository.</p>
+      <section class="f-exp" data-fluent="Expander"><button class="f-exph pk" aria-expanded="false"><span style="flex: 1; min-width: 0">JetBrains Mono (шрифт в пакете <span class="mono">gpt_markdown</span>)<span class="t-cap t2" style="display: block">OFL-1.1</span></span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></button></section>
+      <section class="f-exp" data-fluent="Expander"><button class="f-exph pk" aria-expanded="false"><span style="flex: 1; min-width: 0">Latin Modern (шрифты в пакете <span class="mono">val_latex_flutter</span>)<span class="t-cap t2" style="display: block">GUST Font License</span></span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></button></section>
+    <h2>2. Package licenses</h2>
+    <label class="f-tb" data-fluent="AutoSuggestBox" style="min-height: 44px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m20 20-4.5-4.5"></path></svg><input type="search" value="bloc" aria-label="Search packages by name" aria-controls="pk"><button class="clear tbtn" aria-label="Clear search"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></label>
+    <span class="t-cap t2" role="status">[M] of [N] packages</span>
+    <div id="pk" style="display: flex; flex-direction: column; gap: 4px">
+      <section class="f-exp" data-fluent="Expander"><button class="f-exph pk" aria-expanded="false"><span style="flex: 1; min-width: 0"><span class="mono"><b>bloc</b></span></span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></button></section>
+      <section class="f-exp" data-fluent="Expander"><button class="f-exph pk" aria-expanded="false"><span style="flex: 1; min-width: 0"><span class="mono">flutter_<b>bloc</b></span></span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></button></section>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>
