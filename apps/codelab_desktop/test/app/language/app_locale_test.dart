@@ -3,8 +3,8 @@
 // интерфейса app»: «По умолчанию — язык системы», «Незнакомый язык
 // системы», «Явный выбор сильнее системы»).
 //
-// До итерации 6 (D2, D12) `system` всегда даёт `en`, даже при `ru-RU`:
-// так `develop` остаётся рабочим, пока русские тексты не завершены.
+// Итерация 6 (задача 6.1): временное правило D2 снято — `system` даёт `ru`,
+// если `languageCode` первого языка системы `ru`, иначе `en` (Q5 (а)).
 
 import 'dart:ui';
 
@@ -37,11 +37,11 @@ void main() {
     });
   });
 
-  group('system до итерации 6', () {
-    test('ru-RU даёт en (D2: переключатель включается в итерации 6)', () {
+  group('system — язык системы (D2, Q5 (а))', () {
+    test('ru-RU даёт ru (сценарий «По умолчанию — язык системы»)', () {
       expect(
         resolveAppLocale(AppLanguagePreference.system, const [ruRu]),
-        const Locale('en'),
+        const Locale('ru'),
       );
     });
 
@@ -59,10 +59,17 @@ void main() {
       );
     });
 
-    test('ru вторым языком не влияет: берётся только первый язык', () {
+    test('берётся только первый язык: ru вторым не даёт ru', () {
       expect(
         resolveAppLocale(AppLanguagePreference.system, const [deDe, ruRu]),
         const Locale('en'),
+      );
+    });
+
+    test('ru первым, de вторым даёт ru', () {
+      expect(
+        resolveAppLocale(AppLanguagePreference.system, const [ruRu, deDe]),
+        const Locale('ru'),
       );
     });
   });

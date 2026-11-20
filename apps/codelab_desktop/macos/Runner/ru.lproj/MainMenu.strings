@@ -1,0 +1,91 @@
+/*
+  Русские названия пунктов главного меню macOS (change add-desktop-localization, D11, Q4 (а)).
+  Почему: меню собирается из MainMenu.xib на английском; macOS выбирает язык меню
+  по языку системы (CFBundleLocalizations в Info.plist), а не по настройке приложения.
+  Как поддерживать: ключ — objectID элемента в Base.lproj/MainMenu.xib; при правке xib
+  перегенерировать список командой `ibtool --generate-strings-file`. Названия — стандартные
+  для русской macOS. APP_NAME подставляет AppKit (имя приложения).
+*/
+
+/* Меню приложения */
+"1Xt-HY-uBw.title" = "APP_NAME";
+"uQy-DD-JDr.title" = "APP_NAME";
+"5kV-Vb-QxS.title" = "О программе APP_NAME";
+"BOF-NM-1cW.title" = "Настройки…";
+"NMo-om-nkz.title" = "Службы";
+"hz9-B4-Xy5.title" = "Службы";
+"Olw-nP-bQN.title" = "Скрыть APP_NAME";
+"Vdr-fp-XzO.title" = "Скрыть остальные";
+"Kd2-mp-pUS.title" = "Показать все";
+"4sb-4s-VLi.title" = "Завершить APP_NAME";
+
+/* Правка */
+"5QF-Oa-p0T.title" = "Правка";
+"W48-6f-4Dl.title" = "Правка";
+"dRJ-4n-Yzg.title" = "Отменить";
+"6dh-zS-Vam.title" = "Повторить";
+"uRl-iY-unG.title" = "Вырезать";
+"x3v-GG-iWU.title" = "Скопировать";
+"gVA-U4-sdL.title" = "Вставить";
+"WeT-3V-zwk.title" = "Вставить с сохранением стиля";
+"pa3-QI-u2k.title" = "Удалить";
+"Ruw-6m-B2m.title" = "Выбрать все";
+
+/* Правка › Найти */
+"4EN-yA-p0u.title" = "Найти";
+"1b7-l0-nxx.title" = "Найти";
+"Xz5-n4-O0W.title" = "Найти…";
+"YEy-JH-Tfz.title" = "Найти и заменить…";
+"q09-fT-Sye.title" = "Найти далее";
+"OwM-mh-QMV.title" = "Найти ранее";
+"buJ-ug-pKt.title" = "Использовать выбранное для поиска";
+"S0p-oC-mLd.title" = "Перейти к выбранному";
+
+/* Правка › Правописание */
+"Dv1-io-Yv7.title" = "Правописание и грамматика";
+"3IN-sU-3Bg.title" = "Правописание";
+"HFo-cy-zxI.title" = "Показать правописание и грамматику";
+"hz2-CU-CR7.title" = "Проверить документ сейчас";
+"rbD-Rh-wIN.title" = "Проверять правописание при вводе";
+"mK6-2p-4JG.title" = "Проверять грамматику вместе с правописанием";
+"78Y-hA-62v.title" = "Исправлять правописание автоматически";
+
+/* Правка › Замены */
+"9ic-FL-obx.title" = "Замены";
+"FeM-D8-WVr.title" = "Замены";
+"z6F-FW-3nz.title" = "Показать замены";
+"9yt-4B-nSM.title" = "Умное копирование/вставка";
+"hQb-2v-fYv.title" = "Умные кавычки";
+"rgM-f4-ycn.title" = "Умные тире";
+"cwL-P1-jid.title" = "Умные ссылки";
+"tRr-pd-1PS.title" = "Детекторы данных";
+"HFQ-gK-NFA.title" = "Замена текста";
+
+/* Правка › Преобразования */
+"2oI-Rn-ZJC.title" = "Преобразования";
+"c8a-y6-VQd.title" = "Преобразования";
+"vmV-6d-7jI.title" = "Верхний регистр";
+"d9M-CD-aMd.title" = "Нижний регистр";
+"UEZ-Bs-lqG.title" = "С заглавной буквы";
+
+/* Правка › Речь */
+"xrE-MZ-jX0.title" = "Речь";
+"3rS-ZA-NoH.title" = "Речь";
+"Ynk-f8-cLZ.title" = "Начать озвучивание";
+"Oyz-dy-DGm.title" = "Остановить озвучивание";
+
+/* Вид */
+"H8h-7b-M4v.title" = "Вид";
+"HyV-fh-RgO.title" = "Вид";
+"4J7-dP-txa.title" = "Перейти в полноэкранный режим";
+
+/* Окно */
+"aUF-d1-5bR.title" = "Окно";
+"Td7-aD-5lo.title" = "Окно";
+"OY7-WF-poV.title" = "Свернуть";
+"R4o-n2-Eq4.title" = "Увеличить";
+"LE2-aR-0XJ.title" = "Все окна — на передний план";
+
+/* Справка */
+"EPT-qC-fAb.title" = "Справка";
+"rJ0-wn-3NY.title" = "Справка";
