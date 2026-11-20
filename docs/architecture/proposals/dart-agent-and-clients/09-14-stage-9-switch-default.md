@@ -57,8 +57,8 @@
    целей, подписанный `SHA256SUMS`, скрипты `install.sh` / `install.ps1` и каналы (U-29),
    происхождение сборки; инструкция установки. Переключение по умолчанию МОЖЕТ выйти
    `beta`-релизом; первый публичный `stable`-релиз выпускается только вместе с подписанными
-   дистрибутивами app (D-16, REL-4) и опубликованной политикой конфиденциальности (D-18,
-   REL-9, §12.7.7). До первого релиза заменить `com.example.codelabApp` и
+   дистрибутивами app (D-16, REL-4), опубликованными политикой конфиденциальности (D-18,
+   REL-9, §12.7.7) и условиями использования (D-29, §12.7.7а; решение пользователя 2026-11-20). До первого релиза заменить `com.example.codelabApp` и
    `PRODUCT_COPYRIGHT` в `AppInfo.xcconfig`, создать платформы `windows` и `linux` app.
 5. **9.5. Предупреждение о Python-сессиях** в пользовательской документации: сохранённые сессии
    Python-агента не переносятся, мигратора нет (agent-core-architecture §16.1, задача 3.7).
@@ -79,15 +79,15 @@
    (`args`, `yaml`, `yaml_edit`; без `toml` — `codelab.toml` не читается, решение пользователя
    2026-10-29, change `add-agent-configuration`); пользовательская
    документация: установка (скрипты §12.7.5, проверка подписи вручную — `docs/release/verify.md`),
-   README репозитория со ссылками на установку и `PRIVACY.md` (D-18), конфигурация (`config.yaml`), LiteLLM Proxy как `baseUrl`, ручной перенос настроек Python-агента
+   README репозитория со ссылками на установку, `PRIVACY.md` (D-18) и `TERMS.md` (D-29), конфигурация (`config.yaml`), LiteLLM Proxy как `baseUrl`, ручной перенос настроек Python-агента
    из `codelab.toml` по таблице соответствия ключей (agent-core-architecture §15.7) вместо команды
    `codelab config migrate`, которой нет.
    **Распределение** (change `switch-default-agent-to-dart`, D12, D13; решение пользователя
    2026-11-09, Q7): этот change — архитектурные документы, `AGENTS.md` §5 и пользовательская
    документация MVP в `docs/user/` (сборка из исходников, `config.yaml`, LiteLLM Proxy, ручной
    перенос, предупреждение о Python-сессиях, Zed). Установка и `docs/release/verify.md` — с
-   change `add-release-pipeline-and-installer` (9.4); `PRIVACY.md` и ссылка на него в README — с
-   change `add-privacy-policy` (D-18).
+   change `add-release-pipeline-and-installer` (9.4); `PRIVACY.md`, `TERMS.md` и ссылки на них в
+   README — с change `add-privacy-policy` (D-18, D-29; §12.7.7а).
 8. **9.8. Ручная проверка совместимости с Zed** — чек-лист ниже («Чек-лист Zed»); проводит
    ответственный за релиз. Сверка с другим ACP-агентом — не на глаз, а диффом журналов ACP Zed
    на том же сценарии (там же).
@@ -141,10 +141,10 @@
     пометка «сейчас».
 
 **OpenSpec change.** [`switch-default-agent-to-dart`](../../../../openspec/changes/switch-default-agent-to-dart/proposal.md)
-(scope: 9.1, 9.2, вторая половина 9.3, 9.5, 9.7 без установки и `PRIVACY.md`, таблица 9.8 и ворота
+(scope: 9.1, 9.2, вторая половина 9.3, 9.5, 9.7 без установки, `PRIVACY.md` и `TERMS.md`, таблица 9.8 и ворота
 MVP; онбординг 9.6 сделан change `add-provider-setup-ui`), `add-release-pipeline-and-installer` (scope:
 поставка 9.4, U-29, §12.7.2–§12.7.6, §12.7.8), `add-signed-app-distributions` (D-16) и
-`add-privacy-policy` (D-18, §12.7.7), `retire-python-agent` (scope: политика заморозки, условие
+`add-privacy-policy` (D-18, D-29, §12.7.7, §12.7.7а), `retire-python-agent` (scope: политика заморозки, условие
 удаления, алиас `codelab serve`) и `remove-python-agent` (scope: снятие алиаса, режима `python`
 e2e и упоминаний Python-агента — после условия удаления 9.9). Смена значения по умолчанию `ui.mode` в CLI с `line` на `tui` после приёмки
 U-12 — отдельный OpenSpec change, не входящий в эти два (§12.2.1). `tasks.md` — пары
