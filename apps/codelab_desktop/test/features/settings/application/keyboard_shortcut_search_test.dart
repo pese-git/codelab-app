@@ -121,6 +121,19 @@ void main() {
     expect(filterKeyboardShortcuts(_entries(), 'ctrl y'), isEmpty);
   });
 
+  // Нотации комбинаций macOS не собираются в слова Windows и Linux и наоборот
+  // (ревью итерации 7): у записи с ⌘ нет клавиш `Y`, `Alt+Z`, `Alt+Shift+Z`.
+  test('несуществующие клавиши не находят ничего: «alt shift z», «alt z», '
+      '«y»', () {
+    for (final query in const ['alt shift z', 'alt z', 'alt y']) {
+      expect(
+        filterKeyboardShortcuts(_entries(), query),
+        isEmpty,
+        reason: query,
+      );
+    }
+  });
+
   group('русский интерфейс', () {
     final translated = {
       'allow-always': 'Всегда разрешать',

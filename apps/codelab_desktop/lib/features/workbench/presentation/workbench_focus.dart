@@ -2,12 +2,11 @@ import 'package:codelab_ui/codelab_ui.dart' show CodeLabApprovalVisibility;
 import 'package:fluent_ui/fluent_ui.dart';
 
 /// Узел фокуса композера, обработчик ухода полосы одобрения и ручка видимости
-/// полос, которые рабочее
-/// место отдаёт вниз по дереву.
+/// полос, которые рабочее место отдаёт вниз по дереву.
 ///
 /// Почему `InheritedWidget`: узел принадлежит `State` рабочего места
 /// (`_CodeLabHomeState`: создаётся и освобождается там), а композер и лента
-/// строятся глубоко внутри `WorkbenchMainPane`; пробрасывать два параметра
+/// строятся глубоко внутри `WorkbenchMainPane`; пробрасывать параметры
 /// через все промежуточные виджеты не нужно (`fix-approval-focus`, D5).
 ///
 /// Для чего: `WorkbenchMainPane` отдаёт [composerNode] композеру

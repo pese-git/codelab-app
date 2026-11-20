@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 
 import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
@@ -17,7 +18,7 @@ import '../molecules/molecules.dart';
 ///
 /// Как использовать: хост передаёт колбэки только для доступных действий;
 /// без колбэка сочетание не привязано.
-class CodeLabWorkbenchShortcuts extends StatelessWidget {
+class CodeLabWorkbenchShortcuts extends StatefulWidget {
   const CodeLabWorkbenchShortcuts({
     required this.child,
     this.onOpenCommandPalette,
@@ -29,6 +30,7 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
     this.onGoToApproval,
     this.onAnswerApproval,
     this.enabled = true,
+    this.clock,
     super.key,
   });
 
@@ -74,8 +76,22 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
   /// сообщает нажатие. Автоповтор не вызывает колбэк (`includeRepeats:
   /// false`): одно нажатие — не больше одного ответа. Клавиши зависят от
   /// платформы (`CodeLabShortcut.combosFor`, D15).
-  final ValueChanged<CodeLabApprovalOptionKind>? onAnswerApproval;
+  ///
+  /// Второй аргумент — сколько Alt и Shift зажаты вместе к моменту нажатия
+  /// буквы (`CodeLabModifierHoldTracker`); на macOS (⌘) он `null` — условие
+  /// не применяется. На Windows и Linux Alt+Shift — ещё и смена раскладки,
+  /// поэтому хост не отвечает, если модификаторы зажаты недавно (решение
+  /// пользователя 2026-11-20; порог — политика хоста).
+  final void Function(
+    CodeLabApprovalOptionKind kind,
+    Duration? modifiersHeldFor,
+  )?
+  onAnswerApproval;
   final bool enabled;
+
+  /// Часы отсчёта зажатых модификаторов; без них — `DateTime.now`. Шов тестов
+  /// и хоста: одни и те же часы двигают отсчёт задержек хоста.
+  final DateTime Function()? clock;
 
   /// Запись каталога и вид варианта, на который она отвечает (D14).
   static const _answerKinds = [
@@ -86,36 +102,80 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
   ];
 
   @override
+  State<CodeLabWorkbenchShortcuts> createState() =>
+      _CodeLabWorkbenchShortcutsState();
+}
+
+class _CodeLabWorkbenchShortcutsState extends State<CodeLabWorkbenchShortcuts> {
+  late CodeLabModifierHoldTracker _hold;
+
+  @override
+  void initState() {
+    super.initState();
+    _hold = CodeLabModifierHoldTracker(clock: widget.clock)..attach();
+  }
+
+  @override
+  void didUpdateWidget(CodeLabWorkbenchShortcuts oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.clock != widget.clock) {
+      _hold.detach();
+      _hold = CodeLabModifierHoldTracker(clock: widget.clock)..attach();
+    }
+  }
+
+  @override
+  void dispose() {
+    _hold.detach();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (!enabled) {
-      return child;
+    final onOpenCommandPalette = widget.onOpenCommandPalette;
+    final onCancel = widget.onCancel;
+    final onNewSession = widget.onNewSession;
+    final onToggleSidebar = widget.onToggleSidebar;
+    final onOpenSettings = widget.onOpenSettings;
+    final onToggleFiles = widget.onToggleFiles;
+    final onGoToApproval = widget.onGoToApproval;
+    final onAnswerApproval = widget.onAnswerApproval;
+    if (!widget.enabled) {
+      return widget.child;
     }
 
     final bindings = <ShortcutActivator, VoidCallback>{
       if (onOpenCommandPalette != null)
-        ...CodeLabShortcut.commandPalette.bind(onOpenCommandPalette!),
-      if (onCancel != null) ...CodeLabShortcut.cancelTurn.bind(onCancel!),
+        ...CodeLabShortcut.commandPalette.bind(onOpenCommandPalette),
+      if (onCancel != null) ...CodeLabShortcut.cancelTurn.bind(onCancel),
       if (onNewSession != null)
-        ...CodeLabShortcut.newSession.bind(onNewSession!),
+        ...CodeLabShortcut.newSession.bind(onNewSession),
       if (onToggleSidebar != null)
-        ...CodeLabShortcut.toggleSidebar.bind(onToggleSidebar!),
+        ...CodeLabShortcut.toggleSidebar.bind(onToggleSidebar),
       if (onOpenSettings != null)
-        ...CodeLabShortcut.openSettings.bind(onOpenSettings!),
+        ...CodeLabShortcut.openSettings.bind(onOpenSettings),
       if (onToggleFiles != null)
-        ...CodeLabShortcut.toggleFiles.bind(onToggleFiles!),
+        ...CodeLabShortcut.toggleFiles.bind(onToggleFiles),
       if (onGoToApproval != null)
-        ...CodeLabShortcut.goToApproval.bind(onGoToApproval!),
+        ...CodeLabShortcut.goToApproval.bind(onGoToApproval),
       if (onAnswerApproval != null)
-        for (final (shortcut, kind) in _answerKinds)
+        for (final (shortcut, kind) in CodeLabWorkbenchShortcuts._answerKinds)
           ...shortcut.bind(
-            () => onAnswerApproval!(kind),
+            () => onAnswerApproval(
+              kind,
+              // ⌘ на macOS смену раскладки не вызывает: условия «зажаты
+              // заранее» там нет.
+              defaultTargetPlatform == TargetPlatform.macOS
+                  ? null
+                  : _hold.heldFor,
+            ),
             includeRepeats: false,
           ),
     };
 
     return CallbackShortcuts(
       bindings: bindings,
-      child: Focus(autofocus: true, child: child),
+      child: Focus(autofocus: true, child: widget.child),
     );
   }
 }

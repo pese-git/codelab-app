@@ -81,8 +81,10 @@ void main() {
     CodeLabApprovalOptionKind kind = CodeLabApprovalOptionKind.allowOnce,
     CodeLabConnectionStatus status = connected,
     bool visible = true,
+    Duration? held,
     void Function(String session, String approval)? onAsked,
   }) => approvalShortcutDecisionOf(
+    modifiersHeldFor: held,
     connectionStatus: status,
     view: view,
     kind: kind,
@@ -135,6 +137,64 @@ void main() {
       final d = skipped(decide(view));
       expect(d.reason, ApprovalShortcutSkipReason.noTarget);
       expect(d.show, isFalse);
+    });
+  });
+
+  // Решение пользователя 2026-11-20: на Windows и Linux Alt+Shift — ещё и
+  // смена раскладки, поэтому буква отвечает, только если модификаторы зажаты
+  // не меньше 150 мс до неё. `null` — macOS, условия нет.
+  group('Alt и Shift зажаты заранее — modifiers_not_held', () {
+    test('порог 150 мс', () {
+      expect(
+        approvalShortcutModifierHoldDelay,
+        const Duration(milliseconds: 150),
+      );
+    });
+
+    test('нажаты вместе с буквой или меньше порога: ответа и показа нет', () {
+      final view = _view([_pending('A')]);
+      tracker.observe(view);
+      advance(1000);
+
+      for (final ms in const [0, 100, 149]) {
+        final d = skipped(decide(view, held: Duration(milliseconds: ms)));
+        expect(
+          d.reason,
+          ApprovalShortcutSkipReason.modifiersNotHeld,
+          reason: '$ms мс',
+        );
+        expect(d.reason.wireName, 'modifiers_not_held');
+        expect(d.show, isFalse, reason: '$ms мс: показ не нужен');
+        expect(d.approvalId, const ApprovalRequestId('A'));
+        expect(d.sessionId, 's1');
+      }
+    });
+
+    test('150 мс и больше: ответ', () {
+      final view = _view([_pending('A')]);
+      tracker.observe(view);
+      advance(1000);
+
+      for (final ms in const [150, 151, 5000]) {
+        expect(
+          decide(view, held: Duration(milliseconds: ms)),
+          isA<ApprovalShortcutAnswer>(),
+          reason: '$ms мс',
+        );
+      }
+    });
+
+    test('null (macOS) условия не создаёт', () {
+      final view = _view([_pending('A')]);
+      tracker.observe(view);
+      advance(1000);
+
+      expect(decide(view), isA<ApprovalShortcutAnswer>());
+    });
+
+    test('нет цели — no_target раньше модификаторов', () {
+      final d = skipped(decide(_view(const []), held: Duration.zero));
+      expect(d.reason, ApprovalShortcutSkipReason.noTarget);
     });
   });
 
@@ -257,6 +317,31 @@ void main() {
         expect(d.reason, ApprovalShortcutSkipReason.settling);
       },
     );
+
+    test('restart начинает отсчёт заново от показа (not_visible)', () {
+      final view = _view([_pending('A')]);
+      tracker.observe(view);
+      advance(1000);
+      expect(decide(view), isA<ApprovalShortcutAnswer>());
+
+      // Полосу только что показали: отсчёт 500 мс идёт от показа.
+      tracker.restart(const ApprovalRequestId('A'));
+      advance(100);
+      expect(skipped(decide(view)).reason, ApprovalShortcutSkipReason.settling);
+      advance(400);
+      expect(decide(view), isA<ApprovalShortcutAnswer>());
+    });
+
+    test('restart чужого или не активного id ничего не меняет', () {
+      final view = _view([_pending('A')]);
+      tracker.observe(view);
+      advance(1000);
+
+      tracker.restart(const ApprovalRequestId('B'));
+
+      expect(decide(view), isA<ApprovalShortcutAnswer>());
+      expect(tracker.ageOf(const ApprovalRequestId('B')), isNull);
+    });
 
     test('повторный снимок той же цели не сбрасывает отсчёт', () {
       final view = _view([_pending('A')]);

@@ -4502,19 +4502,19 @@
   },
   "settingsKeyboardActionAllowOnce": "Allow once",
   "@settingsKeyboardActionAllowOnce": {
-    "description": "Действие сочетания Cmd/Ctrl+Enter при ожидающем одобрении: разрешить один раз. Метка security (D14): перевод не смягчает смысл."
+    "description": "Действие глобального сочетания ответа на ожидающее одобрение (⌘Y на macOS, Alt+Shift+Y на Windows и Linux): разрешить один раз. Метка security (D14): перевод не смягчает смысл."
   },
   "settingsKeyboardActionAllowAlways": "Allow always",
   "@settingsKeyboardActionAllowAlways": {
-    "description": "Действие сочетания Cmd/Ctrl+Alt+Enter при ожидающем одобрении: разрешить всегда. Метка security (D14): перевод не смягчает смысл."
+    "description": "Действие глобального сочетания ответа на ожидающее одобрение (⌥⌘Y на macOS, Alt+Shift+Q на Windows и Linux): разрешить всегда. Метка security (D14): перевод не смягчает смысл."
   },
   "settingsKeyboardActionRejectOnce": "Reject once",
   "@settingsKeyboardActionRejectOnce": {
-    "description": "Действие сочетания Cmd/Ctrl+Backspace при ожидающем одобрении: отклонить один раз. Метка security (D14): перевод не смягчает смысл."
+    "description": "Действие глобального сочетания ответа на ожидающее одобрение (⌥⌘Z на macOS, Alt+Shift+X на Windows и Linux): отклонить один раз. Метка security (D14): перевод не смягчает смысл."
   },
   "settingsKeyboardActionRejectAlways": "Reject always",
   "@settingsKeyboardActionRejectAlways": {
-    "description": "Действие сочетания Cmd/Ctrl+Alt+Backspace при ожидающем одобрении: отклонить всегда. Метка security (D14): перевод не смягчает смысл."
+    "description": "Действие глобального сочетания ответа на ожидающее одобрение (⌥⇧⌘Z на macOS, Alt+Shift+W на Windows и Linux): отклонить всегда. Метка security (D14): перевод не смягчает смысл."
   },
   "settingsKeyboardWhereWorkbench": "Workbench",
   "@settingsKeyboardWhereWorkbench": {

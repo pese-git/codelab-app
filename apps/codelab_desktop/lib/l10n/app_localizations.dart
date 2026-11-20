@@ -5189,25 +5189,25 @@ abstract class AppLocalizations {
   /// **'Close the command menu'**
   String get settingsKeyboardActionCommandMenuClose;
 
-  /// Действие сочетания Cmd/Ctrl+Enter при ожидающем одобрении: разрешить один раз. Метка security (D14): перевод не смягчает смысл.
+  /// Действие глобального сочетания ответа на ожидающее одобрение (⌘Y на macOS, Alt+Shift+Y на Windows и Linux): разрешить один раз. Метка security (D14): перевод не смягчает смысл.
   ///
   /// In en, this message translates to:
   /// **'Allow once'**
   String get settingsKeyboardActionAllowOnce;
 
-  /// Действие сочетания Cmd/Ctrl+Alt+Enter при ожидающем одобрении: разрешить всегда. Метка security (D14): перевод не смягчает смысл.
+  /// Действие глобального сочетания ответа на ожидающее одобрение (⌥⌘Y на macOS, Alt+Shift+Q на Windows и Linux): разрешить всегда. Метка security (D14): перевод не смягчает смысл.
   ///
   /// In en, this message translates to:
   /// **'Allow always'**
   String get settingsKeyboardActionAllowAlways;
 
-  /// Действие сочетания Cmd/Ctrl+Backspace при ожидающем одобрении: отклонить один раз. Метка security (D14): перевод не смягчает смысл.
+  /// Действие глобального сочетания ответа на ожидающее одобрение (⌥⌘Z на macOS, Alt+Shift+X на Windows и Linux): отклонить один раз. Метка security (D14): перевод не смягчает смысл.
   ///
   /// In en, this message translates to:
   /// **'Reject once'**
   String get settingsKeyboardActionRejectOnce;
 
-  /// Действие сочетания Cmd/Ctrl+Alt+Backspace при ожидающем одобрении: отклонить всегда. Метка security (D14): перевод не смягчает смысл.
+  /// Действие глобального сочетания ответа на ожидающее одобрение (⌥⇧⌘Z на macOS, Alt+Shift+W на Windows и Linux): отклонить всегда. Метка security (D14): перевод не смягчает смысл.
   ///
   /// In en, this message translates to:
   /// **'Reject always'**

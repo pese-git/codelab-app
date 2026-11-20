@@ -79,7 +79,8 @@ export 'ui_mappers.dart'
 /// [initialProfile] — профиль окна до первого старта; с
 /// [defaultProfiles] его заменяет профиль по умолчанию (D5, change
 /// `add-app-settings-shell`), [eventLogger] получает события старта и
-/// перезапуска агента (D17). Выбор проекта стартует агента: сборка связывает
+/// перезапуска агента (D17). [clock] — часы задержек ответа сочетанием.
+/// Выбор проекта стартует агента: сборка связывает
 /// `SettingsCubit.onProjectSelected` с `ConnectionCubit.startAgent` (D13).
 final class CodeLabShellParts {
   CodeLabShellParts._({
@@ -92,6 +93,7 @@ final class CodeLabShellParts {
     required this.settings,
     required this.layout,
     required this.transcriptView,
+    required this.clock,
   });
 
   factory CodeLabShellParts.build({
@@ -112,7 +114,9 @@ final class CodeLabShellParts {
     Logger? usageLogger,
     StartupPreferences? startupPreferences,
     Logger? appLogger,
+    DateTime Function()? clock,
   }) {
+    final now = clock ?? DateTime.now;
     final changes = ShellChanges();
     final diagnostics = ShellDiagnostics(logger: logger);
     final settings = SettingsCubit(
@@ -133,6 +137,7 @@ final class CodeLabShellParts {
       strings: strings,
       usageLogger: usageLogger,
       approvalLogger: appLogger,
+      clock: now,
     );
     final connection = ConnectionCubit(
       changes: changes,
@@ -149,6 +154,7 @@ final class CodeLabShellParts {
     );
     settings.bindProjectStart(connection.startAgent);
     return CodeLabShellParts._(
+      clock: now,
       strings: strings,
       changes: changes,
       diagnostics: diagnostics,
@@ -186,6 +192,11 @@ final class CodeLabShellParts {
   final SettingsCubit settings;
   final LayoutCubit layout;
   final TranscriptViewCubit transcriptView;
+
+  /// Часы рабочего места: по ним отсчитываются задержка ответа сочетанием
+  /// (500 мс) и срок зажатия Alt и Shift (150 мс), D14. Шов тестов: без него
+  /// `DateTime.now`, и тест ждал бы реальное время (`testing.md` §20).
+  final DateTime Function() clock;
 
   Future<void> close() async {
     await sessions.close();
@@ -348,6 +359,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// Канал событий `link.open` и `image.show` (D12): только схема, хост и
   /// исход, без пути и query.
   final Logger? _eventLogger;
+
+  /// Часы рабочего места (общие с отсчётом задержек ответа сочетанием, D14).
+  DateTime Function() get clock => _parts.clock;
 
   /// Сессия в фокусе на прошлом изменении: по её смене гасится запрос показа.
   String? _focusedSessionId;
@@ -635,12 +649,17 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// событие `workbench.approval_shortcut_skipped` и, где решено, показ полосы
   /// без фокуса. [isVisible] — ручка ленты (`CodeLabApprovalVisibility`),
   /// виджет решения не принимает (AGENTS.md §10).
+  ///
+  /// [modifiersHeldFor] — сколько Alt и Shift зажаты вместе к нажатию буквы
+  /// (Windows и Linux; смена раскладки не должна отвечать), `null` на macOS.
   void answerApprovalByShortcut(
     CodeLabApprovalOptionKind kind, {
     required bool Function(String sessionId, String approvalId) isVisible,
+    required Duration? modifiersHeldFor,
   }) {
-    // Палитра закрывает рабочее место: ответ из неё не уходит (D14).
-    if (state.isCommandPaletteOpen) {
+    // Палитра и диалог открытия сессии в корне диска закрывают рабочее место:
+    // ответ из них не уходит (D14); оба лежат внутри поддерева сочетаний.
+    if (state.isCommandPaletteOpen || state.pendingRootSession != null) {
       return;
     }
     final sessionId = _parts.activeSession.state.sessionId;
@@ -652,19 +671,38 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       kind: kind,
       isVisible: isVisible,
       activation: _parts.activeSession.activation,
+      modifiersHeldFor: modifiersHeldFor,
     );
     switch (decision) {
       case ApprovalShortcutAnswer():
+        // Предыдущий ответ ещё в полёте: `respondToApproval` молча вышел бы,
+        // а нажатие должно оставить след в журнале.
+        if (_parts.activeSession.state.isRespondingToApproval) {
+          _parts.activeSession.logApprovalShortcutSkipped(
+            ApprovalShortcutSkipped(
+              reason: ApprovalShortcutSkipReason.answerInFlight,
+              sessionId: decision.sessionId,
+              approvalId: decision.approvalId,
+            ),
+          );
+          return;
+        }
         unawaited(
           _parts.activeSession.respondToApproval(
             approvalId: decision.approvalId,
             sessionId: SessionId(decision.sessionId),
             optionId: decision.optionId.value,
-            source: 'shortcut',
+            source: ApprovalAnswerSource.shortcut,
           ),
         );
       case ApprovalShortcutSkipped():
         _parts.activeSession.logApprovalShortcutSkipped(decision);
+        // Полоса, которую пользователь увидит только сейчас, получает свои
+        // 500 мс от показа, а не от активации (D14, п. 2).
+        if (decision.reason == ApprovalShortcutSkipReason.notVisible &&
+            decision.approvalId != null) {
+          _parts.activeSession.activation.restart(decision.approvalId!);
+        }
         if (decision.show && sessionId != null) {
           final target = goToApprovalTargetOf(
             connectionStatus: state.connectionStatus,

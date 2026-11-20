@@ -16,6 +16,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// для платформы `defaultTargetPlatform` (`combosFor`, change
 /// `fix-approval-focus`, D15): сочетания ответа на одобрение различаются на
 /// macOS и в остальных ОС; точный модификатор `meta` нажимается всегда как ⌘.
+/// [afterModifiers] вызывается после нажатия модификаторов и до клавиши:
+/// тест сдвигает управляемые часы, имитируя «Alt и Shift зажаты заранее»
+/// (change `fix-approval-focus`, D14, решение пользователя 2026-11-20).
 /// Пустой каталог — ошибка теста, а не молчаливый пропуск.
 Future<void> pressShortcut(
   WidgetTester tester,
@@ -23,6 +26,7 @@ Future<void> pressShortcut(
   int combo = 0,
   bool useMeta = false,
   Duration settle = const Duration(milliseconds: 100),
+  void Function()? afterModifiers,
 }) async {
   final combos = shortcut.combosFor(defaultTargetPlatform);
   expect(
@@ -41,6 +45,7 @@ Future<void> pressShortcut(
   for (final modifier in modifiers) {
     await tester.sendKeyDownEvent(modifier);
   }
+  afterModifiers?.call();
   await tester.sendKeyEvent(keys.key);
   for (final modifier in modifiers.reversed) {
     await tester.sendKeyUpEvent(modifier);

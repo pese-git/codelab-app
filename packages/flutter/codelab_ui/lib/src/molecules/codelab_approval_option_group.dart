@@ -60,17 +60,14 @@ class CodeLabApprovalOption {
 /// Для чего: показать варианты и выбрать один кнопкой.
 ///
 /// Как использовать: группа НЕ берёт клавиатурный фокус сама и своих клавиш
-/// не привязывает. [shortcutsEnabled] оставлен для совместимости и ни на что
-/// не влияет.
+/// не привязывает; подсказки клавиш показывает только полоса
+/// `CodeLabApprovalPrompt`.
 class CodeLabApprovalOptionGroup extends StatelessWidget {
   const CodeLabApprovalOptionGroup({
     required this.options,
     required this.onSelected,
     this.selectedOptionId,
     this.enabled = true,
-    this.approveOptionId,
-    this.rejectOptionId,
-    this.shortcutsEnabled = true,
     super.key,
   });
 
@@ -78,9 +75,6 @@ class CodeLabApprovalOptionGroup extends StatelessWidget {
   final String? selectedOptionId;
   final CodeLabApprovalOptionSelected onSelected;
   final bool enabled;
-  final String? approveOptionId;
-  final String? rejectOptionId;
-  final bool shortcutsEnabled;
 
   @override
   Widget build(BuildContext context) {

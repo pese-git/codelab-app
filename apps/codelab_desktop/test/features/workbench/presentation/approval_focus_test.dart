@@ -47,6 +47,7 @@ import '../../../support/test_app_scope.dart';
 void main() {
   late FakeAcpTransport agent;
   late CodeLabShellCubit cubit;
+  var now = DateTime.utc(2026, 11, 20, 12);
 
   // Четыре стандартных варианта: сочетания всех видов должны не отвечать.
   const fourOptions = [
@@ -73,6 +74,7 @@ void main() {
   ];
 
   setUp(() {
+    now = DateTime.utc(2026, 11, 20, 12);
     final view = TestWidgetsFlutterBinding.ensureInitialized()
         .platformDispatcher
         .views
@@ -105,6 +107,7 @@ void main() {
       stdioTransportFactory: (_) => agent,
       projectFiles: projectFiles,
       settingsPages: settingsPages,
+      clock: () => now,
     );
     await tester.pumpWidget(
       binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
@@ -252,15 +255,12 @@ void main() {
     }
   }
 
-  /// Выдерживает задержку после появления (D14, п. 2): 500 мс на часах теста
-  /// и столько же реального времени. Часы реализации неизвестны тесту
-  /// (`DateTime.now` или `package:clock`), поэтому ждём по обоим.
+  /// Выдерживает задержку после появления (D14, п. 2): сдвигает управляемые
+  /// часы рабочего места на 600 мс (`CodeLabTestBinding(clock:)`), реального
+  /// ожидания нет (`testing.md` §20).
   Future<void> afterSettling(WidgetTester tester) async {
+    now = now.add(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 600)),
-    );
-    await tester.pump();
   }
 
   /// Нажимает сочетание ответа платформы после задержки: цель к этому
@@ -270,7 +270,12 @@ void main() {
     CodeLabShortcut shortcut,
   ) async {
     await afterSettling(tester);
-    await pressShortcut(tester, shortcut);
+    // Windows и Linux: Alt и Shift зажаты заранее, не меньше 150 мс.
+    await pressShortcut(
+      tester,
+      shortcut,
+      afterModifiers: () => now = now.add(const Duration(milliseconds: 200)),
+    );
     await settle(tester);
   }
 

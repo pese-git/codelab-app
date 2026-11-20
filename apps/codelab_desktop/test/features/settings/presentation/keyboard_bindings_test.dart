@@ -11,8 +11,9 @@
 //   рабочее место без `session/cancel`;
 // - `close-overlay`: Esc закрывает «Add connection profile», мастер
 //   провайдера, подтверждение `bypass` и палитру рабочего места;
-// - Cmd/Ctrl+Enter при ожидающем одобрении: с фокусом на одобрении — вариант
-//   `allow_once`, с фокусом в композере — сообщение в очереди;
+// - Cmd/Ctrl+Enter при ожидающем одобрении остаётся отправкой: с фокусом в
+//   композере — сообщение в очереди, ответа на одобрение нет (ответ — только
+//   глобальные сочетания ⌘Y, Alt+Shift+Y и другие, D14);
 // - подсказки шапки и сайдбара берут клавиши из каталога.
 //
 // Клавиши берутся из `CodeLabShortcut` (`pressShortcut`). Esc диалогов
@@ -82,6 +83,11 @@ void main() {
     late FakeAcpTransport agent;
     late CodeLabShellCubit cubit;
     late CodeLabTestBinding binding;
+
+    /// Управляемые часы рабочего места: задержка ответа сочетанием (500 мс) и
+    /// срок зажатия Alt+Shift (150 мс) двигаются явно, без реального ожидания
+    /// (`testing.md` §20).
+    var now = DateTime.utc(2026, 11, 20, 12);
 
     /// Кадры вместо `pumpAndSettle`: при ходе индикаторы анимируются
     /// бесконечно.
@@ -154,6 +160,7 @@ void main() {
         settingsPages: const SettingsPages(
           available: {SettingsPage.connection},
         ),
+        clock: () => now,
       );
       await tester.pumpWidget(
         binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
@@ -269,13 +276,16 @@ void main() {
         expect(permissionAnswers(), isEmpty, reason: 'Enter — не ответ');
         expect(cubit.state.queuedPrompts, isEmpty);
 
-        // Задержка после появления (D14, п. 2): на часах теста и реально.
+        // Задержка после появления (D14, п. 2) и срок зажатия Alt+Shift
+        // (Windows и Linux) — на управляемых часах.
+        now = now.add(const Duration(milliseconds: 600));
         await tester.pump(const Duration(milliseconds: 600));
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 600)),
+        await pressShortcut(
+          tester,
+          CodeLabShortcut.allowOnce,
+          afterModifiers: () =>
+              now = now.add(const Duration(milliseconds: 200)),
         );
-        await tester.pump();
-        await pressShortcut(tester, CodeLabShortcut.allowOnce);
         await settle(tester);
 
         final answers = permissionAnswers();

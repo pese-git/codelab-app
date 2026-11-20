@@ -106,8 +106,10 @@ class CodeLabShell extends StatelessWidget {
           // Ответ сочетанием (D14): кит сообщает только нажатие, решение —
           // application (`answerApprovalByShortcut`); видимость полосы
           // отвечает лента через ручку хоста, без неё — «не видна».
-          onAnswerApproval: (kind) => cubit.answerApprovalByShortcut(
+          clock: cubit.clock,
+          onAnswerApproval: (kind, held) => cubit.answerApprovalByShortcut(
             kind,
+            modifiersHeldFor: held,
             isVisible:
                 WorkbenchFocus.maybeOf(context)?.approvalVisibility.isVisible ??
                 (_, _) => false,

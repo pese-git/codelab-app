@@ -20,9 +20,10 @@
 // реализации — сценарии «не отвечает» (они закрепляют границу, пока ответа
 // сочетанием нет вовсе, и защищают от лишнего ответа после 7.5).
 //
-// Часы: реализация может брать время из `DateTime.now` или `package:clock`,
-// тест этого не знает, поэтому `afterSettling` ждёт 600 мс и на часах теста,
-// и реально.
+// Часы: рабочее место получает управляемые часы (`CodeLabTestBinding(clock:)`),
+// тест двигает их явно (`advance`, `afterSettling`), реального ожидания нет
+// (`testing.md` §20). Те же часы отсчитывают, сколько Alt и Shift зажаты до
+// буквы на Windows и Linux (`modifiers_not_held`, порог 150 мс).
 
 import 'dart:async';
 
@@ -75,8 +76,10 @@ void main() {
   late FakeAcpTransport agent;
   late CodeLabShellCubit cubit;
   late CodeLabTestBinding binding;
+  var now = DateTime.utc(2026, 11, 20, 12);
 
   setUp(() {
+    now = DateTime.utc(2026, 11, 20, 12);
     final view = TestWidgetsFlutterBinding.ensureInitialized()
         .platformDispatcher
         .views
@@ -97,34 +100,79 @@ void main() {
     await tester.pump();
   }
 
-  /// Задержка после появления (D14, п. 2): 600 мс на часах теста и реально.
-  Future<void> afterSettling(WidgetTester tester) async {
-    await tester.pump(const Duration(milliseconds: 600));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 600)),
-    );
-    await tester.pump();
+  /// Сдвигает управляемые часы и кадры на [by].
+  Future<void> advance(WidgetTester tester, Duration by) async {
+    now = now.add(by);
+    await tester.pump(by);
   }
+
+  /// Задержка после появления (D14, п. 2): 600 мс на управляемых часах.
+  Future<void> afterSettling(WidgetTester tester) =>
+      advance(tester, const Duration(milliseconds: 600));
+
+  /// Нажимает сочетание ответа так, как его нажимает пользователь: на Windows
+  /// и Linux Alt и Shift зажаты заранее ([hold]), на macOS условия нет.
+  Future<void> pressAnswerShortcut(
+    WidgetTester tester,
+    CodeLabShortcut shortcut, {
+    Duration hold = const Duration(milliseconds: 200),
+  }) => pressShortcut(
+    tester,
+    shortcut,
+    afterModifiers: defaultTargetPlatform == TargetPlatform.macOS
+        ? null
+        : () => now = now.add(hold),
+  );
 
   Future<void> pumpConnected(
     WidgetTester tester, {
     SettingsPages? settingsPages,
     FakeUserShellLauncher? shells,
+    FakeAcpTransport? withAgent,
+    Map<String, String> listed = const {},
   }) async {
-    agent = FakeAcpTransport();
+    agent = withAgent ?? FakeAcpTransport();
     binding = CodeLabTestBinding(
       project: '/workspace',
       transport: FakeAcpTransport(),
       stdioTransportFactory: (_) => agent,
       settingsPages: settingsPages,
       userShellLauncher: shells,
+      clock: () => now,
     );
     await tester.pumpWidget(
       binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
     );
     await tester.pump();
     cubit = binding.scope.resolve<CodeLabShellCubit>();
-    await tester.runAsync(() => cubit.startWith());
+    if (listed.isEmpty) {
+      await tester.runAsync(() => cubit.startWith());
+    } else {
+      // Агент отдаёт список сессий: запуск ждёт ответа на `session/list`.
+      await tester.runAsync(() async {
+        final request = agent.sent.firstWhere(
+          (m) => m is JsonRpcRequest && m.method == sessionListMethod,
+        );
+        final started = cubit.startWith();
+        final list = await request as JsonRpcRequest;
+        agent.emitInbound(
+          JsonRpcMessage.response(
+            id: list.id,
+            result: ListSessionsResponse(
+              sessions: [
+                for (final entry in listed.entries)
+                  SessionInfo(
+                    sessionId: SessionId(entry.key),
+                    cwd: entry.value,
+                    title: entry.key,
+                  ),
+              ],
+            ).toJson(),
+          ),
+        );
+        await started;
+      });
+    }
     await tester.pump();
   }
 
@@ -278,7 +326,7 @@ void main() {
       await shortFrames(tester);
       await afterSettling(tester);
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await settle(tester);
 
       final given = answers();
@@ -315,13 +363,13 @@ void main() {
       await shortFrames(tester);
       await afterSettling(tester);
 
-      await pressShortcut(tester, CodeLabShortcut.allowAlways);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowAlways);
       await shortFrames(tester);
       ask('session-1', 803);
       await settle(tester);
       await shortFrames(tester);
       await afterSettling(tester);
-      await pressShortcut(tester, CodeLabShortcut.rejectOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.rejectOnce);
       await settle(tester);
 
       final given = answers();
@@ -345,7 +393,7 @@ void main() {
         await focusComposer(tester);
         await afterSettling(tester);
 
-        await pressShortcut(tester, CodeLabShortcut.rejectAlways);
+        await pressAnswerShortcut(tester, CodeLabShortcut.rejectAlways);
         await settle(tester);
 
         final given = answers();
@@ -506,9 +554,8 @@ void main() {
     }
 
     testWidgets('Полоса не видна — первое нажатие показывает: ответа нет, '
-        'фокус прежний, в журнале not_visible; повторное нажатие отвечает', (
-      tester,
-    ) async {
+        'фокус прежний, в журнале not_visible; отсчёт 500 мс идёт от показа, '
+        'а не от активации', (tester) async {
       await pumpConnected(tester);
       await createSession(tester, 'session-1');
       await startTurn(tester);
@@ -534,7 +581,7 @@ void main() {
       await afterSettling(tester);
       expect(prompts, findsNothing, reason: 'полоса вне области, не построена');
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await shortFrames(tester);
 
       expect(answers(), isEmpty);
@@ -546,7 +593,18 @@ void main() {
       expect(skipped.single['request_id'], 'permission-821');
       expect(skipped.single['session_id'], 'session-1');
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      // Запрос активен давно, но полосу показали только что: через 100 мс
+      // после показа сочетание ещё не отвечает (D14, п. 2).
+      await advance(tester, const Duration(milliseconds: 100));
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
+      await settle(tester);
+      expect(answers(), isEmpty, reason: '100 мс после показа — рано');
+      expect(journal(_skippedEvent).last['reason'], 'settling');
+
+      // Через 500 мс после показа сочетание отвечает (часы уже ушли вперёд
+      // на срок зажатия модификаторов, поэтому добавляем остаток с запасом).
+      await advance(tester, const Duration(milliseconds: 500));
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await settle(tester);
 
       final given = answers();
@@ -564,10 +622,10 @@ void main() {
       ask('session-1', 822);
       await settle(tester);
       // Полоса построена, но прошло заведомо меньше 500 мс.
-      await tester.pump(const Duration(milliseconds: 100));
+      await advance(tester, const Duration(milliseconds: 100));
       expect(prompts, findsOneWidget);
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await settle(tester);
 
       expect(answers(), isEmpty);
@@ -577,7 +635,7 @@ void main() {
       expect(skipped.single['request_id'], 'permission-822');
 
       await afterSettling(tester);
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await settle(tester);
 
       expect(chosenOption(answers().single), 'allow-once');
@@ -596,14 +654,14 @@ void main() {
       await shortFrames(tester);
       await afterSettling(tester);
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await settle(tester);
       expect(answers(), hasLength(1));
       expect(answers().single.id, const JsonRpcId.integer(823));
 
       // B стало активным; через 100 мс пользователь нажимает снова.
-      await tester.pump(const Duration(milliseconds: 100));
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await advance(tester, const Duration(milliseconds: 100));
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await settle(tester);
 
       expect(answers(), hasLength(1), reason: 'ответ на B не отправлен');
@@ -650,6 +708,104 @@ void main() {
   });
 
   // ---------------------------------------------------------------------
+  // Windows и Linux: Alt и Shift зажаты заранее (решение пользователя
+  // 2026-11-20): Alt+Shift — ещё и смена раскладки.
+
+  group('Alt и Shift зажаты заранее (Windows и Linux)', () {
+    for (final entry in {'Linux': linux, 'Windows': windows}.entries) {
+      testWidgets('${entry.key}: вместе с буквой и меньше 150 мс не отвечает, '
+          '150 мс и больше отвечает', (tester) async {
+        await pumpConnected(tester);
+        await sessionWithApproval(tester, 851);
+        await focusComposer(tester);
+        await afterSettling(tester);
+
+        // Модификаторы нажаты одновременно с буквой.
+        await pressShortcut(tester, CodeLabShortcut.allowOnce);
+        await settle(tester);
+        expect(answers(), isEmpty, reason: 'вместе с буквой');
+        // Смена раскладки не повод прокручивать ленту к полосе.
+        expect(focusInside<CodeLabPromptComposer>(), isTrue);
+
+        await pressShortcut(
+          tester,
+          CodeLabShortcut.allowOnce,
+          afterModifiers: () =>
+              now = now.add(const Duration(milliseconds: 149)),
+        );
+        await settle(tester);
+        expect(answers(), isEmpty, reason: '149 мс');
+
+        final skipped = journal(_skippedEvent);
+        expect(skipped, hasLength(2));
+        for (final entry in skipped) {
+          expect(entry['reason'], 'modifiers_not_held');
+          expect(entry['request_id'], 'permission-851');
+          expect(entry['session_id'], 'session-1');
+        }
+
+        await pressShortcut(
+          tester,
+          CodeLabShortcut.allowOnce,
+          afterModifiers: () =>
+              now = now.add(const Duration(milliseconds: 150)),
+        );
+        await settle(tester);
+
+        final given = answers();
+        expect(given, hasLength(1));
+        expect(chosenOption(given.single), 'allow-once');
+        expect(journal(_skippedEvent), hasLength(2));
+        await tearDownApp(tester);
+      }, variant: entry.value);
+    }
+
+    testWidgets('macOS: ⌘Y отвечает без условия зажатия', (tester) async {
+      await pumpConnected(tester);
+      await sessionWithApproval(tester, 852);
+      await focusComposer(tester);
+      await afterSettling(tester);
+
+      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await settle(tester);
+
+      expect(answers(), hasLength(1));
+      expect(journal(_skippedEvent), isEmpty);
+      await tearDownApp(tester);
+    }, variant: macOS);
+  });
+
+  // ---------------------------------------------------------------------
+  // Предыдущий ответ в полёте.
+
+  group('предыдущий ответ в полёте', () {
+    testWidgets('второе нажатие до ответа не отправляет второй ответ и '
+        'оставляет answer_in_flight в журнале', (tester) async {
+      await pumpConnected(tester);
+      await sessionWithApproval(tester, 861);
+      await afterSettling(tester);
+
+      // Два нажатия подряд, пока первый ответ не завершён.
+      void press() => cubit.answerApprovalByShortcut(
+        CodeLabApprovalOptionKind.allowOnce,
+        isVisible: (_, _) => true,
+        modifiersHeldFor: null,
+      );
+      press();
+      press();
+      await settle(tester);
+
+      expect(answers(), hasLength(1));
+      final skipped = journal(_skippedEvent);
+      expect(skipped, hasLength(1));
+      expect(skipped.single['reason'], 'answer_in_flight');
+      expect(skipped.single['request_id'], 'permission-861');
+      expect(skipped.single['session_id'], 'session-1');
+      await tearDownApp(tester);
+    });
+  });
+
+  // ---------------------------------------------------------------------
   // Цель и вариант.
 
   group('цель и вариант', () {
@@ -668,7 +824,7 @@ void main() {
       expect(prompts, findsNWidgets(2));
       await afterSettling(tester);
 
-      await pressShortcut(tester, CodeLabShortcut.rejectOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.rejectOnce);
       await settle(tester);
 
       final given = answers();
@@ -761,7 +917,7 @@ void main() {
       await afterSettling(tester);
       expect(prompts, findsOneWidget, reason: 'блок под строкой agent виден');
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await settle(tester);
 
       final given = answers();
@@ -787,7 +943,7 @@ void main() {
       await focusComposer(tester);
       await afterSettling(tester);
 
-      await pressShortcut(tester, CodeLabShortcut.allowAlways);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowAlways);
       await settle(tester);
 
       expect(answers(), isEmpty);
@@ -819,7 +975,7 @@ void main() {
         findsOneWidget,
       );
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await settle(tester);
 
       expect(answers(), isEmpty);
@@ -834,7 +990,7 @@ void main() {
       await shortFrames(tester);
       expect(find.byType(CodeLabCommandPaletteSurface), findsOneWidget);
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await settle(tester);
 
       expect(answers(), isEmpty);
@@ -859,11 +1015,51 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Add connection profile'), findsOneWidget);
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await settle(tester);
 
       expect(answers(), isEmpty);
       expect(find.text('Add connection profile'), findsOneWidget);
+      await tearDownApp(tester);
+    }, variant: macOS);
+
+    testWidgets('диалог открытия сессии в корне диска: ⌘Y не отвечает', (
+      tester,
+    ) async {
+      await pumpConnected(
+        tester,
+        withAgent: FakeAcpTransport()
+          ..initializeAgentCapabilities = const AgentCapabilities(
+            loadSession: true,
+            sessionCapabilities: SessionCapabilities(
+              list: SessionListCapabilities(),
+            ),
+          ),
+        listed: const {'s-root': '/'},
+      );
+      await sessionWithApproval(tester, 846);
+      await afterSettling(tester);
+      cubit.selectSession('s-root');
+      await settle(tester);
+      await shortFrames(tester);
+      expect(cubit.state.pendingRootSession, isNotNull);
+
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
+      await settle(tester);
+
+      expect(answers(), isEmpty, reason: 'диалог закрывает рабочее место');
+      // Не полагаемся на проверку видимости: даже если лента сочтёт полосу
+      // видимой, пока диалог открыт, решение отвечать не должно. Первое
+      // нажатие перезапустило отсчёт (not_visible), поэтому ждём заново.
+      await afterSettling(tester);
+      cubit.answerApprovalByShortcut(
+        CodeLabApprovalOptionKind.allowOnce,
+        isVisible: (_, _) => true,
+        modifiersHeldFor: null,
+      );
+      await settle(tester);
+      expect(answers(), isEmpty, reason: 'диалог закрывает рабочее место');
+      expect(cubit.state.pendingRootSession, isNotNull);
       await tearDownApp(tester);
     }, variant: macOS);
 
@@ -899,7 +1095,7 @@ void main() {
           CodeLabShortcut.rejectOnce,
           CodeLabShortcut.rejectAlways,
         ]) {
-          await pressShortcut(tester, shortcut);
+          await pressAnswerShortcut(tester, shortcut);
           await settle(tester);
         }
 
@@ -922,6 +1118,7 @@ void main() {
         project: '/workspace',
         transport: FakeAcpTransport(),
         stdioTransportFactory: (_) => starts++ == 0 ? old : fresh,
+        clock: () => now,
       );
       await tester.pumpWidget(
         binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
@@ -937,7 +1134,7 @@ void main() {
       await shortFrames(tester);
       await afterSettling(tester);
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressAnswerShortcut(tester, CodeLabShortcut.allowOnce);
       await settle(tester);
 
       expect(

@@ -85,11 +85,7 @@ void main() {
     bool shortcutsEnabled = true,
     List<CodeLabApprovalOption> list = options,
   }) => FluentApp(
-    home: CodeLabApprovalOptionGroup(
-      options: list,
-      shortcutsEnabled: shortcutsEnabled,
-      onSelected: selected.add,
-    ),
+    home: CodeLabApprovalOptionGroup(options: list, onSelected: selected.add),
   );
 
   // Обе поверхности одобрения: полоса ленты и молекула группы вариантов.

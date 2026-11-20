@@ -9,6 +9,24 @@ import 'package:codelab_ui/codelab_ui.dart';
 /// (`fix-approval-focus`, D14, п. 2; решение пользователя Q8).
 const approvalShortcutSettleDelay = Duration(milliseconds: 500);
 
+/// Сколько Alt и Shift должны быть зажаты до буквы на Windows и Linux
+/// (решение пользователя 2026-11-20, D14): Alt+Shift — ещё и смена раскладки,
+/// буква, наложившаяся на неё, не должна отвечать на одобрение. Срок
+/// сообщает кит (`CodeLabWorkbenchShortcuts.onAnswerApproval`), порог —
+/// политика application. На macOS (⌘) условия нет.
+const approvalShortcutModifierHoldDelay = Duration(milliseconds: 150);
+
+/// Откуда пришёл ответ на одобрение; значение поля `source` события
+/// `workbench.approval_answer` (D9).
+enum ApprovalAnswerSource {
+  button('button'),
+  shortcut('shortcut');
+
+  const ApprovalAnswerSource(this.wireName);
+
+  final String wireName;
+}
+
 /// Почему нажатие сочетания ответа не отправило ответ (D9, D14).
 ///
 /// [wireName] — значение поля `reason` события журнала
@@ -17,7 +35,14 @@ enum ApprovalShortcutSkipReason {
   noTarget('no_target'),
   noOption('no_option'),
   notVisible('not_visible'),
-  settling('settling');
+  settling('settling'),
+
+  /// Windows и Linux: Alt и Shift зажаты меньше
+  /// [approvalShortcutModifierHoldDelay] до буквы (смена раскладки).
+  modifiersNotHeld('modifiers_not_held'),
+
+  /// Предыдущий ответ ещё в полёте; новое нажатие ничего не отправляет.
+  answerInFlight('answer_in_flight');
 
   const ApprovalShortcutSkipReason(this.wireName);
 
@@ -71,8 +96,10 @@ final class ApprovalShortcutSkipped extends ApprovalShortcutDecision {
 /// отсчёт заново; одобрение, которое трекер ни разу не видел, считается только
 /// что появившимся.
 ///
-/// Как использовать: владелец (`CodeLabShellCubit`) вызывает [observe] на
-/// каждый снимок активной сессии, функция решения читает [ageOf]. Часы —
+/// Как использовать: владелец (`ActiveSessionCubit`) вызывает [observe] на
+/// каждый снимок показанной сессии, функция решения читает [ageOf]; после
+/// показа невидимой полосы хост вызывает [restart] (отсчёт идёт от показа,
+/// а не от активации). Часы —
 /// параметр, как у `WorkbenchUsagePane`: тесты подставляют свои.
 final class ApprovalActivationTracker {
   ApprovalActivationTracker({required DateTime Function() clock})
@@ -107,6 +134,15 @@ final class ApprovalActivationTracker {
     }
   }
 
+  /// Начинает отсчёт [approvalId] заново, если оно активно: после показа
+  /// невидимой полосы (`not_visible`) пользователь видит её только сейчас, и
+  /// 500 мс идут от показа (D14, п. 2). Для другого id ничего не делает.
+  void restart(ApprovalRequestId approvalId) {
+    if (_activeId == approvalId) {
+      _since = _clock();
+    }
+  }
+
   /// Сколько [approvalId] активно; `null` — не активно или не наблюдалось.
   Duration? ageOf(ApprovalRequestId approvalId) {
     final since = _since;
@@ -124,9 +160,12 @@ final class ApprovalActivationTracker {
 /// виджет (AGENTS.md §10). Кит сообщает только нажатие.
 ///
 /// Для чего: хост вызывает функцию на каждое нажатие и выполняет результат.
-/// Порядок проверок: цель (`no_target`), вариант по виду (`no_option`),
-/// видимость полосы (`not_visible`), задержка после появления (`settling`).
-/// Отказ, кроме `no_target`, только показывает полосу (`show`).
+/// Порядок проверок: цель (`no_target`), Alt и Shift зажаты заранее
+/// (`modifiers_not_held`; [modifiersHeldFor] `null` — macOS, условия нет),
+/// вариант по виду (`no_option`), видимость полосы (`not_visible`), задержка
+/// после появления (`settling`). Отказ, кроме `no_target` и
+/// `modifiers_not_held` (возможная смена раскладки — не повод прокручивать
+/// ленту), только показывает полосу (`show`).
 ///
 /// Как использовать: [view] — снимок активной сессии, [isVisible] — ручка
 /// ленты, [activation] — трекер с [ApprovalActivationTracker.observe] на
@@ -137,6 +176,7 @@ ApprovalShortcutDecision approvalShortcutDecisionOf({
   required CodeLabApprovalOptionKind kind,
   required bool Function(String sessionId, String approvalId) isVisible,
   required ApprovalActivationTracker activation,
+  required Duration? modifiersHeldFor,
 }) {
   if (connectionStatus != CodeLabConnectionStatus.connected ||
       view == null ||
@@ -158,13 +198,20 @@ ApprovalShortcutDecision approvalShortcutDecisionOf({
     );
   }
   final session = target.sessionId.value;
-  ApprovalShortcutSkipped skipped(ApprovalShortcutSkipReason reason) =>
-      ApprovalShortcutSkipped(
-        reason: reason,
-        sessionId: session,
-        approvalId: target!.approvalId,
-        show: true,
-      );
+  ApprovalShortcutSkipped skipped(
+    ApprovalShortcutSkipReason reason, {
+    bool show = true,
+  }) => ApprovalShortcutSkipped(
+    reason: reason,
+    sessionId: session,
+    approvalId: target!.approvalId,
+    show: show,
+  );
+
+  if (modifiersHeldFor != null &&
+      modifiersHeldFor < approvalShortcutModifierHoldDelay) {
+    return skipped(ApprovalShortcutSkipReason.modifiersNotHeld, show: false);
+  }
 
   // Вариант выбирается по виду, а не по подписи агента (spec «Approval options
   // are rendered and bound to shortcuts by kind»).

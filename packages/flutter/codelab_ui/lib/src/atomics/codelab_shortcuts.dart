@@ -354,11 +354,18 @@ enum CodeLabShortcut {
   List<CodeLabKeyCombo> combosFor(TargetPlatform platform) =>
       (platform == TargetPlatform.macOS ? macCombos : otherCombos) ?? combos;
 
-  /// Нотации поиска страницы «Keyboard» по комбинациям записи на всех
-  /// платформах (D15, D8): поиск `alt shift y` на macOS находит `allow-once`.
+  /// Нотации поиска страницы «Keyboard» (D15, D8): общие комбинации — все
+  /// нотации, комбинации macOS — только нотации macOS (символы и слова ⌘/Option),
+  /// комбинации Windows и Linux — только слова этих ОС. Иначе поиск находил бы
+  /// клавиши, которых на платформе нет (`Y`, `Alt+Z` для записи с ⌘).
   Iterable<String> searchNotations() => {
-    for (final list in [combos, ?macCombos, ?otherCombos])
-      for (final combo in list) ...combo.searchNotations(),
+    for (final combo in combos) ...combo.searchNotations(),
+    for (final combo in macCombos ?? const <CodeLabKeyCombo>[]) ...[
+      combo.compactFor(TargetPlatform.macOS),
+      combo.spokenFor(TargetPlatform.macOS),
+    ],
+    for (final combo in otherCombos ?? const <CodeLabKeyCombo>[])
+      combo.spokenFor(TargetPlatform.windows),
   };
 
   /// Привязка [action] ко всем активаторам комбинаций записи на
@@ -375,4 +382,70 @@ enum CodeLabShortcut {
       ))
         activator: action,
   };
+}
+
+/// Сколько Alt и Shift зажаты одновременно, до текущего нажатия.
+///
+/// Почему: на Windows и Linux Alt+Shift — ещё и смена раскладки. Если буква
+/// ответа наложилась на смену раскладки, пользователь не собирался отвечать на
+/// одобрение (решение пользователя 2026-11-20, `fix-approval-focus`, D14).
+/// Различить это можно только по времени: модификаторы «зажаты заранее»,
+/// а не нажаты вместе с буквой.
+///
+/// Для чего: кит различает нажатие и сообщает хосту, сколько модификаторы уже
+/// зажаты (`CodeLabWorkbenchShortcuts.onAnswerApproval`); сколько этого
+/// достаточно, решает хост (политика — application, AGENTS.md §10). Класс не
+/// читает клавиши событий, а только состояние модификаторов
+/// `HardwareKeyboard`, поэтому литералов клавиш (сторож каталога, D3) нет.
+///
+/// Как использовать: владелец вызывает [attach] один раз и [detach] при
+/// освобождении; [heldFor] читают в момент нажатия сочетания. Обработчик
+/// `HardwareKeyboard` вызывается раньше фокус-дерева, поэтому к нажатию буквы
+/// отсчёт уже обновлён. [clock] — внедряемые часы (тесты двигают их явно).
+final class CodeLabModifierHoldTracker {
+  CodeLabModifierHoldTracker({DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
+
+  final DateTime Function() _clock;
+  DateTime? _since;
+  bool _attached = false;
+
+  /// Подписывается на события клавиатуры; повторный вызов ничего не делает.
+  void attach() {
+    if (_attached) {
+      return;
+    }
+    _attached = true;
+    HardwareKeyboard.instance.addHandler(_onKeyEvent);
+  }
+
+  /// Отписывается; без вызова подписка пережила бы владельца.
+  void detach() {
+    if (!_attached) {
+      return;
+    }
+    _attached = false;
+    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
+  }
+
+  bool _onKeyEvent(KeyEvent event) {
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isAltPressed && keyboard.isShiftPressed) {
+      _since ??= _clock();
+    } else {
+      _since = null;
+    }
+    // Событие не поглощается: фокус-дерево обработает его как обычно.
+    return false;
+  }
+
+  /// Сколько Alt и Shift зажаты вместе; [Duration.zero] — не зажаты или
+  /// зажаты только что.
+  Duration get heldFor {
+    final since = _since;
+    if (since == null) {
+      return Duration.zero;
+    }
+    return _clock().difference(since);
+  }
 }

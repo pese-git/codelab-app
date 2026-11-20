@@ -540,7 +540,7 @@ Future<void> _approvalAnswer(
     await tester.pumpWidget(
       FluentApp(
         home: CodeLabWorkbenchShortcuts(
-          onAnswerApproval: answered.add,
+          onAnswerApproval: (kind, _) => answered.add(kind),
           child: const SizedBox(width: 320, height: 200),
         ),
       ),

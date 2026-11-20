@@ -251,7 +251,9 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   final DateTime Function() _clock;
 
   /// Момент, с которого активное одобрение показанной сессии стало активным
-  /// (D14, п. 2). Cubit сообщает ему каждый снимок показанной сессии.
+  /// (D14, п. 2). Владелец — этот Cubit: он сообщает трекеру каждый снимок
+  /// показанной сессии; решение по сочетанию (`CodeLabShellCubit`) только
+  /// читает его и после показа невидимой полосы перезапускает отсчёт.
   late final ApprovalActivationTracker activation;
   late final StreamSubscription<PromptOutcome> _outcomeSubscription;
   StreamSubscription<SessionView>? _viewSubscription;
@@ -565,7 +567,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     required ApprovalRequestId approvalId,
     required SessionId sessionId,
     required String optionId,
-    String source = 'button',
+    ApprovalAnswerSource source = ApprovalAnswerSource.button,
   }) async {
     if (state.isRespondingToApproval) {
       return;
@@ -605,7 +607,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     SessionHandle handle,
     ApprovalRequestId approvalId,
     String optionId,
-    String source,
+    ApprovalAnswerSource source,
   ) {
     final logger = _approvalLogger;
     if (logger == null) {
@@ -630,7 +632,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
         'request_id': approvalId.value,
         'tool_call_id': ?_toolCallIdOf(handle.id.value, approvalId),
         'kind': ?kind,
-        'source': source,
+        'source': source.wireName,
       },
     );
   }
