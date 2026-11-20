@@ -10,6 +10,7 @@
 
 import 'package:codelab_desktop/features/settings/application/keyboard_shortcut_search.dart';
 import 'package:codelab_ui/codelab_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/keyboard_rows.dart';
@@ -25,9 +26,9 @@ KeyboardShortcutEntry _entry(
     shortcut: shortcut,
     action: translated[row.id] ?? row.action,
     englishAction: row.action,
-    notations: [
-      for (final combo in shortcut.combos) ...combo.searchNotations(),
-    ],
+    // Нотации записи на всех платформах (change `fix-approval-focus`, D15):
+    // у сочетаний ответа клавиши macOS и остальных ОС различаются.
+    notations: shortcut.searchNotations().toList(),
   );
 }
 
@@ -90,11 +91,44 @@ void main() {
     ]);
   });
 
-  test('символы macOS и слова macOS находят allow-always', () {
-    for (final query in const ['⌥⌘⏎', 'Option+Cmd+Enter', 'ctrl alt enter']) {
+  test('символы macOS, слова macOS и клавиши Windows и Linux находят '
+      'allow-always', () {
+    for (final query in const ['⌥⌘Y', 'Option+Cmd+Y', 'alt shift q']) {
+      expect(_ids(filterKeyboardShortcuts(_entries(), query)), [
+        'allow-always',
+      ], reason: query);
+    }
+  });
+
+  // Спека app-settings «Страница «Keyboard»: поиск»: нотации всех платформ
+  // участвуют в поиске независимо от платформы, на которой открыта страница.
+  test('«alt shift y» на macOS находит только allow-once', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    expect(_ids(filterKeyboardShortcuts(_entries(), 'alt shift y')), [
+      'allow-once',
+    ]);
+  });
+
+  test('«⌥⇧⌘Z» и «alt shift w» находят только reject-always, «ctrl y» — '
+      'ничего (Ctrl+Y не ответ)', () {
+    for (final query in const ['⌥⇧⌘Z', 'alt shift w']) {
+      expect(_ids(filterKeyboardShortcuts(_entries(), query)), [
+        'reject-always',
+      ], reason: query);
+    }
+    expect(filterKeyboardShortcuts(_entries(), 'ctrl y'), isEmpty);
+  });
+
+  // Нотации комбинаций macOS не собираются в слова Windows и Linux и наоборот
+  // (ревью итерации 7): у записи с ⌘ нет клавиш `Y`, `Alt+Z`, `Alt+Shift+Z`.
+  test('несуществующие клавиши не находят ничего: «alt shift z», «alt z», '
+      '«y»', () {
+    for (final query in const ['alt shift z', 'alt z', 'alt y']) {
       expect(
-        _ids(filterKeyboardShortcuts(_entries(), query)),
-        contains('allow-always'),
+        filterKeyboardShortcuts(_entries(), query),
+        isEmpty,
         reason: query,
       );
     }
@@ -132,12 +166,22 @@ void main() {
   test('ничего не найдено: «zzz» даёт пустой список, а «» — все записи', () {
     // Первая проверка отличает пустой результат от «функция ничего не
     // отбирает».
-    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(19));
+    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(20));
     expect(filterKeyboardShortcuts(_entries(), 'zzz'), isEmpty);
   });
 
+  test('«ctrl shift a», «⇧⌘A» и «Shift+Cmd+A» находят только go-to-approval '
+      '(change `fix-approval-focus`, D7; spec app-settings «Поиск строки '
+      'перехода»)', () {
+    for (final query in const ['ctrl shift a', '⇧⌘A', 'Shift+Cmd+A']) {
+      expect(_ids(filterKeyboardShortcuts(_entries(), query)), [
+        'go-to-approval',
+      ], reason: query);
+    }
+  });
+
   test('поиск не идёт по «Where»: «files tree» ничего не находит', () {
-    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(19));
+    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(20));
     // «Files tree» — текст «Where» строк дерева, но не их действия.
     expect(filterKeyboardShortcuts(_entries(), 'files tree'), isEmpty);
   });

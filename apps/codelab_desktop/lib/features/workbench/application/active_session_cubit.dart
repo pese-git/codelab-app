@@ -31,6 +31,7 @@ import '../../usage/application/usage_csv.dart';
 import '../../usage/application/usage_pane_data.dart';
 import 'agents_pane_data.dart';
 import 'shell_part.dart';
+import 'approval_shortcut_decision.dart';
 import 'ui_mappers.dart';
 
 /// Показываемая сессия: лента, инспектор, очередь, одобрения, опции, план.
@@ -209,14 +210,19 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     required UsageCsvSaver usageCsvSaver,
     required AppStrings strings,
     Logger? usageLogger,
+    Logger? approvalLogger,
     DateTime Function()? clock,
+    DateTime Function()? wallClock,
   }) : _workspace = workspace,
        _diagnostics = diagnostics,
        _usageCsvSaver = usageCsvSaver,
        _strings = strings,
        _usageLogger = usageLogger,
+       _approvalLogger = approvalLogger,
        _clock = clock ?? DateTime.now,
+       _wallClock = wallClock ?? clock ?? DateTime.now,
        super(const ActiveSessionState()) {
+    activation = ApprovalActivationTracker(clock: _clock);
     _languageSubscription = strings.changes.listen(_handleLanguage);
     // Исход хода любой сессии — отправленного отсюда и ушедшего из очереди
     // kit: очередь могла сдвинуться.
@@ -239,7 +245,21 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   /// События `usage_pane.refresh` и `usage_pane.export` (D13): логгер
   /// `codelab_desktop.usage`; без секретов, путей, подписей и чисел.
   final Logger? _usageLogger;
+
+  /// События `workbench.approval_answer` и
+  /// `workbench.approval_shortcut_skipped` (D9, D14): без сырых аргументов,
+  /// команды, заголовка и подписей вариантов агента.
+  final Logger? _approvalLogger;
   final DateTime Function() _clock;
+
+  /// Время стены для имени CSV; отсчёты задержек идут по [_clock] (монотонным).
+  final DateTime Function() _wallClock;
+
+  /// Момент, с которого активное одобрение показанной сессии стало активным
+  /// (D14, п. 2). Владелец — этот Cubit: он сообщает трекеру каждый снимок
+  /// показанной сессии; решение по сочетанию (`CodeLabShellCubit`) только
+  /// читает его и после показа невидимой полосы перезапускает отсчёт.
+  late final ApprovalActivationTracker activation;
   late final StreamSubscription<PromptOutcome> _outcomeSubscription;
   StreamSubscription<SessionView>? _viewSubscription;
   SessionHandle? _watchedHandle;
@@ -257,6 +277,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     final id = session.id.value;
     final view = _handle(id)?.current;
     _shown = session;
+    activation.observe(view);
     emit(
       state._copyWith(
         sessionId: id,
@@ -287,6 +308,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     final id = session.id.value;
     _shown = session;
     final view = _handle(id)?.current;
+    activation.observe(view);
     emit(
       state._copyWith(
         sessionId: id,
@@ -317,7 +339,15 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   /// Единственное место сборки ленты: [show] и смена языка ([_handleLanguage])
   /// строят её одинаково, поэтому после смены языка лента равна ленте, которую
   /// построил бы новый `session/update` (D5 п. 1).
-  List<CodeLabTranscriptRow> _rowsOf(AcpSession session, SessionView? view) {
+  ///
+  /// [approvalsEnabled] — переопределение доступности кнопок одобрений для
+  /// кадра, который выставляет и признак ответа, и ленту одним `emit`; без него
+  /// берётся текущее состояние.
+  List<CodeLabTranscriptRow> _rowsOf(
+    AcpSession session,
+    SessionView? view, {
+    bool? approvalsEnabled,
+  }) {
     // Соединение kit в `canRetry` не учитывает — его проверяет хост
     // (design D4 change `add-connection-and-error-states`).
     final canRetry =
@@ -328,7 +358,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       view?.transcript ?? const [],
       cwd: session.cwd,
       isRunning: view?.status == SessionStatusView.running,
-      approvalsEnabled: !state.isRespondingToApproval,
+      approvalsEnabled: approvalsEnabled ?? !state.isRespondingToApproval,
       onApprovalSelected: _onApprovalSelected,
       onRetry: canRetry ? () => unawaited(retryTurn()) : null,
       l10n: _l10n,
@@ -542,6 +572,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     required ApprovalRequestId approvalId,
     required SessionId sessionId,
     required String optionId,
+    ApprovalAnswerSource source = ApprovalAnswerSource.button,
   }) async {
     if (state.isRespondingToApproval) {
       return;
@@ -550,6 +581,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     if (handle == null) {
       return;
     }
+    _logApprovalAnswer(handle, approvalId, optionId, source);
 
     emit(state._copyWith(isRespondingToApproval: true));
     try {
@@ -558,7 +590,94 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       // Ошибка уже записана диагностикой kit.
     }
     if (isClosed) return;
-    emit(state._copyWith(isRespondingToApproval: false));
+    // Кнопки других одобрений гасились на время ответа (`approvalsEnabled`),
+    // а лента пересобирается только по `sessionChanges`. Если после ответа
+    // нового кадра нет, оставшееся одобрение так и осталось бы выключенным и
+    // не отвечало бы на сочетание: лента пересобирается здесь же
+    // (`fix-approval-focus`, design.md, D4, п. 4).
+    // Один `emit`: два подряд дали бы промежуточный кадр с включёнными
+    // кнопками и старой лентой.
+    final id = state.sessionId;
+    final shown = _shown;
+    final rows = id != null && shown != null && shown.id.value == id
+        ? _rowsOf(shown, _handle(id)?.current, approvalsEnabled: true)
+        : state.transcriptRows;
+    emit(state._copyWith(isRespondingToApproval: false, transcriptRows: rows));
+  }
+
+  /// Пишет `workbench.approval_answer` (D9): каждый ответ с рабочего места —
+  /// кнопкой или сочетанием — с источником решения. Поля: `session_id`,
+  /// `request_id`, `tool_call_id`, `kind`, `source`; сырых данных вызова нет.
+  void _logApprovalAnswer(
+    SessionHandle handle,
+    ApprovalRequestId approvalId,
+    String optionId,
+    ApprovalAnswerSource source,
+  ) {
+    final logger = _approvalLogger;
+    if (logger == null) {
+      return;
+    }
+    PendingApprovalView? approval;
+    for (final candidate in handle.current.pendingApprovals) {
+      if (candidate.approvalId == approvalId) {
+        approval = candidate;
+      }
+    }
+    String? kind;
+    for (final option in approval?.options ?? const <PermissionOption>[]) {
+      if (option.optionId.value == optionId) {
+        kind = option.kind.wireName;
+      }
+    }
+    logger.info(
+      'workbench.approval_answer',
+      context: {
+        'session_id': handle.id.value,
+        'request_id': approvalId.value,
+        'tool_call_id': ?_toolCallIdOf(handle.id.value, approvalId),
+        'kind': ?kind,
+        'source': source.wireName,
+      },
+    );
+  }
+
+  /// `tool_call_id` запроса [approvalId] показанной сессии для журнала;
+  /// `null`, если сессия не показана или запроса нет.
+  String? _toolCallIdOf(String sessionId, ApprovalRequestId approvalId) {
+    final shown = _shown;
+    if (shown == null || shown.id.value != sessionId) {
+      return null;
+    }
+    for (final turn in shown.turns) {
+      final request = turn.approvals[approvalId];
+      if (request != null) {
+        return request.toolCall.id.value;
+      }
+    }
+    return null;
+  }
+
+  /// Пишет `workbench.approval_shortcut_skipped` (D9): нажатие сочетания
+  /// ответа, не давшее ответа. `request_id` — только если цель есть.
+  ///
+  /// [visibilityDetail] — только для `not_visible`: типы и геометрия из
+  /// `CodeLabApprovalVisibilityResult.diagnostic` (`out_of_viewport bar=…`,
+  /// `obscured by=<Type> at=(x,y)`, `not_built`); подписей и текста ленты нет
+  /// (AGENTS.md §16).
+  void logApprovalShortcutSkipped(
+    ApprovalShortcutSkipped skipped, {
+    String? visibilityDetail,
+  }) {
+    _approvalLogger?.info(
+      'workbench.approval_shortcut_skipped',
+      context: {
+        'session_id': ?skipped.sessionId,
+        'request_id': ?skipped.approvalId?.value,
+        'reason': skipped.reason.wireName,
+        'visibility_detail': ?visibilityDetail,
+      },
+    );
   }
 
   /// Отправляет агенту выбор [value] опции [configId]. Показанные опции
@@ -680,7 +799,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     UsageCsvSaveResult result;
     try {
       result = await _usageCsvSaver.save(
-        suggestedName: _csvNameOf(id, _clock()),
+        suggestedName: _csvNameOf(id, _wallClock()),
         csv: buildUsageCsv(data),
       );
     } on Object catch (error) {
@@ -884,6 +1003,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
     if (isClosed || state.sessionId != sessionId) {
       return;
     }
+    activation.observe(view);
     final data = sessionStatusDataOf(view, l10n: _l10n);
     final usage = _usageOf(sessionId, view, _shown?.cwd ?? '');
     if (data != state.statusBar || !identical(usage, state.usage)) {

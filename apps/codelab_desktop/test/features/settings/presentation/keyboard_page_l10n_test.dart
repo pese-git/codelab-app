@@ -134,7 +134,7 @@ void main() {
       findsOneWidget,
     );
 
-    expect(_rowIds(tester), hasLength(19));
+    expect(_rowIds(tester), hasLength(20));
     for (final row in keyboardRows) {
       final texts = _texts(tester, _row(row.id));
       expect(texts, hasLength(2), reason: '${row.id}: действие и место');
@@ -142,6 +142,29 @@ void main() {
       expect(texts.first, isNot(row.action), reason: row.id);
       // Клавиши не переводятся: те же плашки, что на английском.
       expect(_caps(tester, _row(row.id)), row.linuxCaps, reason: row.id);
+    }
+  }, variant: variant);
+
+  testWidgets('русские тексты строки перехода и нового места строк решения '
+      '(D7, решение пользователя Q4)', (tester) async {
+    await _pump(tester, _ru);
+
+    expect(_texts(tester, _row('go-to-approval')), [
+      'Перейти к одобрению',
+      'Рабочее место, пока ждёт одобрение',
+    ]);
+    for (final id in const [
+      'allow-once',
+      'allow-always',
+      'reject-once',
+      'reject-always',
+    ]) {
+      expect(
+        _texts(tester, _row(id)).last,
+        'Рабочее место, самое раннее ожидающее одобрение, если в нём есть '
+        'этот вариант',
+        reason: id,
+      );
     }
   }, variant: variant);
 
@@ -173,7 +196,7 @@ void main() {
   testWidgets('«zzz» при русском интерфейсе: строка пустого результата и '
       'footer', (tester) async {
     await _pump(tester, _ru);
-    expect(_rowIds(tester), hasLength(19));
+    expect(_rowIds(tester), hasLength(20));
 
     await _type(tester, 'zzz');
 

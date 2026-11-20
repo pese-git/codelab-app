@@ -40,6 +40,20 @@ List<String> _caps(WidgetTester tester, Finder scope) => [
 CodeLabKeyCombo _combo(CodeLabShortcut shortcut, [int index = 0]) =>
     shortcut.combos[index];
 
+// Образцы для кейкапов: после итерации 7 `fix-approval-focus` записи ответа
+// на одобрение не имеют общих `combos` (клавиши по платформам), а правила
+// отрисовки плашек (⌥ ⇧ ⌘, `⏎`, `⌫`) проверяются на явных комбинациях.
+const _primaryAltEnter = CodeLabKeyCombo(
+  LogicalKeyboardKey.enter,
+  primary: true,
+  alt: true,
+);
+const _primaryAltBackspace = CodeLabKeyCombo(
+  LogicalKeyboardKey.backspace,
+  primary: true,
+  alt: true,
+);
+
 /// Таблица из трёх групп: «Approvals» с самой широкой строкой кейкапов,
 /// «Navigation» с альтернативами и «Global» с длинным текстом действия.
 CodeLabShortcutTable _table() => CodeLabShortcutTable(
@@ -78,7 +92,7 @@ CodeLabShortcutTable _table() => CodeLabShortcutTable(
         CodeLabShortcutTableRow(
           key: const ValueKey('row-allow-always'),
           action: 'Allow always',
-          combos: CodeLabShortcut.allowAlways.combos,
+          combos: const [_primaryAltEnter],
           where: 'Pending approval in focus, when the agent offers this option',
         ),
       ],
@@ -95,7 +109,7 @@ void main() {
     ) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
       await tester.pumpWidget(
-        _enHost(CodeLabKeycaps(combos: [_combo(CodeLabShortcut.allowAlways)])),
+        _enHost(CodeLabKeycaps(combos: [_primaryAltEnter])),
       );
 
       expect(_caps(tester, find.byType(CodeLabKeycaps)), ['⌥', '⌘', '⏎']);
@@ -103,7 +117,7 @@ void main() {
 
     testWidgets('Windows и Linux — слова Ctrl Alt Enter', (tester) async {
       await tester.pumpWidget(
-        _enHost(CodeLabKeycaps(combos: [_combo(CodeLabShortcut.allowAlways)])),
+        _enHost(CodeLabKeycaps(combos: [_primaryAltEnter])),
       );
 
       expect(_caps(tester, find.byType(CodeLabKeycaps)), [
@@ -118,7 +132,7 @@ void main() {
     ) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
-        _enHost(CodeLabKeycaps(combos: [_combo(CodeLabShortcut.allowAlways)])),
+        _enHost(CodeLabKeycaps(combos: [_primaryAltEnter])),
       );
 
       expect(
@@ -202,8 +216,8 @@ void main() {
             children: [
               CodeLabKeycaps(combos: [_combo(CodeLabShortcut.commandPalette)]),
               CodeLabKeycaps(combos: [_combo(CodeLabShortcut.toggleFiles)]),
-              CodeLabKeycaps(combos: [_combo(CodeLabShortcut.rejectAlways)]),
-              CodeLabKeycaps(combos: [_combo(CodeLabShortcut.allowAlways)]),
+              CodeLabKeycaps(combos: [_primaryAltBackspace]),
+              CodeLabKeycaps(combos: [_primaryAltEnter]),
               CodeLabKeycaps(combos: CodeLabShortcut.fileTreeMove.combos),
             ],
           ),

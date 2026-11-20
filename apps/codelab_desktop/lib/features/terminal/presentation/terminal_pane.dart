@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
+import 'package:flutter/services.dart' show HardwareKeyboard;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:xterm2/ui.dart' show TerminalStyle, TerminalView;
 
@@ -57,26 +59,71 @@ class WorkbenchTerminalPane extends StatelessWidget {
           onDisclosureClosed: cubit.acknowledgeDisclosure,
           content: model == null
               ? const SizedBox.shrink()
-              : TerminalView(
-                  model,
-                  // Ключ по вкладке: у каждой свои прокрутка и фокус.
-                  key: ValueKey('terminal-view-$activeId'),
-                  theme: terminalThemeOf(FluentTheme.of(context)),
-                  autofocus: true,
-                  padding: terminalViewPadding,
-                  // Моноширинный шрифт кита (`CodeLabTextRole.mono`): свой
-                  // шрифт не добавляем, терминал выглядит как остальной
-                  // моно-текст рабочего места (ручная проверка итерации 2).
-                  textStyle: TerminalStyle.fromTextStyle(
-                    CodeLabText.styleOf(context, CodeLabTextRole.mono)!,
+              : _AbsorbApprovalAnswerKeys(
+                  child: TerminalView(
+                    model,
+                    // Ключ по вкладке: у каждой свои прокрутка и фокус.
+                    key: ValueKey('terminal-view-$activeId'),
+                    theme: terminalThemeOf(FluentTheme.of(context)),
+                    autofocus: true,
+                    padding: terminalViewPadding,
+                    // Моноширинный шрифт кита (`CodeLabTextRole.mono`): свой
+                    // шрифт не добавляем, терминал выглядит как остальной
+                    // моно-текст рабочего места (ручная проверка итерации 2).
+                    textStyle: TerminalStyle.fromTextStyle(
+                      CodeLabText.styleOf(context, CodeLabTextRole.mono)!,
+                    ),
+                    // Только жест Cmd/Ctrl+клик (проверяет сам `TerminalView`);
+                    // `Terminal.onOpenUrl` (OSC 1337) намеренно не задан (D3).
+                    onHyperlinkTap: (uri) =>
+                        unawaited(_confirmLink(context, cubit, uri)),
                   ),
-                  // Только жест Cmd/Ctrl+клик (проверяет сам `TerminalView`);
-                  // `Terminal.onOpenUrl` (OSC 1337) намеренно не задан (D3).
-                  onHyperlinkTap: (uri) =>
-                      unawaited(_confirmLink(context, cubit, uri)),
                 ),
         );
       },
+    );
+  }
+}
+
+/// Не пускает клавиши ответа на одобрение из терминала к рабочему месту.
+///
+/// Почему: терминал лежит внутри рабочего места, и клавиша, которую эмулятор
+/// не обработал (⌘Y, Alt+Shift+Y), всплыла бы до привязки
+/// `CodeLabWorkbenchShortcuts.onAnswerApproval` и ответила бы на запрос
+/// разрешения агента; терминал пользователя вне одобрений агента (D8, D14).
+///
+/// Для чего: клавиша, которую `TerminalView` сам отдал shell, не всплывает; а
+/// необработанная клавиша ответа поглощается здесь. Как использовать: оборачивает
+/// `TerminalView`; сам фокус не берёт.
+class _AbsorbApprovalAnswerKeys extends StatelessWidget {
+  const _AbsorbApprovalAnswerKeys({required this.child});
+
+  final Widget child;
+
+  static const _answerShortcuts = [
+    CodeLabShortcut.allowOnce,
+    CodeLabShortcut.allowAlways,
+    CodeLabShortcut.rejectOnce,
+    CodeLabShortcut.rejectAlways,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: (node, event) {
+        final platform = defaultTargetPlatform;
+        for (final shortcut in _answerShortcuts) {
+          for (final combo in shortcut.combosFor(platform)) {
+            if (combo.accepts(event, HardwareKeyboard.instance)) {
+              return KeyEventResult.handled;
+            }
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: child,
     );
   }
 }

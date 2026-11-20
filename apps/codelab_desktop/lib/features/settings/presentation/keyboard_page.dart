@@ -20,6 +20,7 @@ library;
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 
 import '../../../l10n/app_localizations_en.dart';
 import '../../../l10n/l10n.dart';
@@ -53,6 +54,7 @@ String keyboardShortcutActionOf(
   CodeLabShortcut.commandMenuRun => l10n.settingsKeyboardActionCommandMenuRun,
   CodeLabShortcut.commandMenuClose =>
     l10n.settingsKeyboardActionCommandMenuClose,
+  CodeLabShortcut.goToApproval => l10n.settingsKeyboardActionGoToApproval,
   CodeLabShortcut.allowOnce => l10n.settingsKeyboardActionAllowOnce,
   CodeLabShortcut.allowAlways => l10n.settingsKeyboardActionAllowAlways,
   CodeLabShortcut.rejectOnce => l10n.settingsKeyboardActionRejectOnce,
@@ -80,10 +82,11 @@ String keyboardShortcutWhereOf(
   CodeLabShortcut.commandMenuMove ||
   CodeLabShortcut.commandMenuRun ||
   CodeLabShortcut.commandMenuClose => l10n.settingsKeyboardWhereCommandMenu,
+  CodeLabShortcut.goToApproval => l10n.settingsKeyboardWhereApprovalPending,
   CodeLabShortcut.allowOnce ||
   CodeLabShortcut.allowAlways ||
   CodeLabShortcut.rejectOnce ||
-  CodeLabShortcut.rejectAlways => l10n.settingsKeyboardWhereApproval,
+  CodeLabShortcut.rejectAlways => l10n.settingsKeyboardWhereApprovalAnywhere,
 };
 
 /// Заголовок группы таблицы на языке [l10n].
@@ -111,9 +114,9 @@ List<KeyboardShortcutEntry> keyboardEntriesOf(AppLocalizations l10n) {
         shortcut: shortcut,
         action: keyboardShortcutActionOf(l10n, shortcut),
         englishAction: keyboardShortcutActionOf(english, shortcut),
-        notations: [
-          for (final combo in shortcut.combos) ...combo.searchNotations(),
-        ],
+        // Нотации всех платформ (D15): у сочетаний ответа клавиши macOS и
+        // остальных ОС различаются.
+        notations: shortcut.searchNotations().toList(),
       ),
   ];
 }
@@ -201,7 +204,9 @@ class _KeyboardPageState extends State<KeyboardPage> {
                               'settings-keyboard-row-${entry.shortcut.id}',
                             ),
                             action: entry.action,
-                            combos: entry.shortcut.combos,
+                            combos: entry.shortcut.combosFor(
+                              defaultTargetPlatform,
+                            ),
                             where: keyboardShortcutWhereOf(
                               l10n,
                               entry.shortcut,

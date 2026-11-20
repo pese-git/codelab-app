@@ -3,6 +3,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/approval_focus.dart';
+
 void main() {
   test('exports organisms through the public package API', () {
     expect(CodeLabActivityBar, isA<Type>());
@@ -224,6 +226,9 @@ void main() {
       find.descendant(of: find.byKey(key), matching: find.byType(Button)),
     );
 
+    // На macOS подсказки короткие (`⌘Y`, `⌥⌘Z`) и ряд умещается в одну строку
+    // колонки 720 px; длинные `Alt+Shift+Y` на других ОС ряд переносят —
+    // полоса для этого построена на `Wrap` (D14).
     testWidgets('one bar: Allow, Reject and the scope Only this time', (
       tester,
     ) async {
@@ -241,7 +246,7 @@ void main() {
       final allow = tester.getRect(find.byKey(CodeLabApprovalPrompt.allowKey));
       final scope = tester.getRect(find.byKey(CodeLabApprovalPrompt.scopeKey));
       expect((allow.center.dy - scope.center.dy).abs(), lessThan(4));
-    });
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
     testWidgets('Allow answers allow_once by default', (tester) async {
       final selected = <String>[];
@@ -344,11 +349,16 @@ void main() {
       expect(find.text('Only this time'), findsOneWidget);
     });
 
-    testWidgets('the shortcut of an always option works in any scope', (
+    // Итерация 7 (D14): ни одно сочетание не привязано к самой полосе;
+    // прежние Ctrl+Alt+⏎ и подобные при фокусе на кнопке не отвечают, а ответ
+    // даёт только рабочее место (`CodeLabWorkbenchShortcuts.onAnswerApproval`).
+    testWidgets('the former always shortcut does not select anything', (
       tester,
     ) async {
       final selected = <String>[];
       await tester.pumpWidget(prompt(onSelected: selected.add));
+      // Полоса не берёт фокус сама (`fix-approval-focus`, D1): Tab до «Allow».
+      await tabTo(tester, find.byKey(CodeLabApprovalPrompt.allowKey));
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
@@ -357,36 +367,29 @@ void main() {
       await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(selected, ['a2']);
+      expect(selected, isEmpty);
     });
 
-    // Подсказка варианта «Always» строит каталог сочетаний (change
-    // `add-app-keyboard-page`, D3, D4; решение Q4): на Windows и Linux
-    // `Ctrl+Alt+⏎` вместо прежнего `Alt+Ctrl+⏎`, на macOS `⌥⌘⏎`.
-    testWidgets('Linux: allow_always shows Ctrl+Alt+⏎ and Ctrl+Alt+Enter '
-        'selects it', (tester) async {
-      final selected = <String>[];
-      await tester.pumpWidget(prompt(onSelected: selected.add));
-      await pickScope(tester, 'Always');
-
-      expect(find.text('Ctrl+Alt+⏎'), findsOneWidget);
-      expect(find.text('Alt+Ctrl+⏎'), findsNothing);
-
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pump(const Duration(milliseconds: 100));
-
-      expect(selected, ['a2']);
-    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-    testWidgets('macOS: allow_always shows ⌥⌘⏎', (tester) async {
+    // Подсказки кнопок строит каталог (D14, D15): Alt+Shift+Q и Alt+Shift+W
+    // на Windows и Linux, ⌥⌘Y и ⌥⇧⌘Z на macOS.
+    testWidgets('Linux: the Always scope shows Alt+Shift+Q and Alt+Shift+W', (
+      tester,
+    ) async {
       await tester.pumpWidget(prompt(onSelected: (_) {}));
       await pickScope(tester, 'Always');
 
-      expect(find.text('⌥⌘⏎'), findsOneWidget);
+      expect(find.text('Alt+Shift+Q'), findsOneWidget);
+      expect(find.text('Alt+Shift+W'), findsOneWidget);
+      expect(find.text('Ctrl+Alt+⏎'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+    testWidgets('macOS: the Always scope shows ⌥⌘Y and ⌥⇧⌘Z', (tester) async {
+      await tester.pumpWidget(prompt(onSelected: (_) {}));
+      await pickScope(tester, 'Always');
+
+      expect(find.text('⌥⌘Y'), findsOneWidget);
+      expect(find.text('⌥⇧⌘Z'), findsOneWidget);
+      expect(find.text('⌥⌘⏎'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
     testWidgets('raw input stays collapsed until View raw input', (

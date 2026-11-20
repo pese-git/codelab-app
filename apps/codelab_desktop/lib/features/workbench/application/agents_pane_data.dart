@@ -9,6 +9,7 @@ final class AgentsShowTarget {
     required this.rowId,
     required this.targetId,
     this.expand = const [],
+    this.approvalId,
   });
 
   /// Id строки ленты верхнего уровня (`tool-N`).
@@ -19,6 +20,12 @@ final class AgentsShowTarget {
 
   /// Id строк пути, которые раскрываются тем же обновлением, что и запрос.
   final List<String> expand;
+
+  /// Id ожидающего одобрения, к которому ведёт цель (`approvalTargetById`);
+  /// `null` — цель не одобрение. «Go to approval» передаёт его ленте, чтобы
+  /// фокус получила полоса именно этого запроса, а не любая в строке
+  /// (`fix-approval-focus`, D13).
+  final String? approvalId;
 }
 
 /// Данные панели Agents сессии в фокусе: строки kit и то, что нужно, чтобы
@@ -138,16 +145,22 @@ final class AgentsPaneData {
   AgentsShowTarget? approvalTargetOf(
     String id,
     List<CodeLabTranscriptRow> transcriptRows,
-  ) => _approvalTarget(rowOf(id)?.approvalId?.value, transcriptRows);
+  ) => approvalTargetById(rowOf(id)?.approvalId?.value, transcriptRows);
 
   /// То же для шага дерева [id] (id элемента ленты): у шага своего
   /// `approvalId` в строке нет, он берётся только из [pendingApprovals].
   AgentsShowTarget? stepApprovalTargetOf(
     String id,
     List<CodeLabTranscriptRow> transcriptRows,
-  ) => _approvalTarget(pendingApprovals[id], transcriptRows);
+  ) => approvalTargetById(pendingApprovals[id], transcriptRows);
 
-  static AgentsShowTarget? _approvalTarget(
+  /// Цель показа ожидающего одобрения [approvalId] в строках ленты: строка с
+  /// собственным одобрением или строка `agent` корня, под которой стоит блок
+  /// потомка (путь не раскрывается). `null` — одобрения в ленте нет.
+  ///
+  /// Публичен, чтобы сочетание «Go to approval» (`goToApprovalTargetOf`) и
+  /// кнопки панели Agents находили цель одним правилом (§14).
+  static AgentsShowTarget? approvalTargetById(
     String? approvalId,
     List<CodeLabTranscriptRow> transcriptRows,
   ) {
@@ -159,10 +172,18 @@ final class AgentsPaneData {
         continue;
       }
       if (_holdsChildApproval(row, approvalId)) {
-        return AgentsShowTarget(rowId: row.id, targetId: approvalId);
+        return AgentsShowTarget(
+          rowId: row.id,
+          targetId: approvalId,
+          approvalId: approvalId,
+        );
       }
       if (row.approval?.targetId == approvalId) {
-        return AgentsShowTarget(rowId: row.id, targetId: row.id);
+        return AgentsShowTarget(
+          rowId: row.id,
+          targetId: row.id,
+          approvalId: approvalId,
+        );
       }
     }
     return null;
