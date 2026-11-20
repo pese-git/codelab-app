@@ -94,9 +94,16 @@ const _monoFallback = [
   'monospace',
 ];
 
-/// Запасные шрифты со знаками клавиш: на Windows и Linux системный шрифт
-/// может не содержать ⏎ и ⌫.
+/// Запасные шрифты со знаками клавиш.
+///
+/// Первым — системный шрифт macOS (SF): шрифт темы Fluent (`Segoe UI`) на
+/// macOS отсутствует, и без него знаки брались бы из `Apple Symbols`, где они
+/// так же мелки, как в `Menlo` (замер CoreText: в SF ⌘ ⇧ ⏎ ростом с
+/// заглавную букву). На Windows и Linux `.AppleSystemUIFont` не найдётся и
+/// пропустится; там системный шрифт может не содержать ⏎ и ⌫ — дальше идут
+/// шрифты символов.
 const _symbolFallback = [
+  '.AppleSystemUIFont',
   'Apple Symbols',
   'Segoe UI Symbol',
   'Noto Sans Symbols 2',
