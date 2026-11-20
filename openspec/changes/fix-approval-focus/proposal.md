@@ -41,6 +41,7 @@
   - журнал `workbench.approval_answer` (`source: button | shortcut`) и `workbench.approval_shortcut_skipped`;
   - прежние локальные клавиши полосы (Cmd/Ctrl+Enter, +Alt, Cmd/Ctrl+Backspace, +Alt) и подсказка перехода `Press ⇧⌘A to answer from the keyboard` убираются; Cmd/Ctrl+Enter — только отправка; «Go to approval» остаётся для чтения запроса и выбора охвата;
   - каталог `CodeLabShortcut` получает клавиши по платформе; на странице «Keyboard» 20 строк: новые клавиши у `allow-once`, `allow-always`, `reject-once`, `reject-always` и новое место.
+- **Сочетания при любой раскладке** (design.md, D16; решение пользователя 2026-11-20). Сочетания каталога с буквами и знаками срабатывали только при латинской раскладке: при русской ⌘K, ⌘Y и остальные молчали (дефект с `add-app-keyboard-page`). Клавиша совпадает по логической клавише, а для нелатинской раскладки — по физической позиции на раскладке US; модификаторы и меры безопасности одобрений не меняются.
 - **Документы** (design.md, D10):
   - `12-3-desktop-display.md`: A9 и A13, шаг 3, DSK-18 — обновлены при подготовке change;
   - руководство пользователя desktop, `AGENTS.md` и `README.md` кита, `AGENTS.md` app и глоссарий — задачи `docs-writer`.
@@ -74,6 +75,7 @@
   - ADDED «Переход к ожидающему одобрению с клавиатуры»;
   - ADDED «Фокус после ухода одобрения»;
   - ADDED «Ответ на одобрение сочетанием с любого места рабочего места»;
+  - ADDED «Сочетания app не зависят от раскладки ввода»;
   - MODIFIED «Approval options are rendered and bound to shortcuts by kind» — сочетания у всех четырёх видов по платформе;
   - MODIFIED «Approval card inside the tool call row» — подсказки и сочетания ответа действуют с любого места рабочего места; полоса не берёт фокус сама; сценарии «Shortcut of an always option», «Shortcut hints of the always scope».
 - `acp-client-kit` — ADDED «Одобрение в элементе вызова транскрипта» (повторный запрос того же вызова).
