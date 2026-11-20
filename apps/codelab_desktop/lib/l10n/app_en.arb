@@ -4514,18 +4514,6 @@
       }
     }
   },
-  "appearanceIssuesHint": "Unknown keys were ignored; the theme is applied. Missing roles come from extends: \"{base}\" ({builtIn}).",
-  "@appearanceIssuesHint": {
-    "description": "Пояснение под InfoBar предупреждений; {base} — значение extends, {builtIn} — имя встроенной темы базы.",
-    "placeholders": {
-      "base": {
-        "type": "String"
-      },
-      "builtIn": {
-        "type": "String"
-      }
-    }
-  },
   "appearanceIssuesError": "{name} couldn't be loaded",
   "@appearanceIssuesError": {
     "description": "InfoBar ошибки темы; {name} — имя темы как есть.",
@@ -5047,5 +5035,25 @@
   "settingsSearchKeywordsKeyboard": "shortcut, hotkey, keybinding, key",
   "@settingsSearchKeywordsKeyboard": {
     "description": "Ключевые слова поиска «Find a setting» для страницы Keyboard: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять."
+  },
+  "appearanceIssuesHintUnknownKeys": "Unknown keys were ignored; the theme is applied.",
+  "@appearanceIssuesHintUnknownKeys": {
+    "description": "Пояснение под InfoBar предупреждений, когда в файле есть неизвестные ключи."
+  },
+  "appearanceIssuesHintApplied": "The theme is applied with warnings.",
+  "@appearanceIssuesHintApplied": {
+    "description": "Пояснение под InfoBar предупреждений, когда неизвестных ключей нет (например, только низкий контраст)."
+  },
+  "appearanceIssuesHintExtends": "Missing roles come from extends: \"{base}\" ({builtIn}).",
+  "@appearanceIssuesHintExtends": {
+    "description": "Дополнение к пояснению, когда у темы есть незаданные роли; {base} — значение extends, {builtIn} — имя встроенной темы базы.",
+    "placeholders": {
+      "base": {
+        "type": "String"
+      },
+      "builtIn": {
+        "type": "String"
+      }
+    }
   }
 }

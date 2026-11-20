@@ -3309,11 +3309,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String appearanceIssuesHint(String base, String builtIn) {
-    return 'Неизвестные ключи пропущены, тема применяется. Недостающие роли берутся из extends: «$base» ($builtIn).';
-  }
-
-  @override
   String appearanceIssuesError(String name) {
     return '$name: не удалось загрузить';
   }
@@ -3703,4 +3698,17 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsSearchKeywordsKeyboard =>
       'сочетание, горячие клавиши, клавиатура, клавиша';
+
+  @override
+  String get appearanceIssuesHintUnknownKeys =>
+      'Неизвестные ключи пропущены, тема применяется.';
+
+  @override
+  String get appearanceIssuesHintApplied =>
+      'Тема применяется с предупреждениями.';
+
+  @override
+  String appearanceIssuesHintExtends(String base, String builtIn) {
+    return 'Недостающие роли берутся из extends: «$base» ($builtIn).';
+  }
 }

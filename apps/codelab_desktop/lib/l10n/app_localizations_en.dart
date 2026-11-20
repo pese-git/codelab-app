@@ -3261,11 +3261,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String appearanceIssuesHint(String base, String builtIn) {
-    return 'Unknown keys were ignored; the theme is applied. Missing roles come from extends: \"$base\" ($builtIn).';
-  }
-
-  @override
   String appearanceIssuesError(String name) {
     return '$name couldn\'t be loaded';
   }
@@ -3645,4 +3640,17 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsSearchKeywordsKeyboard =>
       'shortcut, hotkey, keybinding, key';
+
+  @override
+  String get appearanceIssuesHintUnknownKeys =>
+      'Unknown keys were ignored; the theme is applied.';
+
+  @override
+  String get appearanceIssuesHintApplied =>
+      'The theme is applied with warnings.';
+
+  @override
+  String appearanceIssuesHintExtends(String base, String builtIn) {
+    return 'Missing roles come from extends: \"$base\" ($builtIn).';
+  }
 }

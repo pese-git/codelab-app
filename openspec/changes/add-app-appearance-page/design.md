@@ -229,6 +229,16 @@ App файлов не открывает: обработчиком `.json` в О
 - **Старт.** `main` до `runApp` вызывает `AppAppearanceStart.resolve(load:, library:, accentSource:, fileTimeout:)`: `load` — результат `AppAppearancePreferences.load()`, файлы тем двух режимов (если они пользовательские) читаются `ThemeLibrary.read` с ограничением `fileTimeout` (1 с) на файл, первое чтение акцента — с тем же ограничением. Метод не бросает. Причины, по которым выбранная пользовательская тема режима не загрузилась (код, строка, колонка — как у `appearance.theme_invalid`), шов несёт списком `themeProblems`: журнала в `main` ещё нет, поэтому событие по каждой причине пишет модуль root scope. Результат передаётся швом `createCodeLabRootScope(appearance:)`; модуль root scope пишет `app.appearance_resolved`, а по диагностике шва — `appearance.stored_value_invalid` и `appearance.read_failed {error_class}` (сбой чтения хранилища). Без шва — значения по умолчанию. Файлы не дочитываются после старта: первый кадр уже в итоговом оформлении, «мигания» темы нет.
 - **Применение без потери состояния.** `BlocBuilder<AppAppearanceCubit>` стоит рядом с языковым над `FluentApp` и меняет только `theme`, `darkTheme`, `themeMode`. `FluentApp` не пересоздаётся, `State` виджетов сохраняется (как D2, R6 `add-desktop-localization`).
 
+### D15а. ⌘, на macOS через нативное меню (вне основной темы, по просьбе пользователя 2026-11-20)
+
+Пункт «Preferences…» главного меню macOS (`MainMenu.xib`, `keyEquivalent=","`) был без action. Меню перехватывает ⌘, раньше Flutter, поэтому сочетание `open-settings` на macOS не срабатывало (ручная проверка собранного app). Решение:
+- пункт получил action `AppDelegate.openPreferences`, который вызывает метод `openSettings` канала `codelab/app_menu`;
+- в Dart канал слушает мост `AppMenuBridge` (`core/platform/app_menu_bridge.dart`; платформенный канал изолирован в `core/platform/`, AGENTS.md §11). Его создаёт `CodeLabBootstrap`: `attach()` при старте, `dispose()` при закрытии. Мост зовёт `NavigationCubit.openSettings(source: shortcut)` — тот же путь, что у сочетания;
+- проверок платформы в Dart нет: на других ОС канал никто не вызывает, а Ctrl+, обрабатывает `CallbackShortcuts`, как раньше;
+- неизвестный метод канала — `MissingPluginException`.
+
+Альтернатива — убрать `keyEquivalent` у пункта меню и оставить ⌘, Flutter. Отклонена: пункт «Настройки…» с ⌘, — норма macOS, и без него меню выглядело бы неполным. Требование — spec app-settings «Открытие настроек из меню macOS»; общее правило — `platform-integration.md` §8а.
+
 ### D14. Отступления от артборда
 
 - «Open file» → «Open folder» (D11).

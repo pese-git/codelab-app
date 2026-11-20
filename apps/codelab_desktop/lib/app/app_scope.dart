@@ -119,6 +119,7 @@ import 'appearance/app_appearance_start.dart';
 import 'appearance/built_in_themes.dart' show kBuiltInThemeIds;
 import '../core/platform/app_appearance_preferences.dart';
 import '../core/platform/system_accent_source.dart';
+import '../core/platform/app_menu_bridge.dart';
 import '../core/platform/home_path_label.dart';
 import '../core/platform/theme_file_picker.dart';
 import '../features/settings/application/appearance_settings_cubit.dart';
@@ -1841,9 +1842,20 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
   /// (`add-client-process-shutdown-on-exit`, D1).
   late final AppLifecycleListener _exitListener;
 
+  /// Мост пункта «Настройки…» нативного меню (macOS, ⌘,): открывает настройки
+  /// тем же путём, что сочетание `open-settings`.
+  late final AppMenuBridge _menuBridge;
+
   @override
   void initState() {
     super.initState();
+    _menuBridge = AppMenuBridge(
+      onOpenSettings: () => unawaited(
+        _dependencies.navigationCubit.openSettings(
+          source: SettingsOpenSource.shortcut,
+        ),
+      ),
+    )..attach();
     final rootLifecycle = _scope.resolve<CodeLabRootLifecycle>();
     _exitListener = AppLifecycleListener(
       onExitRequested: AppExitHandler(
@@ -1858,6 +1870,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
   @override
   void dispose() {
     _exitListener.dispose();
+    _menuBridge.dispose();
     final providedScope = widget.scope;
     if (providedScope == null) {
       unawaited(closeCodeLabRootScope());

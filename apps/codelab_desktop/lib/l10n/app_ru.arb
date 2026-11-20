@@ -846,7 +846,6 @@
   "appearanceCustomTitle": "Свои темы",
   "appearanceImportButton": "Импорт JSON…",
   "appearanceIssuesSummary": "{name}: загружена, {count, plural, one{{count} предупреждение} few{{count} предупреждения} many{{count} предупреждений} other{{count} предупреждения}}",
-  "appearanceIssuesHint": "Неизвестные ключи пропущены, тема применяется. Недостающие роли берутся из extends: «{base}» ({builtIn}).",
   "appearanceIssuesError": "{name}: не удалось загрузить",
   "appearanceOpenFolder": "Открыть папку",
   "appearanceReload": "Перечитать",
@@ -943,5 +942,8 @@
   "settingsKeyboardWhereComposer": "Поле ввода",
   "settingsKeyboardWhereCommandMenu": "Меню команд после /",
   "settingsKeyboardWhereApproval": "Ожидающее одобрение в фокусе, когда агент предлагает этот вариант",
-  "settingsSearchKeywordsKeyboard": "сочетание, горячие клавиши, клавиатура, клавиша"
+  "settingsSearchKeywordsKeyboard": "сочетание, горячие клавиши, клавиатура, клавиша",
+  "appearanceIssuesHintUnknownKeys": "Неизвестные ключи пропущены, тема применяется.",
+  "appearanceIssuesHintApplied": "Тема применяется с предупреждениями.",
+  "appearanceIssuesHintExtends": "Недостающие роли берутся из extends: «{base}» ({builtIn})."
 }

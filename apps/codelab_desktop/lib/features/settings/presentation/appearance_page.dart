@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show ThemeReadError, ThemeRole;
+    show ThemeIssueCode, ThemeReadError, ThemeRole;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -76,6 +76,9 @@ String _escapeFileText(String text) => [
   for (final line in text.split(RegExp(r'\r?\n')))
     escapeForDisplay(line.replaceAll('\t', '    ')),
 ].join('\n');
+
+/// Ширина строки «Accent color», от которой переключатель стоит справа.
+const _accentInlineWidth = 560.0;
 
 /// Сколько строк списка проблем показывается (D9а): остальные — строкой «ещё».
 const _issueLimit = 50;
@@ -346,19 +349,56 @@ class _AccentRow extends StatelessWidget {
         // Видимость не меняется после первого кадра: `supported` известно
         // при старте (D7).
         if (!state.systemAccentSupported) return const SizedBox.shrink();
+        void change(bool value) =>
+            _fire(context.read<AppAppearanceCubit>().setSystemAccent(value));
         return CodeLabSettingsSection(
           title: l10n.appearanceAccentTitle,
           children: [
-            CodeLabSettingsRow(
+            KeyedSubtree(
               key: const ValueKey('settings-appearance-system-accent'),
-              title: l10n.appearanceAccentTitle,
-              description: l10n.appearanceAccentDescription,
-              trailing: ToggleSwitch(
-                checked: state.systemAccent,
-                onChanged: (value) => _fire(
-                  context.read<AppAppearanceCubit>().setSystemAccent(value),
-                ),
-                content: Text(l10n.appearanceAccentToggle),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Переключатель с подписью не сжимается: в узкой области
+                  // (окно около 600 px, контент около 350 px) справа от описания
+                  // он давал переполнение строки на 116 px, поэтому там он
+                  // стоит под описанием, а не в `trailing`.
+                  if (constraints.maxWidth >= _accentInlineWidth) {
+                    return CodeLabSettingsRow(
+                      title: l10n.appearanceAccentTitle,
+                      description: l10n.appearanceAccentDescription,
+                      trailing: ToggleSwitch(
+                        checked: state.systemAccent,
+                        onChanged: change,
+                        content: Text(l10n.appearanceAccentToggle),
+                      ),
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      CodeLabSettingsRow(
+                        title: l10n.appearanceAccentTitle,
+                        description: l10n.appearanceAccentDescription,
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                        // Подпись переносится, а не сжимает строку: у
+                        // `ToggleSwitch` с `content` своя `Row` без гибкой
+                        // части и она переполняется в узкой области.
+                        child: Row(
+                          children: [
+                            ToggleSwitch(
+                              checked: state.systemAccent,
+                              onChanged: change,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(l10n.appearanceAccentToggle)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ],
@@ -713,12 +753,7 @@ class _IssuesBlock extends StatelessWidget {
                   ),
                   content: hasError
                       ? null
-                      : Text(
-                          l10n.appearanceIssuesHint(
-                            base,
-                            _themeName(l10n, base),
-                          ),
-                        ),
+                      : Text(_issuesHint(l10n, selection, base)),
                   severity: hasError
                       ? InfoBarSeverity.error
                       : InfoBarSeverity.warning,
@@ -769,6 +804,27 @@ class _IssuesBlock extends StatelessWidget {
   /// «… and M more warnings». Файл может содержать любое число предупреждений,
   /// а список строит виджеты на каждую (D9а); бейдж карточки и InfoBar считают
   /// все.
+  /// Пояснение под InfoBar по составу проблем: фраза о неизвестных ключах — только
+  /// если они есть, о ролях из `extends` — только если есть незаданные роли.
+  String _issuesHint(
+    AppLocalizations l10n,
+    AppearanceSelection selection,
+    String base,
+  ) {
+    final hasUnknownKeys = selection.issues.any(
+      (i) =>
+          i is AppearanceParseIssue &&
+          i.issue.code == ThemeIssueCode.unknownKey,
+    );
+    return [
+      hasUnknownKeys
+          ? l10n.appearanceIssuesHintUnknownKeys
+          : l10n.appearanceIssuesHintApplied,
+      if (selection.unsetRoles.isNotEmpty)
+        l10n.appearanceIssuesHintExtends(base, _themeName(l10n, base)),
+    ].join(' ');
+  }
+
   List<Widget> _issueRows(
     AppLocalizations l10n,
     AppearanceSelection selection,
@@ -992,39 +1048,43 @@ class _PreviewBody extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Статусы — часть карточки превью: их цвета принадлежат выбранной
+                // теме и рисуются на её фоне, а не на фоне страницы (ручная
+                // проверка: тёмная страница и светлая тема давали нечитаемый
+                // текст).
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 14,
+                  runSpacing: 6,
+                  children: [
+                    Text(
+                      l10n.appearancePreviewLink,
+                      style: TextStyle(
+                        color: _linkColor(theme),
+                        decoration: TextDecoration.underline,
+                        fontSize: 12,
+                      ),
+                    ),
+                    status(
+                      FluentIcons.accept,
+                      l10n.appearancePreviewDone,
+                      palette.success,
+                    ),
+                    status(
+                      FluentIcons.warning,
+                      l10n.appearancePreviewContext,
+                      palette.warning,
+                    ),
+                    status(
+                      FluentIcons.chrome_close,
+                      l10n.appearancePreviewFailed,
+                      palette.danger,
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 14,
-          runSpacing: 6,
-          children: [
-            Text(
-              l10n.appearancePreviewLink,
-              style: TextStyle(
-                color: _linkColor(theme),
-                decoration: TextDecoration.underline,
-                fontSize: 12,
-              ),
-            ),
-            status(
-              FluentIcons.accept,
-              l10n.appearancePreviewDone,
-              palette.success,
-            ),
-            status(
-              FluentIcons.warning,
-              l10n.appearancePreviewContext,
-              palette.warning,
-            ),
-            status(
-              FluentIcons.chrome_close,
-              l10n.appearancePreviewFailed,
-              palette.danger,
-            ),
-          ],
         ),
       ],
     );

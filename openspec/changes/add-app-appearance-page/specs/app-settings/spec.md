@@ -9,7 +9,7 @@ Composition root SHALL делать видимой страницу «Appearance
 5. панель проблем выбранной темы (`settings-appearance-issues`) — только если у выбранной темы есть предупреждения, ошибка или незаданные роли;
 6. «Preview» (`settings-appearance-preview`) с проверкой контраста и кнопками «Reset» (`settings-appearance-reset`) и «Use <name>» (`settings-appearance-use`).
 
-При ширине области страницы от 960 px «Preview» SHALL стоять правой колонкой, при меньшей — под остальными блоками.
+При ширине области страницы от 960 px «Preview» SHALL стоять правой колонкой, при меньшей — под остальными блоками. Строка «Accent color» при ширине области меньше 560 px SHALL переносить переключатель под подпись и описание, а не обрезать их.
 
 Поиск «Find a setting» SHALL находить «Appearance» по английским ключевым словам `theme`, `dark`, `light`, `mode`, `color`, `accent`, `contrast`, `json` при любом языке интерфейса, а при русском — ещё по `тема`, `тёмная`, `светлая`, `режим`, `цвет`, `акцент`, `контраст`, `оформление` (сообщение `settingsSearchKeywordsAppearance` в ARB `en` и `ru`).
 
@@ -99,7 +99,7 @@ App SHALL хранить две темы: тему светлого режима
 «Preview» SHALL рисовать в цветах выбранной темы:
 - блок кода `dart` с подписью языка;
 - строку удалённого и строку добавленного кода diff на фонах `diff_remove_bg` и `diff_add_bg`;
-- статусы `Link` (`info`), `Done` (`success`), `84% context` (`warning`), `Failed` (`error`).
+- статусы `Link` (`info`), `Done` (`success`), `84% context` (`warning`), `Failed` (`error`) — внутри той же карточки превью, на фоне кода темы, а не на фоне страницы: так статусы видны в цветах выбранной темы, а не текущей.
 
 Тексты превью SHALL быть фиксированными данными app и НЕ SHALL браться из сессий.
 
@@ -131,7 +131,7 @@ App SHALL хранить две темы: тему светлого режима
 Страница SHALL читать каталог тем при открытии и по «Reload», только через порт каталога тем (spec client-themes «Каталог пользовательских тем»). Пока каталог читается, карточки встроенных тем SHALL работать, а на месте пользовательских SHALL стоять индикатор загрузки (`settings-appearance-themes-loading`). Если каталог не удалось прочитать целиком (порт бросил исключение), страница SHALL показывать встроенные темы и InfoBar уровня `warning` `settings-appearance-catalog-failed`: `Couldn't read <home>/themes. Custom themes are not shown.` без текста исключения и с кнопкой «Reload» (`settings-appearance-catalog-reload`), которая повторяет чтение. Результат чтения, начатого до закрытия страницы или до более нового «Reload», НЕ SHALL менять состояние страницы.
 
 Если у выбранной темы есть предупреждения, панель проблем SHALL показывать:
-- InfoBar уровня `warning` `settings-appearance-issues-summary`: `<name> loaded with N warnings` и пояснение `Unknown keys were ignored; the theme is applied. Missing roles come from extends: "<base>" (<built-in name>).`;
+- InfoBar уровня `warning` `settings-appearance-issues-summary`: `<name> loaded with N warnings` и пояснение по составу проблем: `Unknown keys were ignored; the theme is applied.`, если среди предупреждений есть неизвестные ключи, иначе `The theme is applied with warnings.`; если у темы есть незаданные роли, к нему добавляется `Missing roles come from extends: "<base>" (<built-in name>).`;
 - кнопки «Open folder» (`settings-appearance-open-folder`) и «Reload» (`settings-appearance-reload`);
 - текст файла с номерами строк (`settings-appearance-file`), где строки с предупреждением выделены (`CodeLabFilePreview`);
 - список проблем `settings-appearance-issue-<n>` (n с 1, по порядку позиции; показываются первые 50, остальные — строкой `settings-appearance-issues-more` `… and {count} more warnings`, бейдж карточки считает все): `<file>:<line>:<col> unknown key "<key>"` с пояснением `Ignored. Did you mean "<role>"?` или `Ignored — not a theme role.`, `duplicate key "<key>"` — `The last value is used.`, `terminal color "<value>"` — `Terminal colors are not used by the app; the role comes from extends.`, а также строка о низком контрасте для каждой такой роли;
@@ -144,6 +144,10 @@ App SHALL хранить две темы: тему светлого режима
 Текст файла и значения из него SHALL проходить экранирование управляющих символов и символов направления текста (`escapeForDisplay`) перед показом. Текст файла SHALL экранироваться построчно: переводы строк сохраняются, и номер строки на экране совпадает с номером строки в позиции проблемы. Табуляция SHALL показываться четырьмя пробелами, остальные управляющие и невидимые символы — как `\uXXXX`.
 
 «Open folder» SHALL открывать каталог тем через порт `LocalFolderOpener` (создавая его, если нет). Файл темы app НЕ SHALL открывать внешним приложением. «Reload» SHALL перечитывать каталог. Если выбранная тема назначена режиму, «Reload» SHALL заново применять её из файла.
+
+#### Scenario: Пояснение без неизвестных ключей
+- **WHEN** у выбранной темы только предупреждение о низком контрасте, и все роли заданы
+- **THEN** пояснение InfoBar — `The theme is applied with warnings.`, без фраз о неизвестных ключах и `extends`
 
 #### Scenario: Тема с двумя предупреждениями
 - **WHEN** выбрана `acme-night` с ключами `acent` (строка 6) и `tab_bg` (строка 9)
@@ -239,3 +243,18 @@ App SHALL хранить две темы: тему светлого режима
 #### Scenario: Журнал без имени пользовательской темы
 - **WHEN** пользователь применяет `acme-night` и импортирует ещё одну тему
 - **THEN** события содержат `theme: custom` и `outcome: imported`, строк `acme-night`, `themes/` и пути домашнего каталога в журнале нет
+
+### Requirement: Открытие настроек из меню macOS
+На macOS пункт главного меню приложения «Preferences…» (на русском интерфейсе ОС — «Настройки…») с сочетанием ⌘, SHALL открывать настройки так же, как сочетание `open-settings` (требование «Переход в настройки и обратно»): нативное меню передаёт команду в Dart по каналу `codelab/app_menu`, а Dart открывает настройки через `NavigationCubit` с источником `shortcut`. Пункт меню НЕ SHALL оставаться без действия: меню macOS перехватывает ⌘, раньше Flutter, и без действия сочетание не доходило бы до app. На других ОС Ctrl+, SHALL обрабатываться сочетанием Flutter (`CallbackShortcuts`), как раньше. Канал SHALL слушаться, пока жив владелец моста, и после его закрытия поздняя команда меню НЕ SHALL ничего делать (design.md change `add-app-appearance-page`, D15а).
+
+#### Scenario: ⌘, на macOS
+- **WHEN** app работает на macOS, и пользователь нажимает ⌘, или выбирает «Preferences…» в меню приложения
+- **THEN** открывается экран настроек с последней выбранной страницей, событие `settings.opened` записано с `source: shortcut`
+
+#### Scenario: Ctrl+, на других ОС
+- **WHEN** app работает на Linux, и пользователь нажимает Ctrl+,
+- **THEN** настройки открываются сочетанием Flutter, канал `codelab/app_menu` не участвует
+
+#### Scenario: Неизвестная команда меню
+- **WHEN** нативная сторона вызывает в канале `codelab/app_menu` неизвестный метод
+- **THEN** вызов получает «метод не реализован», состояние навигации не меняется

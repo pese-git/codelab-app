@@ -876,6 +876,172 @@ void main() {
     });
   });
 
+  group('превью рисуется на фоне своей темы (ручная проверка macOS)', () {
+    testWidgets('тёмный режим и выбранная светлая тема: статусы на фоне '
+        'светлой темы', (tester) async {
+      await pumpPage(
+        tester,
+        _state(selectedId: 'light'),
+        system: Brightness.dark,
+      );
+
+      final light = _builtIn('light').theme!;
+      final background = CodeLabCodeTheme.of(light).background;
+      for (final label in const ['Link', 'Done', '84% context', 'Failed']) {
+        final fills = find
+            .ancestor(of: find.text(label), matching: find.byType(DecoratedBox))
+            .evaluate()
+            .map((e) => (e.widget as DecoratedBox).decoration)
+            .whereType<BoxDecoration>()
+            .map((d) => d.color)
+            .whereType<Color>();
+        expect(fills, contains(background), reason: label);
+      }
+    });
+
+    testWidgets('цвета статусов читаемы на фоне выбранной светлой темы', (
+      tester,
+    ) async {
+      await pumpPage(
+        tester,
+        _state(selectedId: 'light'),
+        system: Brightness.dark,
+      );
+
+      final light = _builtIn('light').theme!;
+      final background = CodeLabCodeTheme.of(light).background;
+      final failed = tester.widget<Text>(
+        find.descendant(of: key('-preview'), matching: find.text('Failed')),
+      );
+      expect(
+        contrastRatio(failed.style!.color!, background),
+        greaterThanOrEqualTo(3),
+      );
+    });
+  });
+
+  group('тело InfoBar зависит от состава проблем', () {
+    testWidgets('только низкий контраст: про неизвестные ключи и extends '
+        'ничего нет', (tester) async {
+      final card = _custom(
+        'dim',
+        '{"name":"dim","extends":"dark","colors":{}}',
+      );
+      await pumpPage(
+        tester,
+        _state(
+          custom: [card],
+          selectedId: 'custom-dim',
+          selection: AppearanceSelection(
+            card: card,
+            fileText: '{}',
+            issues: const [
+              AppearanceLowContrastIssue(ThemeRole.codeComment, 1.9),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.textContaining('Unknown keys'), findsNothing);
+      expect(find.textContaining('Missing roles'), findsNothing);
+      expect(find.text('The theme is applied with warnings.'), findsOneWidget);
+    });
+
+    testWidgets('низкий контраст и незаданные роли: только фраза про extends', (
+      tester,
+    ) async {
+      final card = _custom(
+        'dim',
+        '{"name":"dim","extends":"dark","colors":{}}',
+      );
+      await pumpPage(
+        tester,
+        _state(
+          custom: [card],
+          selectedId: 'custom-dim',
+          selection: AppearanceSelection(
+            card: card,
+            fileText: '{}',
+            issues: const [
+              AppearanceLowContrastIssue(ThemeRole.codeComment, 1.9),
+            ],
+            unsetRoles: const [ThemeRole.warning],
+          ),
+        ),
+      );
+
+      expect(find.textContaining('Unknown keys'), findsNothing);
+      expect(
+        find.textContaining(
+          'Missing roles come from extends: "dark" (Fluent Dark).',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('неизвестные ключи без незаданных ролей: нет фразы про '
+        'extends', (tester) async {
+      final card = _custom('acme-night', _twoWarnings, parseWarnings: 2);
+      final parsed = _parsed('acme-night', _twoWarnings);
+      await pumpPage(
+        tester,
+        _state(
+          custom: [card],
+          selectedId: 'custom-acme-night',
+          selection: AppearanceSelection(
+            card: card,
+            fileText: _twoWarnings,
+            issues: [for (final w in parsed.warnings) AppearanceParseIssue(w)],
+          ),
+        ),
+      );
+
+      expect(
+        find.text('Unknown keys were ignored; the theme is applied.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Missing roles'), findsNothing);
+    });
+  });
+
+  group('узкая область (ручная проверка macOS)', () {
+    testWidgets('«Accent color» по-русски при 360 px без переполнения', (
+      tester,
+    ) async {
+      app = buildApp(accentSupported: true);
+      await pumpPage(tester, _state(), locale: const Locale('ru'), width: 360);
+
+      expect(tester.takeException(), isNull);
+      expect(key('-system-accent'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: key('-system-accent'),
+          matching: find.byType(ToggleSwitch),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Использовать системный акцент'), findsOneWidget);
+    });
+
+    testWidgets('«Mode» и действия по-русски при 360 px без переполнения', (
+      tester,
+    ) async {
+      app = buildApp(accentSupported: true);
+      await pumpPage(
+        tester,
+        _state(
+          custom: [_custom('acme-night', _twoWarnings, parseWarnings: 2)],
+          selectedId: 'custom-acme-night',
+          selection: _twoWarningsSelection(),
+        ),
+        locale: const Locale('ru'),
+        width: 360,
+      );
+
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('«Custom themes» и импорт', () {
     testWidgets('путь каталога с ~ и кнопка «Import JSON…»', (tester) async {
       await pumpPage(tester, _state());

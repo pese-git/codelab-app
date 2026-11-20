@@ -5183,12 +5183,6 @@ abstract class AppLocalizations {
   /// **'{name} loaded with {count, plural, one{{count} warning} other{{count} warnings}}'**
   String appearanceIssuesSummary(String name, int count);
 
-  /// Пояснение под InfoBar предупреждений; {base} — значение extends, {builtIn} — имя встроенной темы базы.
-  ///
-  /// In en, this message translates to:
-  /// **'Unknown keys were ignored; the theme is applied. Missing roles come from extends: \"{base}\" ({builtIn}).'**
-  String appearanceIssuesHint(String base, String builtIn);
-
   /// InfoBar ошибки темы; {name} — имя темы как есть.
   ///
   /// In en, this message translates to:
@@ -5790,6 +5784,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'shortcut, hotkey, keybinding, key'**
   String get settingsSearchKeywordsKeyboard;
+
+  /// Пояснение под InfoBar предупреждений, когда в файле есть неизвестные ключи.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown keys were ignored; the theme is applied.'**
+  String get appearanceIssuesHintUnknownKeys;
+
+  /// Пояснение под InfoBar предупреждений, когда неизвестных ключей нет (например, только низкий контраст).
+  ///
+  /// In en, this message translates to:
+  /// **'The theme is applied with warnings.'**
+  String get appearanceIssuesHintApplied;
+
+  /// Дополнение к пояснению, когда у темы есть незаданные роли; {base} — значение extends, {builtIn} — имя встроенной темы базы.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing roles come from extends: \"{base}\" ({builtIn}).'**
+  String appearanceIssuesHintExtends(String base, String builtIn);
 }
 
 class _AppLocalizationsDelegate
