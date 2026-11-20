@@ -41,8 +41,6 @@ const _about = AboutInfo(
   licenseCopyright: 'Copyright (c) 2026 alice',
   configHome: '/Users/alice/.codelab-test',
   logDirectory: '/Users/alice/Library/Application Support/CodeLab/logs',
-  thirdPartyNotices:
-      'See https://devbox:7420/acp?t=sk-test-leak-0123456789 MARKER_ENV',
 );
 
 DiagnosticsContext _context({

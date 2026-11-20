@@ -18,6 +18,18 @@
 //
 // Реализация блоков — задачи 2.6, 3.6 и 5.10 change `add-app-general-page`.
 //
+// Задача 5.1 change `add-app-legal-page` (D9; spec app-settings «Страница
+// «General»: состав и порядок», «Раздел «About» страницы «General»», «События
+// журнала страницы «General»»): блок «Privacy» со ссылкой на политику, кнопки
+// «About» открывают вкладки страницы «Legal», диалога сторонних уведомлений
+// нет, переход пишет `settings.legal_link`. Реализация — задача 5.2:
+// `GeneralPage(onOpenLegal: (LegalTab tab, LegalLinkSource from) {…})`,
+// `LegalLinkSource { privacyBlock, about }` — в `legal_documents.dart`,
+// `AboutInfo` без `thirdPartyNotices`. Ключи: `settings-general-privacy`,
+// `settings-general-no-telemetry`, `settings-general-privacy-policy`,
+// `settings-general-about-privacy`, `settings-general-about-terms`,
+// `settings-general-about-license`, `settings-general-about-third-party`.
+//
 // Контракт ключей (spec): `settings-general-shared-info`,
 // `settings-general-agent-defaults`, `settings-general-agent-row-<key>`,
 // `settings-general-agent-banner`, `settings-general-agent-read-only`,
@@ -27,9 +39,11 @@
 // `TextBox`), своих ключей у них нет.
 
 import 'dart:io';
+import 'dart:ui' show Tristate;
 
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/language/app_language_cubit.dart';
+import 'package:codelab_desktop/app/navigation/app_destination.dart';
 import 'package:codelab_desktop/app/navigation/navigation_cubit.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
@@ -43,6 +57,7 @@ import 'package:codelab_desktop/features/settings/application/about_ports.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/agent_defaults_rows.dart';
 import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
+import 'package:codelab_desktop/features/settings/application/legal_documents.dart';
 import 'package:codelab_desktop/features/settings/application/startup_settings_cubit.dart';
 import 'package:codelab_desktop/features/settings/presentation/general_page.dart';
 import 'package:codelab_desktop/features/settings/presentation/settings_shell.dart';
@@ -235,7 +250,11 @@ void main() {
     final binding = CodeLabTestBinding(
       project: '/workspace',
       settingsPages: const SettingsPages(
-        available: {SettingsPage.connection, SettingsPage.general},
+        available: {
+          SettingsPage.connection,
+          SettingsPage.general,
+          SettingsPage.legal,
+        },
       ),
       languagePreferences: languagePreferences,
       startupPreferences: startupPreferences,
@@ -415,6 +434,7 @@ void main() {
       Locale locale = const Locale('en'),
       Size size = const Size(1200, 2600),
       AboutPorts? about,
+      void Function(LegalTab tab, LegalLinkSource from)? onOpenLegal,
     }) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
@@ -449,7 +469,10 @@ void main() {
               supportedLocales: AppLocalizations.supportedLocales,
               home: ScaffoldPage(
                 content: SingleChildScrollView(
-                  child: GeneralPage(about: about),
+                  child: GeneralPage(
+                    about: about,
+                    onOpenLegal: onOpenLegal ?? (tab, from) {},
+                  ),
                 ),
               ),
             ),
@@ -507,11 +530,123 @@ void main() {
           'When I press Enter during a turn',
           'Sidebar opens on',
           'Send crash reports',
-          'Privacy policy',
-          'Privacy',
         ]) {
           expect(find.text(hidden), findsNothing, reason: hidden);
         }
+      });
+
+      // Задача 5.1 change `add-app-legal-page` (D9; spec «Страница «General»:
+      // состав и порядок», «Порядок блоков», «No telemetry» ведёт на
+      // политику»).
+      group('Privacy (add-app-legal-page, D9)', () {
+        const aboutInfo = AboutInfo(
+          version: '0.1.0',
+          os: 'macOS',
+          arch: 'arm64',
+          embeddedAgentVersion: '0.1.0',
+          licenseName: 'MIT',
+          licenseCopyright: 'Copyright (c) 2026 x',
+          configHome: '~/.codelab',
+          logDirectory: '/tmp/logs-marker',
+        );
+        final aboutPorts = AboutPorts(
+          info: () async => aboutInfo,
+          window: () async => (
+            connection: DiagnosticsConnection.embedded,
+            state: DiagnosticsConnectionState.connected,
+            access: DiagnosticsAccess.editable,
+            customConfigHome: false,
+          ),
+          externalLinks: FakeExternalLinkOpener(),
+          folders: FakeLocalFolderOpener(),
+        );
+
+        testWidgets('порядок блоков: shared-info, Agent defaults, Language, '
+            'Reopen, No telemetry, About', (tester) async {
+          await pumpPage(tester, _ready(), about: aboutPorts);
+
+          final order = [
+            key('settings-general-shared-info'),
+            key('settings-general-agent-defaults'),
+            key('settings-general-language'),
+            key('settings-general-reopen-last-project'),
+            key('settings-general-no-telemetry'),
+            key('settings-general-about'),
+          ];
+          for (final f in order) {
+            expect(f, findsOneWidget);
+          }
+          for (var i = 1; i < order.length; i++) {
+            expect(top(tester, order[i - 1]), lessThan(top(tester, order[i])));
+          }
+          expect(key('settings-general-privacy'), findsOneWidget);
+          for (final hidden in [
+            'When I press Enter during a turn',
+            'Sidebar opens on',
+            'Send crash reports',
+          ]) {
+            expect(find.text(hidden), findsNothing, reason: hidden);
+          }
+        });
+
+        testWidgets('блок Privacy: заголовок, описание и ссылка; '
+            'переключателя нет', (tester) async {
+          await pumpPage(tester, _ready(), about: aboutPorts);
+
+          expect(find.text('Privacy'), findsOneWidget);
+          expect(find.text('No telemetry'), findsOneWidget);
+          expect(
+            find.text(
+              'The app, the CLI and the agent send no usage analytics or '
+              'crash reports. Prompts and files go only to the provider and '
+              'tools you set up.',
+            ),
+            findsOneWidget,
+          );
+          expect(key('settings-general-privacy-policy'), findsOneWidget);
+          expect(
+            find.descendant(
+              of: key('settings-general-no-telemetry'),
+              matching: find.byType(ToggleSwitch),
+            ),
+            findsNothing,
+          );
+        });
+
+        testWidgets('ru: заголовок, строка и описание на русском', (
+          tester,
+        ) async {
+          await pumpPage(
+            tester,
+            _ready(),
+            about: aboutPorts,
+            locale: const Locale('ru'),
+          );
+
+          expect(find.text('Конфиденциальность'), findsOneWidget);
+          expect(find.text('Без телеметрии'), findsOneWidget);
+          expect(find.text('Privacy'), findsNothing);
+          expect(find.text('No telemetry'), findsNothing);
+        });
+
+        testWidgets('ссылка «Privacy policy» вызывает onOpenLegal с '
+            'вкладкой политики и источником privacyBlock', (tester) async {
+          final calls = <(LegalTab, LegalLinkSource)>[];
+          await pumpPage(
+            tester,
+            _ready(),
+            about: aboutPorts,
+            onOpenLegal: (tab, from) => calls.add((tab, from)),
+          );
+
+          await tester.ensureVisible(key('settings-general-privacy-policy'));
+          await tester.tap(key('settings-general-privacy-policy'));
+          await tester.pumpAndSettle();
+
+          expect(calls, [
+            (LegalTab.privacyPolicy, LegalLinkSource.privacyBlock),
+          ]);
+        });
       });
 
       testWidgets('строки идут по группам: Budget, Agent, Subagents, '
@@ -1311,7 +1446,6 @@ void main() {
         licenseCopyright: 'Copyright (c) 2026 x',
         configHome: '~/.codelab',
         logDirectory: '/tmp/logs-marker',
-        thirdPartyNotices: '',
       );
 
       AboutPorts ports(
@@ -2397,9 +2531,6 @@ void main() {
       licenseCopyright: root[2],
       configHome: '~/.codelab-about',
       logDirectory: logDir,
-      thirdPartyNotices: File(
-        '../../THIRD_PARTY_NOTICES.md',
-      ).readAsStringSync(),
     );
 
     late FakeExternalLinkOpener links;
@@ -2483,6 +2614,9 @@ void main() {
       expect(find.text('~/.codelab-about'), findsOneWidget);
       for (final k in [
         'settings-general-about-copy-diagnostics',
+        'settings-general-about-privacy',
+        'settings-general-about-terms',
+        'settings-general-about-license',
         'settings-general-about-third-party',
         'settings-general-about-release-notes',
         'settings-general-about-open-logs',
@@ -2502,13 +2636,94 @@ void main() {
       );
       expect(find.text('Channel'), findsNothing);
       expect(find.text('Signed by'), findsNothing);
-      expect(find.text('Privacy policy'), findsNothing);
+      // Значение строки «License» — ссылка `MIT`, кнопки — «Privacy policy»
+      // и «Terms of use» (D9).
+      expect(
+        find.descendant(
+          of: key('settings-general-about-license'),
+          matching: find.text('MIT'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: key('settings-general-about-privacy'),
+          matching: find.text('Privacy policy'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: key('settings-general-about-terms'),
+          matching: find.text('Terms of use'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Send crash reports'), findsNothing);
     });
 
-    group('Third-party notices', () {
-      testWidgets('диалог офлайн: запись из THIRD_PARTY_NOTICES.md и список '
-          'лицензий пакетов', (tester) async {
+    // Ссылки «About» открывают вкладки страницы «Legal» (D9; spec «Раздел
+    // «About»…», «Ссылки «About» открывают вкладки Legal», «Диалога сторонних
+    // уведомлений нет», «События журнала страницы «General»»).
+    group('Ссылки на страницу «Legal»', () {
+      const dialogKey = 'settings-general-third-party-dialog';
+
+      /// Выбрана ли вкладка [slug] страницы «Legal» (семантика `selected`).
+      bool selected(WidgetTester tester, String slug) =>
+          tester
+              .getSemantics(key('settings-legal-tab-$slug'))
+              .flagsCollection
+              .isSelected ==
+          Tristate.isTrue;
+
+      Future<void> backToGeneral(WidgetTester tester) async {
+        await tester.tap(key('settings-nav-general'));
+        await tester.pumpAndSettle();
+      }
+
+      Iterable<Map<String, Object?>> legalLinks() => binding.scope
+          .resolve<LogBuffer>()
+          .entries
+          .value
+          .where((e) => e['event'] == 'settings.legal_link');
+
+      testWidgets('четыре ссылки по очереди открывают свои вкладки, сеть не '
+          'используется', (tester) async {
+        final handle = tester.ensureSemantics();
+        await openAbout(tester);
+        final cases = {
+          'settings-general-about-privacy': 'privacy-policy',
+          'settings-general-about-terms': 'terms-of-use',
+          'settings-general-about-license': 'license',
+          'settings-general-about-third-party': 'third-party-notices',
+        };
+        var first = true;
+        for (final entry in cases.entries) {
+          if (!first) {
+            await backToGeneral(tester);
+          }
+          first = false;
+          await expand(tester);
+
+          await press(tester, entry.key);
+
+          expect(key('settings-legal'), findsOneWidget, reason: entry.key);
+          expect(
+            binding.scope.resolve<NavigationCubit>().state,
+            isA<SettingsDestination>().having(
+              (d) => d.page,
+              'page',
+              SettingsPage.legal,
+            ),
+          );
+          expect(selected(tester, entry.value), isTrue, reason: entry.key);
+        }
+        expect(links.opened, isEmpty);
+        handle.dispose();
+      });
+
+      testWidgets('диалога нет: вкладка «Third-party notices» показывает '
+          'запись реестра и пакет', (tester) async {
         LicenseRegistry.addLicense(
           () => Stream.value(
             const LicenseEntryWithLineBreaks(['marker_pkg_5_9'], 'Marker text'),
@@ -2519,83 +2734,82 @@ void main() {
 
         await press(tester, 'settings-general-about-third-party');
 
-        expect(key('settings-general-third-party-dialog'), findsOneWidget);
+        expect(key(dialogKey), findsNothing);
         expect(
           find.descendant(
-            of: key('settings-general-third-party-dialog'),
+            of: key('settings-legal-notices-records'),
             matching: find.textContaining('JetBrains Mono', findRichText: true),
           ),
           findsWidgets,
         );
-        expect(
-          find.descendant(
-            of: key('settings-general-third-party-dialog'),
-            matching: find.text('marker_pkg_5_9'),
-          ),
-          findsOneWidget,
-        );
-        final opened = aboutEvents().where((e) => e['action'] == 'third_party');
-        expect(opened.single['outcome'], 'opened');
+        expect(key('settings-legal-package-marker_pkg_5_9'), findsOneWidget);
       });
-    });
 
-    // Только записи реестра (задача 7.7, D13): без заголовка первого уровня,
-    // вводной, «Формат записи» и шаблона; подпись на языке интерфейса.
-    group('Third-party notices: только записи реестра (D13)', () {
-      const dialogKey = 'settings-general-third-party-dialog';
-      const captionEn =
-          'Entries of the CodeLab third-party notices register, as kept in '
-          'the repository.';
-      const captionRu =
-          'Записи реестра сторонних уведомлений CodeLab в том виде, в каком '
-          'они хранятся в репозитории.';
+      testWidgets('Close диалога и подпись «Package licenses» ушли со '
+          'страницы «General»', (tester) async {
+        await openAbout(tester);
+        await expand(tester);
 
-      Finder inDialog(Finder matching) =>
-          find.descendant(of: key(dialogKey), matching: matching);
+        expect(key(dialogKey), findsNothing);
+        expect(find.text('Package licenses'), findsNothing);
+        expect(find.text('Close'), findsNothing);
+      });
 
-      testWidgets('en: записи на русском, подпись на английском, служебных '
-          'разделов нет, заголовок диалога один раз', (tester) async {
+      testWidgets('«Privacy policy» блока «Privacy» открывает вкладку '
+          'политики, пункт Legal выбран', (tester) async {
+        final handle = tester.ensureSemantics();
+        await openAbout(tester);
+
+        await tester.ensureVisible(key('settings-general-privacy-policy'));
+        await tester.tap(key('settings-general-privacy-policy'));
+        await tester.pumpAndSettle();
+
+        expect(key('settings-legal'), findsOneWidget);
+        expect(selected(tester, 'privacy-policy'), isTrue);
+        expect(
+          binding.scope.resolve<NavigationCubit>().state,
+          isA<SettingsDestination>()
+              .having((d) => d.page, 'page', SettingsPage.legal)
+              .having((d) => d.legalTab, 'legalTab', LegalTab.privacyPolicy),
+        );
+        expect(links.opened, isEmpty);
+        handle.dispose();
+      });
+
+      testWidgets('журнал: settings.legal_link с from и tab, без других '
+          'полей с путями', (tester) async {
+        await openAbout(tester);
+        await expand(tester);
+        await press(tester, 'settings-general-about-terms');
+        await backToGeneral(tester);
+        await tester.ensureVisible(key('settings-general-privacy-policy'));
+        await tester.tap(key('settings-general-privacy-policy'));
+        await tester.pumpAndSettle();
+
+        final events = legalLinks().toList();
+        expect(events, hasLength(2));
+        expect(events[0]['from'], 'about');
+        expect(events[0]['tab'], 'terms_of_use');
+        expect(events[1]['from'], 'privacy_block');
+        expect(events[1]['tab'], 'privacy_policy');
+        // Раньше «third_party» писало `settings.about_action`: двух событий на
+        // одно нажатие нет.
+        expect(
+          aboutEvents().where((e) => e['action'] == 'third_party'),
+          isEmpty,
+        );
+      });
+
+      testWidgets('about_action не пишется для ссылок на Legal', (
+        tester,
+      ) async {
         await openAbout(tester);
         await expand(tester);
 
         await press(tester, 'settings-general-about-third-party');
 
-        expect(key(dialogKey), findsOneWidget);
-        expect(
-          inDialog(find.textContaining('JetBrains Mono', findRichText: true)),
-          findsWidgets,
-        );
-        expect(inDialog(find.text(captionEn)), findsOneWidget);
-        expect(
-          inDialog(find.textContaining('Формат записи', findRichText: true)),
-          findsNothing,
-        );
-        expect(
-          inDialog(
-            find.textContaining('<Название источника>', findRichText: true),
-          ),
-          findsNothing,
-        );
-        expect(inDialog(find.text('Third-party notices')), findsOneWidget);
-      });
-
-      testWidgets('ru: подпись на русском, записи те же', (tester) async {
-        await openAbout(tester);
-        await choose(tester, 'settings-language-ru');
-        await expand(tester);
-
-        await press(tester, 'settings-general-about-third-party');
-
-        expect(inDialog(find.text(captionRu)), findsOneWidget);
-        expect(inDialog(find.text(captionEn)), findsNothing);
-        expect(
-          inDialog(find.textContaining('JetBrains Mono', findRichText: true)),
-          findsWidgets,
-        );
-        expect(
-          inDialog(find.textContaining('Формат записи', findRichText: true)),
-          findsNothing,
-        );
+        expect(aboutEvents(), isEmpty);
+        expect(legalLinks().single['tab'], 'third_party_notices');
       });
     });
 
@@ -2788,40 +3002,43 @@ void main() {
         await expectNoStaleLanguage(tester, from: en, to: ru);
       });
 
-      testWidgets('открытый диалог сторонних уведомлений тоже переводится', (
-        tester,
-      ) async {
+      testWidgets('кнопки «Privacy policy» и «Terms of use» и ссылка '
+          'лицензии переводятся; значение MIT нет', (tester) async {
         await openAbout(tester);
         await expand(tester);
-        await press(tester, 'settings-general-about-third-party');
-        expect(key('settings-general-third-party-dialog'), findsOneWidget);
 
-        await tester.runAsync(
-          () => binding.scope.resolve<AppLanguageCubit>().select(
-            AppLanguagePreference.ru,
-          ),
-        );
-        await tester.pumpAndSettle();
+        await choose(tester, 'settings-language-ru');
 
-        expect(key('settings-general-third-party-dialog'), findsOneWidget);
-        // Заголовок самого THIRD_PARTY_NOTICES.md — содержимое юридического
-        // документа и не переводится, поэтому `expectNoStaleLanguage` для
-        // диалога дал бы ложное срабатывание: проверяем подписи диалога.
-        final dialog = key('settings-general-third-party-dialog');
         expect(
           find.descendant(
-            of: dialog,
+            of: key('settings-general-about-privacy'),
+            matching: find.text('Политика конфиденциальности'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: key('settings-general-about-terms'),
+            matching: find.text('Условия использования'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: key('settings-general-about-third-party'),
             matching: find.text('Сторонние уведомления'),
           ),
           findsOneWidget,
         );
         expect(
-          find.descendant(of: dialog, matching: find.text('Лицензии пакетов')),
+          find.descendant(
+            of: key('settings-general-about-license'),
+            matching: find.text('MIT'),
+          ),
           findsOneWidget,
         );
-        expect(find.text('Закрыть'), findsOneWidget);
-        expect(find.text('Close'), findsNothing);
-        expect(find.text('Package licenses'), findsNothing);
+        expect(find.text('Privacy policy'), findsNothing);
+        expect(find.text('Terms of use'), findsNothing);
       });
     });
   });

@@ -4,6 +4,9 @@
 // Страницы в тестах — тестовый набор `available` с заглушками тел: страница
 // «Connection» появляется только в итерации 2.
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:codelab_desktop/app/default_settings_pages.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/l10n/app_localizations_en.dart';
@@ -18,12 +21,14 @@ import '../../../support/l10n_app.dart';
 import '../../../support/l10n_mix.dart';
 import '../../../support/settings_search.dart';
 
-/// Страницы группы Agent рабочей сборки: без «General» и «Keyboard» заголовка
+/// Страницы группы Agent рабочей сборки: без «General», «Keyboard» и «Legal»
+/// (`add-app-legal-page`, D1) заголовка
 /// «App» нет.
 final _agentPages = {...defaultSettingsPages.available}
   ..remove(SettingsPage.general)
   ..remove(SettingsPage.appearance)
-  ..remove(SettingsPage.keyboard);
+  ..remove(SettingsPage.keyboard)
+  ..remove(SettingsPage.legal);
 
 Finder _nav(SettingsPage page) => find.byKey(ValueKey(page.navKey));
 
@@ -200,6 +205,160 @@ void main() {
     expect(agent.dy, lessThan(connection.dy));
     expect(connection.dy, lessThan(app.dy));
     expect(app.dy, lessThan(general.dy));
+  });
+
+  // Задача 4.1 change `add-app-legal-page` (D1; spec app-settings «Навигация
+  // настроек», сценарий «Legal — последний пункт группы «App»»; «Страница
+  // «Legal»: видимость и вкладки», сценарий «Поиск страницы по ключевому
+  // слову»). Реализация — задача 4.2.
+  group('Legal', () {
+    test('Legal — в defaultSettingsPages, группе App, с построителем', () {
+      expect(defaultSettingsPages.visible, contains(SettingsPage.legal));
+      expect(defaultSettingsPages.visible.last, SettingsPage.legal);
+      expect(SettingsPage.legal.group, SettingsGroup.app);
+      expect(SettingsPage.legal.navKey, 'settings-nav-legal');
+      expect(settingsPageBuilders, contains(SettingsPage.legal));
+    });
+
+    testWidgets('settings-nav-legal — последний пункт группы App при любом '
+        'порядке регистрации', (tester) async {
+      await pumpShell(
+        tester,
+        available: {
+          SettingsPage.legal,
+          SettingsPage.general,
+          SettingsPage.keyboard,
+          SettingsPage.appearance,
+        },
+        selected: SettingsPage.general,
+      );
+
+      final ys = [
+        for (final page in [
+          SettingsPage.general,
+          SettingsPage.appearance,
+          SettingsPage.keyboard,
+          SettingsPage.legal,
+        ])
+          tester.getTopLeft(_nav(page)).dy,
+      ];
+      expect(ys, [...ys]..sort());
+      expect(ys.toSet(), hasLength(4));
+      expect(find.text('Legal'), findsOneWidget);
+    });
+
+    Future<Set<SettingsPage>> found(
+      WidgetTester tester,
+      String query,
+      Locale locale,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        localizedFluentApp(
+          locale: locale,
+          SettingsShell(
+            pages: const SettingsPages(
+              available: {
+                SettingsPage.connection,
+                SettingsPage.general,
+                SettingsPage.legal,
+              },
+            ),
+            selected: SettingsPage.general,
+            onSelected: (_) {},
+            onBack: () {},
+            builders: bodies,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(CodeLabSettingsNavigation.searchKey),
+        query,
+      );
+      await tester.pumpAndSettle();
+      return {
+        for (final page in SettingsPage.values)
+          if (_nav(page).evaluate().isNotEmpty) page,
+      };
+    }
+
+    testWidgets('поиск «privacy» оставляет Legal на en и на ru', (
+      tester,
+    ) async {
+      expect(await found(tester, 'privacy', const Locale('en')), {
+        SettingsPage.legal,
+      });
+      expect(await found(tester, 'privacy', const Locale('ru')), {
+        SettingsPage.legal,
+      });
+    });
+
+    testWidgets('поиск «конфиденциальность» находит Legal на ru', (
+      tester,
+    ) async {
+      expect(await found(tester, 'конфиденциальность', const Locale('ru')), {
+        SettingsPage.legal,
+      });
+    });
+
+    testWidgets('русское слово при английском интерфейсе Legal не находит', (
+      tester,
+    ) async {
+      expect(
+        await found(tester, 'конфиденциальность', const Locale('en')),
+        isEmpty,
+      );
+    });
+
+    testWidgets('поиск «telemetry» находит Legal', (tester) async {
+      expect(
+        await found(tester, 'telemetry', const Locale('en')),
+        contains(SettingsPage.legal),
+      );
+    });
+
+    // Читается каталог напрямую: сообщение `settingsSearchKeywordsLegal`
+    // (D1); `support/settings_search.dart` получит случай `legal` в задаче 4.2.
+    List<String> keywords(String locale) =>
+        ((jsonDecode(File('lib/l10n/app_$locale.arb').readAsStringSync())
+                        as Map<String, dynamic>)['settingsSearchKeywordsLegal']
+                    as String? ??
+                '')
+            .split(',')
+            .map((w) => w.trim())
+            .toList();
+
+    test('ключевые слова Legal из спецификации есть в каталогах ARB', () {
+      expect(
+        keywords('en'),
+        containsAll([
+          'legal',
+          'privacy',
+          'terms',
+          'license',
+          'notices',
+          'third-party',
+          'telemetry',
+          'packages',
+        ]),
+      );
+      expect(
+        keywords('ru'),
+        containsAll([
+          'правовая',
+          'конфиденциальность',
+          'условия',
+          'лицензия',
+          'уведомления',
+          'телеметрия',
+          'пакеты',
+        ]),
+      );
+    });
   });
 
   testWidgets('shows only available pages and no title for an empty group', (
