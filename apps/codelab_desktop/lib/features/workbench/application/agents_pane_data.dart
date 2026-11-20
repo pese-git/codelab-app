@@ -9,6 +9,7 @@ final class AgentsShowTarget {
     required this.rowId,
     required this.targetId,
     this.expand = const [],
+    this.approvalId,
   });
 
   /// Id строки ленты верхнего уровня (`tool-N`).
@@ -19,6 +20,12 @@ final class AgentsShowTarget {
 
   /// Id строк пути, которые раскрываются тем же обновлением, что и запрос.
   final List<String> expand;
+
+  /// Id ожидающего одобрения, к которому ведёт цель (`approvalTargetById`);
+  /// `null` — цель не одобрение. «Go to approval» передаёт его ленте, чтобы
+  /// фокус получила полоса именно этого запроса, а не любая в строке
+  /// (`fix-approval-focus`, D13).
+  final String? approvalId;
 }
 
 /// Данные панели Agents сессии в фокусе: строки kit и то, что нужно, чтобы
@@ -165,10 +172,18 @@ final class AgentsPaneData {
         continue;
       }
       if (_holdsChildApproval(row, approvalId)) {
-        return AgentsShowTarget(rowId: row.id, targetId: approvalId);
+        return AgentsShowTarget(
+          rowId: row.id,
+          targetId: approvalId,
+          approvalId: approvalId,
+        );
       }
       if (row.approval?.targetId == approvalId) {
-        return AgentsShowTarget(rowId: row.id, targetId: row.id);
+        return AgentsShowTarget(
+          rowId: row.id,
+          targetId: row.id,
+          approvalId: approvalId,
+        );
       }
     }
     return null;

@@ -777,45 +777,45 @@ ApprovalRequest? _approvalFor(PromptTurn turn, ToolCallId toolCallId) =>
     );
 
 /// Выбор одобрения по правилу D13 из [candidates] в порядке прихода.
-ApprovalRequest? _chooseApproval(Iterable<ApprovalRequest> candidates) {
-  ApprovalRequest? earliestPending;
-  ApprovalRequest? last;
+ApprovalRequest? _chooseApproval(Iterable<ApprovalRequest> candidates) =>
+    _earliestPending(candidates) ?? candidates.lastOrNull;
+
+/// Строгое «раньше» в едином порядке «самое раннее ожидающее» (D13).
+///
+/// Почему: сравнение «0 при отсутствии времени» нетранзитивно, и строка вызова
+/// с `focused` могли указывать на разные запросы (A(t2), B(null), C(t1)).
+/// Порядок: сначала запросы с `requestedAt` (по времени), затем без него;
+/// равные остаются в порядке прихода — это делает порядок полным и
+/// транзитивным.
+bool _isEarlierPending(ApprovalRequest a, ApprovalRequest b) {
+  final aTime = a.requestedAt;
+  final bTime = b.requestedAt;
+  if (aTime == null) {
+    return false;
+  }
+  return bTime == null || aTime.isBefore(bTime);
+}
+
+/// Самое раннее ожидающее одобрение из [candidates] (порядок прихода) по
+/// [_isEarlierPending]; `null`, если ожидающих нет. Общая для выбора строки
+/// вызова и признака `focused`, чтобы они всегда указывали на один запрос.
+ApprovalRequest? _earliestPending(Iterable<ApprovalRequest> candidates) {
+  ApprovalRequest? best;
   for (final approval in candidates) {
-    last = approval;
     if (approval.status != ApprovalStatus.pending) {
       continue;
     }
-    final best = earliestPending;
-    final bestTime = best?.requestedAt;
-    final time = approval.requestedAt;
-    // Строгое «раньше»: при равенстве или без времени остаётся первый по
-    // порядку прихода.
-    if (best == null ||
-        (bestTime != null && time != null && time.isBefore(bestTime))) {
-      earliestPending = approval;
+    if (best == null || _isEarlierPending(approval, best)) {
+      best = approval;
     }
   }
-  return earliestPending ?? last;
+  return best;
 }
 
-/// Самое раннее по `requestedAt` ожидающее одобрение хода — единственное,
-/// которому принадлежат клавиши одобрения (embed-approval-in-thread/
-/// design.md, Decision 6).
-ApprovalRequestId? _earliestPendingApprovalId(PromptTurn turn) {
-  final pending =
-      turn.approvals.values
-          .where((approval) => approval.status == ApprovalStatus.pending)
-          .toList()
-        ..sort((a, b) {
-          final aTime = a.requestedAt;
-          final bTime = b.requestedAt;
-          if (aTime == null || bTime == null) {
-            return 0;
-          }
-          return aTime.compareTo(bTime);
-        });
-  return pending.firstOrNull?.id;
-}
+/// Самое раннее ожидающее одобрение хода — единственное, которому принадлежат
+/// клавиши одобрения (embed-approval-in-thread/design.md, Decision 6; D13).
+ApprovalRequestId? _earliestPendingApprovalId(PromptTurn turn) =>
+    _earliestPending(turn.approvals.values)?.id;
 
 ApprovalStateView? _approvalView(
   PromptTurn turn,

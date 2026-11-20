@@ -108,8 +108,7 @@ class CodeLabTranscriptPanel extends StatefulWidget {
 
   /// Полоса одобрения с клавиатурным фокусом исчезла из ленты (ответ, отмена
   /// хода, снятие запроса, смена сессии): хост возвращает фокус (change
-  /// `fix-approval-focus`, D5). ЗАГЛУШКА задачи 3.1: параметр принят, но не
-  /// Колбэк идёт от полосы через строку вызова; вызывается один раз и только
+  /// `fix-approval-focus`, D5). Колбэк идёт от полосы через строку вызова; вызывается один раз и только
   /// если фокус был в полосе, когда она уходила. Хост возвращает фокус в
   /// следующем кадре и только если его никто не взял (§12).
   final VoidCallback? onApprovalFocusReleased;
@@ -139,6 +138,8 @@ final class CodeLabTranscriptShowRequest {
     required this.targetId,
     required this.serial,
     this.focusApproval = false,
+    this.sessionId,
+    this.approvalId,
   });
 
   final String rowId;
@@ -151,6 +152,14 @@ final class CodeLabTranscriptShowRequest {
   /// не нашли полосу или запрос устарел — фокус прежний. Разовость запроса
   /// (`serial`, `onShowRequestDone`) защищает от повтора при перемонтировании.
   final bool focusApproval;
+
+  /// Сессия и id запроса, выбранного при нажатии «Go to approval»: фокус
+  /// получает только полоса с ключом `CodeLabApprovalPrompt.keyFor(sessionId,
+  /// approvalId)`. Без них или без такой полосы в цели фокус не трогается:
+  /// запрос мог уйти, а в той же строке появиться другой (D13; спецификация
+  /// «Цель ушла до фокуса»).
+  final String? sessionId;
+  final String? approvalId;
 }
 
 /// Состояние ленты: владеет `ScrollController` и решает, когда двигать
@@ -362,6 +371,17 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   void _startShow(CodeLabTranscriptShowRequest request) {
     final token = ++_showToken;
     _lastShowSerial = request.serial;
+    // Фокус уже в полосе цели: повторный переход ничего не меняет — ни фокуса,
+    // ни прокрутки, ни подсветки, ни следования за хвостом (спецификация
+    // «Переход к ожидающему одобрению с клавиатуры»). Показ закрываем в
+    // следующем кадре: `didUpdateWidget` идёт в сборке, а хост меняет состояние.
+    if (request.focusApproval && _approvalBarNode(request)?.hasFocus == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || token != _showToken) return;
+        widget.onShowRequestDone?.call(request.serial);
+      });
+      return;
+    }
     _isReadingHistory = true;
     _isFollowingTail = false;
     _isKeepingApprovalInView = false;
@@ -408,7 +428,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
         // Запрос мог устареть между кадрами: фокус ставит только актуальный.
         if (request.focusApproval &&
             widget.showRequest?.serial == request.serial) {
-          _focusApprovalBar(again ?? target);
+          _focusApprovalBar(request);
         }
         widget.onShowRequestDone?.call(request.serial);
       });
@@ -450,11 +470,16 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
       ? CodeLabTranscriptPanel.rowKey(request.rowId)
       : CodeLabTranscriptPanel.targetKey(request.targetId);
 
-  /// Ставит фокус на полосу решения внутри построенной цели [target]; полосы
-  /// нет — фокус не трогает. Другое одобрение фокус не получает: ищется только
-  /// внутри цели запроса (§9).
-  void _focusApprovalBar(BuildContext target) {
-    if (target is! Element || !target.mounted) return;
+  /// Узел фокуса полосы запроса, выбранного в [request], или `null`: запрос
+  /// не назван или полосы с его ключом нет в построенном дереве. Ищется
+  /// именно по ключу запроса, а не «первая полоса цели»: цель могла сменить
+  /// запрос или нести под собой блок потомка (§9, D13).
+  FocusNode? _approvalBarNode(CodeLabTranscriptShowRequest request) {
+    final session = request.sessionId;
+    final approval = request.approvalId;
+    if (session == null || approval == null) return null;
+    final prompt = _findKeyed(CodeLabApprovalPrompt.keyFor(session, approval));
+    if (prompt is! Element || !prompt.mounted) return null;
     Element? bar;
     void visit(Element element) {
       if (bar != null) return;
@@ -465,11 +490,19 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
       element.visitChildren(visit);
     }
 
-    target.visitChildren(visit);
+    prompt.visitChildren(visit);
     final found = bar;
-    if (found == null || !found.mounted) return;
-    final node = Focus.maybeOf(found, createDependency: false);
-    if (node != null && node.canRequestFocus) node.requestFocus();
+    if (found == null || !found.mounted) return null;
+    return Focus.maybeOf(found, createDependency: false);
+  }
+
+  /// Ставит фокус на полосу решения запроса [request]; полосы нет — фокус не
+  /// трогает. Фокус уже в полосе — тоже не трогает: перенос с кнопки на
+  /// контейнер ломал бы текущий выбор пользователя.
+  void _focusApprovalBar(CodeLabTranscriptShowRequest request) {
+    final node = _approvalBarNode(request);
+    if (node == null || node.hasFocus || !node.canRequestFocus) return;
+    node.requestFocus();
   }
 
   void _reveal(BuildContext target) {

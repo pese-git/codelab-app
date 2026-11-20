@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:codelab_ui/codelab_ui.dart' show CodeLabLocalizations;
+import 'package:codelab_ui/codelab_ui.dart'
+    show CodeLabApprovalPrompt, CodeLabLocalizations;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -136,35 +137,54 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
   /// рабочее место (`fix-approval-focus`, D5).
   ///
   /// Вызывается из `dispose` полосы, поэтому дерево не трогает. Микротаск
-  /// после освобождения записывает узел, которому Flutter сам отдал фокус; в
-  /// следующем кадре фокус возвращается, только если он всё ещё на этом узле,
-  /// то есть никто его за это время не взял (§12: устаревший результат не
+  /// после освобождения записывает узел, которому Flutter сам отдал фокус.
+  /// Если это кнопка другой полосы одобрения (история фокуса области), фокус
+  /// возвращается сразу: у этой полосы после решения прежней включаются
+  /// сочетания, и второй Cmd/Ctrl+Enter в этот кадр ответил бы на запрос, к
+  /// которому пользователь не переходил (AGENTS.md §10). Иначе фокус
+  /// возвращается в следующем кадре и только если он всё ещё на этом узле, то
+  /// есть никто его за это время не взял (§12: устаревший результат не
   /// отбирает фокус у пользователя).
   void _onApprovalFocusReleased() {
     scheduleMicrotask(() {
+      if (!mounted) {
+        return;
+      }
       final settled = FocusManager.instance.primaryFocus;
+      if (settled?.context
+              ?.findAncestorWidgetOfExactType<CodeLabApprovalPrompt>() !=
+          null) {
+        _returnApprovalFocus(focusTaken: false);
+        return;
+      }
       WidgetsBinding.instance
         ..addPostFrameCallback((_) {
           if (!mounted) {
             return;
           }
-          final shell = context.read<CodeLabShellCubit>();
-          final target = approvalFocusReturnOf(
-            hasComposer: _composerFocus.context != null,
-            composerEnabled: shell.state.isPromptEnabled,
+          _returnApprovalFocus(
             focusTaken: FocusManager.instance.primaryFocus != settled,
           );
-          switch (target) {
-            case ApprovalFocusReturn.composer:
-              _composerFocus.requestFocus();
-            case ApprovalFocusReturn.workbench:
-              _workbenchScope.requestFocus();
-            case ApprovalFocusReturn.none:
-              break;
-          }
         })
         ..scheduleFrame();
     });
+  }
+
+  void _returnApprovalFocus({required bool focusTaken}) {
+    final shell = context.read<CodeLabShellCubit>();
+    final target = approvalFocusReturnOf(
+      hasComposer: _composerFocus.context != null,
+      composerEnabled: shell.state.isPromptEnabled,
+      focusTaken: focusTaken,
+    );
+    switch (target) {
+      case ApprovalFocusReturn.composer:
+        _composerFocus.requestFocus();
+      case ApprovalFocusReturn.workbench:
+        _workbenchScope.requestFocus();
+      case ApprovalFocusReturn.none:
+        break;
+    }
   }
 
   void _onNavigation(AppDestination current) {

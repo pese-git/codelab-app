@@ -13,6 +13,7 @@ final class TranscriptShowRequest {
     required this.targetId,
     required this.serial,
     this.focusApproval = false,
+    this.approvalId,
   });
 
   final String sessionId;
@@ -26,6 +27,11 @@ final class TranscriptShowRequest {
   /// `finishShowRequest` и `dropShowRequestOutside`, поэтому возврат в сессию
   /// и перемонтированная лента фокус не повторяют (§9).
   final bool focusApproval;
+
+  /// Id одобрения, выбранного при нажатии: лента ставит фокус только на полосу
+  /// этого запроса сессии [sessionId] (`fix-approval-focus`, D13). Запрос мог
+  /// уйти, а в той же строке появиться другой — тогда фокус не трогается.
+  final String? approvalId;
 }
 
 /// Ручное раскрытие строк ленты, показанные изображения, выбранная строка
@@ -188,6 +194,7 @@ final class TranscriptViewCubit extends ShellPartCubit<TranscriptViewState> {
           targetId: target.targetId,
           serial: state.showSerial + 1,
           focusApproval: focusApproval,
+          approvalId: target.approvalId,
         ),
         showSerial: state.showSerial + 1,
       ),

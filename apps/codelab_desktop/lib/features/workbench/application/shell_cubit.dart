@@ -875,6 +875,8 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           targetId: request.targetId,
           serial: request.serial,
           focusApproval: request.focusApproval,
+          sessionId: request.sessionId,
+          approvalId: request.approvalId,
         ),
         null => null,
       },

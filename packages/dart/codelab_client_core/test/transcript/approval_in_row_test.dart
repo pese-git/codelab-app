@@ -192,6 +192,26 @@ void main() {
         expect(pending.focused, isTrue);
       });
 
+      test(
+        'часть запросов без requestedAt: строка и focused — один запрос',
+        () {
+          // Порядок D13 транзитивен: запросы со временем раньше запросов без
+          // него, поэтому A(t2), B(null), C(t1) дают C и в строке, и в focused.
+          final items = _project(
+            [
+              _approval('a', _c1, requestedAt: late),
+              _approval('b', _c1),
+              _approval('c', _c1, requestedAt: early),
+            ],
+            announced: {_c1},
+          );
+
+          final pending = _row(items, _c1).approval! as PendingApprovalView;
+          expect(pending.approvalId, const ApprovalRequestId('c'));
+          expect(pending.focused, isTrue);
+        },
+      );
+
       test('после ответа на p1 в строке — p2', () {
         final items = _project(
           [

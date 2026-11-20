@@ -576,4 +576,37 @@ void main() {
       expect(released, 0);
     });
   });
+
+  // `didUpdateWidget` полосы: кнопка в фокусе гаснет (`enabled: false`, хост
+  // блокирует ответы на время ответа другому одобрению) — фокус остаётся в
+  // полосе, на её узле (design.md, Risks).
+  group('a focused button gets disabled', () {
+    Widget host({required bool enabled}) => FluentApp(
+      home: Center(
+        child: SizedBox(
+          width: 720,
+          child: CodeLabApprovalPrompt(
+            options: options,
+            enabled: enabled,
+            onOptionSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('the focus moves from the button to the bar node', (
+      tester,
+    ) async {
+      await tester.pumpWidget(host(enabled: true));
+      await tabTo(tester, find.byKey(CodeLabApprovalPrompt.allowKey));
+
+      await tester.pumpWidget(host(enabled: false));
+      await tester.pump();
+
+      final barNode = Focus.of(
+        tester.element(find.byKey(CodeLabApprovalPrompt.barKey)),
+      );
+      expect(FocusManager.instance.primaryFocus, same(barNode));
+    });
+  });
 }

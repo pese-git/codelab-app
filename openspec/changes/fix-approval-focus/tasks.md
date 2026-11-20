@@ -114,7 +114,8 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - выбор цели в application (`features/workbench/application/`), без логики в `build`;
   - `TranscriptViewCubit.requestShow(focusApproval:)`;
   - `onGoToApproval` в `workbench_shell.dart`, передаётся всегда (D4, п. 1);
-  - пока открыта палитра команд, сочетание ничего не делает.
+  - пока открыта палитра команд, сочетание ничего не делает;
+  - `ActiveSessionCubit.respondToApproval` пересобирает ленту одним `emit` со снятием `isRespondingToApproval` (D4, п. 4).
 
   2.3 зелёный; `workbench_shell_test.dart`, `settings_pending_approval_test.dart` и тесты панели Agents зелёные без изменения сценариев.
 
@@ -168,13 +169,13 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
 
 ## 5. Итерация 5 — документация (`docs-writer`, стандарт `.claude/skills/codelab-docs/SKILL.md`)
 
-- [ ] 5.1 `[desktop]` `docs/architecture/l10n-glossary.md` (D7, итог 4.3; правило §7 глоссария — термин в том же PR, что и сообщение):
+- [x] 5.1 `[desktop]` `docs/architecture/l10n-glossary.md` (D7, итог 4.3; правило §7 глоссария — термин в том же PR, что и сообщение):
   - «Страница «Keyboard»» — строки `Go to approval`, `Workbench, while an approval is pending`, `Pending approval with keyboard focus, when the agent offers this option`;
   - «Одобрение» — `Press {shortcut} to answer from the keyboard`.
-- [ ] 5.2 `[desktop]` `apps/codelab_desktop/doc/user-guide.md`:
+- [x] 5.2 `[desktop]` `apps/codelab_desktop/doc/user-guide.md`:
   - раздел про одобрения: таблица сочетаний дополнена ⇧⌘A / Ctrl+Shift+A «перейти к одобрению»; абзац «Сочетания работают, когда фокус внутри карточки…» переписан — переход, рамка фокуса, Enter на полосе ничего не выбирает, подсказка, возврат фокуса в композер, следующее одобрение фокус не получает;
   - раздел «Сочетания клавиш» — строка «Go to approval» в группе Approvals и новое место строк одобрения.
-- [ ] 5.3 `[desktop]` Правила пакетов:
+- [x] 5.3 `[desktop]` Правила пакетов:
   - `packages/flutter/codelab_ui/AGENTS.md` §4: виджеты одобрения не берут фокус сами (`autofocus` запрещён), ключ полосы — id запроса, `onGoToApproval`, `focusApproval`, `onApprovalFocusReleased`;
   - `packages/flutter/codelab_ui/README.md`: раздел про одобрение — фокус и переход;
   - `apps/codelab_desktop/AGENTS.md`: цель перехода выбирает application по признаку `focused` модели; возврат фокуса в композер с проверкой свободного фокуса.
@@ -201,3 +202,10 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2):
   - изменение поведения: одобрение больше не берёт фокус само, новый переход Cmd/Ctrl+Shift+A;
   - исправление ядра: повторный `session/request_permission` того же вызова виден в строке вызова (D13), затрагивает и CLI;
   - зависимость от `add-app-keyboard-page`.
+- [ ] 6.6 `[desktop]` `[client]` Исправления по двойному ревью (без CRITICAL и HIGH):
+  - пересборка ленты одним `emit` после ответа (`ActiveSessionCubit.respondToApproval`), D4, п. 4;
+  - фокус с выключенной кнопки полосы переходит на узел самой полосы (`didUpdateWidget`), не покидая её; сценарий «Кнопка с фокусом выключается», D4, п. 4;
+  - запрос показа несёт `approvalId`, лента фокусирует только полосу с ключом `CodeLabApprovalPrompt.keyFor(sessionId, approvalId)`; ключ включает id сессии; повторное нажатие при фокусе в цели ничего не меняет, D4, пп. 2, 4;
+  - узел, которому Flutter отдал фокус, внутри другой полосы — перевод в композер или на рабочее место сразу, в микротаске; сценарий «Flutter вернул фокус на кнопку другого одобрения», D5;
+  - одна транзитивная функция порядка «самое раннее ожидающее» для строки вызова и признака `focused` (`codelab_client_core`, `[client]`), D13;
+  - документация: убран «клик» как способ поставить фокус (кнопка Fluent `HoverButton` фокус по клику не берёт); уточнены подсказки и «только у самого раннего одобрения».

@@ -290,6 +290,7 @@ void main() {
           options: options,
           onOptionSelected: (_) {},
           targetId: targetId,
+          sessionId: 's1',
         );
 
     // Одобрение корня: цель — сама строка (как `AgentsPaneData`).
@@ -347,15 +348,20 @@ void main() {
       ),
     );
 
+    // `approvalId` по умолчанию — id запроса, который стоит в целевой строке
+    // (`perm-1` у строки корня, иначе равен [targetId]).
     CodeLabTranscriptShowRequest req(
       String targetId, {
       int serial = 5,
       bool focus = true,
+      String? approvalId,
     }) => CodeLabTranscriptShowRequest(
       rowId: 'tool-1',
       targetId: targetId,
       serial: serial,
       focusApproval: focus,
+      sessionId: 's1',
+      approvalId: approvalId ?? (targetId == 'tool-1' ? 'perm-1' : targetId),
     );
 
     final prompt = find.byType(CodeLabApprovalPrompt);
@@ -465,6 +471,111 @@ void main() {
 
       expect(outside.hasPrimaryFocus, isTrue);
     });
+
+    // Цель ушла до фокуса, а в той же строке появился другой запрос того же
+    // вызова (D13): фокус получает только полоса выбранного запроса.
+    testWidgets('a different approval in the same row does not get the focus', (
+      tester,
+    ) async {
+      List<CodeLabTranscriptRow> rowsOf(String perm) => [
+        CodeLabToolCallRow(
+          id: 'tool-1',
+          status: CodeLabToolCallStatus.running,
+          label: 'Run echo',
+          approval: pending(perm),
+        ),
+        for (var i = 0; i < 60; i++)
+          CodeLabAgentTextRow(id: 'text-$i', text: 'Answer $i'),
+      ];
+      await start(tester, rowsOf('perm-1'));
+
+      // Запрос показа выбран для perm-1, но строка уже держит perm-2.
+      await tester.pumpWidget(
+        host(rowsOf('perm-2'), request: req('tool-1', approvalId: 'perm-1')),
+      );
+      await _frames(tester);
+
+      expect(outside.hasPrimaryFocus, isTrue);
+    });
+
+    testWidgets('a child block under the root row does not take the focus '
+        'meant for the root own approval', (tester) async {
+      final rows = [
+        CodeLabToolCallRow(
+          id: 'tool-1',
+          status: CodeLabToolCallStatus.running,
+          label: 'Subagent review: x',
+          subagent: const CodeLabSubagentCall(),
+          childApprovals: [pending('perm-9')],
+        ),
+        for (var i = 0; i < 60; i++)
+          CodeLabAgentTextRow(id: 'text-$i', text: 'Answer $i'),
+      ];
+      await start(tester, rows);
+
+      // Собственного одобрения строки нет (оно ушло), под ней блок потомка.
+      await tester.pumpWidget(
+        host(rows, request: req('tool-1', approvalId: 'perm-1')),
+      );
+      await _frames(tester);
+
+      expect(outside.hasPrimaryFocus, isTrue);
+    });
+
+    testWidgets('the same approval id in another session is not matched', (
+      tester,
+    ) async {
+      await start(tester, ownRows());
+
+      await tester.pumpWidget(
+        host(
+          ownRows(),
+          request: const CodeLabTranscriptShowRequest(
+            rowId: 'tool-1',
+            targetId: 'tool-1',
+            serial: 5,
+            focusApproval: true,
+            sessionId: 's2',
+            approvalId: 'perm-1',
+          ),
+        ),
+      );
+      await _frames(tester);
+
+      expect(outside.hasPrimaryFocus, isTrue);
+    });
+
+    // Повторное сочетание при фокусе уже в полосе ничего не меняет (spec
+    // «Переход к ожидающему одобрению с клавиатуры»): фокус остаётся на кнопке,
+    // лента не прокручивается и не подсвечивается, показ закрывается.
+    testWidgets('a repeated request with the focus already in the bar changes '
+        'nothing', (tester) async {
+      final done = <int>[];
+      await start(tester, ownRows());
+      await tester.pumpWidget(
+        host(ownRows(), request: req('tool-1'), onDone: done.add),
+      );
+      await _frames(tester);
+      await tester.pump(const Duration(seconds: 3));
+      await tabTo(tester, find.byKey(CodeLabApprovalPrompt.rejectKey));
+      final offset = _position(tester).pixels;
+
+      await tester.pumpWidget(
+        host(ownRows(), request: req('tool-1', serial: 6), onDone: done.add),
+      );
+      await _frames(tester);
+
+      expect(
+        focusIsInside(tester, find.byKey(CodeLabApprovalPrompt.rejectKey)),
+        isTrue,
+      );
+      expect(_position(tester).pixels, offset);
+      expect(
+        find.byKey(CodeLabTranscriptPanel.highlightKey('tool-1')),
+        findsNothing,
+      );
+      expect(done, [5, 6]);
+    });
   });
 
   // Уход полосы с фокусом из ленты (задача 3.1 `fix-approval-focus`, D5): лента
@@ -490,6 +601,7 @@ void main() {
                 options: options,
                 onOptionSelected: (_) {},
                 targetId: 'perm-1',
+                sessionId: 's1',
               )
             : const CodeLabTranscriptApproval.resolved(label: 'Allow once'),
       ),
@@ -516,6 +628,8 @@ void main() {
       targetId: 'tool-1',
       serial: 5,
       focusApproval: true,
+      sessionId: 's1',
+      approvalId: 'perm-1',
     );
 
     testWidgets('the focused bar is gone: reported once', (tester) async {

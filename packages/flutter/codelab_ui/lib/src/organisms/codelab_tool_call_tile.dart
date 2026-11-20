@@ -9,14 +9,12 @@ import 'codelab_compact_call_line.dart';
 import 'codelab_transcript_row.dart';
 import 'codelab_transcript_target.dart';
 
-/// Ключ полосы решения по id запроса (`targetId`, он же `approvalId`).
-///
-/// Почему: новый запрос того же вызова на том же месте ленты должен получить
-/// новый `State` полосы, а значит и новый узел фокуса: фокус прежнего запроса
-/// на него не переносится, и каждое одобрение начинает с охвата по умолчанию
-/// (change `fix-approval-focus`, D4, п. 4). Без `targetId` ключа нет.
-Key? _promptKeyOf(String? targetId) =>
-    targetId == null ? null : ValueKey('approval-prompt-$targetId');
+/// Ключ полосы решения ожидающего одобрения: без сессии или id ключа нет.
+Key? _promptKeyOf(CodeLabTranscriptApprovalPending p) =>
+    switch ((p.sessionId, p.targetId)) {
+      (final session?, final id?) => CodeLabApprovalPrompt.keyFor(session, id),
+      _ => null,
+    };
 
 /// Вызов инструмента в ленте: одна строка и раскрываемые подробности.
 ///
@@ -142,7 +140,7 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
                 if (pending.requesterLine case final line?)
                   _RequesterHeader(line: line, hint: pending.requesterHint),
                 CodeLabApprovalPrompt(
-                  key: _promptKeyOf(pending.targetId),
+                  key: _promptKeyOf(pending),
                   onApprovalFocusReleased: widget.onApprovalFocusReleased,
                   reason: pending.reason,
                   diffSummary: pending.diffSummary,
@@ -547,7 +545,7 @@ class _ChildApprovalBlock extends StatelessWidget {
               ),
             ),
           CodeLabApprovalPrompt(
-            key: _promptKeyOf(p.targetId),
+            key: _promptKeyOf(p),
             onApprovalFocusReleased: onApprovalFocusReleased,
             reason: p.reason,
             diffSummary: p.diffSummary,

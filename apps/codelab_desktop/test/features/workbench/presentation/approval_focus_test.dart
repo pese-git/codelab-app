@@ -840,6 +840,161 @@ void main() {
       await tearDownApp(tester);
     });
 
+    // Цель ушла до фокуса, а в той же строке появился другой запрос того же
+    // вызова (D13): фокус получает только полоса выбранного запроса
+    // (spec «Переход к ожидающему одобрению с клавиатуры», «Цель ушла до
+    // фокуса»).
+    testWidgets('цель ушла до фокуса: новый запрос того же вызова в той же '
+        'строке фокус не получает', (tester) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 931, toolCallId: 'x');
+      await settle(tester);
+      await shortFrames(tester);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.runAsync(
+        () => cubit.respondToApproval(
+          approvalId: const ApprovalRequestId('permission-931'),
+          sessionId: const SessionId('session-1'),
+          optionId: 'reject-once',
+        ),
+      );
+      ask('session-1', 932, toolCallId: 'x');
+      await settle(tester);
+      await shortFrames(tester);
+      await shortFrames(tester);
+
+      expect(
+        focusIn(prompts),
+        isFalse,
+        reason: 'полоса запроса 932 фокус не получила',
+      );
+      await tearDownApp(tester);
+    });
+
+    // Под строкой `agent` корня стоит блок потомка: фокус, выбранный для
+    // собственного одобрения строки, на него не переходит.
+    testWidgets('цель ушла до фокуса: блок потомка под строкой корня фокус не '
+        'получает', (tester) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      Map<String, Object?> agentCall(
+        String id,
+        String type,
+        String subagentId, {
+        String? parent,
+      }) => {
+        'sessionUpdate': 'tool_call',
+        'toolCallId': id,
+        'title': 'Subagent $type: Find auth code',
+        'kind': 'think',
+        'status': 'in_progress',
+        'rawInput': {'type': type, 'description': 'Find auth code'},
+        '_meta': {
+          'codelab': {
+            'parentToolCallId': ?parent,
+            'subagent': {'id': subagentId, 'type': type},
+          },
+        },
+      };
+      await frames(tester, [
+        agentCall('call_1', 'review', 'sub_a1'),
+        agentCall('call_1/call_2', 'explore', 'sub_b2', parent: 'call_1'),
+        {
+          'sessionUpdate': 'tool_call',
+          'toolCallId': 'call_1/call_2/call_3',
+          'title': 'Run git diff --stat',
+          'kind': 'execute',
+          'status': 'pending',
+          'rawInput': {'command': 'git diff --stat'},
+          '_meta': {
+            'codelab': {'parentToolCallId': 'call_1/call_2'},
+          },
+        },
+      ]);
+      // Раннее одобрение — запуск самой строки `call_1` (её собственная
+      // полоса), позднее — блок потомка под этой строкой.
+      ask('session-1', 941, toolCallId: 'call_1');
+      await settle(tester);
+      agent.emitInbound(
+        JsonRpcMessage.request(
+          id: const JsonRpcId.integer(942),
+          method: sessionRequestPermissionMethod,
+          params: RequestPermissionRequest(
+            sessionId: const SessionId('session-1'),
+            toolCall: ToolCallUpdate(
+              toolCallId: const ToolCallId('call_1/call_2/call_3'),
+              title: 'Run git diff --stat',
+              kind: ToolKind.execute,
+              status: ToolCallStatus.pending,
+              rawInput: const {'command': 'git diff --stat'},
+              meta: const {
+                'codelab': {
+                  'subagent': {
+                    'id': 'sub_b2',
+                    'type': 'explore',
+                    'description': 'Find callers',
+                    'depth': 2,
+                    'path': <String>[],
+                    'parentToolCallId': 'call_1',
+                  },
+                },
+              },
+            ),
+            options: fourOptions,
+          ).toJson(),
+        ),
+      );
+      await settle(tester);
+      await shortFrames(tester);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.runAsync(
+        () => cubit.respondToApproval(
+          approvalId: const ApprovalRequestId('permission-941'),
+          sessionId: const SessionId('session-1'),
+          optionId: 'reject-once',
+        ),
+      );
+      await settle(tester);
+      await shortFrames(tester);
+      await shortFrames(tester);
+
+      expect(prompts, findsOneWidget, reason: 'остался блок потомка');
+      expect(focusIn(prompts), isFalse);
+      await tearDownApp(tester);
+    });
+
+    // Повторное сочетание при фокусе уже в полосе ничего не меняет (spec
+    // «Переход к ожидающему одобрению с клавиатуры»).
+    testWidgets('повторное сочетание при фокусе на кнопке Reject: фокус '
+        'остаётся на Reject', (tester) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 951);
+      await settle(tester);
+      await shortFrames(tester);
+      await pressGoTo(tester);
+      expect(focusInApproval(), isTrue);
+      final reject = find.byKey(CodeLabApprovalPrompt.rejectKey);
+      await tabTo(tester, reject);
+
+      await pressGoTo(tester);
+
+      expect(focusIn(reject), isTrue);
+      expect(answers(), isEmpty);
+      await tearDownApp(tester);
+    });
+
     testWidgets('из настроек сочетание не действует', (tester) async {
       await pumpConnected(
         tester,
@@ -1082,10 +1237,8 @@ void main() {
       await tearDownApp(tester);
     });
 
-    // ВНИМАНИЕ: красный по причине вне итерации 3 — `_approvalFor` в
-    // `transcript_projector.dart` (`codelab_client_core`) отдаёт строке вызова
-    // первое одобрение вызова, то есть уже решённое, и новый запрос того же
-    // вызова в строке не показывается (design.md D11: ядро не меняется).
+    // Новый запрос того же вызова показывается в строке отдельной полосой
+    // (design.md D13); полоса нового запроса фокус не наследует.
     testWidgets('новый запрос того же вызова: полоса без фокуса, фокус в '
         'композере', (tester) async {
       await pumpConnected(tester);
@@ -1170,6 +1323,40 @@ void main() {
       expect(prompts, findsNothing);
       expect(focusInside<CodeLabFileTree>(), isTrue);
       expect(focusInComposerField(), isFalse);
+      await tearDownApp(tester);
+    });
+
+    // Между уходом полосы A и кадром фокус остаётся на узле, который Flutter
+    // выбрал из истории: это кнопка полосы B, у которой после решения A
+    // включаются сочетания. Фокус уходит с неё сразу, в том же микротаске
+    // (design.md D5).
+    testWidgets('A решена, история фокуса указывает на кнопку B: фокус уходит '
+        'в композер сразу', (tester) async {
+      await pumpConnected(tester);
+      await createSession(tester, 'session-1');
+      await startTurn(tester);
+      ask('session-1', 1051);
+      await settle(tester);
+      ask('session-1', 1052);
+      await settle(tester);
+      await shortFrames(tester);
+      await focusSidebarRow(tester);
+      await tabTo(tester, find.byKey(CodeLabApprovalPrompt.allowKey).last);
+      await pressGoTo(tester);
+      expect(focusInApproval(), isTrue);
+      // Фокус сейчас на полосе A, а в истории области позади — кнопка B.
+      await tester.runAsync(
+        () => cubit.respondToApproval(
+          approvalId: const ApprovalRequestId('permission-1051'),
+          sessionId: const SessionId('session-1'),
+          optionId: 'reject-once',
+        ),
+      );
+      await tester.pump();
+
+      expect(prompts, findsOneWidget);
+      expect(focusIn(prompts), isFalse, reason: 'кнопка B не держит фокус');
+      expect(focusInComposerField(), isTrue);
       await tearDownApp(tester);
     });
   });

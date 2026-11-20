@@ -317,7 +317,15 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
   /// Единственное место сборки ленты: [show] и смена языка ([_handleLanguage])
   /// строят её одинаково, поэтому после смены языка лента равна ленте, которую
   /// построил бы новый `session/update` (D5 п. 1).
-  List<CodeLabTranscriptRow> _rowsOf(AcpSession session, SessionView? view) {
+  ///
+  /// [approvalsEnabled] — переопределение доступности кнопок одобрений для
+  /// кадра, который выставляет и признак ответа, и ленту одним `emit`; без него
+  /// берётся текущее состояние.
+  List<CodeLabTranscriptRow> _rowsOf(
+    AcpSession session,
+    SessionView? view, {
+    bool? approvalsEnabled,
+  }) {
     // Соединение kit в `canRetry` не учитывает — его проверяет хост
     // (design D4 change `add-connection-and-error-states`).
     final canRetry =
@@ -328,7 +336,7 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       view?.transcript ?? const [],
       cwd: session.cwd,
       isRunning: view?.status == SessionStatusView.running,
-      approvalsEnabled: !state.isRespondingToApproval,
+      approvalsEnabled: approvalsEnabled ?? !state.isRespondingToApproval,
       onApprovalSelected: _onApprovalSelected,
       onRetry: canRetry ? () => unawaited(retryTurn()) : null,
       l10n: _l10n,
@@ -558,19 +566,19 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       // Ошибка уже записана диагностикой kit.
     }
     if (isClosed) return;
-    emit(state._copyWith(isRespondingToApproval: false));
     // Кнопки других одобрений гасились на время ответа (`approvalsEnabled`),
     // а лента пересобирается только по `sessionChanges`. Если после ответа
     // нового кадра нет, оставшееся одобрение так и осталось бы выключенным и
     // не отвечало бы на сочетание: лента пересобирается здесь же
     // (`fix-approval-focus`, design.md, Risks).
+    // Один `emit`: два подряд дали бы промежуточный кадр с включёнными
+    // кнопками и старой лентой.
     final id = state.sessionId;
     final shown = _shown;
-    if (id != null && shown != null && shown.id.value == id) {
-      emit(
-        state._copyWith(transcriptRows: _rowsOf(shown, _handle(id)?.current)),
-      );
-    }
+    final rows = id != null && shown != null && shown.id.value == id
+        ? _rowsOf(shown, _handle(id)?.current, approvalsEnabled: true)
+        : state.transcriptRows;
+    emit(state._copyWith(isRespondingToApproval: false, transcriptRows: rows));
   }
 
   /// Отправляет агенту выбор [value] опции [configId]. Показанные опции
