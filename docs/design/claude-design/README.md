@@ -137,6 +137,8 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `TabletTerms.dc.html` | T8 Планшет — Legal › Terms of use |
 | `TabletLicense.dc.html` | T9 Планшет — Legal › License |
 | `TabletNotices.dc.html` | T10 Планшет — Legal › Third-party notices |
+| `TabletNoticesMatch.dc.html` | T10a Планшет — Third-party notices, поиск: состояние «M of N» с подсветкой (записи реестра свёрнуты) |
+| `TabletNoticesEmpty.dc.html` | T10b Планшет — Third-party notices, поиск: состояние «No packages match» с кнопкой «Clear search» |
 
 ### Навигация, покрытие и прототип
 
