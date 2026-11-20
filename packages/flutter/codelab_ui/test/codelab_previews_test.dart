@@ -165,9 +165,9 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(codelabApprovalPromptPreview());
     expect(tester.takeException(), isNull);
-    // Без фокуса полоса активного одобрения подсказывает, как к ней перейти
-    // (change `fix-approval-focus`, D4, п. 6).
-    expect(find.textContaining('to answer from the keyboard'), findsOneWidget);
+    // Подсказки перехода больше нет (change `fix-approval-focus`, D14):
+    // кнопки активного одобрения показывают сочетания ответа.
+    expect(find.textContaining('to answer from the keyboard'), findsNothing);
     expect(find.byKey(CodeLabApprovalPrompt.focusFrameKey), findsNothing);
 
     // Превью с фокусом: рамка есть, подсказки нет.

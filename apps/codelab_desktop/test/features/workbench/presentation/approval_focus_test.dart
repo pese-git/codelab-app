@@ -17,6 +17,13 @@
 // `autofocus` (задача 1.2); сценарии с фокусом в композере, дереве Files или
 // сайдбаре держат фокус рабочего места и зелёные и до правки — они
 // закрепляют границу, а не дефект.
+//
+// Итерация 7 (задача 7.4, D14): прежние клавиши Cmd/Ctrl+Enter, +Alt+Enter,
+// +Backspace, +Alt+Backspace больше не отвечают нигде (`pressLegacy`), а
+// ответ даёт глобальное сочетание рабочего места (⌘Y, ⌥⌘Y, ⌥⌘Z, ⌥⇧⌘Z на
+// macOS; Alt+Shift+Y, Q, X, W на остальных ОС) — только видимой цели, активной
+// не меньше 500 мс (`pressAnswer`). Глобальные сценарии целиком —
+// `approval_shortcuts_test.dart`.
 
 import 'dart:async';
 
@@ -202,13 +209,70 @@ void main() {
     expect(focusIn(finder), isTrue, reason: 'Tab не довёл фокус до $finder');
   }
 
-  /// Четыре сочетания одобрения из каталога в обоих вариантах модификатора.
-  const approvalShortcuts = [
-    CodeLabShortcut.allowOnce,
-    CodeLabShortcut.allowAlways,
-    CodeLabShortcut.rejectOnce,
-    CodeLabShortcut.rejectAlways,
+  /// Прежняя клавиша ответа полосы (Cmd/Ctrl+Enter и родственные): после
+  /// итерации 7 она ничего не отвечает нигде (D14). Нажимается литералом, а не
+  /// записью каталога: записи теперь несут новые клавиши.
+  Future<void> pressLegacy(
+    WidgetTester tester,
+    LogicalKeyboardKey key, {
+    required bool meta,
+    bool alt = false,
+  }) async {
+    final primary = meta
+        ? LogicalKeyboardKey.metaLeft
+        : LogicalKeyboardKey.controlLeft;
+    await tester.sendKeyDownEvent(primary);
+    if (alt) {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    }
+    await tester.sendKeyEvent(key);
+    if (alt) {
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    }
+    await tester.sendKeyUpEvent(primary);
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  /// Четыре прежних сочетания полосы: Enter, Alt+Enter, Backspace,
+  /// Alt+Backspace с основным модификатором.
+  const legacyKeys = <({LogicalKeyboardKey key, bool alt})>[
+    (key: LogicalKeyboardKey.enter, alt: false),
+    (key: LogicalKeyboardKey.enter, alt: true),
+    (key: LogicalKeyboardKey.backspace, alt: false),
+    (key: LogicalKeyboardKey.backspace, alt: true),
   ];
+
+  /// Все четыре прежних сочетания в обоих вариантах модификатора.
+  Future<void> pressAllLegacy(WidgetTester tester) async {
+    for (final useMeta in const [false, true]) {
+      for (final legacy in legacyKeys) {
+        await pressLegacy(tester, legacy.key, meta: useMeta, alt: legacy.alt);
+        await settle(tester);
+      }
+    }
+  }
+
+  /// Выдерживает задержку после появления (D14, п. 2): 500 мс на часах теста
+  /// и столько же реального времени. Часы реализации неизвестны тесту
+  /// (`DateTime.now` или `package:clock`), поэтому ждём по обоим.
+  Future<void> afterSettling(WidgetTester tester) async {
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 600)),
+    );
+    await tester.pump();
+  }
+
+  /// Нажимает сочетание ответа платформы после задержки: цель к этому
+  /// моменту активна не меньше 500 мс.
+  Future<void> pressAnswer(
+    WidgetTester tester,
+    CodeLabShortcut shortcut,
+  ) async {
+    await afterSettling(tester);
+    await pressShortcut(tester, shortcut);
+    await settle(tester);
+  }
 
   group('одобрение не берёт фокус само', () {
     testWidgets('одобрение появилось без фокуса: Ctrl+Enter и Cmd+Enter не '
@@ -224,11 +288,7 @@ void main() {
       expect(find.byType(CodeLabApprovalPrompt), findsOneWidget);
 
       for (final useMeta in const [false, true]) {
-        await pressShortcut(
-          tester,
-          CodeLabShortcut.allowOnce,
-          useMeta: useMeta,
-        );
+        await pressLegacy(tester, LogicalKeyboardKey.enter, meta: useMeta);
         await settle(tester);
       }
 
@@ -239,8 +299,8 @@ void main() {
       await tearDownApp(tester);
     });
 
-    testWidgets('одобрение появилось без фокуса: остальные сочетания '
-        'одобрения не отвечают', (tester) async {
+    testWidgets('одобрение появилось без фокуса: прежние клавиши одобрения '
+        'не отвечают', (tester) async {
       await pumpConnected(tester);
       await createSession(tester, 'session-1');
       await startTurn(tester);
@@ -250,12 +310,7 @@ void main() {
       await settle(tester);
       await shortFrames(tester);
 
-      for (final shortcut in approvalShortcuts.skip(1)) {
-        for (final useMeta in const [false, true]) {
-          await pressShortcut(tester, shortcut, useMeta: useMeta);
-          await settle(tester);
-        }
-      }
+      await pressAllLegacy(tester);
 
       expect(answers(), isEmpty, reason: 'ни один вариант не выбран');
       expect(find.byType(CodeLabApprovalPrompt), findsOneWidget);
@@ -278,7 +333,9 @@ void main() {
       await shortFrames(tester);
       expect(find.byType(CodeLabApprovalPrompt), findsOneWidget);
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressLegacy(tester, LogicalKeyboardKey.enter, meta: false);
+      await settle(tester);
+      await pressLegacy(tester, LogicalKeyboardKey.enter, meta: true);
       await settle(tester);
 
       expect(answers(), isEmpty, reason: 'после палитры ответа нет');
@@ -286,31 +343,61 @@ void main() {
       await tearDownApp(tester);
     });
 
-    // MODIFIED «Approval card inside the tool call row»: сочетание варианта
-    // `allow_always` без клавиатурного фокуса в полосе ничего не отправляет.
-    testWidgets('Shortcut without keyboard focus in the bar: allow_always '
-        'sends no answer', (tester) async {
+    // MODIFIED «Approval card inside the tool call row», сценарий «Shortcut of
+    // an always option»: одобрение активно дольше 500 мс, полоса видна, фокус
+    // в композере, выбран охват «Only this time» — сочетание `allow_always`
+    // выбирает `allow_always`.
+    testWidgets('Shortcut of an always option: allow_always is selected from '
+        'the composer whatever the scope', (tester) async {
       await pumpConnected(tester);
       await createSession(tester, 'session-1');
       await startTurn(tester);
-      await dropFocus(tester);
+      final field = find
+          .descendant(
+            of: find.byType(CodeLabPromptComposer),
+            matching: find.byType(EditableText),
+          )
+          .last;
+      await tester.tap(field);
+      await tester.pump();
       ask('session-1', 804);
       await settle(tester);
       await shortFrames(tester);
+      expect(focusInside<CodeLabPromptComposer>(), isTrue);
 
-      for (final useMeta in const [false, true]) {
-        await pressShortcut(
-          tester,
-          CodeLabShortcut.allowAlways,
-          useMeta: useMeta,
-        );
-        await settle(tester);
-      }
+      await pressAnswer(tester, CodeLabShortcut.allowAlways);
 
-      expect(answers(), isEmpty);
-      expect(find.byType(CodeLabApprovalPrompt), findsOneWidget);
+      final given = answers();
+      expect(given, hasLength(1));
+      expect(given.single.id, const JsonRpcId.integer(804));
+      expect(chosenOption(given.single), 'allow-always');
       await tearDownApp(tester);
     });
+
+    // MODIFIED «Approval card inside the tool call row», сценарий «Shortcut
+    // hints of the always scope»: на macOS при охвате «Always» кнопки
+    // показывают `⌥⌘Y` и `⌥⇧⌘Z`.
+    testWidgets('Shortcut hints of the always scope: ⌥⌘Y and ⌥⇧⌘Z on macOS', (
+      tester,
+    ) async {
+      await pumpConnected(tester);
+      await createSession(tester, 'session-1');
+      await startTurn(tester);
+      ask('session-1', 805);
+      await settle(tester);
+      await shortFrames(tester);
+      expect(find.text('⌘Y'), findsOneWidget);
+      expect(find.text('⌥⌘Z'), findsOneWidget);
+
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.scopeKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Always').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('⌥⌘Y'), findsOneWidget);
+      expect(find.text('⌥⇧⌘Z'), findsOneWidget);
+      await tearDownApp(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
     // Фокус рабочего места держит композер: `autofocus` полосы не срабатывает,
     // сценарий зелёный и до правки (закрепляет границу).
@@ -329,7 +416,7 @@ void main() {
       await tester.enterText(field, 'run tests');
       await tester.pump();
 
-      ask('session-1', 805);
+      ask('session-1', 8050);
       await settle(tester);
       await shortFrames(tester);
       expect(focusInside<CodeLabPromptComposer>(), isTrue);
@@ -372,15 +459,7 @@ void main() {
       await shortFrames(tester);
       expect(focusInside<CodeLabFileTree>(), isTrue);
 
-      for (final shortcut in [
-        CodeLabShortcut.allowOnce,
-        CodeLabShortcut.rejectOnce,
-      ]) {
-        for (final useMeta in const [false, true]) {
-          await pressShortcut(tester, shortcut, useMeta: useMeta);
-          await settle(tester);
-        }
-      }
+      await pressAllLegacy(tester);
 
       expect(answers(), isEmpty);
       expect(cubit.state.queuedPrompts, isEmpty);
@@ -415,15 +494,7 @@ void main() {
       await shortFrames(tester);
       expect(focusInside<CodeLabSessionSidebar>(), isTrue);
 
-      for (final shortcut in [
-        CodeLabShortcut.allowOnce,
-        CodeLabShortcut.rejectOnce,
-      ]) {
-        for (final useMeta in const [false, true]) {
-          await pressShortcut(tester, shortcut, useMeta: useMeta);
-          await settle(tester);
-        }
-      }
+      await pressAllLegacy(tester);
 
       expect(answers(), isEmpty);
       expect(cubit.state.queuedPrompts, isEmpty);
@@ -446,11 +517,7 @@ void main() {
 
       await tabTo(tester, allowOfB);
       for (final useMeta in const [false, true]) {
-        await pressShortcut(
-          tester,
-          CodeLabShortcut.allowOnce,
-          useMeta: useMeta,
-        );
+        await pressLegacy(tester, LogicalKeyboardKey.enter, meta: useMeta);
         await settle(tester);
       }
       expect(answers(), isEmpty, reason: 'ни `A`, ни `B` не отвечены');
@@ -466,8 +533,8 @@ void main() {
       await tearDownApp(tester);
     });
 
-    testWidgets('после Tab до «Allow» активного одобрения Ctrl+Enter '
-        'выбирает allow_once', (tester) async {
+    testWidgets('после Tab до «Allow» активного одобрения Ctrl+Enter не '
+        'отвечает, а сочетание ответа выбирает allow_once', (tester) async {
       await pumpConnected(tester);
       await createSession(tester, 'session-1');
       await startTurn(tester);
@@ -476,8 +543,11 @@ void main() {
       await shortFrames(tester);
 
       await tabTo(tester, find.byKey(CodeLabApprovalPrompt.allowKey));
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressLegacy(tester, LogicalKeyboardKey.enter, meta: false);
       await settle(tester);
+      expect(answers(), isEmpty, reason: 'Ctrl+Enter — только отправка');
+
+      await pressAnswer(tester, CodeLabShortcut.allowOnce);
 
       final given = answers();
       expect(given, hasLength(1));
@@ -548,9 +618,11 @@ void main() {
     for (final meta in const [false, true]) {
       final modifier = meta ? 'Cmd' : 'Ctrl';
 
-      testWidgets('$modifier: с клавиатуры доходит до одобрения и отвечает', (
-        tester,
-      ) async {
+      // Спека «Пользователь с клавиатуры доходит до одобрения и отвечает
+      // кнопкой»: переход, Tab до выбора охвата, «Always», Tab до «Reject»,
+      // Enter — `reject_always` этого одобрения.
+      testWidgets('$modifier: с клавиатуры доходит до одобрения и отвечает '
+          'кнопкой reject_always', (tester) async {
         await pumpConnected(tester);
         await turnWithComposerFocus(tester);
         ask('session-1', 901);
@@ -563,18 +635,71 @@ void main() {
         expect(frame, findsOneWidget, reason: 'рамка фокуса');
         expect(answers(), isEmpty, reason: 'переход не отвечает');
 
-        await pressShortcut(tester, CodeLabShortcut.allowOnce, useMeta: meta);
+        await tabTo(tester, find.byKey(CodeLabApprovalPrompt.scopeKey));
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tap(find.text('Always').last);
+        await tester.pump(const Duration(milliseconds: 400));
+        await tabTo(tester, find.byKey(CodeLabApprovalPrompt.rejectKey));
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump(const Duration(milliseconds: 300));
         await settle(tester);
 
         final given = answers();
         expect(given, hasLength(1));
         expect(given.single.id, const JsonRpcId.integer(901));
-        expect(chosenOption(given.single), 'allow-once');
+        expect(chosenOption(given.single), 'reject-always');
+        await tearDownApp(tester);
+      });
+
+      // Спека «Прежние клавиши одобрения не отвечают и при фокусе в полосе».
+      testWidgets('$modifier: после перехода прежние клавиши не отвечают', (
+        tester,
+      ) async {
+        await pumpConnected(tester);
+        await turnWithComposerFocus(tester);
+        ask('session-1', 905);
+        await settle(tester);
+        await shortFrames(tester);
+        await pressGoTo(tester, meta: meta);
+        expect(focusInApproval(), isTrue);
+
+        await afterSettling(tester);
+        await pressLegacy(tester, LogicalKeyboardKey.enter, meta: meta);
+        await pressLegacy(tester, LogicalKeyboardKey.backspace, meta: meta);
+        await settle(tester);
+
+        expect(answers(), isEmpty);
+        expect(prompts, findsOneWidget);
+        expect(focusInApproval(), isTrue, reason: 'полоса осталась в фокусе');
         await tearDownApp(tester);
       });
     }
 
-    testWidgets('переход и остальные сочетания: Alt+Backspace — '
+    // Спека «Переход и сочетание ответа»: после перехода ответ даёт сочетание
+    // рабочего места, активное дольше 500 мс (macOS: ⌥⌘Z).
+    testWidgets('переход и сочетание ответа: ⌥⌘Z выбирает reject_once', (
+      tester,
+    ) async {
+      await pumpConnected(tester);
+      await turnWithComposerFocus(tester);
+      ask('session-1', 906);
+      await settle(tester);
+      await shortFrames(tester);
+      await pressGoTo(tester, meta: true);
+      expect(focusInApproval(), isTrue);
+
+      await pressAnswer(tester, CodeLabShortcut.rejectOnce);
+
+      final given = answers();
+      expect(given, hasLength(1));
+      expect(given.single.id, const JsonRpcId.integer(906));
+      expect(chosenOption(given.single), 'reject-once');
+      await tearDownApp(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets('переход и сочетание «Отклонить всегда» (⌥⇧⌘Z, Alt+Shift+W): '
         'reject_always', (tester) async {
       await pumpConnected(tester);
       await turnWithComposerFocus(tester);
@@ -583,8 +708,7 @@ void main() {
       await shortFrames(tester);
 
       await pressGoTo(tester);
-      await pressShortcut(tester, CodeLabShortcut.rejectAlways);
-      await settle(tester);
+      await pressAnswer(tester, CodeLabShortcut.rejectAlways);
 
       final given = answers();
       expect(given, hasLength(1));
@@ -654,8 +778,7 @@ void main() {
       );
       expect(focusIn(prompts.last), isFalse);
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
-      await settle(tester);
+      await pressAnswer(tester, CodeLabShortcut.allowOnce);
 
       final given = answers();
       expect(given, hasLength(1));
@@ -1048,35 +1171,43 @@ void main() {
       await tearDownApp(tester);
     });
 
-    testWidgets('macOS: подсказка ⇧⌘A, после перехода её нет', (tester) async {
+    // Спека «Подсказки на кнопках активного одобрения»: кнопка «Allow» при
+    // охвате «Only this time» показывает сочетание ответа; подписи «Press …
+    // to answer from the keyboard» нет ни до перехода, ни после.
+    testWidgets('macOS: кнопки показывают ⌘Y и ⌥⌘Z, подсказки перехода нет', (
+      tester,
+    ) async {
       await pumpConnected(tester);
       await turnWithComposerFocus(tester);
       ask('session-1', 961);
       await settle(tester);
       await shortFrames(tester);
-      const hint = 'Press ⇧⌘A to answer from the keyboard';
-      expect(find.text(hint), findsOneWidget);
+
+      expect(find.text('⌘Y'), findsOneWidget);
+      expect(find.text('⌥⌘Z'), findsOneWidget);
+      expect(find.textContaining('to answer from the keyboard'), findsNothing);
 
       await pressGoTo(tester, meta: true);
 
-      expect(find.text(hint), findsNothing);
+      expect(find.textContaining('to answer from the keyboard'), findsNothing);
       await tearDownApp(tester);
     }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
-    testWidgets('Linux: подсказка Ctrl+Shift+A, после перехода её нет', (
-      tester,
-    ) async {
+    testWidgets('Linux: кнопки показывают Alt+Shift+Y и Alt+Shift+X, '
+        'подсказки перехода нет', (tester) async {
       await pumpConnected(tester);
       await turnWithComposerFocus(tester);
       ask('session-1', 962);
       await settle(tester);
       await shortFrames(tester);
-      const hint = 'Press Ctrl+Shift+A to answer from the keyboard';
-      expect(find.text(hint), findsOneWidget);
+
+      expect(find.text('Alt+Shift+Y'), findsOneWidget);
+      expect(find.text('Alt+Shift+X'), findsOneWidget);
+      expect(find.textContaining('to answer from the keyboard'), findsNothing);
 
       await pressGoTo(tester);
 
-      expect(find.text(hint), findsNothing);
+      expect(find.textContaining('to answer from the keyboard'), findsNothing);
       await tearDownApp(tester);
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
@@ -1094,18 +1225,21 @@ void main() {
       final data = tester
           .getSemantics(find.bySemanticsLabel('Awaiting approval'))
           .getSemanticsData();
-      expect(data.hint, contains('Allow once: Cmd+Enter'));
-      expect(data.hint, contains('Reject: Cmd+Backspace'));
+      expect(data.hint, contains('Allow once: Cmd+Y'));
+      expect(data.hint, contains('Reject: Option+Cmd+Z'));
       expect(data.hint, isNot(contains('⌘')));
+      expect(data.hint, isNot(contains('⌥')));
       handle.dispose();
       await tearDownApp(tester);
     }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
-    // Риск design.md «Активное одобрение сменилось при фокусе в полосе»:
-    // фокус на полосе `B` поставил пользователь, и когда `A` решена другим
-    // путём, сочетания на `B` начинают действовать, а фокус не переходит.
-    testWidgets('A решена, пока фокус на кнопке B: сочетания на B '
-        'действуют, фокус остаётся', (tester) async {
+    // Спека «Flutter вернул фокус на кнопку другого одобрения»: фокус был на
+    // кнопке «Allow» одобрения `B`, пользователь перешёл к `A`, ответил ⌘Y,
+    // Flutter отдаёт фокус прежнему узлу — кнопке `B`; `B` становится активным,
+    // и пользователь сразу нажимает Enter. Фокус уходит в композер, нажатие
+    // `B` не отвечает.
+    testWidgets('Flutter вернул фокус на кнопку другого одобрения: Enter не '
+        'отвечает на B', (tester) async {
       await pumpConnected(tester);
       await turnWithComposerFocus(tester);
       ask('session-1', 981);
@@ -1115,33 +1249,26 @@ void main() {
       await shortFrames(tester);
       final allowOfB = find.byKey(CodeLabApprovalPrompt.allowKey).last;
       await tabTo(tester, allowOfB);
-
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
-      await settle(tester);
-      expect(answers(), isEmpty, reason: 'B пока не активна');
-
-      await tester.runAsync(
-        () => cubit.respondToApproval(
-          approvalId: const ApprovalRequestId('permission-981'),
-          sessionId: const SessionId('session-1'),
-          optionId: 'reject-once',
-        ),
-      );
-      await settle(tester);
-      await shortFrames(tester);
+      await pressGoTo(tester);
       expect(
-        focusIn(prompts),
+        focusIn(prompts.first),
         isTrue,
-        reason: 'фокус остался в полосе B, никуда не перешёл',
+        reason: 'фокус в полосе A (самое раннее)',
       );
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      await pressAnswer(tester, CodeLabShortcut.allowOnce);
+      await shortFrames(tester);
+      expect(answers(), hasLength(1), reason: 'ответ получил только A');
+      expect(answers().single.id, const JsonRpcId.integer(981));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump(const Duration(milliseconds: 300));
       await settle(tester);
 
-      final given = answers();
-      expect(given, hasLength(2));
-      expect(given.last.id, const JsonRpcId.integer(982));
-      expect(chosenOption(given.last), 'allow-once');
+      expect(answers(), hasLength(1), reason: 'B ждёт');
+      expect(prompts, findsOneWidget);
+      expect(focusIn(prompts), isFalse, reason: 'фокус не на кнопке B');
+      expect(focusInside<CodeLabPromptComposer>(), isTrue);
       await tearDownApp(tester);
     });
 
@@ -1187,8 +1314,7 @@ void main() {
       await pressGoTo(tester);
       expect(focusInApproval(), isTrue);
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
-      await settle(tester);
+      await pressAnswer(tester, CodeLabShortcut.allowOnce);
       await shortFrames(tester);
 
       expect(answers(), hasLength(1));
@@ -1197,8 +1323,9 @@ void main() {
       expect(focusIn(prompts), isFalse, reason: 'полоса B фокус не получила');
 
       // Повторное Cmd/Ctrl+Enter уходит в композер: поле пусто, ничего не
-      // отправляется и на B не отвечает.
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
+      // отправляется и на B не отвечает (прежнего ответа этой клавишей нет).
+      await pressLegacy(tester, LogicalKeyboardKey.enter, meta: false);
+      await pressLegacy(tester, LogicalKeyboardKey.enter, meta: true);
       await settle(tester);
       expect(answers(), hasLength(1));
       expect(cubit.state.queuedPrompts, isEmpty);
@@ -1251,8 +1378,7 @@ void main() {
       await pressGoTo(tester);
       expect(focusInApproval(), isTrue);
 
-      await pressShortcut(tester, CodeLabShortcut.allowOnce);
-      await settle(tester);
+      await pressAnswer(tester, CodeLabShortcut.allowOnce);
       ask('session-1', 1022, toolCallId: 'call-same');
       await settle(tester);
       await shortFrames(tester);

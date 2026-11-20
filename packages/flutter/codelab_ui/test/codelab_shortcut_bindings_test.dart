@@ -10,13 +10,17 @@
 // модификатором — в варианте `control` и в варианте `meta`. Тест на запись
 // создаётся всегда, а пустой каталог он считает ошибкой, поэтому красный до
 // задачи 1.4, пока у записей нет комбинаций.
+//
+// Итерация 7 `fix-approval-focus` (задача 7.1, D14, D15): записи ответа на
+// одобрение проверяются через `CodeLabWorkbenchShortcuts.onAnswerApproval` на
+// каждой платформе своими клавишами; чужие клавиши и автоповтор колбэк не
+// вызывают.
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'support/approval_focus.dart';
 
 /// Нажатие комбинации; [useMeta] выбирает ⌘ вместо Ctrl для основного
 /// модификатора, [key] подменяет клавишу (numpad Enter из `alsoKeys`).
@@ -42,6 +46,14 @@ final class _InKit extends _Check {
   final _Scenario scenario;
 }
 
+/// Запись с клавишами по платформе: сценарий сам выбирает платформу и
+/// клавиши (`combosFor`), общий цикл Ctrl и ⌘ для неё не подходит.
+final class _InKitPlatform extends _Check {
+  const _InKitPlatform(this.scenario);
+  final Future<void> Function(WidgetTester tester, CodeLabShortcut shortcut)
+  scenario;
+}
+
 /// Запись принадлежит app: проверяется в `keyboard_bindings_test.dart` app
 /// (задача 1.5).
 final class _InApp extends _Check {
@@ -65,10 +77,10 @@ _Check _checkOf(CodeLabShortcut shortcut) => switch (shortcut) {
   CodeLabShortcut.commandMenuRun => const _InKit(_commandMenuRun),
   CodeLabShortcut.commandMenuClose => const _InKit(_commandMenuClose),
   CodeLabShortcut.goToApproval => const _InKit(_workbenchShortcut),
-  CodeLabShortcut.allowOnce => const _InKit(_approval),
-  CodeLabShortcut.allowAlways => const _InKit(_approval),
-  CodeLabShortcut.rejectOnce => const _InKit(_approval),
-  CodeLabShortcut.rejectAlways => const _InKit(_approval),
+  CodeLabShortcut.allowOnce => const _InKitPlatform(_approvalAnswer),
+  CodeLabShortcut.allowAlways => const _InKitPlatform(_approvalAnswer),
+  CodeLabShortcut.rejectOnce => const _InKitPlatform(_approvalAnswer),
+  CodeLabShortcut.rejectAlways => const _InKitPlatform(_approvalAnswer),
 };
 
 void main() {
@@ -81,6 +93,18 @@ void main() {
 
   for (final shortcut in CodeLabShortcut.values) {
     final check = _checkOf(shortcut);
+    if (check is _InKitPlatform) {
+      testWidgets('${shortcut.name}: нажатие отвечает на своей платформе', (
+        tester,
+      ) async {
+        try {
+          await check.scenario(tester, shortcut);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      });
+      continue;
+    }
     if (check is! _InKit) {
       continue;
     }
@@ -455,31 +479,8 @@ Future<void> _fileTreeOpen(
 }
 
 // ---------------------------------------------------------------------------
-// Одобрение: четыре варианта по `kind`; подписи вариантов не на английском,
-// чтобы выбор по виду, а не по тексту, был виден (ACP: `name` — текст агента).
-
-const _options = [
-  CodeLabApprovalOption(
-    id: 'ao',
-    label: 'Разрешить один раз',
-    kind: CodeLabApprovalOptionKind.allowOnce,
-  ),
-  CodeLabApprovalOption(
-    id: 'aa',
-    label: 'Всегда разрешать',
-    kind: CodeLabApprovalOptionKind.allowAlways,
-  ),
-  CodeLabApprovalOption(
-    id: 'ro',
-    label: 'Отклонить',
-    kind: CodeLabApprovalOptionKind.rejectOnce,
-  ),
-  CodeLabApprovalOption(
-    id: 'ra',
-    label: 'Всегда отклонять',
-    kind: CodeLabApprovalOptionKind.rejectAlways,
-  ),
-];
+// Одобрение: сочетания ответа привязаны по `kind` к рабочему месту, а не к
+// полосе (D14); подписи вариантов агента кит не видит.
 
 CodeLabApprovalOptionKind _kindOf(CodeLabShortcut shortcut) =>
     switch (shortcut) {
@@ -490,51 +491,101 @@ CodeLabApprovalOptionKind _kindOf(CodeLabShortcut shortcut) =>
       _ => throw ArgumentError('не одобрение: $shortcut'),
     };
 
-Future<void> _approval(
+/// Нажимает [key] с заданными модификаторами. [repeats] — число событий
+/// автоповтора между нажатием и отпусканием.
+Future<void> _pressKey(
+  WidgetTester tester,
+  LogicalKeyboardKey key, {
+  bool meta = false,
+  bool control = false,
+  bool alt = false,
+  bool shift = false,
+  int repeats = 0,
+}) async {
+  final modifiers = <LogicalKeyboardKey>[
+    if (control) LogicalKeyboardKey.controlLeft,
+    if (meta) LogicalKeyboardKey.metaLeft,
+    if (alt) LogicalKeyboardKey.altLeft,
+    if (shift) LogicalKeyboardKey.shiftLeft,
+  ];
+  for (final modifier in modifiers) {
+    await tester.sendKeyDownEvent(modifier);
+  }
+  await tester.sendKeyDownEvent(key);
+  for (var i = 0; i < repeats; i++) {
+    await tester.sendKeyRepeatEvent(key);
+  }
+  await tester.sendKeyUpEvent(key);
+  for (final modifier in modifiers.reversed) {
+    await tester.sendKeyUpEvent(modifier);
+  }
+  await tester.pump(const Duration(milliseconds: 100));
+}
+
+/// Сочетания ответа (D14, D15): на каждой платформе отвечают свои клавиши,
+/// чужие (Ctrl, ⌘ на Linux, Alt+Shift на macOS) и автоповтор — нет.
+Future<void> _approvalAnswer(
   WidgetTester tester,
   CodeLabShortcut shortcut,
-  _Press press,
 ) async {
-  final expectedId = _options
-      .singleWhere((o) => o.kind == _kindOf(shortcut))
-      .id;
-  final combo = shortcut.combos.single;
+  final kind = _kindOf(shortcut);
+  const macOS = TargetPlatform.macOS;
+  const linux = TargetPlatform.linux;
+  const windows = TargetPlatform.windows;
 
-  final fromGroup = <String>[];
-  await tester.pumpWidget(
-    FluentApp(
-      home: CodeLabApprovalOptionGroup(
-        options: _options,
-        onSelected: fromGroup.add,
-      ),
-    ),
-  );
-  await tester.pump();
-  // Виджеты одобрения не берут фокус сами (`fix-approval-focus`, D1):
-  // как и пользователь, доводим его до первой кнопки клавишей Tab.
-  await tabTo(
-    tester,
-    find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.allowOnce)),
-  );
-  await press(combo);
-  expect(fromGroup, [expectedId], reason: 'CodeLabApprovalOptionGroup');
-
-  final fromPrompt = <String>[];
-  await tester.pumpWidget(
-    FluentApp(
-      home: Center(
-        child: SizedBox(
-          width: 720,
-          child: CodeLabApprovalPrompt(
-            options: _options,
-            onOptionSelected: fromPrompt.add,
-          ),
+  for (final platform in const [macOS, linux, windows]) {
+    debugDefaultTargetPlatformOverride = platform;
+    final answered = <CodeLabApprovalOptionKind>[];
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(
+      FluentApp(
+        home: CodeLabWorkbenchShortcuts(
+          onAnswerApproval: answered.add,
+          child: const SizedBox(width: 320, height: 200),
         ),
       ),
-    ),
-  );
-  await tester.pump();
-  await tabTo(tester, find.byKey(CodeLabApprovalPrompt.allowKey));
-  await press(combo);
-  expect(fromPrompt, [expectedId], reason: 'CodeLabApprovalPrompt');
+    );
+    await tester.pump();
+    final own = shortcut.combosFor(platform).single;
+    final reason = '${shortcut.name} $platform';
+
+    // Своя комбинация отвечает ровно один раз своим видом.
+    await _pressKey(
+      tester,
+      own.key,
+      meta: own.meta,
+      alt: own.alt,
+      shift: own.shift,
+    );
+    expect(answered, [kind], reason: reason);
+
+    // Автоповтор удерживаемой клавиши не отвечает повторно.
+    answered.clear();
+    await _pressKey(
+      tester,
+      own.key,
+      meta: own.meta,
+      alt: own.alt,
+      shift: own.shift,
+      repeats: 3,
+    );
+    expect(answered, [kind], reason: '$reason: автоповтор');
+
+    // Чужие клавиши не отвечают: Ctrl вместо своего модификатора и
+    // комбинации другой платформы.
+    answered.clear();
+    await _pressKey(tester, own.key, control: true, alt: own.alt);
+    await _pressKey(tester, own.key, control: true, shift: own.shift);
+    final foreign = shortcut
+        .combosFor(platform == macOS ? linux : macOS)
+        .single;
+    await _pressKey(
+      tester,
+      foreign.key,
+      meta: foreign.meta,
+      alt: foreign.alt,
+      shift: foreign.shift,
+    );
+    expect(answered, isEmpty, reason: '$reason: чужие клавиши');
+  }
 }

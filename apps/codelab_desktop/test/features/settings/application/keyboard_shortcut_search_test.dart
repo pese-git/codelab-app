@@ -10,6 +10,7 @@
 
 import 'package:codelab_desktop/features/settings/application/keyboard_shortcut_search.dart';
 import 'package:codelab_ui/codelab_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/keyboard_rows.dart';
@@ -25,9 +26,9 @@ KeyboardShortcutEntry _entry(
     shortcut: shortcut,
     action: translated[row.id] ?? row.action,
     englishAction: row.action,
-    notations: [
-      for (final combo in shortcut.combos) ...combo.searchNotations(),
-    ],
+    // Нотации записи на всех платформах (change `fix-approval-focus`, D15):
+    // у сочетаний ответа клавиши macOS и остальных ОС различаются.
+    notations: shortcut.searchNotations().toList(),
   );
 }
 
@@ -90,14 +91,34 @@ void main() {
     ]);
   });
 
-  test('символы macOS и слова macOS находят allow-always', () {
-    for (final query in const ['⌥⌘⏎', 'Option+Cmd+Enter', 'ctrl alt enter']) {
-      expect(
-        _ids(filterKeyboardShortcuts(_entries(), query)),
-        contains('allow-always'),
-        reason: query,
-      );
+  test('символы macOS, слова macOS и клавиши Windows и Linux находят '
+      'allow-always', () {
+    for (final query in const ['⌥⌘Y', 'Option+Cmd+Y', 'alt shift q']) {
+      expect(_ids(filterKeyboardShortcuts(_entries(), query)), [
+        'allow-always',
+      ], reason: query);
     }
+  });
+
+  // Спека app-settings «Страница «Keyboard»: поиск»: нотации всех платформ
+  // участвуют в поиске независимо от платформы, на которой открыта страница.
+  test('«alt shift y» на macOS находит только allow-once', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    expect(_ids(filterKeyboardShortcuts(_entries(), 'alt shift y')), [
+      'allow-once',
+    ]);
+  });
+
+  test('«⌥⇧⌘Z» и «alt shift w» находят только reject-always, «ctrl y» — '
+      'ничего (Ctrl+Y не ответ)', () {
+    for (final query in const ['⌥⇧⌘Z', 'alt shift w']) {
+      expect(_ids(filterKeyboardShortcuts(_entries(), query)), [
+        'reject-always',
+      ], reason: query);
+    }
+    expect(filterKeyboardShortcuts(_entries(), 'ctrl y'), isEmpty);
   });
 
   group('русский интерфейс', () {

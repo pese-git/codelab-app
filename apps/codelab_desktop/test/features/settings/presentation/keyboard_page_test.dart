@@ -394,38 +394,36 @@ void main() {
   });
 
   group('обозначения клавиш', () {
-    testWidgets('macOS: toggle-files — ⇧ ⌘ E, allow-always — ⌥ ⌘ ⏎', (
-      tester,
-    ) async {
+    testWidgets('macOS: toggle-files — ⇧ ⌘ E, allow-once — ⌘ Y, allow-always — '
+        '⌥ ⌘ Y, reject-always — ⌥ ⇧ ⌘ Z', (tester) async {
       await _pumpPage(tester);
 
       expect(_caps(tester, _row('toggle-files')), ['⇧', '⌘', 'E']);
-      expect(_caps(tester, _row('allow-always')), ['⌥', '⌘', '⏎']);
+      expect(_caps(tester, _row('allow-once')), ['⌘', 'Y']);
+      expect(_caps(tester, _row('allow-always')), ['⌥', '⌘', 'Y']);
+      expect(_caps(tester, _row('reject-always')), ['⌥', '⇧', '⌘', 'Z']);
       for (final row in keyboardRows) {
         expect(_caps(tester, _row(row.id)), row.macCaps, reason: row.id);
       }
     }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
-    testWidgets('Windows: toggle-files — Ctrl Shift E, reject-always — Ctrl '
-        'Alt Backspace', (tester) async {
+    testWidgets('Windows: toggle-files — Ctrl Shift E, reject-always — Alt '
+        'Shift W', (tester) async {
       await _pumpPage(tester);
 
       expect(_caps(tester, _row('toggle-files')), ['Ctrl', 'Shift', 'E']);
-      expect(_caps(tester, _row('reject-always')), [
-        'Ctrl',
-        'Alt',
-        'Backspace',
-      ]);
+      expect(_caps(tester, _row('reject-always')), ['Alt', 'Shift', 'W']);
+      expect(_caps(tester, _row('allow-once')), ['Alt', 'Shift', 'Y']);
     }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
 
-    testWidgets('подпись для чтения с экрана: «Option+Cmd+Enter», не '
+    testWidgets('подпись для чтения с экрана: «Option+Cmd+Y», не '
         'символы', (tester) async {
       final handle = tester.ensureSemantics();
       await _pumpPage(tester);
 
       expect(_row('allow-always'), findsOneWidget);
       final label = tester.getSemantics(_row('allow-always')).label;
-      expect(label, contains('Option+Cmd+Enter'));
+      expect(label, contains('Option+Cmd+Y'));
       expect(label, isNot(contains('⌥')));
       handle.dispose();
     }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));

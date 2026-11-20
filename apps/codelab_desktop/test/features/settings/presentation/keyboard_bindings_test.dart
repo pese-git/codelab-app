@@ -1,8 +1,8 @@
 // Сторож 2 для записей app: каждая запись каталога проверена нажатием
 // (задача 1.5 change `add-app-keyboard-page`; design.md D3, Risks; spec
 // app-settings «Сочетания app и страница «Keyboard» не расходятся», сценарии
-// «Каждая строка проверена нажатием» и «Отправка и одобрение на одной
-// клавише»; «Страница «Keyboard»: обозначения клавиш», сценарии подсказок).
+// «Каждая строка проверена нажатием» и «Отправка и одобрение на разных
+// клавишах»; «Страница «Keyboard»: обозначения клавиш», сценарии подсказок).
 //
 // Записи кита (палитра, Files, композер, одобрение, выдвижная панель) нажимает
 // `codelab_shortcut_bindings_test.dart` кита. Здесь — записи, привязки которых
@@ -247,8 +247,12 @@ void main() {
     for (final useMeta in const [false, true]) {
       final modifier = useMeta ? 'Cmd' : 'Ctrl';
 
-      testWidgets('$modifier+Enter с фокусом на одобрении выбирает '
-          'allow_once', (tester) async {
+      // Спека app-settings «Отправка и одобрение на разных клавишах»
+      // (change `fix-approval-focus`, итерация 7, D14): Cmd/Ctrl+Enter с
+      // фокусом в полосе одобрения не отвечает, ответ — отдельное сочетание,
+      // которое действует с любого места после задержки 500 мс.
+      testWidgets('$modifier+Enter с фокусом на одобрении не отвечает, ответ '
+          'даёт отдельное сочетание', (tester) async {
         await pumpConnected(tester);
         await createSession(tester, 'session-1');
         await startTurn(tester);
@@ -259,11 +263,19 @@ void main() {
         expect(cubit.state.queuedPrompts, isEmpty);
         await focusApproval(tester);
 
-        await pressShortcut(
-          tester,
-          CodeLabShortcut.allowOnce,
-          useMeta: useMeta,
+        await pressShortcut(tester, CodeLabShortcut.send, useMeta: useMeta);
+        await settle(tester);
+
+        expect(permissionAnswers(), isEmpty, reason: 'Enter — не ответ');
+        expect(cubit.state.queuedPrompts, isEmpty);
+
+        // Задержка после появления (D14, п. 2): на часах теста и реально.
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 600)),
         );
+        await tester.pump();
+        await pressShortcut(tester, CodeLabShortcut.allowOnce);
         await settle(tester);
 
         final answers = permissionAnswers();

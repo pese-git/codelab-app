@@ -40,10 +40,11 @@ const keyboardGroups = [
   (slug: 'approvals', title: 'Approvals'),
 ];
 
-/// Место строк решения (change `fix-approval-focus`, D7): «with keyboard
-/// focus» — клавиатурный фокус в полосе решения, а не признак модели.
+/// Место строк ответа на одобрение (change `fix-approval-focus`, итерация 7,
+/// D14; решение пользователя Q7): сочетания действуют с любого места рабочего
+/// места и отвечают самому раннему ожидающему одобрению.
 const _approvalWhere =
-    'Pending approval with keyboard focus, when the agent offers this option';
+    'Workbench, earliest pending approval, if it offers this option';
 
 /// 20 строк в порядке спецификации.
 final keyboardRows = <KeyboardRow>[
@@ -179,32 +180,32 @@ final keyboardRows = <KeyboardRow>[
     'allow-once',
     'approvals',
     'Allow once',
-    ['Ctrl', 'Enter'],
-    ['⌘', '⏎'],
+    ['Alt', 'Shift', 'Y'],
+    ['⌘', 'Y'],
     _approvalWhere,
   ),
   _r(
     'allow-always',
     'approvals',
     'Allow always',
-    ['Ctrl', 'Alt', 'Enter'],
-    ['⌥', '⌘', '⏎'],
+    ['Alt', 'Shift', 'Q'],
+    ['⌥', '⌘', 'Y'],
     _approvalWhere,
   ),
   _r(
     'reject-once',
     'approvals',
     'Reject once',
-    ['Ctrl', 'Backspace'],
-    ['⌘', '⌫'],
+    ['Alt', 'Shift', 'X'],
+    ['⌥', '⌘', 'Z'],
     _approvalWhere,
   ),
   _r(
     'reject-always',
     'approvals',
     'Reject always',
-    ['Ctrl', 'Alt', 'Backspace'],
-    ['⌥', '⌘', '⌫'],
+    ['Alt', 'Shift', 'W'],
+    ['⌥', '⇧', '⌘', 'Z'],
     _approvalWhere,
   ),
 ];

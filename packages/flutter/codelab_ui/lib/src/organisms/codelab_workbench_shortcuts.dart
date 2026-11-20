@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../molecules/molecules.dart';
 
 /// Сочетания клавиш рабочего места: палитра, новая сессия, настройки, сайдбар,
 /// панель Files, переход к одобрению и Esc отмены хода.
@@ -25,6 +26,7 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
     this.onOpenSettings,
     this.onToggleFiles,
     this.onGoToApproval,
+    this.onAnswerApproval,
     this.enabled = true,
     super.key,
   });
@@ -63,6 +65,16 @@ class CodeLabWorkbenchShortcuts extends StatelessWidget {
   /// терялось бы. Колбэк только прокручивает и ставит фокус на полосу, ответа
   /// не отправляет (AGENTS.md §10).
   final VoidCallback? onGoToApproval;
+
+  /// Сочетания ответа на активное одобрение: ⌘Y, ⌥⌘Y, ⌥⌘Z, ⌥⇧⌘Z на macOS и
+  /// Alt+Shift+Y, Q, X, W на остальных ОС (change `fix-approval-focus`,
+  /// D14, D15). Колбэк получает вид варианта; вариант, цель, видимость и
+  /// задержку после появления решает хост (AGENTS.md §10), кит только
+  /// сообщает нажатие. Автоповтор не вызывает колбэк.
+  ///
+  /// ЗАГЛУШКА красных тестов 7.1: параметр принят, но не привязан;
+  /// реализация — 7.2.
+  final ValueChanged<CodeLabApprovalOptionKind>? onAnswerApproval;
   final bool enabled;
 
   @override

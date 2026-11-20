@@ -41,6 +41,7 @@ final class CodeLabKeyCombo {
     this.primary = false,
     this.alt = false,
     this.shift = false,
+    this.meta = false,
     this.alsoKeys = const [],
   });
 
@@ -61,6 +62,16 @@ final class CodeLabKeyCombo {
 
   /// Нужен ли Shift (⇧ на macOS); смысл и использование как у [alt].
   final bool shift;
+
+  /// Точный модификатор ⌘ без Ctrl (change `fix-approval-focus`, D15).
+  ///
+  /// Почему: сочетания ответа на одобрение на macOS привязаны только к ⌘
+  /// (Ctrl+Y в поле ввода — «yank» Emacs-раскладки Cocoa и не должен
+  /// отвечать на запрос), а [primary] привязывает и Ctrl, и ⌘.
+  ///
+  /// ЗАГЛУШКА красных тестов 7.1: поле объявлено, но `activators`, `accepts`
+  /// и обозначения клавиш его пока не учитывают — реализация в 7.2.
+  final bool meta;
 
   List<LogicalKeyboardKey> get _keys => [key, ...alsoKeys];
 
@@ -264,6 +275,23 @@ enum CodeLabShortcut {
   /// (`command-palette`, `file-tree-open`).
   String get id =>
       name.replaceAllMapped(RegExp('[A-Z]'), (m) => '-${m[0]!.toLowerCase()}');
+
+  /// Комбинации записи на платформе [platform] (change `fix-approval-focus`,
+  /// D15): для сочетаний ответа на одобрение клавиши macOS и остальных ОС
+  /// различаются, у остальных записей совпадают с [combos].
+  ///
+  /// ЗАГЛУШКА красных тестов 7.1: пока возвращает общие [combos]; выбор по
+  /// платформе — реализация 7.2.
+  List<CodeLabKeyCombo> combosFor(TargetPlatform platform) => combos;
+
+  /// Нотации поиска страницы «Keyboard» по комбинациям записи на всех
+  /// платформах (D15): поиск `alt shift y` на macOS находит `allow-once`.
+  ///
+  /// ЗАГЛУШКА красных тестов 7.1: пока берёт только общие [combos]; учёт
+  /// комбинаций всех платформ — реализация 7.2.
+  Iterable<String> searchNotations() => [
+    for (final combo in combos) ...combo.searchNotations(),
+  ];
 
   /// Привязка [action] ко всем активаторам всех комбинаций записи, для
   /// `CallbackShortcuts`. Записи с разными действиями у альтернатив (меню

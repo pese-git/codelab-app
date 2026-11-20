@@ -16,9 +16,11 @@ import 'support/approval_focus.dart';
 /// Для чего: тесты фиксируют, что полоса не берёт фокус сама, а сочетания
 /// действуют только после того, как пользователь довёл фокус до её кнопок.
 ///
-/// Как читать: сценарии идут парами — «без фокуса не отвечает» и «после Tab
-/// отвечает»; обе проверки разом исключают и случайный ответ, и «мёртвые»
-/// сочетания.
+/// Как читать: до итерации 7 сценарии шли парами «без фокуса не отвечает» и
+/// «после Tab отвечает». Итерация 7 (задача 7.1, D14) убрала локальные
+/// клавиши полосы: Cmd/Ctrl+Enter, +Alt+Enter, +Backspace, +Alt+Backspace не
+/// отвечают ни без фокуса, ни при фокусе в полосе; ответ даёт только
+/// глобальное сочетание рабочего места (`CodeLabWorkbenchShortcuts`).
 void main() {
   const options = [
     CodeLabApprovalOption(
@@ -43,7 +45,7 @@ void main() {
     ),
   ];
 
-  // Сочетание → вариант, который оно выбирает (каталог CodeLabShortcut).
+  // Прежние локальные клавиши полосы: теперь не выбирают ничего (D14).
   final combos = <({String name, LogicalKeyboardKey key, bool alt, String id})>[
     (name: 'Enter', key: LogicalKeyboardKey.enter, alt: false, id: 'ao'),
     (name: 'Alt+Enter', key: LogicalKeyboardKey.enter, alt: true, id: 'aa'),
@@ -147,9 +149,12 @@ void main() {
             expect(selected, isEmpty);
           });
 
+          // Прежний локальный ответ при фокусе на кнопке: теперь ничего не
+          // выбирает (спека «Прежние клавиши одобрения не отвечают и при
+          // фокусе в полосе»).
           testWidgets(
-            '$modifier+${combo.name} after Tab to the first button selects '
-            '${combo.id}',
+            '$modifier+${combo.name} with focus on the first button selects '
+            'nothing',
             (tester) async {
               final selected = <String>[];
               await tester.pumpWidget(surface.build(selected));
@@ -158,7 +163,7 @@ void main() {
 
               await pressPrimary(tester, combo.key, meta: meta, alt: combo.alt);
 
-              expect(selected, [combo.id]);
+              expect(selected, isEmpty);
             },
           );
         }
@@ -372,57 +377,43 @@ void main() {
           .getSemantics(find.bySemanticsLabel('Awaiting approval'))
           .getSemanticsData();
       expect(data.label, contains('Awaiting approval'));
-      expect(data.hint, contains('Allow once: Cmd+Enter'));
-      expect(data.hint, contains('Reject: Cmd+Backspace'));
+      expect(data.hint, contains('Allow once: Cmd+Y'));
+      expect(data.hint, contains('Reject: Option+Cmd+Z'));
       expect(data.hint, isNot(contains('⌘')));
       expect(data.hint, isNot(contains('⏎')));
       handle.dispose();
     }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
-    testWidgets('macOS: the hint names ⇧⌘A while focus is outside the bar', (
+    // Подсказки перехода больше нет (D14): кнопки активного одобрения
+    // показывают сочетания ответа, а `codeLabApprovalGoToHint` удалена.
+    for (final platform in [TargetPlatform.macOS, TargetPlatform.linux]) {
+      testWidgets('$platform: there is no go-to hint, with or without focus', (
+        tester,
+      ) async {
+        await tester.pumpWidget(host(<String>[]));
+        await tester.pump();
+        expect(
+          find.textContaining('to answer from the keyboard'),
+          findsNothing,
+        );
+
+        barNode(tester).requestFocus();
+        await tester.pump();
+        await tester.pump();
+        expect(
+          find.textContaining('to answer from the keyboard'),
+          findsNothing,
+        );
+      }, variant: TargetPlatformVariant.only(platform));
+    }
+
+    testWidgets('ru: no go-to hint in the Russian interface either', (
       tester,
     ) async {
-      await tester.pumpWidget(host(<String>[]));
-      await tester.pump();
-      expect(
-        find.text('Press ⇧⌘A to answer from the keyboard'),
-        findsOneWidget,
-      );
-
-      barNode(tester).requestFocus();
-      // Первый кадр применяет смену фокуса, второй перерисовывает рамку и
-      // подсказку по `onFocusChange`.
-      await tester.pump();
-      await tester.pump();
-      expect(find.text('Press ⇧⌘A to answer from the keyboard'), findsNothing);
-    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
-
-    testWidgets('Linux: the hint names Ctrl+Shift+A and disappears with '
-        'focus', (tester) async {
-      await tester.pumpWidget(host(<String>[]));
-      await tester.pump();
-      const text = 'Press Ctrl+Shift+A to answer from the keyboard';
-      expect(find.text(text), findsOneWidget);
-
-      await tabTo(tester, allow);
-      expect(find.text(text), findsNothing);
-    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-    testWidgets('a bar of an inactive approval has no hint', (tester) async {
-      await tester.pumpWidget(host(<String>[], shortcutsEnabled: false));
-      await tester.pump();
-
-      expect(find.textContaining('to answer from the keyboard'), findsNothing);
-    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-    testWidgets('ru: the hint is translated', (tester) async {
       await tester.pumpWidget(host(<String>[], locale: const Locale('ru')));
       await tester.pump();
 
-      expect(
-        find.text('Нажмите Ctrl+Shift+A, чтобы ответить с клавиатуры'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('чтобы ответить с клавиатуры'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
     testWidgets('a new request key gives a bar without focus', (tester) async {
@@ -637,5 +628,61 @@ void main() {
 
       expect(selected, isEmpty);
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // Подсказки кнопок активного одобрения (D14; spec «Подсказки на кнопках
+  // активного одобрения», «Shortcut hints of the always scope»): клавиши
+  // ответа по платформе; у неактивного одобрения подсказок нет.
+  group('подсказки кнопок — сочетания ответа (D14)', () {
+    Widget host({bool active = true}) => FluentApp(
+      home: Center(
+        child: SizedBox(
+          width: 720,
+          child: CodeLabApprovalPrompt(
+            options: options,
+            shortcutsEnabled: active,
+            onOptionSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    Future<void> pickAlways(WidgetTester tester) async {
+      await tester.tap(find.byKey(CodeLabApprovalPrompt.scopeKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Always').last);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('macOS: ⌘Y и ⌥⌘Z при охвате «Only this time»', (tester) async {
+      await tester.pumpWidget(host());
+      expect(find.text('⌘Y'), findsOneWidget);
+      expect(find.text('⌥⌘Z'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets('macOS: ⌥⌘Y и ⌥⇧⌘Z при охвате «Always»', (tester) async {
+      await tester.pumpWidget(host());
+      await pickAlways(tester);
+      expect(find.text('⌥⌘Y'), findsOneWidget);
+      expect(find.text('⌥⇧⌘Z'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets('Linux: Alt+Shift+Y и Alt+Shift+X, затем Q и W', (
+      tester,
+    ) async {
+      await tester.pumpWidget(host());
+      expect(find.text('Alt+Shift+Y'), findsOneWidget);
+      expect(find.text('Alt+Shift+X'), findsOneWidget);
+      await pickAlways(tester);
+      expect(find.text('Alt+Shift+Q'), findsOneWidget);
+      expect(find.text('Alt+Shift+W'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+    testWidgets('Linux: у неактивного одобрения подсказок нет', (tester) async {
+      await tester.pumpWidget(host(active: false));
+      expect(find.text('Alt+Shift+Y'), findsNothing);
+      expect(find.text('Alt+Shift+X'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
   });
 }

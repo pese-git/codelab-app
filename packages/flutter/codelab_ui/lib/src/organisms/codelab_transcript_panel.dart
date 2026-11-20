@@ -81,6 +81,7 @@ class CodeLabTranscriptPanel extends StatefulWidget {
     this.showRequest,
     this.onShowRequestDone,
     this.onApprovalFocusReleased,
+    this.approvalVisibility,
     super.key,
   });
 
@@ -99,6 +100,15 @@ class CodeLabTranscriptPanel extends StatefulWidget {
   /// — новый запрос; тот же номер при перестроении повторно не прокручивает.
   /// Хост очищать запрос не обязан.
   final CodeLabTranscriptShowRequest? showRequest;
+
+  /// Ручка запроса видимости полос одобрения (change `fix-approval-focus`,
+  /// D14, п. 1): хост создаёт её, передаёт ленте и перед ответом сочетанием
+  /// спрашивает, видна ли полоса цели. Без ручки лента видимость не
+  /// сообщает.
+  ///
+  /// ЗАГЛУШКА красных тестов 7.1: параметр принят, лента ручку не подключает;
+  /// реализация — 7.2.
+  final CodeLabApprovalVisibility? approvalVisibility;
 
   /// Показ с этим номером закончен: цель показана или шаги исчерпаны. Не
   /// вызывается, если цепочку оборвала смена или исчезновение запроса, смена
@@ -162,6 +172,30 @@ final class CodeLabTranscriptShowRequest {
   /// «Цель ушла до фокуса»).
   final String? sessionId;
   final String? approvalId;
+}
+
+/// Ручка видимости полос одобрения в ленте (change `fix-approval-focus`,
+/// D14, п. 1; spec agent-workbench-ui «Ответ на одобрение сочетанием с любого
+/// места рабочего места», компенсирующая мера «Видимость»).
+///
+/// Почему: ответ глобальным сочетанием не должен уходить на запрос, которого
+/// пользователь не видит (лента прокручена, строка не построена, поверх ленты
+/// выдвижная панель). Видимость знает только лента: у неё прокрутка и
+/// построенные полосы; application решает по её признаку (AGENTS.md §10).
+///
+/// Для чего: единственный источник «полоса видна» для решения по нажатию.
+///
+/// Как использовать: `final visibility = CodeLabApprovalVisibility();`,
+/// передать в `CodeLabTranscriptPanel(approvalVisibility: visibility)`,
+/// перед ответом вызвать [isVisible]. Видна — полоса запроса с ключом
+/// `CodeLabApprovalPrompt.keyFor(sessionId, approvalId)` построена, её
+/// прямоугольник целиком внутри области прокрутки, и в её центре событие
+/// указателя доходит до неё, а не до панели поверх ленты.
+///
+/// ЗАГЛУШКА красных тестов 7.1: всегда `false`; реализация — 7.2.
+final class CodeLabApprovalVisibility {
+  /// Видна ли полоса одобрения [approvalId] сессии [sessionId] целиком.
+  bool isVisible(String sessionId, String approvalId) => false;
 }
 
 /// Состояние ленты: владеет `ScrollController` и решает, когда двигать

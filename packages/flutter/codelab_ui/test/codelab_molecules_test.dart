@@ -715,76 +715,74 @@ void main() {
     expect(find.text('Risk'), findsOneWidget);
   });
 
-  testWidgets('binds all four option kinds to their own keyboard shortcut', (
-    tester,
-  ) async {
-    final selected = <String>[];
+  testWidgets(
+    'binds no keyboard shortcut of its own (D14): the former Ctrl keys select nothing',
+    (tester) async {
+      final selected = <String>[];
 
-    await tester.pumpWidget(
-      FluentApp(
-        home: CodeLabApprovalOptionGroup(
-          onSelected: selected.add,
-          options: const [
-            CodeLabApprovalOption(
-              id: 'allow_once',
-              label: 'Allow once',
-              kind: CodeLabApprovalOptionKind.allowOnce,
-            ),
-            CodeLabApprovalOption(
-              id: 'allow_always',
-              label: 'Allow always',
-              kind: CodeLabApprovalOptionKind.allowAlways,
-            ),
-            CodeLabApprovalOption(
-              id: 'reject_once',
-              label: 'Reject once',
-              kind: CodeLabApprovalOptionKind.rejectOnce,
-            ),
-            CodeLabApprovalOption(
-              id: 'reject_always',
-              label: 'Reject always',
-              kind: CodeLabApprovalOptionKind.rejectAlways,
-            ),
-          ],
+      await tester.pumpWidget(
+        FluentApp(
+          home: CodeLabApprovalOptionGroup(
+            onSelected: selected.add,
+            options: const [
+              CodeLabApprovalOption(
+                id: 'allow_once',
+                label: 'Allow once',
+                kind: CodeLabApprovalOptionKind.allowOnce,
+              ),
+              CodeLabApprovalOption(
+                id: 'allow_always',
+                label: 'Allow always',
+                kind: CodeLabApprovalOptionKind.allowAlways,
+              ),
+              CodeLabApprovalOption(
+                id: 'reject_once',
+                label: 'Reject once',
+                kind: CodeLabApprovalOptionKind.rejectOnce,
+              ),
+              CodeLabApprovalOption(
+                id: 'reject_always',
+                label: 'Reject always',
+                kind: CodeLabApprovalOptionKind.rejectAlways,
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
 
-    // Группа не берёт фокус сама (change `fix-approval-focus`, D1):
-    // пользователь доводит его до первой кнопки клавишей Tab.
-    await tabTo(
-      tester,
-      find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.allowOnce)),
-    );
+      // Группа не берёт фокус сама (change `fix-approval-focus`, D1):
+      // пользователь доводит его до первой кнопки клавишей Tab.
+      await tabTo(
+        tester,
+        find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.allowOnce)),
+      );
 
-    Future<void> pressWithModifiers(
-      LogicalKeyboardKey trigger, {
-      bool alt = false,
-    }) async {
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      if (alt) {
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      Future<void> pressWithModifiers(
+        LogicalKeyboardKey trigger, {
+        bool alt = false,
+      }) async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        if (alt) {
+          await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+        }
+        await tester.sendKeyEvent(trigger);
+        if (alt) {
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+        }
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await tester.pump(const Duration(milliseconds: 100));
       }
-      await tester.sendKeyEvent(trigger);
-      if (alt) {
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-      }
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pump(const Duration(milliseconds: 100));
-    }
 
-    await pressWithModifiers(LogicalKeyboardKey.enter);
-    await pressWithModifiers(LogicalKeyboardKey.enter, alt: true);
-    await pressWithModifiers(LogicalKeyboardKey.backspace);
-    await pressWithModifiers(LogicalKeyboardKey.backspace, alt: true);
+      await pressWithModifiers(LogicalKeyboardKey.enter);
+      await pressWithModifiers(LogicalKeyboardKey.enter, alt: true);
+      await pressWithModifiers(LogicalKeyboardKey.backspace);
+      await pressWithModifiers(LogicalKeyboardKey.backspace, alt: true);
 
-    expect(selected, [
-      'allow_once',
-      'allow_always',
-      'reject_once',
-      'reject_always',
-    ]);
-  });
+      // Итерация 7 (D14): локальных клавиш у группы нет; ответ с клавиатуры
+      // даёт только рабочее место.
+      expect(selected, isEmpty);
+    },
+  );
 
   // Подписи вариантов — свободный текст агента, поэтому кнопку находят по
   // ключу вида: подписи Dart-агента здесь намеренно не совпадают с видом.
@@ -839,40 +837,29 @@ void main() {
 
   testWidgets('a non-English label without allow/reject words still gets the '
       'shortcut its kind implies', (tester) async {
-    final selected = <String>[];
-
-    await tester.pumpWidget(
-      FluentApp(
-        home: CodeLabApprovalOptionGroup(
-          onSelected: selected.add,
-          options: const [
-            CodeLabApprovalOption(
-              id: 'opt_1',
-              label: 'Разрешить',
-              kind: CodeLabApprovalOptionKind.allowOnce,
-            ),
-            CodeLabApprovalOption(
-              id: 'opt_2',
-              label: 'Отклонить',
-              kind: CodeLabApprovalOptionKind.rejectOnce,
-            ),
-          ],
-        ),
+    // Вариант выбирается по `kind`, а не по подписи агента (spec «Approval
+    // options are rendered and bound to shortcuts by kind»); после итерации 7
+    // `CodeLabApprovalShortcuts` даёт только вариант по виду и подсказку.
+    const options = [
+      CodeLabApprovalOption(
+        id: 'opt_1',
+        label: 'Разрешить',
+        kind: CodeLabApprovalOptionKind.allowOnce,
       ),
-    );
+      CodeLabApprovalOption(
+        id: 'opt_2',
+        label: 'Отклонить',
+        kind: CodeLabApprovalOptionKind.rejectOnce,
+      ),
+    ];
+    final shortcuts = CodeLabApprovalShortcuts(options);
 
-    // Явный шаг фокуса: группа не берёт его сама (`fix-approval-focus`, D1).
-    await tabTo(
-      tester,
-      find.byKey(approvalOptionKey(CodeLabApprovalOptionKind.allowOnce)),
-    );
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pump(const Duration(milliseconds: 100));
-
-    expect(selected, ['opt_2']);
-  });
+    expect(shortcuts.allowOnceId, 'opt_1');
+    expect(shortcuts.rejectOnceId, 'opt_2');
+    expect(shortcuts.labelFor('opt_1'), '⌘Y');
+    expect(shortcuts.labelFor('opt_2'), '⌥⌘Z');
+    expect(shortcuts.spokenFor('opt_2'), 'Option+Cmd+Z');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
   group('CodeLabConnectionBanner', () {
     Widget host(CodeLabConnectionBannerStatus status) => FluentApp(
