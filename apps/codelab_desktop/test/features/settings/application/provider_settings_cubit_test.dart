@@ -1235,8 +1235,21 @@ void main() {
     await pumpEventQueue();
     wizard.dispatch(const ModelChosen('m1'));
     await pumpEventQueue();
+    // Запись идёт через настоящий файловый ввод-вывод (`RealConfigSession`),
+    // а `Done` публикуется только после чтения снимка для подсказки
+    // «Restart agent» (`ProviderWizardCubit._finishDone`). Фиксированного
+    // числа проходов очереди событий на медленном раннере CI не хватало
+    // (тест падал в `Saving`), поэтому ждём итоговое состояние по потоку.
+    // Подписка — до `ConfirmSave`, чтобы не пропустить быстрый `Done`;
+    // `SaveFailed` тоже итог, чтобы сбой записи дал понятную проверку ниже,
+    // а не тайм-аут теста. Исключение — конфликт записи: его `SaveFailed`
+    // наружу не публикуется, мастер возвращается в «Review» (SETUP-6). Здесь
+    // конфликт невозможен: `CODELAB_HOME` свежий, второго писателя нет.
+    final settled = wizard.stream.firstWhere(
+      (state) => state.setup is Done || state.setup is SaveFailed,
+    );
     wizard.dispatch(const ConfirmSave());
-    await pumpEventQueue(times: 40);
+    await settled;
 
     expect(wizard.state.setup, isA<Done>());
     expect(
