@@ -781,7 +781,7 @@ Presentation mapping
 localized message
 ```
 
-В CodeLab эта граница реализована change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md) (D5, D6; правила — `layers-and-dependencies.md` §54):
+В CodeLab эта граница реализована change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md) (D5, D6; правила — `layers-and-dependencies.md` §54):
 
 * **Ядро клиента** (`codelab_client_core`, `codelab_client_acp`) отдаёт типизированную причину и сбой: `PromptFailure`, `ProfileDraftIssueCode`, sealed-результаты `ProfileCommitter`, причина заметки транскрипта `NoticeReason` (spec `acp-client-kit` «Типизированная причина заметки транскрипта»). Английские `text`/`message` ядра остаются для CLI и диагностики; `intl` в ядре клиента запрещён сторожем.
 * **App** строит переведённый текст по варианту и коду (`context.l10n`) и НЕ ДОЛЖЕН разбирать английскую строку ядра. Не хватает данных — ядро получает аддитивное типизированное поле.

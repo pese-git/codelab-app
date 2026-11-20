@@ -569,7 +569,7 @@ Golden/image tests следует использовать только там, 
 
 ### 30а. Локаль и язык интерфейса в тестах
 
-Источник — change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md), D3, D4, D9; правила текста — `layers-and-dependencies.md` §54.
+Источник — change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md), D3, D4, D9; правила текста — `layers-and-dependencies.md` §54.
 
 **Локаль по умолчанию — `en`.** Эталон `en` каталогов совпадает с текстами спецификаций символ в символ, поэтому `find.text('…')` на английском остаётся верным и тесты под перевод не переписываются.
 

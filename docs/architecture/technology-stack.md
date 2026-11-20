@@ -45,7 +45,7 @@
 | Markdown ответа агента в ленте (`codelab_ui`, только `lib/src/rendering/`) | `gpt_markdown` (change [`add-desktop-markdown`](../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md), D1; без Material-предка, свои builder'ы) |
 | Подсветка кода (`codelab_ui`, только `lib/src/rendering/`) | `val_highlight` (change `add-desktop-markdown`, D4) |
 | Открытие внешних ссылок (`codelab_desktop`, только `lib/core/platform/`) | `url_launcher` (change `add-desktop-markdown`, D5) |
-| Локализация интерфейса (`codelab_desktop`, `codelab_ui`) | `flutter_localizations`, `gen-l10n` (ARB), `intl` для сгенерированного кода (change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md), D1; §20ж) |
+| Локализация интерфейса (`codelab_desktop`, `codelab_ui`) | `flutter_localizations`, `gen-l10n` (ARB), `intl` для сгенерированного кода (change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md), D1; §20ж) |
 | Сайт-визитка (`site/`, вне pub workspace и Melos) | Astro на Node, пакетный менеджер npm (ADR-0003, §28) |
 
 Технологии из этой таблицы считаются **утверждёнными решениями проекта**.
@@ -935,7 +935,7 @@ Architectural dependency rules важнее технической доступ�
 
 ## 20ж. `codelab_desktop` и `codelab_ui`: локализация интерфейса — `flutter_localizations`, `gen-l10n`, `intl`
 
-**Статус: утверждено.** Решение — change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md), D1, D3, D4, D10; требование — D-19 матрицы паритета (`proposals/agent-parity-goals.md`). До этого change утверждённого решения для i18n в стеке не было.
+**Статус: утверждено.** Решение — change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md), D1, D3, D4, D10; требование — D-19 матрицы паритета (`proposals/agent-parity-goals.md`). До этого change утверждённого решения для i18n в стеке не было.
 
 Технология: стандартная локализация Flutter. `flutter_localizations` — часть SDK; классы сообщений генерирует `fvm flutter gen-l10n` из каталогов ARB; сообщения — ICU (`plural`, `select`, типизированные плейсхолдеры); `intl` нужен сгенерированному коду для `plural` и `Intl.message`.
 
