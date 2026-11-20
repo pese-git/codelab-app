@@ -296,6 +296,7 @@ sealed class CodeLabTranscriptApproval {
     String? requesterHint,
     String? callTitle,
     String? targetId,
+    String? sessionId,
   }) = CodeLabTranscriptApprovalPending;
 
   const factory CodeLabTranscriptApproval.resolved({
@@ -339,6 +340,7 @@ final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
     this.requesterHint,
     this.callTitle,
     this.targetId,
+    this.sessionId,
   });
 
   final CodeLabApprovalRisk risk;
@@ -372,6 +374,11 @@ final class CodeLabTranscriptApprovalPending extends CodeLabTranscriptApproval {
   /// адресуется.
   @override
   final String? targetId;
+
+  /// Сессия запроса: вместе с [targetId] даёт ключ полосы
+  /// (`CodeLabApprovalPrompt.keyFor`); id запросов уникальны только в
+  /// соединении (change `fix-approval-focus`, D4, п. 4). `null` — ключа нет.
+  final String? sessionId;
 }
 
 /// Решённое одобрение: [label] — выбранный вариант или «Cancelled».

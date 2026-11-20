@@ -4974,19 +4974,19 @@
   },
   "settingsKeyboardActionAllowOnce": "Allow once",
   "@settingsKeyboardActionAllowOnce": {
-    "description": "Действие сочетания Cmd/Ctrl+Enter при ожидающем одобрении: разрешить один раз. Метка security (D14): перевод не смягчает смысл."
+    "description": "Действие глобального сочетания ответа на ожидающее одобрение (⌘Y на macOS, Alt+Shift+Y на Windows и Linux): разрешить один раз. Метка security (D14): перевод не смягчает смысл."
   },
   "settingsKeyboardActionAllowAlways": "Allow always",
   "@settingsKeyboardActionAllowAlways": {
-    "description": "Действие сочетания Cmd/Ctrl+Alt+Enter при ожидающем одобрении: разрешить всегда. Метка security (D14): перевод не смягчает смысл."
+    "description": "Действие глобального сочетания ответа на ожидающее одобрение (⌥⌘Y на macOS, Alt+Shift+Q на Windows и Linux): разрешить всегда. Метка security (D14): перевод не смягчает смысл."
   },
   "settingsKeyboardActionRejectOnce": "Reject once",
   "@settingsKeyboardActionRejectOnce": {
-    "description": "Действие сочетания Cmd/Ctrl+Backspace при ожидающем одобрении: отклонить один раз. Метка security (D14): перевод не смягчает смысл."
+    "description": "Действие глобального сочетания ответа на ожидающее одобрение (⌥⌘Z на macOS, Alt+Shift+X на Windows и Linux): отклонить один раз. Метка security (D14): перевод не смягчает смысл."
   },
   "settingsKeyboardActionRejectAlways": "Reject always",
   "@settingsKeyboardActionRejectAlways": {
-    "description": "Действие сочетания Cmd/Ctrl+Alt+Backspace при ожидающем одобрении: отклонить всегда. Метка security (D14): перевод не смягчает смысл."
+    "description": "Действие глобального сочетания ответа на ожидающее одобрение (⌥⇧⌘Z на macOS, Alt+Shift+W на Windows и Linux): отклонить всегда. Метка security (D14): перевод не смягчает смысл."
   },
   "settingsKeyboardWhereWorkbench": "Workbench",
   "@settingsKeyboardWhereWorkbench": {
@@ -5028,10 +5028,6 @@
   "@settingsKeyboardWhereCommandMenu": {
     "description": "Колонка «Где»: меню команд, открытое символом /. Символ / не переводится."
   },
-  "settingsKeyboardWhereApproval": "Pending approval in focus, when the agent offers this option",
-  "@settingsKeyboardWhereApproval": {
-    "description": "Колонка «Где» строк одобрения. Метка security (D14): перевод не смягчает смысл."
-  },
   "settingsSearchKeywordsKeyboard": "shortcut, hotkey, keybinding, key",
   "@settingsSearchKeywordsKeyboard": {
     "description": "Ключевые слова поиска «Find a setting» для страницы Keyboard: слова и короткие фразы через запятую, запятой внутри слова нет, пробелы по краям отбрасываются. Перевод — по глоссарию, строчными буквами; число и порядок слов в переводе не обязаны совпадать с английскими; слова другой страницы не добавлять."
@@ -5055,5 +5051,17 @@
         "type": "String"
       }
     }
+  },
+  "settingsKeyboardWhereApprovalAnywhere": "Workbench, earliest pending approval, if it offers this option",
+  "@settingsKeyboardWhereApprovalAnywhere": {
+    "description": "Колонка «Где» строк ответа на одобрение (allow/reject, once/always): сочетания действуют с любого места рабочего места и отвечают самому раннему ожидающему одобрению активной сессии, если в нём есть такой вариант (change fix-approval-focus, итерация 7, D14; текст принят пользователем, Q7). Метка security (D14): перевод не смягчает смысл."
+  },
+  "settingsKeyboardActionGoToApproval": "Go to approval",
+  "@settingsKeyboardActionGoToApproval": {
+    "description": "Действие сочетания Cmd/Ctrl+Shift+A: перейти к ожидающему одобрению (change fix-approval-focus, D7). Термин глоссария. Метка security (D14): перевод не смягчает смысл."
+  },
+  "settingsKeyboardWhereApprovalPending": "Workbench, while an approval is pending",
+  "@settingsKeyboardWhereApprovalPending": {
+    "description": "Колонка «Где» строки «Go to approval»: сочетание работает на рабочем месте, пока есть ожидающее одобрение (change fix-approval-focus, D7). Метка security (D14): перевод не смягчает смысл."
   }
 }

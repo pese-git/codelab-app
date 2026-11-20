@@ -941,9 +941,11 @@
   "settingsKeyboardWhereTurnRunning": "Рабочее место или поле ввода, пока идёт ход",
   "settingsKeyboardWhereComposer": "Поле ввода",
   "settingsKeyboardWhereCommandMenu": "Меню команд после /",
-  "settingsKeyboardWhereApproval": "Ожидающее одобрение в фокусе, когда агент предлагает этот вариант",
   "settingsSearchKeywordsKeyboard": "сочетание, горячие клавиши, клавиатура, клавиша",
   "appearanceIssuesHintUnknownKeys": "Неизвестные ключи пропущены, тема применяется.",
   "appearanceIssuesHintApplied": "Тема применяется с предупреждениями.",
-  "appearanceIssuesHintExtends": "Недостающие роли берутся из extends: «{base}» ({builtIn})."
+  "appearanceIssuesHintExtends": "Недостающие роли берутся из extends: «{base}» ({builtIn}).",
+  "settingsKeyboardWhereApprovalAnywhere": "Рабочее место, самое раннее ожидающее одобрение, если в нём есть этот вариант",
+  "settingsKeyboardActionGoToApproval": "Перейти к одобрению",
+  "settingsKeyboardWhereApprovalPending": "Рабочее место, пока ждёт одобрение"
 }

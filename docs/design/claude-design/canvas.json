@@ -490,7 +490,7 @@
    "y": 4260
   },
   "NavApp.dc.html": {
-   "h": 1980,
+   "h": 2100,
    "page": "nav",
    "title": "Navigation graph — codelab_app",
    "w": 2160,
@@ -503,7 +503,7 @@
    "title": "Navigation graph — codelab_cli",
    "w": 1920,
    "x": 0,
-   "y": 1880
+   "y": 2220
   },
   "NavPhone.dc.html": {
    "h": 1080,
@@ -519,16 +519,16 @@
    "page": "dark",
    "title": "07 Onboarding — dark",
    "w": 1440,
-   "x": 6080,
-   "y": 2640
+   "x": 1520,
+   "y": 19100
   },
   "Onboarding.dc.html": {
    "expand": "fill",
    "h": 900,
-   "title": "07 Onboarding — first run",
+   "title": "07 Onboarding — step 2 Permissions",
    "w": 1440,
-   "x": 6080,
-   "y": 2640
+   "x": 1520,
+   "y": 19100
   },
   "OnboardingPrivacy-dark.dc.html": {
    "expand": "fill",
@@ -537,8 +537,8 @@
    "page": "dark",
    "title": "07a Onboarding privacy — dark",
    "w": 1440,
-   "x": 0,
-   "y": 15600
+   "x": 12160,
+   "y": 19100
   },
   "OnboardingPrivacy.dc.html": {
    "expand": "fill",
@@ -546,8 +546,8 @@
    "is_interactive": true,
    "title": "07a Onboarding — step 4 Privacy, links to both documents",
    "w": 1440,
-   "x": 0,
-   "y": 15600
+   "x": 12160,
+   "y": 19100
   },
   "Palette-dark.dc.html": {
    "expand": "fill",
@@ -1388,6 +1388,169 @@
    "h": 820,
    "page": "tablet-dark",
    "title": "T10b Tablet — Legal › Third-party notices, no packages match — dark"
+  },
+  "NoticesMatch.dc.html": {
+   "x": 7600,
+   "y": 15600,
+   "w": 1440,
+   "h": 1500,
+   "expand": "fill",
+   "is_interactive": true,
+   "title": "35b Settings › Legal — Third-party notices, search: M of N"
+  },
+  "NoticesMatch-dark.dc.html": {
+   "x": 7600,
+   "y": 15600,
+   "w": 1440,
+   "h": 1500,
+   "expand": "fill",
+   "page": "dark",
+   "title": "35b Third-party notices, search: M of N — dark"
+  },
+  "NoticesEmpty.dc.html": {
+   "x": 9120,
+   "y": 15600,
+   "w": 1440,
+   "h": 1500,
+   "expand": "fill",
+   "is_interactive": true,
+   "title": "35c Settings › Legal — Third-party notices, no packages match"
+  },
+  "NoticesEmpty-dark.dc.html": {
+   "x": 9120,
+   "y": 15600,
+   "w": 1440,
+   "h": 1500,
+   "expand": "fill",
+   "page": "dark",
+   "title": "35c Third-party notices, no packages match — dark"
+  },
+  "OnboardingWelcome.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07b Onboarding — step 1 What CodeLab does",
+   "w": 1440,
+   "x": 0,
+   "y": 19100
+  },
+  "OnboardingModel.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c Onboarding — step 3 Choose a model (opens 06 wizard)",
+   "w": 1440,
+   "x": 3040,
+   "y": 19100
+  },
+  "OnboardingWelcome-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "page": "dark",
+   "title": "07b Onboarding welcome — dark",
+   "w": 1440,
+   "x": 0,
+   "y": 19100
+  },
+  "OnboardingModel-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "page": "dark",
+   "title": "07c Onboarding model — dark",
+   "w": 1440,
+   "x": 3040,
+   "y": 19100
+  },
+  "NavOnboarding.dc.html": {
+   "h": 900,
+   "page": "nav",
+   "title": "Onboarding flow — codelab_app first run",
+   "w": 2160,
+   "x": 0,
+   "y": 3680
+  },
+  "OnbWizardUrl.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c.1 Onboarding — wizard: provider address",
+   "w": 1440,
+   "x": 4560,
+   "y": 19100
+  },
+  "OnbWizardUrl-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c.1 Provider address — dark",
+   "w": 1440,
+   "page": "dark",
+   "x": 4560,
+   "y": 19100
+  },
+  "OnbWizardKey.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c.2 Onboarding — wizard: key (keychain, env, none)",
+   "w": 1440,
+   "x": 6080,
+   "y": 19100
+  },
+  "OnbWizardKey-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c.2 Provider key — dark",
+   "w": 1440,
+   "page": "dark",
+   "x": 6080,
+   "y": 19100
+  },
+  "OnbWizardModel.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c.3 Onboarding — wizard: check passed, choose the model",
+   "w": 1440,
+   "x": 7600,
+   "y": 19100
+  },
+  "OnbWizardModel-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c.3 Choose the model — dark",
+   "w": 1440,
+   "page": "dark",
+   "x": 7600,
+   "y": 19100
+  },
+  "OnbWizardReview.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c.4 Onboarding — wizard: review and save",
+   "w": 1440,
+   "x": 9120,
+   "y": 19100
+  },
+  "OnbWizardReview-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c.4 Review provider — dark",
+   "w": 1440,
+   "page": "dark",
+   "x": 9120,
+   "y": 19100
+  },
+  "OnboardingModelDone.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c.5 Onboarding — step 3 done, provider connected",
+   "w": 1440,
+   "x": 10640,
+   "y": 19100
+  },
+  "OnboardingModelDone-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07c.5 Model ready — dark",
+   "w": 1440,
+   "page": "dark",
+   "x": 10640,
+   "y": 19100
   }
  },
  "createdOnFiles": {
@@ -1455,7 +1618,10 @@
   "rowT",
   "row10",
   "row10s",
-  "d-row10"
+  "d-row10",
+  "row11",
+  "d-row11",
+  "row11s"
  ],
  "notes": {
   "c-row1": {
@@ -1604,7 +1770,7 @@
   },
   "d-row10": {
    "kind": "title1",
-   "maxW": 7520,
+   "maxW": 10560,
    "page": "dark",
    "text": "Тёмная тема — правовые документы",
    "w": 240,
@@ -1753,7 +1919,7 @@
   },
   "row10": {
    "kind": "title1",
-   "maxW": 7520,
+   "maxW": 10560,
    "text": "Правовые документы: политика конфиденциальности и лицензия",
    "w": 240,
    "x": 0,
@@ -1762,9 +1928,9 @@
   "row10s": {
    "fill": "blue",
    "size": 24,
-   "text": "07a → 32/33 — шаг 4 onboarding (D-11, §12.4.9): что уходит с компьютера, ссылки на Privacy policy и Terms of use; принимать нечего, Back возвращает на шаг.\n26 General → 32 — строка Privacy «No telemetry» (D-18, E-21); About → 32, 33, 34, 35 (MIT License → 34, Third-party notices → 35).\nLegal — последний пункт группы App в панели настроек (§12.4.9), как на телефоне и планшете; General и About — дополнительные входы. 32 ⇄ 33 ⇄ 34 ⇄ 35 — вкладки страницы Legal (SelectorBar): Privacy policy · Terms of use · License · Third-party notices. 35 — записи раздела «## Записи» THIRD_PARTY_NOTICES.md как есть (на русском, с подписью) и лицензии пакетов из LicenseRegistry свёрнутыми Expander, без фильтра (D13 add-app-general-page); заменяет диалог D13. Тексты — ассеты PRIVACY.md, TERMS.md (D-29, §12.7.7а), LICENSE; читаются офлайн; «Open on the web» — [SITE]/privacy и [SITE]/terms.",
+   "text": "07a (ряд «Первый запуск») → 32/33 — шаг 4 onboarding (D-11, §12.4.9): что уходит с компьютера, ссылки на Privacy policy и Terms of use; принимать нечего, Back возвращает на шаг.\n26 General → 32 — строка Privacy «No telemetry» (D-18, E-21); About → 32, 33, 34, 35 (MIT License → 34, Third-party notices → 35).\nLegal — последний пункт группы App в панели настроек (§12.4.9), как на телефоне и планшете; General и About — дополнительные входы. 32 ⇄ 33 ⇄ 34 ⇄ 35 — вкладки страницы Legal (SelectorBar): Privacy policy · Terms of use · License · Third-party notices. 35 — записи раздела «## Записи» THIRD_PARTY_NOTICES.md как есть (на русском, с подписью) и лицензии пакетов из LicenseRegistry свёрнутыми Expander, без фильтра (D13 add-app-general-page); заменяет диалог D13. Тексты — ассеты PRIVACY.md, TERMS.md (D-29, §12.7.7а), LICENSE; читаются офлайн; «Open on the web» — [SITE]/privacy и [SITE]/terms.",
    "w": 460,
-   "x": 7600,
+   "x": 10640,
    "y": 15600
   },
   "row1s": {
@@ -1802,7 +1968,7 @@
   "row3s": {
    "fill": "purple",
    "size": 24,
-   "text": "20 — U-06, D-04, D-10, R-12 подключение: профили встроенный / stdio / WebSocket (общие с CLI), «Test connection», «Restart agent»; первая страница настроек\n05 — D-05 провайдеры, статус ключа без чтения значения\n05b — E-13 MCP-серверы: состав из конфига, живой статус от агента, Reconnect / Reload all, секреты заголовков в keychain, отказ /config check\n06 — L-24 мастер: Preset → URL → Key → Check → Model → Review\n07 — D-11 onboarding\n08 — D-15 сторож запуска",
+   "text": "20 — U-06, D-04, D-10, R-12 подключение: профили встроенный / stdio / WebSocket (общие с CLI), «Test connection», «Restart agent»; первая страница настроек\n05 — D-05 провайдеры, статус ключа без чтения значения\n05b — E-13 MCP-серверы: состав из конфига, живой статус от агента, Reconnect / Reload all, секреты заголовков в keychain, отказ /config check\n06 — L-24 мастер: Preset → URL → Key → Check → Model → Review\n07 — D-11 onboarding: все четыре шага в ряду «Первый запуск»\n08 — D-15 сторож запуска",
    "w": 440,
    "x": 9120,
    "y": 2640
@@ -2065,6 +2231,31 @@
    "size": 24,
    "page": "tablet-dark",
    "text": "Те же файлы планшета, открытые с theme = dark: правка светлого экрана сразу видна здесь. Граф навигации не тематизируется и остаётся только на странице «Планшет»."
+  },
+  "row11": {
+   "kind": "title1",
+   "maxW": 13680,
+   "w": 240,
+   "x": 0,
+   "y": 18840,
+   "text": "Первый запуск: шаги onboarding"
+  },
+  "d-row11": {
+   "kind": "title1",
+   "maxW": 13680,
+   "page": "dark",
+   "w": 240,
+   "x": 0,
+   "y": 18840,
+   "text": "Тёмная тема — первый запуск"
+  },
+  "row11s": {
+   "fill": "purple",
+   "size": 24,
+   "w": 460,
+   "x": 13680,
+   "y": 19100,
+   "text": "Onboarding app (D-11, §12.4.9): 07b → 07 → 07c → 07a, после BootReady, флаг onboarding_done.\n07b — шаг 1 «What CodeLab does»: проектная папка, одобрения, своя модель и ключ; встроенный агент по умолчанию. Back нет.\n07 — шаг 2 «Permissions»: что агент делает сам, где спрашивает, что запрещено.\n07c — шаг 3 «Choose a model»: пресеты ProviderPresets.all; кнопка открывает ProviderWizardDialog (тот же ProviderSetupFlow, §12.4.4). Шаг пропускается при ProviderReady.\n07c.1–07c.4 — мастер поверх шага 3: Base URL → Key → Check (успех сразу ведёт на Model; отказ — 06) → Model → Review, Save.\n07c.5 — шаг 3 после Save: провайдер подключён, Next ведёт на 07a.\n07a — шаг 4 «Privacy»: ссылки на 32 и 33 (ряд «Правовые документы»), «Start using CodeLab» → 01.\nГраф переходов — NavOnboarding на странице навигации."
   }
  },
  "order": [
@@ -2231,7 +2422,26 @@
   "TabletNoticesMatch.dc.html",
   "TabletNoticesMatch-dark.dc.html",
   "TabletNoticesEmpty.dc.html",
-  "TabletNoticesEmpty-dark.dc.html"
+  "TabletNoticesEmpty-dark.dc.html",
+  "NoticesMatch.dc.html",
+  "NoticesMatch-dark.dc.html",
+  "NoticesEmpty.dc.html",
+  "NoticesEmpty-dark.dc.html",
+  "OnboardingWelcome.dc.html",
+  "OnboardingModel.dc.html",
+  "OnboardingWelcome-dark.dc.html",
+  "OnboardingModel-dark.dc.html",
+  "NavOnboarding.dc.html",
+  "OnbWizardUrl.dc.html",
+  "OnbWizardUrl-dark.dc.html",
+  "OnbWizardKey.dc.html",
+  "OnbWizardKey-dark.dc.html",
+  "OnbWizardModel.dc.html",
+  "OnbWizardModel-dark.dc.html",
+  "OnbWizardReview.dc.html",
+  "OnbWizardReview-dark.dc.html",
+  "OnboardingModelDone.dc.html",
+  "OnboardingModelDone-dark.dc.html"
  ],
  "pages": [
   {

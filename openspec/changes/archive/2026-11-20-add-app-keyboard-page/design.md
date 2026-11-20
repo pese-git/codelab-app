@@ -5,20 +5,20 @@
   - заголовок «Keyboard shortcuts», поле «Search by action or key» и подпись «Read-only list. Shortcuts are fixed in the app; on macOS Ctrl reads Cmd.»;
   - таблица Action · Shortcut · Where в блоке с `overflow-x: auto` и группами Global, Navigation, Transcript, Composer, Approvals; клавиши — кейкапы;
   - внизу «Agent commands have no shortcuts; open them from the command palette.»;
-- [`12-4-first-run-and-settings.md`](../../../docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md) §12.4.9 (строка «Keyboard (27)»), SETUP-17;
-- [`12-3-desktop-display.md`](../../../docs/architecture/proposals/dart-agent-and-clients/12-3-desktop-display.md):
+- [`12-4-first-run-and-settings.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md) §12.4.9 (строка «Keyboard (27)»), SETUP-17;
+- [`12-3-desktop-display.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/12-3-desktop-display.md):
   - A9 — фокус и сочетания;
   - A13, шаг 3 — сочетания экранов;
   - A13, шаг 4 — пункт палитры «Keyboard shortcuts»;
   - DSK-18, DSK-24;
-- [`12-8-phone-and-tablet.md`](../../../docs/architecture/proposals/dart-agent-and-clients/12-8-phone-and-tablet.md) §12.8.4, §12.8.5 (Keyboard на планшете при ширине ≥ 641, на телефоне скрыта);
-- [`delivery-roadmap.md`](../../../docs/architecture/proposals/delivery-roadmap.md) §10, строка 27;
+- [`12-8-phone-and-tablet.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/12-8-phone-and-tablet.md) §12.8.4, §12.8.5 (Keyboard на планшете при ширине ≥ 641, на телефоне скрыта);
+- [`delivery-roadmap.md`](../../../../docs/architecture/proposals/delivery-roadmap.md) §10, строка 27;
 - активные changes:
-  - [`add-desktop-localization`](../add-desktop-localization/design.md) — D5 (три вида текста), D7 (что не переводится, в том числе клавиши), D12 (параллельные changes пишут строки сразу в ARB), D14 (метка `security`);
-  - [`add-app-general-page`](../add-app-general-page/design.md) — D15 (ключевые слова поиска в ARB);
-  - [`add-app-skills-page`](../add-app-skills-page/design.md) — MODIFIED «Страницы Providers и MCP servers в навигации»;
-  - [`add-integrated-terminal`](../add-integrated-terminal/design.md) — D6, итерация 3: Ctrl+\` по физической клавише, только Control;
-  - [`add-file-preview-and-tree`](../add-file-preview-and-tree/design.md) — дерево Files;
+  - [`add-desktop-localization`](../2026-11-20-add-desktop-localization/design.md) — D5 (три вида текста), D7 (что не переводится, в том числе клавиши), D12 (параллельные changes пишут строки сразу в ARB), D14 (метка `security`);
+  - [`add-app-general-page`](../../add-app-general-page/design.md) — D15 (ключевые слова поиска в ARB);
+  - [`add-app-skills-page`](../../add-app-skills-page/design.md) — MODIFIED «Страницы Providers и MCP servers в навигации»;
+  - [`add-integrated-terminal`](../../add-integrated-terminal/design.md) — D6, итерация 3: Ctrl+\` по физической клавише, только Control;
+  - [`add-file-preview-and-tree`](../../add-file-preview-and-tree/design.md) — дерево Files;
 - спецификации `app-settings`, `agent-workbench-ui`, `workspace-file-browser`;
 - `AGENTS.md` (корень, §6, §8, §11, §13, §14, §15) и вложенные: `apps/codelab_desktop`, `packages/flutter/codelab_ui`, `packages/dart/codelab_agent_core` (TDD, §2);
 - `docs/architecture/`: `layers-and-dependencies.md`, `platform-integration.md` §5, `state-management.md`, `testing.md`, `observability.md`, `l10n-glossary.md`.

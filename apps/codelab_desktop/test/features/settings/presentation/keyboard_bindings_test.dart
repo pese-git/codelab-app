@@ -1,8 +1,8 @@
 // Сторож 2 для записей app: каждая запись каталога проверена нажатием
 // (задача 1.5 change `add-app-keyboard-page`; design.md D3, Risks; spec
 // app-settings «Сочетания app и страница «Keyboard» не расходятся», сценарии
-// «Каждая строка проверена нажатием» и «Отправка и одобрение на одной
-// клавише»; «Страница «Keyboard»: обозначения клавиш», сценарии подсказок).
+// «Каждая строка проверена нажатием» и «Отправка и одобрение на разных
+// клавишах»; «Страница «Keyboard»: обозначения клавиш», сценарии подсказок).
 //
 // Записи кита (палитра, Files, композер, одобрение, выдвижная панель) нажимает
 // `codelab_shortcut_bindings_test.dart` кита. Здесь — записи, привязки которых
@@ -11,8 +11,9 @@
 //   рабочее место без `session/cancel`;
 // - `close-overlay`: Esc закрывает «Add connection profile», мастер
 //   провайдера, подтверждение `bypass` и палитру рабочего места;
-// - Cmd/Ctrl+Enter при ожидающем одобрении: с фокусом на одобрении — вариант
-//   `allow_once`, с фокусом в композере — сообщение в очереди;
+// - Cmd/Ctrl+Enter при ожидающем одобрении остаётся отправкой: с фокусом в
+//   композере — сообщение в очереди, ответа на одобрение нет (ответ — только
+//   глобальные сочетания ⌘Y, Alt+Shift+Y и другие, D14);
 // - подсказки шапки и сайдбара берут клавиши из каталога.
 //
 // Клавиши берутся из `CodeLabShortcut` (`pressShortcut`). Esc диалогов
@@ -39,6 +40,7 @@ import 'package:codelab_setup/codelab_setup.dart' show ConfigLayer;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -81,6 +83,11 @@ void main() {
     late FakeAcpTransport agent;
     late CodeLabShellCubit cubit;
     late CodeLabTestBinding binding;
+
+    /// Управляемые часы рабочего места: задержка ответа сочетанием (500 мс) и
+    /// срок зажатия Alt+Shift (150 мс) двигаются явно, без реального ожидания
+    /// (`testing.md` §20).
+    var now = DateTime.utc(2026, 11, 20, 12);
 
     /// Кадры вместо `pumpAndSettle`: при ходе индикаторы анимируются
     /// бесконечно.
@@ -153,6 +160,7 @@ void main() {
         settingsPages: const SettingsPages(
           available: {SettingsPage.connection},
         ),
+        clock: () => now,
       );
       await tester.pumpWidget(
         binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
@@ -177,24 +185,24 @@ void main() {
         )
         .last;
 
-    /// Переводит фокус клавиатуры внутрь ожидающего одобрения: сочетания
-    /// вариантов действуют, когда фокус внутри полосы решения (spec
-    /// agent-workbench-ui).
+    /// Переводит фокус клавиатуры внутрь ожидающего одобрения клавишей Tab:
+    /// сочетания вариантов действуют, когда фокус внутри полосы решения
+    /// (spec agent-workbench-ui).
     ///
-    /// Почему явно: `Focus(autofocus: true)` полосы
-    /// (`codelab_approval_prompt.dart`) срабатывает, только если в области
-    /// фокуса ещё нет сфокусированного узла, а у рабочего места он есть
-    /// (`CodeLabWorkbenchShortcuts` тоже `autofocus`). Пользователь попадает
-    /// в полосу Tab-ом или щелчком по кнопке.
-    void focusApproval(WidgetTester tester) {
-      final node = FocusManager.instance.rootScope.descendants.firstWhere(
-        (node) =>
-            node.canRequestFocus &&
-            node.context
-                    ?.findAncestorWidgetOfExactType<CodeLabApprovalPrompt>() !=
-                null,
-      );
-      node.requestFocus();
+    /// Почему явно: полоса не берёт фокус сама (change `fix-approval-focus`,
+    /// D1), пользователь попадает в неё Tab-ом, щелчком по кнопке или
+    /// сочетанием перехода. Tab нажимается с верхней границей, пока фокус не
+    /// окажется внутри полосы.
+    Future<void> focusApproval(WidgetTester tester) async {
+      bool inApproval() =>
+          FocusManager.instance.primaryFocus?.context
+              ?.findAncestorWidgetOfExactType<CodeLabApprovalPrompt>() !=
+          null;
+      for (var i = 0; i < 60 && !inApproval(); i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
+      expect(inApproval(), isTrue, reason: 'Tab не довёл фокус до одобрения');
     }
 
     /// Ответы клиента на `session/request_permission` (id — запроса агента).
@@ -246,8 +254,12 @@ void main() {
     for (final useMeta in const [false, true]) {
       final modifier = useMeta ? 'Cmd' : 'Ctrl';
 
-      testWidgets('$modifier+Enter с фокусом на одобрении выбирает '
-          'allow_once', (tester) async {
+      // Спека app-settings «Отправка и одобрение на разных клавишах»
+      // (change `fix-approval-focus`, итерация 7, D14): Cmd/Ctrl+Enter с
+      // фокусом в полосе одобрения не отвечает, ответ — отдельное сочетание,
+      // которое действует с любого места после задержки 500 мс.
+      testWidgets('$modifier+Enter с фокусом на одобрении не отвечает, ответ '
+          'даёт отдельное сочетание', (tester) async {
         await pumpConnected(tester);
         await createSession(tester, 'session-1');
         await startTurn(tester);
@@ -256,13 +268,23 @@ void main() {
         await shortFrames(tester);
         expect(find.byType(CodeLabApprovalPrompt), findsOneWidget);
         expect(cubit.state.queuedPrompts, isEmpty);
-        focusApproval(tester);
-        await tester.pump();
+        await focusApproval(tester);
 
+        await pressShortcut(tester, CodeLabShortcut.send, useMeta: useMeta);
+        await settle(tester);
+
+        expect(permissionAnswers(), isEmpty, reason: 'Enter — не ответ');
+        expect(cubit.state.queuedPrompts, isEmpty);
+
+        // Задержка после появления (D14, п. 2) и срок зажатия Alt+Shift
+        // (Windows и Linux) — на управляемых часах.
+        now = now.add(const Duration(milliseconds: 600));
+        await tester.pump(const Duration(milliseconds: 600));
         await pressShortcut(
           tester,
           CodeLabShortcut.allowOnce,
-          useMeta: useMeta,
+          afterModifiers: () =>
+              now = now.add(const Duration(milliseconds: 200)),
         );
         await settle(tester);
 

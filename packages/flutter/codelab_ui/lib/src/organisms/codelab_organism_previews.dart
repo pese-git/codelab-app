@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/widget_previews.dart';
 
 import '../atomics/atomics.dart';
@@ -477,6 +478,78 @@ Widget codelabApprovalPromptRuPreview() {
       ),
     ),
   );
+}
+
+/// Пример полосы одобрения с клавиатурным фокусом: рамка вместо подсказки
+/// перехода (change `fix-approval-focus`, D4). Фокус ставится после первого
+/// кадра, как это делает лента по «Go to approval». Обычное превью
+/// «Approval prompt» показывает полосу без фокуса, с подсказкой.
+@Preview(
+  name: 'Approval prompt (focused)',
+  group: codelabOrganismPreviewGroup,
+  size: Size(620, 160),
+)
+Widget codelabApprovalPromptFocusedPreview() {
+  return const _AcpOrganismPreviewSurface(
+    child: SizedBox(width: 620, child: _FocusedApprovalPrompt()),
+  );
+}
+
+/// Полоса одобрения, которой после первого кадра передан фокус.
+///
+/// Почему: фокус полосы нельзя задать параметром — он принадлежит её
+/// `State` (D4, п. 3), а превью должно показать рамку.
+/// Как использовать: только в превью; ищет узел полосы по
+/// [CodeLabApprovalPrompt.barKey], как лента.
+class _FocusedApprovalPrompt extends StatefulWidget {
+  const _FocusedApprovalPrompt();
+
+  @override
+  State<_FocusedApprovalPrompt> createState() => _FocusedApprovalPromptState();
+}
+
+class _FocusedApprovalPromptState extends State<_FocusedApprovalPrompt> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Element? bar;
+      void visit(Element element) {
+        if (bar != null) return;
+        if (element.widget.key == CodeLabApprovalPrompt.barKey) {
+          bar = element;
+          return;
+        }
+        element.visitChildren(visit);
+      }
+
+      (context as Element).visitChildren(visit);
+      if (bar case final found?) {
+        Focus.maybeOf(found, createDependency: false)?.requestFocus();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const CodeLabApprovalPrompt(
+      reason: 'The agent wants to verify the Flutter UI package.',
+      onOptionSelected: codelabPreviewApprovalSelected,
+      options: [
+        CodeLabApprovalOption(
+          id: 'allow_once',
+          label: 'Allow once',
+          kind: CodeLabApprovalOptionKind.allowOnce,
+        ),
+        CodeLabApprovalOption(
+          id: 'reject_once',
+          label: 'Reject',
+          kind: CodeLabApprovalOptionKind.rejectOnce,
+        ),
+      ],
+    );
+  }
 }
 
 @Preview(
@@ -1135,7 +1208,7 @@ List<CodeLabShortcutTableGroup> _shortcutTableGroups({
       CodeLabShortcutTableRow(
         key: const ValueKey('preview-row-allow-always'),
         action: allowAlways,
-        combos: CodeLabShortcut.allowAlways.combos,
+        combos: CodeLabShortcut.allowAlways.combosFor(defaultTargetPlatform),
         where: pendingApproval,
       ),
     ],

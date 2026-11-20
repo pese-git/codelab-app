@@ -12,12 +12,26 @@ final class TranscriptShowRequest {
     required this.rowId,
     required this.targetId,
     required this.serial,
+    this.focusApproval = false,
+    this.approvalId,
   });
 
   final String sessionId;
   final String rowId;
   final String targetId;
   final int serial;
+
+  /// После показа поставить клавиатурный фокус на полосу решения цели
+  /// (change `fix-approval-focus`, D4): сочетание «Go to approval». Признак
+  /// живёт в том же разовом запросе, что и прокрутка: его гасят
+  /// `finishShowRequest` и `dropShowRequestOutside`, поэтому возврат в сессию
+  /// и перемонтированная лента фокус не повторяют (§9).
+  final bool focusApproval;
+
+  /// Id одобрения, выбранного при нажатии: лента ставит фокус только на полосу
+  /// этого запроса сессии [sessionId] (`fix-approval-focus`, D13). Запрос мог
+  /// уйти, а в той же строке появиться другой — тогда фокус не трогается.
+  final String? approvalId;
 }
 
 /// Ручное раскрытие строк ленты, показанные изображения, выбранная строка
@@ -162,6 +176,7 @@ final class TranscriptViewCubit extends ShellPartCubit<TranscriptViewState> {
   void requestShow({
     required String sessionId,
     required AgentsShowTarget target,
+    bool focusApproval = false,
   }) {
     final session = {
       ...state.overridesFor(sessionId),
@@ -178,6 +193,8 @@ final class TranscriptViewCubit extends ShellPartCubit<TranscriptViewState> {
           rowId: target.rowId,
           targetId: target.targetId,
           serial: state.showSerial + 1,
+          focusApproval: focusApproval,
+          approvalId: target.approvalId,
         ),
         showSerial: state.showSerial + 1,
       ),

@@ -85,6 +85,56 @@ void main() {
       expect(cubit.state.selectedAgentFor('s1'), 'call_1');
     });
 
+    // Задача 2.3 change `fix-approval-focus` (D4): признак фокуса едет в том
+    // же разовом запросе показа, что и прокрутка.
+    test('requestShow(focusApproval: true) кладёт признак в запрос, по '
+        'умолчанию его нет', () {
+      final cubit = TranscriptViewCubit(changes: ShellChanges());
+      addTearDown(cubit.close);
+      const target = AgentsShowTarget(rowId: 'tool-1', targetId: 'perm-1');
+
+      cubit.requestShow(sessionId: 's1', target: target);
+      expect(cubit.state.showRequestFor('s1')?.focusApproval, isFalse);
+
+      cubit.requestShow(sessionId: 's1', target: target, focusApproval: true);
+      final request = cubit.state.showRequestFor('s1');
+      expect(request?.focusApproval, isTrue);
+      expect(request?.serial, 2);
+      expect(request?.targetId, 'perm-1');
+      // Переход ничего не раскрывает: строка `agent` корня остаётся прежней.
+      expect(cubit.state.overridesFor('s1'), isEmpty);
+    });
+
+    test('смена сессии гасит запрос вместе с признаком фокуса', () {
+      final cubit = TranscriptViewCubit(changes: ShellChanges());
+      addTearDown(cubit.close);
+      cubit.requestShow(
+        sessionId: 's1',
+        target: const AgentsShowTarget(rowId: 'tool-1', targetId: 'perm-1'),
+        focusApproval: true,
+      );
+      expect(cubit.state.showRequestFor('s1')?.focusApproval, isTrue);
+
+      cubit.dropShowRequestOutside('s2');
+
+      expect(cubit.state.showRequest, isNull);
+      expect(cubit.state.showRequestFor('s1'), isNull);
+    });
+
+    test('лента закончила показ: запрос с признаком гаснет', () {
+      final cubit = TranscriptViewCubit(changes: ShellChanges());
+      addTearDown(cubit.close);
+      cubit.requestShow(
+        sessionId: 's1',
+        target: const AgentsShowTarget(rowId: 'tool-1', targetId: 'perm-1'),
+        focusApproval: true,
+      );
+
+      cubit.finishShowRequest(1);
+
+      expect(cubit.state.showRequest, isNull);
+    });
+
     test('запрос разовый: уход фокуса в другую сессию гасит его', () {
       final cubit = TranscriptViewCubit(changes: ShellChanges());
       addTearDown(cubit.close);

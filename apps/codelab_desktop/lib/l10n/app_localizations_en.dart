@@ -3634,10 +3634,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsKeyboardWhereCommandMenu => 'Command menu after /';
 
   @override
-  String get settingsKeyboardWhereApproval =>
-      'Pending approval in focus, when the agent offers this option';
-
-  @override
   String get settingsSearchKeywordsKeyboard =>
       'shortcut, hotkey, keybinding, key';
 
@@ -3653,4 +3649,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String appearanceIssuesHintExtends(String base, String builtIn) {
     return 'Missing roles come from extends: \"$base\" ($builtIn).';
   }
+
+  @override
+  String get settingsKeyboardWhereApprovalAnywhere =>
+      'Workbench, earliest pending approval, if it offers this option';
+
+  @override
+  String get settingsKeyboardActionGoToApproval => 'Go to approval';
+
+  @override
+  String get settingsKeyboardWhereApprovalPending =>
+      'Workbench, while an approval is pending';
 }
