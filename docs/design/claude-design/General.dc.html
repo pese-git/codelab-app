@@ -41,6 +41,7 @@ body{margin:0}
     <a href="General.dc.html" class="f-pi on" aria-current="page"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>General</a>
     <a href="Appearance.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.7 1.5-1.5 0-1.2-1-1.5-1-2.5s.8-1.5 2-1.5H17a4 4 0 0 0 4-4c0-4.7-4-8.5-9-8.5z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></svg>Appearance</a>
     <a href="Keyboard.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Keyboard</a>
+    <a href="Legal.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg>Legal</a>
   </nav>
 
   <section class="f-content" data-fluent="ScaffoldPage">
@@ -95,9 +96,8 @@ body{margin:0}
       <h2 class="t-strong sec">Privacy</h2>
       <div class="f-sc" data-fluent="Card (settings row)">
         <svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>
-        <div style="flex: 1"><label for="crash">Send crash reports</label><div class="t-cap t2">Off by default. No telemetry or usage analytics are collected (D-18)</div></div>
-        <button class="f-hl">Privacy policy</button>
-        <label class="f-ts" data-fluent="ToggleSwitch"><input id="crash" type="checkbox">Off</label>
+        <div style="flex: 1"><div>No telemetry</div><div class="t-cap t2">The app, the CLI and the agent send no usage analytics or crash reports. Prompts and files go only to the provider and tools you set up (D-18, E-21)</div></div>
+        <a href="Legal.dc.html" class="f-btn">Privacy policy<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
       </div>
 
       <h2 class="t-strong sec">About</h2>
@@ -111,11 +111,11 @@ body{margin:0}
         <div class="f-expc" style="padding-left: 52px; display: flex; flex-direction: column; gap: 12px">
           <div class="f-ib" data-fluent="InfoBar (informational)"><span class="f-ibi" aria-hidden="true">i</span><div><span class="ttl">Updates</span>Updates come from the installer or your package manager — the app does not update itself (D-16, U-29).</div></div>
           <div class="kv">
-            <span class="t2">License</span><span>MIT · © Sergey Penkovsky</span>
+            <span class="t2">License</span><span><a href="License.dc.html" class="f-hl">MIT License</a> · © Sergey Penkovsky</span>
             <span class="t2">Signed by</span><span>Developer ID verified</span>
             <span class="t2">Config folder</span><span class="mono" style="font-size: 13px">~/.codelab</span>
           </div>
-          <div style="display: flex; gap: 16px; flex-wrap: wrap"><button class="f-hl">Third-party notices</button><button class="f-hl">Release notes</button><button class="f-hl">Open log folder</button></div>
+          <div style="display: flex; gap: 16px; flex-wrap: wrap"><a href="Legal.dc.html" class="f-hl">Privacy policy</a><a href="Terms.dc.html" class="f-hl">Terms of use</a><a href="Notices.dc.html" class="f-hl">Third-party notices</a><button class="f-hl">Release notes</button><button class="f-hl">Open log folder</button></div>
         </div>
       </section>
     </div>

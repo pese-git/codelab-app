@@ -43,6 +43,7 @@ body{margin:0}
     <a href="General.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>General</a>
     <a href="Appearance.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.7 1.5-1.5 0-1.2-1-1.5-1-2.5s.8-1.5 2-1.5H17a4 4 0 0 0 4-4c0-4.7-4-8.5-9-8.5z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></svg>Appearance</a>
     <a href="Keyboard.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Keyboard</a>
+    <a href="Legal.dc.html" class="f-pi"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg>Legal</a>
   </nav>
 
   <section class="f-content" data-fluent="ScaffoldPage">
@@ -78,18 +79,26 @@ body{margin:0}
       </div>
 
       <h2 class="t-strong sec">Skills</h2>
-      <div class="f-ib success" data-fluent="InfoBar (success)"><span class="f-ibi" aria-hidden="true">✓</span><div><span class="ttl">New skills load without restart</span>Added <span class="mono">.codelab/skills/release-notes</span> — it is in the slash menu now (E-19).</div></div>
+      <div class="f-ib warning" data-fluent="InfoBar (warning)"><span class="f-ibi" aria-hidden="true">!</span><div><span class="ttl">2 warnings</span><span class="mono">release-notes</span> in <span class="mono">.codelab/skills</span> overrides the one in <span class="mono">~/.agents/skills</span>; <span class="mono">pdf-tools</span>: name in SKILL.md does not match its folder — loaded anyway.</div></div>
       <div class="tw">
         <table class="tbl" aria-label="Skills">
           <thead><tr><th>Skill</th><th>Invoke as</th><th>Source</th><th>Enabled</th></tr></thead>
           <tbody>
-            <tr><td><b>code-review</b><div class="t-cap t2">Review the diff against the project rules</div></td><td class="mono">/skill:code-review [path]</td><td><span class="tag">built-in</span></td><td><label class="f-ts"><input type="checkbox" checked aria-label="Enable code-review"></label></td></tr>
+            <tr><td><b>code-review</b><div class="t-cap t2">Review the diff against the project rules</div></td><td class="mono">/skill:code-review [path]</td><td><span class="mono t-cap">.agents/skills</span></td><td><label class="f-ts"><input type="checkbox" checked aria-label="Enable code-review"></label></td></tr>
+            <tr><td><b>release-notes</b> <span class="tag warn">Overrides user skill</span><div class="t-cap t2">Summarise merged PRs since the last tag</div></td><td class="mono">/skill:release-notes &lt;from-tag&gt;</td><td><span class="mono t-cap">.codelab/skills</span></td><td><label class="f-ts"><input type="checkbox" checked aria-label="Enable release-notes"></label></td></tr>
             <tr><td><b>openspec-propose</b><div class="t-cap t2">Draft an OpenSpec change from a request</div></td><td class="mono">/skill:openspec-propose &lt;change-id&gt;</td><td><span class="mono t-cap">~/.codelab/skills</span></td><td><label class="f-ts"><input type="checkbox" checked aria-label="Enable openspec-propose"></label></td></tr>
-            <tr><td><b>release-notes</b> <span class="tag acc">New</span><div class="t-cap t2">Summarise merged PRs since the last tag</div></td><td class="mono">/skill:release-notes &lt;from-tag&gt;</td><td><span class="mono t-cap">.codelab/skills</span></td><td><label class="f-ts"><input type="checkbox" checked aria-label="Enable release-notes"></label></td></tr>
+            <tr><td><b>deploy-check</b> <span class="tag">Command only</span><div class="t-cap t2">Run only when you type it — the model does not pick it</div></td><td class="mono">/skill:deploy-check</td><td><span class="mono t-cap">~/.agents/skills</span></td><td><label class="f-ts"><input type="checkbox" checked aria-label="Enable deploy-check"></label></td></tr>
+            <tr><td><b>pdf-tools</b> <span class="tag warn">1 warning</span><div class="t-cap t2">Fill PDF forms and extract text</div></td><td class="mono">/skill:pdf-tools</td><td><span class="mono t-cap">.claude/skills</span> <span class="t-cap t2">(extra root)</span></td><td><label class="f-ts"><input type="checkbox" checked aria-label="Enable pdf-tools"></label></td></tr>
             <tr><td><b>flutter-golden</b><div class="t-cap t2">Update golden files and explain the diffs</div></td><td class="mono">/skill:flutter-golden</td><td><span class="mono t-cap">.codelab/skills</span></td><td><label class="f-ts"><input type="checkbox" aria-label="Enable flutter-golden"></label></td></tr>
           </tbody>
         </table>
       </div>
+      <div class="f-sc" data-fluent="Card (settings row)">
+        <svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <div style="flex: 1"><label for="sk-claude">Read skills from other agents' folders</label><div class="t-cap t2">Found in this project: <span class="mono">.claude/skills</span> (3 skills). Read only with your consent — adds it to <span class="mono">skills.extra_roots</span>. <span class="mono">.agents/skills</span> is read without asking in a trusted project.</div></div>
+        <label class="f-ts" data-fluent="ToggleSwitch"><input id="sk-claude" type="checkbox" checked>On</label>
+      </div>
+      <p class="t-cap t2" style="margin: 2px 0 0">Searched from this folder up to the repository root: <span class="mono">.codelab/skills</span>, then <span class="mono">.agents/skills</span>; then <span class="mono">~/.codelab/skills</span>, <span class="mono">~/.agents/skills</span>; extra roots last. The nearest wins. The list is fixed when a session opens — new and changed skills apply to new sessions.</p>
 
       <h2 class="t-strong sec">Prompt templates</h2>
       <div class="tw">
