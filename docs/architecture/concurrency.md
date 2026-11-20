@@ -941,7 +941,7 @@ Concurrent writes должны иметь определённую strategy.
 
 ### 47а. Язык интерфейса app: запись выбора и подписки на смену языка
 
-Источник — change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md), D2, D5, D9, риски R3 и R4; владелец языка — `state-management.md` §63а.
+Источник — change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md), D2, D5, D9, риски R3 и R4; владелец языка — `state-management.md` §63а.
 
 **Запись выбора (§47, §48).** `AppLanguageCubit.select(preference)` синхронно публикует новый язык, затем ставит запись ключа `codelab.app.language` в очередь. Стратегия — serialized writes + last-write-wins:
 

@@ -1772,7 +1772,7 @@ apps/codelab_agent ──────── пакеты агента напря
 
 ## 54. Текст интерфейса и локализация
 
-Источник решений — change [`add-desktop-localization`](../../openspec/changes/add-desktop-localization/design.md) (D2, D4–D7, D10); требование — spec `app-settings` «Язык интерфейса app» и «Локализация интерфейса app». Технология — `technology-stack.md` §20ж, термины перевода — `l10n-glossary.md`.
+Источник решений — change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md) (D2, D4–D7, D10); требование — spec `app-settings` «Язык интерфейса app» и «Локализация интерфейса app». Технология — `technology-stack.md` §20ж, термины перевода — `l10n-glossary.md`.
 
 ### Кто строит текст
 
