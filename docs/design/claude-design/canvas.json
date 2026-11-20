@@ -490,7 +490,7 @@
    "y": 4260
   },
   "NavApp.dc.html": {
-   "h": 1980,
+   "h": 2100,
    "page": "nav",
    "title": "Navigation graph — codelab_app",
    "w": 2160,
@@ -503,7 +503,7 @@
    "title": "Navigation graph — codelab_cli",
    "w": 1920,
    "x": 0,
-   "y": 1880
+   "y": 2220
   },
   "NavPhone.dc.html": {
    "h": 1080,
@@ -1388,6 +1388,42 @@
    "h": 820,
    "page": "tablet-dark",
    "title": "T10b Tablet — Legal › Third-party notices, no packages match — dark"
+  },
+  "NoticesMatch.dc.html": {
+   "x": 7600,
+   "y": 15600,
+   "w": 1440,
+   "h": 1500,
+   "expand": "fill",
+   "is_interactive": true,
+   "title": "35b Settings › Legal — Third-party notices, search: M of N"
+  },
+  "NoticesMatch-dark.dc.html": {
+   "x": 7600,
+   "y": 15600,
+   "w": 1440,
+   "h": 1500,
+   "expand": "fill",
+   "page": "dark",
+   "title": "35b Third-party notices, search: M of N — dark"
+  },
+  "NoticesEmpty.dc.html": {
+   "x": 9120,
+   "y": 15600,
+   "w": 1440,
+   "h": 1500,
+   "expand": "fill",
+   "is_interactive": true,
+   "title": "35c Settings › Legal — Third-party notices, no packages match"
+  },
+  "NoticesEmpty-dark.dc.html": {
+   "x": 9120,
+   "y": 15600,
+   "w": 1440,
+   "h": 1500,
+   "expand": "fill",
+   "page": "dark",
+   "title": "35c Third-party notices, no packages match — dark"
   }
  },
  "createdOnFiles": {
@@ -1604,7 +1640,7 @@
   },
   "d-row10": {
    "kind": "title1",
-   "maxW": 7520,
+   "maxW": 10560,
    "page": "dark",
    "text": "Тёмная тема — правовые документы",
    "w": 240,
@@ -1753,7 +1789,7 @@
   },
   "row10": {
    "kind": "title1",
-   "maxW": 7520,
+   "maxW": 10560,
    "text": "Правовые документы: политика конфиденциальности и лицензия",
    "w": 240,
    "x": 0,
@@ -1764,7 +1800,7 @@
    "size": 24,
    "text": "07a → 32/33 — шаг 4 onboarding (D-11, §12.4.9): что уходит с компьютера, ссылки на Privacy policy и Terms of use; принимать нечего, Back возвращает на шаг.\n26 General → 32 — строка Privacy «No telemetry» (D-18, E-21); About → 32, 33, 34, 35 (MIT License → 34, Third-party notices → 35).\nLegal — последний пункт группы App в панели настроек (§12.4.9), как на телефоне и планшете; General и About — дополнительные входы. 32 ⇄ 33 ⇄ 34 ⇄ 35 — вкладки страницы Legal (SelectorBar): Privacy policy · Terms of use · License · Third-party notices. 35 — записи раздела «## Записи» THIRD_PARTY_NOTICES.md как есть (на русском, с подписью) и лицензии пакетов из LicenseRegistry свёрнутыми Expander, без фильтра (D13 add-app-general-page); заменяет диалог D13. Тексты — ассеты PRIVACY.md, TERMS.md (D-29, §12.7.7а), LICENSE; читаются офлайн; «Open on the web» — [SITE]/privacy и [SITE]/terms.",
    "w": 460,
-   "x": 7600,
+   "x": 10640,
    "y": 15600
   },
   "row1s": {
@@ -2231,7 +2267,11 @@
   "TabletNoticesMatch.dc.html",
   "TabletNoticesMatch-dark.dc.html",
   "TabletNoticesEmpty.dc.html",
-  "TabletNoticesEmpty-dark.dc.html"
+  "TabletNoticesEmpty-dark.dc.html",
+  "NoticesMatch.dc.html",
+  "NoticesMatch-dark.dc.html",
+  "NoticesEmpty.dc.html",
+  "NoticesEmpty-dark.dc.html"
  ],
  "pages": [
   {
