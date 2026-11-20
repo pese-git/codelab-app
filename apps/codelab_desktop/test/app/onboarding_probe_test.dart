@@ -226,4 +226,81 @@ providers:
     expect(facts.readiness, isA<ProviderReady>());
     expect(facts.toString(), isNot(contains('sk-test-leak')));
   });
+
+  // Раздел 5 change (ревью 2026-11-21, пп. 2, 3; design.md D6, D8; задача 5.3).
+  // Контракт: `OnboardingFacts.access` — `EditableSettings`, по которому
+  // прочитан снимок; снимок берётся с `cwd: access.paths.codelabHome`, поэтому
+  // проектного слоя папки процесса в нём нет.
+  group('один доступ и только user-слой (пп. 2, 3)', () {
+    test('конфиг папки процесса не учитывается: .codelab/config.yaml рядом с '
+        'процессом не пропускает шаг модели', () async {
+      final processDir = Directory.systemTemp.createTempSync(
+        'codelab-onboarding-cwd-',
+      );
+      final previous = Directory.current;
+      addTearDown(() {
+        Directory.current = previous;
+        processDir.deleteSync(recursive: true);
+      });
+      Directory(p.join(processDir.path, '.codelab')).createSync();
+      File(
+        p.join(processDir.path, '.codelab', 'config.yaml'),
+      ).writeAsStringSync(
+        provider.replaceFirst('%KEY%', 'api_key_env: GW_KEY'),
+      );
+      environment['GW_KEY'] = 'value-not-read';
+      Directory.current = processDir;
+
+      final facts = await read();
+
+      expect(facts.readiness, isA<NoProviderConfigured>());
+    });
+
+    test('факты несут EditableSettings доступа с домом профиля', () async {
+      final facts = await read();
+
+      final access = facts.access!;
+      expect(access.paths.codelabHome, home);
+    });
+
+    test(
+      'stdio-профиль codelab-agent с CODELAB_HOME в env: доступ и готовность '
+      'берутся из дома агента, а не из встроенного',
+      () async {
+        final agentHome = Directory.systemTemp.createTempSync(
+          'codelab-onboarding-agent-home-',
+        );
+        addTearDown(() => agentHome.deleteSync(recursive: true));
+        File(p.join(agentHome.path, 'config.yaml')).writeAsStringSync(
+          provider.replaceFirst('%KEY%', 'api_key_env: GW_KEY'),
+        );
+        environment['GW_KEY'] = 'value-not-read';
+
+        final facts = await read(
+          profile: ConnectionProfile.stdio(
+            id: 'agent',
+            label: 'Agent',
+            command: 'codelab-agent',
+            env: {'CODELAB_HOME': agentHome.path},
+          ),
+        );
+
+        expect(facts.access!.paths.codelabHome, agentHome.path);
+        expect(facts.readiness, isA<ProviderReady>());
+        expect(facts.isExternal, isFalse);
+      },
+    );
+
+    test('у внешнего профиля доступа нет', () async {
+      final facts = await read(
+        profile: ConnectionProfile.webSocket(
+          id: 'remote',
+          label: 'Remote',
+          uri: Uri.parse('ws://127.0.0.1:8765'),
+        ),
+      );
+
+      expect(facts.access, isNull);
+    });
+  });
 }

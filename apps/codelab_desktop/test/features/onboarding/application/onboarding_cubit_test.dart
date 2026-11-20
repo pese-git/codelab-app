@@ -527,6 +527,139 @@ void main() {
         unavailable.state.model,
         const ModelChoose(ModelNotice.unavailable),
       );
+      // Итог отброшен целиком: события «сохранено» нет (ревью 2026-11-21).
+      expect(events('onboarding.model_saved'), isEmpty);
+    });
+  });
+
+  // Раздел 5 change (ревью 2026-11-21, п. 6; design.md D8): навигация шага
+  // блокируется, пока мастер открывается или открыт. Контракт: `wizardStarted()`
+  // возвращает `false`, если мастер открывать нельзя (шаг не «Choose a model»,
+  // мастер уже активен, `configBroken`/`unavailable`, Cubit закрыт);
+  // `wizardEnded()` снимает блокировку; фаза — поле `wizard` (`ModelWizard`) у
+  // `ModelChoose` и `ModelSaved`.
+  group('мастер и навигация шага (п. 6, D8)', () {
+    Future<OnboardingCubit> atModel({
+      ProviderReadiness readiness = const NoProviderConfigured(),
+    }) async {
+      final cubit = build(_FakeProbe.value(_facts(readiness)));
+      await settle();
+      await walkTo(cubit, OnboardingStep.model);
+      return cubit;
+    }
+
+    ModelWizard phase(OnboardingCubit cubit) => switch (cubit.state.model) {
+      ModelChoose(:final wizard) => wizard,
+      ModelSaved(:final wizard) => wizard,
+      final other => fail('нет фазы мастера у $other'),
+    };
+
+    test(
+      'wizardStarted включает фазу active, wizardEnded снимает её',
+      () async {
+        final cubit = await atModel();
+        expect(phase(cubit), ModelWizard.idle);
+
+        expect(cubit.wizardStarted(), isTrue);
+        expect(phase(cubit), ModelWizard.active);
+        expect(cubit.state.model, isA<ModelChoose>());
+        expect(cubit.state.step, OnboardingStep.model);
+
+        cubit.wizardEnded();
+        expect(phase(cubit), ModelWizard.idle);
+      },
+    );
+
+    test('Back, Next и «Set up later» при active игнорируются', () async {
+      final cubit = await atModel();
+      cubit.wizardStarted();
+      final before = cubit.state;
+
+      cubit.back();
+      await cubit.next();
+      cubit.setUpLater();
+
+      expect(cubit.state.step, OnboardingStep.model);
+      expect(cubit.state, same(before));
+    });
+
+    test(
+      'повторный wizardStarted при active даёт false и ничего не меняет',
+      () async {
+        final cubit = await atModel();
+        expect(cubit.wizardStarted(), isTrue);
+        final before = cubit.state;
+
+        expect(cubit.wizardStarted(), isFalse);
+
+        expect(cubit.state, same(before));
+      },
+    );
+
+    test('wizardStarted вне шага model, при configBroken и unavailable — '
+        'false', () async {
+      final welcome = build(
+        _FakeProbe.value(_facts(const NoProviderConfigured())),
+      );
+      await settle();
+      expect(welcome.wizardStarted(), isFalse);
+
+      final broken = await atModel(readiness: const ConfigBroken([]));
+      expect(broken.wizardStarted(), isFalse);
+      expect(phase(broken), ModelWizard.idle);
+
+      final unavailable = build(_FakeProbe.failing(StateError('x')));
+      await settle();
+      await walkTo(unavailable, OnboardingStep.model);
+      expect(unavailable.wizardStarted(), isFalse);
+    });
+
+    test('после wizardEnded навигация снова работает', () async {
+      final cubit = await atModel();
+      cubit.wizardStarted();
+      cubit.wizardEnded();
+
+      cubit.setUpLater();
+      expect(cubit.state.step, OnboardingStep.privacy);
+      cubit.back();
+      expect(cubit.state.step, OnboardingStep.model);
+    });
+
+    test('Done во время active даёт Saved с той же фазой; wizardEnded снимает '
+        'её, и Next работает', () async {
+      final cubit = await atModel();
+      cubit.wizardStarted();
+
+      cubit.providerSaved(_done(secret: 'codelab/llm'));
+
+      expect(cubit.state.model, isA<ModelSaved>());
+      expect(phase(cubit), ModelWizard.active);
+      await cubit.next();
+      expect(cubit.state.step, OnboardingStep.model, reason: 'мастер открыт');
+
+      cubit.wizardEnded();
+      expect(phase(cubit), ModelWizard.idle);
+      await cubit.next();
+      expect(cubit.state.step, OnboardingStep.privacy);
+    });
+
+    test('«Set up again…»: wizardStarted из Saved разрешён', () async {
+      final cubit = await atModel();
+      cubit.providerSaved(_done(secret: 'codelab/llm'));
+
+      expect(cubit.wizardStarted(), isTrue);
+      expect(phase(cubit), ModelWizard.active);
+    });
+
+    test('wizardEnded без активного мастера ничего не меняет; после close() '
+        'wizardStarted — false', () async {
+      final cubit = await atModel();
+      final before = cubit.state;
+      cubit.wizardEnded();
+      expect(cubit.state, same(before));
+
+      await cubit.close();
+      expect(cubit.wizardStarted(), isFalse);
     });
   });
 
@@ -615,6 +748,70 @@ void main() {
       later.setUpLater();
       await later.finish();
       expect(events('onboarding.completed').single['model_step'], 'later');
+    });
+  });
+
+  // Раздел 5 change (ревью 2026-11-21, пп. 7, 8; design.md D5, D6;
+  // `concurrency.md` §47в): итог записи после `close()` не публикуется, а
+  // `close()` не оставляет `next()` ждать фактов.
+  group('закрытие Cubit-а (пп. 7, 8)', () {
+    test('закрытие во время записи флага: onFinished не вызван, событий '
+        'нет, исключений нет', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const ProviderReady('llm/m1'))),
+      );
+      await settle();
+      await walkTo(cubit, OnboardingStep.privacy);
+      preferences.gate = Completer<void>();
+      final finishing = cubit.finish();
+      await settle();
+      expect(preferences.marked, 1);
+
+      await cubit.close();
+      preferences.gate!.complete();
+      await finishing;
+
+      expect(finished, 0);
+      expect(events('onboarding.completed'), isEmpty);
+    });
+
+    test('закрытие во время записи, которая падает: save_failed не пишется, '
+        'onFinished не вызван', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const ProviderReady('llm/m1'))),
+      );
+      await settle();
+      await walkTo(cubit, OnboardingStep.privacy);
+      preferences
+        ..gate = Completer<void>()
+        ..failure = StateError('disk is full');
+      final finishing = cubit.finish();
+      await settle();
+
+      await cubit.close();
+      preferences.gate!.complete();
+      await finishing;
+
+      expect(finished, 0);
+      expect(events('onboarding.save_failed'), isEmpty);
+      expect(events('onboarding.completed'), isEmpty);
+    });
+
+    test('close() при ожидании фактов в next(): next() завершается, шаг не '
+        'меняется', () async {
+      final cubit = build(_FakeProbe.gated());
+      await cubit.next();
+      expect(cubit.state.step, OnboardingStep.permissions);
+      final waiting = cubit.next();
+      await settle();
+
+      await cubit.close();
+
+      await waiting.timeout(
+        const Duration(seconds: 1),
+        onTimeout: () => fail('next() завис после close()'),
+      );
+      expect(cubit.state.step, OnboardingStep.permissions);
     });
   });
 

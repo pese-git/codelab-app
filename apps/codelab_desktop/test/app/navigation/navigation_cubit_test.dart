@@ -487,6 +487,33 @@ void main() {
       await cubit.close();
     });
 
+    // Раздел 5 change (ревью 2026-11-21, п. 5, D1): событию нужна причина.
+    test(
+      'settings.open_skipped на onboarding несёт reason: onboarding',
+      () async {
+        final cubit = build(initial: const OnboardingDestination());
+
+        await open(cubit, SettingsPage.general);
+
+        final skipped = logger.entries.singleWhere(
+          (e) => e['event'] == 'settings.open_skipped',
+        );
+        expect(skipped['level'], 'debug');
+        expect(skipped['reason'], 'onboarding');
+        await cubit.close();
+      },
+    );
+
+    // Раздел 5 change (п. 7, D5): колбэк `onFinished` может пережить Cubit при
+    // закрытии root scope; `emit` на закрытом Cubit бросил бы `StateError`.
+    test('finishOnboarding на закрытом Cubit — no-op без исключения', () async {
+      final cubit = build(initial: const OnboardingDestination());
+      await cubit.close();
+
+      expect(cubit.finishOnboarding, returnsNormally);
+      expect(cubit.state, const OnboardingDestination());
+    });
+
     test('finishOnboarding вне onboarding ничего не меняет', () async {
       final cubit = build();
       final states = <AppDestination>[];

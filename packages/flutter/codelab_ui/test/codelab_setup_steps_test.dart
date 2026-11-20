@@ -12,6 +12,7 @@
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/semantics.dart' show SemanticsRole;
 import 'package:flutter_test/flutter_test.dart';
 
 const _steps = [
@@ -158,5 +159,27 @@ void main() {
     await pumpSteps(tester, current: 9);
     expect(tester.takeException(), isNull);
     expect(styleOf(tester, 'Privacy').fontWeight, isNot(FontWeight.w600));
+  });
+
+  // Раздел 5 change (ревью 2026-11-21; spec app-onboarding «Локализация и
+  // доступность», design.md D12): строка шагов объявляется списком, у каждого
+  // шага есть позиция «шаг n из m». Контракт: корень — `Semantics(container:
+  // true, role: SemanticsRole.list)`; каждый шаг — `SemanticsRole.listItem` с
+  // подсказкой `Step n of m` из каталога кита (`codeLabSetupStepPosition`,
+  // английский фолбэк без делегата).
+  testWidgets('объявляет список шагов и позицию «шаг n из m»', (tester) async {
+    final handle = tester.ensureSemantics();
+    await pumpSteps(tester, current: 2, done: {0, 1});
+
+    final list = tester.getSemantics(find.byType(CodeLabSetupSteps));
+    expect(list.getSemanticsData().role, SemanticsRole.list);
+
+    for (var i = 0; i < _steps.length; i++) {
+      final data = tester.getSemantics(find.text(_steps[i])).getSemanticsData();
+      expect(data.role, SemanticsRole.listItem, reason: _steps[i]);
+      expect(data.label, contains(_steps[i]), reason: _steps[i]);
+      expect(data.hint, 'Step ${i + 1} of ${_steps.length}', reason: _steps[i]);
+    }
+    handle.dispose();
   });
 }

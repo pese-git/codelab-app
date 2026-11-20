@@ -24,6 +24,8 @@ import 'package:codelab_desktop/app/embedded_logger.dart';
 import 'package:codelab_desktop/app/provider_settings_session.dart';
 import 'package:codelab_desktop/features/onboarding/application/onboarding_wizard_opener.dart';
 import 'package:codelab_setup/codelab_setup.dart';
+import 'package:codelab_desktop/features/settings/application/provider_wizard_cubit.dart'
+    show ProviderWizardCubit;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -47,6 +49,7 @@ void main() {
   late Directory home;
   late RecordingLogger log;
   late OnboardingWizardOpener open;
+  late EditableSettings embeddedAccess;
 
   setUp(() {
     home = Directory.systemTemp.createTempSync('codelab-onboarding-wizard-');
@@ -69,13 +72,22 @@ void main() {
     );
     addTearDown(binding.scope.dispose);
     open = binding.scope.resolve<OnboardingWizardOpener>();
+    embeddedAccess = EditableSettings(ConfigPaths(codelabHome: home.path));
   });
 
-  Future<void> until(bool Function() ok) async {
-    for (var i = 0; i < 300 && !ok(); i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 10));
+  /// Ждёт состояние автомата по потоку Cubit-а мастера, без опроса по
+  /// таймеру (ревью 2026-11-21): состояние уже могло наступить до подписки.
+  Future<void> until(
+    ProviderWizardCubit wizard,
+    bool Function(ProviderSetupState state) ok,
+  ) async {
+    if (ok(wizard.state.setup)) {
+      return;
     }
-    expect(ok(), isTrue, reason: 'автомат не дошёл до нужного состояния');
+    await wizard.stream
+        .map((state) => state.setup)
+        .firstWhere(ok)
+        .timeout(const Duration(seconds: 10));
   }
 
   String config() => File(p.join(home.path, 'config.yaml')).readAsStringSync();
@@ -84,11 +96,14 @@ void main() {
     'диалог начинается с «Base URL»; ключ уходит в хранилище, конфиг '
     'получает ссылку и модель по умолчанию; значения ключа нигде нет',
     () async {
-      final wizard = (await open(presetId: 'custom-openai'))!;
+      final wizard = (await open(
+        presetId: 'custom-openai',
+        access: embeddedAccess,
+      ))!;
       addTearDown(wizard.close);
 
       // PresetChosen отправлен открывателем: «API type» пропущен (D8).
-      await until(() => wizard.state.setup is EnteringBaseUrl);
+      await until(wizard, (state) => state is EnteringBaseUrl);
       expect(
         wizard.forceDefault,
         isTrue,
@@ -96,13 +111,13 @@ void main() {
       );
 
       wizard.dispatch(const BaseUrlSubmitted('https://llm.example/v1'));
-      await until(() => wizard.state.setup is ChoosingKey);
+      await until(wizard, (state) => state is ChoosingKey);
       wizard.dispatch(KeySubmitted(StoreSecret(SecretValue(leakMarker))));
-      await until(() => wizard.state.setup is ChoosingModel);
+      await until(wizard, (state) => state is ChoosingModel);
       wizard.dispatch(const ModelChosen('m1'));
-      await until(() => wizard.state.setup is Reviewing);
+      await until(wizard, (state) => state is Reviewing);
       wizard.dispatch(const ConfirmSave());
-      await until(() => wizard.state.setup is Done);
+      await until(wizard, (state) => state is Done);
 
       final done = wizard.state.setup as Done;
       expect(done.plan.target.layer, ConfigLayer.user, reason: 'цель user');
@@ -128,14 +143,59 @@ void main() {
 
   test('отмена мастера: ничего не записано', () async {
     final before = config();
-    final wizard = (await open(presetId: 'anthropic'))!;
+    final wizard = (await open(presetId: 'anthropic', access: embeddedAccess))!;
     addTearDown(wizard.close);
-    await until(() => wizard.state.setup is EnteringBaseUrl);
+    await until(wizard, (state) => state is EnteringBaseUrl);
 
     wizard.cancel();
-    await until(() => wizard.state.setup is Cancelled);
+    await until(wizard, (state) => state is Cancelled);
 
     expect(config(), before);
+    expect(File(p.join(home.path, 'secrets.yaml')).existsSync(), isFalse);
+  });
+
+  // Раздел 5 change (ревью 2026-11-21, п. 2; design.md D8; spec «Мастер и
+  // конфиг stdio-профиля»). Контракт: `OnboardingWizardOpener({presetId,
+  // access})` открывает сессию настроек по переданному `EditableSettings`
+  // (его экран берёт из `OnboardingFacts.access`), а не по встроенному
+  // профилю.
+  test('мастер и конфиг stdio-профиля: провайдер записан в дом агента, '
+      'конфиг встроенного агента не изменён', () async {
+    final agentHome = Directory.systemTemp.createTempSync(
+      'codelab-onboarding-agent-home-',
+    );
+    addTearDown(() => agentHome.deleteSync(recursive: true));
+    Process.runSync('/bin/chmod', ['700', agentHome.path]);
+    File(
+      p.join(agentHome.path, 'config.yaml'),
+    ).writeAsStringSync('secrets:\n  backend: file\n');
+    final embeddedBefore = config();
+
+    final wizard = (await open(
+      presetId: 'custom-openai',
+      access: EditableSettings(ConfigPaths(codelabHome: agentHome.path)),
+    ))!;
+    addTearDown(wizard.close);
+    await until(wizard, (state) => state is EnteringBaseUrl);
+    wizard.dispatch(const BaseUrlSubmitted('https://llm.example/v1'));
+    await until(wizard, (state) => state is ChoosingKey);
+    wizard.dispatch(KeySubmitted(StoreSecret(SecretValue(leakMarker))));
+    await until(wizard, (state) => state is ChoosingModel);
+    wizard.dispatch(const ModelChosen('m1'));
+    await until(wizard, (state) => state is Reviewing);
+    wizard.dispatch(const ConfirmSave());
+    await until(wizard, (state) => state is Done);
+
+    final agentConfig = File(
+      p.join(agentHome.path, 'config.yaml'),
+    ).readAsStringSync();
+    expect(agentConfig, contains('default_model: llm-example/m1'));
+    expect(agentConfig, isNot(contains(leakMarker)));
+    expect(
+      File(p.join(agentHome.path, 'secrets.yaml')).readAsStringSync(),
+      contains('codelab/llm-example'),
+    );
+    expect(config(), embeddedBefore, reason: 'конфиг встроенного не тронут');
     expect(File(p.join(home.path, 'secrets.yaml')).existsSync(), isFalse);
   });
 }

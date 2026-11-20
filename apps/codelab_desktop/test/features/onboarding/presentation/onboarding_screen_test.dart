@@ -26,8 +26,28 @@
 //   `onboarding-model-connected` (сводка `Saved`), `onboarding-privacy-stays`,
 //   `onboarding-privacy-nothing-to-agree`;
 // - «Next» на шаге модели есть только в `Saved`; до этого — «Set up later».
+//
+// Раздел 5 change (исправления по двойному ревью 2026-11-21; design.md
+// «Решения по двойному ревью», пп. 1, 2, 4, 6; задачи 5.1, 5.5, 5.7, 5.11).
+// Красные по причине компиляции и содержательно; контракт сверх design.md:
+// - `OnboardingScreen({openWizard, appLogsLabel})`: подпись каталога логов app
+//   приходит из composition root (`CodeLabDependencies.onboardingAppLogsLabel`),
+//   а не из фактов (п. 4);
+// - `OnboardingWizardOpener = Future<ProviderWizardCubit?> Function({required
+//   String presetId, required EditableSettings access})`; экран передаёт
+//   `OnboardingFacts.access` (п. 2);
+// - `OnboardingFacts(... access: EditableSettings ...)`: доступ, по которому
+//   прочитан снимок (у внешнего профиля `null`);
+// - шаг 2 при `FactsLoading`: строка `onboarding-permissions-loading` с
+//   `ProgressRing` и `Reading the agent settings…`, InfoBar режима нет (п. 1);
+// - Cubit: `wizardStarted()` (возвращает `false`, если мастер открывать нельзя)
+//   и `wizardEnded()`, поле `wizard: ModelWizard.idle | active` у `ModelChoose`
+//   и `ModelSaved` (п. 6); кнопки навигации шага при `active` неактивны.
+
+import 'dart:async';
 
 import 'package:codelab_desktop/features/onboarding/application/onboarding_cubit.dart';
+import 'package:codelab_desktop/features/onboarding/application/onboarding_probe.dart';
 import 'package:codelab_desktop/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:codelab_desktop/features/settings/application/provider_wizard_cubit.dart';
 import 'package:codelab_desktop/l10n/app_localizations_en.dart';
@@ -93,6 +113,9 @@ Done _done({KeyChoice key = const KeepStoredSecret()}) => Done(
 void main() {
   late FakeOnboardingPreferences preferences;
   late List<String> opened;
+  late List<EditableSettings> openedAccess;
+  // Затвор открывателя мастера: тест держит открытие «в полёте» (п. 6).
+  Completer<ProviderWizardCubit?>? openGate;
   late int finished;
   late OnboardingCubit cubit;
   ProviderWizardCubit? wizardToReturn;
@@ -100,6 +123,8 @@ void main() {
   setUp(() {
     preferences = FakeOnboardingPreferences();
     opened = [];
+    openedAccess = [];
+    openGate = null;
     finished = 0;
     wizardToReturn = null;
     final view = TestWidgetsFlutterBinding.ensureInitialized()
@@ -129,9 +154,12 @@ void main() {
         BlocProvider<OnboardingCubit>.value(
           value: cubit,
           child: OnboardingScreen(
-            openWizard: ({required String presetId}) async {
+            appLogsLabel: fakeLogsLabel,
+            openWizard: ({required String presetId, required access}) async {
               opened.add(presetId);
-              return wizardToReturn;
+              openedAccess.add(access);
+              final gate = openGate;
+              return gate != null ? gate.future : wizardToReturn;
             },
           ),
         ),
@@ -318,10 +346,77 @@ void main() {
       );
     });
 
-    testWidgets('факты недоступны: текст режима standard', (tester) async {
+    testWidgets('настройки не прочитаны: нейтральный текст, режим standard не '
+        'утверждается (п. 1)', (tester) async {
       await pump(tester, FakeOnboardingProbe.failing(StateError('x')));
       await toStep(tester, 'permissions');
 
+      expect(
+        inKey(
+          'onboarding-permissions-mode',
+          'Agent settings could not be read. The mode for new sessions is '
+              'shown in Settings › Agents & modes.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('New sessions start in standard mode'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('настройки ещё читаются: индикатор вместо InfoBar режима, '
+        'после чтения — InfoBar по действующему режиму (п. 1)', (tester) async {
+      final probe = _GatedProbe();
+      cubit = OnboardingCubit(
+        probe: probe,
+        preferences: preferences,
+        onFinished: () => finished++,
+      );
+      addTearDown(cubit.close);
+      await tester.pumpWidget(
+        localizedFluentApp(
+          BlocProvider<OnboardingCubit>.value(
+            value: cubit,
+            child: OnboardingScreen(
+              appLogsLabel: fakeLogsLabel,
+              openWizard: ({required presetId, required access}) async => null,
+            ),
+          ),
+        ),
+      );
+      // Индикатор крутится бесконечно: `pumpAndSettle` здесь завис бы.
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(_key('onboarding-next'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(_key('onboarding-step-permissions'), findsOneWidget);
+
+      expect(_key('onboarding-permissions-mode'), findsNothing);
+      expect(
+        find.descendant(
+          of: _key('onboarding-permissions-loading'),
+          matching: find.text('Reading the agent settings…'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: _key('onboarding-permissions-loading'),
+          matching: find.byType(ProgressRing),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('New sessions start in'),
+        findsNothing,
+        reason: 'режим до чтения фактов не называется',
+      );
+
+      probe.gate.complete(onboardingFacts(const NoProviderConfigured()));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(_key('onboarding-permissions-loading'), findsNothing);
       expect(
         inKey(
           'onboarding-permissions-mode',
@@ -685,9 +780,7 @@ void main() {
       expect(inKey('onboarding-privacy-stays', 'unencrypted'), findsOneWidget);
     });
 
-    testWidgets('внешний профиль и недоступные факты называют каталоги логов', (
-      tester,
-    ) async {
+    testWidgets('внешний профиль называет каталог логов', (tester) async {
       await pump(tester, FakeOnboardingProbe(onboardingExternalFacts));
       await toStep(tester, 'privacy');
       expect(
@@ -695,6 +788,22 @@ void main() {
         findsOneWidget,
       );
       expect(inKey('onboarding-privacy-stays', fakeLogsLabel), findsOneWidget);
+    });
+
+    testWidgets('факты недоступны: каталог логов app из composition root есть, '
+        'пути CODELAB_HOME нет (п. 4, D9)', (tester) async {
+      await pump(tester, FakeOnboardingProbe.failing(StateError('x')));
+      await toStep(tester, 'privacy');
+
+      expect(inKey('onboarding-privacy-stays', fakeLogsLabel), findsOneWidget);
+      expect(
+        inKey(
+          'onboarding-privacy-stays',
+          "the agent's config and keys stay on this computer",
+        ),
+        findsOneWidget,
+      );
+      expect(inKey('onboarding-privacy-stays', '~/.codelab'), findsNothing);
     });
 
     testWidgets('«Start using CodeLab» пишет флаг и завершает onboarding', (
@@ -778,4 +887,121 @@ void main() {
       expect(_key('onboarding-step-privacy'), findsOneWidget);
     });
   });
+
+  group('мастер: доступ из фактов и навигация шага (п. 2, 6)', () {
+    /// Cubit мастера на двойнике сессии: диалог начинается с «Base URL».
+    Future<(ProviderWizardCubit, FakeAgentConfigStore)> makeWizard(
+      WidgetTester tester,
+    ) async {
+      final store = FakeAgentConfigStore();
+      final session = FakeProviderSettingsSession(store);
+      final flow = (await tester.runAsync(
+        () => session.openWizard(
+          forceDefault: true,
+          entry: ProviderWizardEntry.onboarding,
+        ),
+      ))!;
+      final wizard = ProviderWizardCubit(
+        strings: FixedAppStrings(AppLocalizationsEn()),
+        flow: flow,
+        access: session.access,
+        backendId: store.backend.id,
+        forceDefault: true,
+        isAgentConnected: () => false,
+      )..dispatch(const PresetChosen('anthropic'));
+      addTearDown(wizard.close);
+      return (wizard, store);
+    }
+
+    testWidgets('экран передаёт открывателю доступ из фактов', (tester) async {
+      final access = EditableSettings(
+        const ConfigPaths(codelabHome: '/agent-home'),
+      );
+      await pump(
+        tester,
+        FakeOnboardingProbe(
+          OnboardingFacts(
+            readiness: const NoProviderConfigured(),
+            access: access,
+            backendId: 'file',
+            backendWritable: true,
+            mode: 'standard',
+            homeLabel: '/agent-home',
+            logsLabel: fakeLogsLabel,
+          ),
+        ),
+      );
+      await toStep(tester, 'model');
+      await tapKey(tester, 'onboarding-preset-openai');
+
+      await tapKey(tester, 'onboarding-model-setup');
+
+      expect(opened, ['openai']);
+      expect(openedAccess.single, same(access));
+    });
+
+    testWidgets('пока мастер открывается: Back, «Set up later» и повторное '
+        '«Set up…» не действуют; после диалога навигация снова работает', (
+      tester,
+    ) async {
+      final (wizard, store) = await makeWizard(tester);
+      openGate = Completer<ProviderWizardCubit?>();
+      await pump(
+        tester,
+        probeOf(const NoProviderConfigured(), backend: 'file'),
+      );
+      await toStep(tester, 'model');
+      await tapKey(tester, 'onboarding-preset-anthropic');
+
+      await tapKey(tester, 'onboarding-model-setup');
+      await tapKey(tester, 'onboarding-model-later');
+      await tapKey(tester, 'onboarding-back');
+      await tapKey(tester, 'onboarding-model-setup');
+
+      expect(_key('onboarding-step-model'), findsOneWidget);
+      expect(opened, hasLength(1), reason: 'повторное «Set up…» игнорируется');
+
+      openGate!.complete(wizard);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(_key('provider-wizard-base-url-field'), findsOneWidget);
+      await tester.tap(_key('provider-wizard-cancel'));
+      await tester.pumpAndSettle();
+
+      expect(_key('onboarding-step-model'), findsOneWidget);
+      expect(store.applied, isEmpty);
+      await tapKey(tester, 'onboarding-model-later');
+      expect(_key('onboarding-step-privacy'), findsOneWidget);
+    });
+
+    testWidgets('открыватель вернул мастер после закрытия onboarding: диалога '
+        'нет, Cubit мастера закрыт, конфиг не тронут', (tester) async {
+      final (wizard, store) = await makeWizard(tester);
+      openGate = Completer<ProviderWizardCubit?>();
+      await pump(
+        tester,
+        probeOf(const NoProviderConfigured(), backend: 'file'),
+      );
+      await toStep(tester, 'model');
+      await tapKey(tester, 'onboarding-preset-anthropic');
+      await tapKey(tester, 'onboarding-model-setup');
+
+      await cubit.close();
+      openGate!.complete(wizard);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(_key('provider-wizard-base-url-field'), findsNothing);
+      expect(wizard.isClosed, isTrue);
+      expect(store.applied, isEmpty);
+    });
+  });
+}
+
+/// Порт фактов, чей итог тест отдаёт сам: шаг «Permissions» ждёт чтения.
+final class _GatedProbe implements OnboardingProbe {
+  final gate = Completer<OnboardingFacts>();
+
+  @override
+  Future<OnboardingFacts> read() => gate.future;
 }
