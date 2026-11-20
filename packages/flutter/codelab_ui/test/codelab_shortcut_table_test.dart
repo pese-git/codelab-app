@@ -161,6 +161,67 @@ void main() {
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
   });
 
+  // Символы клавиш (⌘ ⇧ ⌥ ⏎ ⌫ и стрелки) в моноширинном шрифте роли `mono`
+  // (`Menlo` с запасными шрифтами) берутся из запасного шрифта и выглядят
+  // мельче букв. Проверяется стиль, а не отрисовка: у плашки-символа тот же
+  // кегль, что у буквы, но свой шрифт, где знаки есть (ручная проверка на
+  // macOS, change `add-app-keyboard-page`).
+  group('символы клавиш и буквы', () {
+    TextStyle styleOf(WidgetTester tester, String text) {
+      // Знак может стоять в нескольких плашках: стиль у всех одинаков.
+      final style = tester.widgetList<Text>(find.text(text)).first.style;
+      expect(style, isNotNull, reason: text);
+      return style!;
+    }
+
+    testWidgets('macOS: ⌘ имеет тот же кегль, что K, но не шрифт букв', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _enHost(
+          CodeLabKeycaps(combos: [_combo(CodeLabShortcut.commandPalette)]),
+        ),
+      );
+
+      final letter = styleOf(tester, 'K');
+      final symbol = styleOf(tester, '⌘');
+      expect(symbol.fontSize, isNotNull);
+      expect(symbol.fontSize, letter.fontSize, reason: 'кегль как у буквы');
+      expect(
+        symbol.fontFamily,
+        isNot(letter.fontFamily),
+        reason: 'знак берётся не из шрифта букв, где его нет',
+      );
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets('все символы плашек (⇧ ⌥ ⏎ ⌫ ↑ ↓) — тем же шрифтом и кеглем, '
+        'что ⌘', (tester) async {
+      await tester.pumpWidget(
+        _enHost(
+          Column(
+            children: [
+              CodeLabKeycaps(combos: [_combo(CodeLabShortcut.commandPalette)]),
+              CodeLabKeycaps(combos: [_combo(CodeLabShortcut.toggleFiles)]),
+              CodeLabKeycaps(combos: [_combo(CodeLabShortcut.rejectAlways)]),
+              CodeLabKeycaps(combos: [_combo(CodeLabShortcut.allowAlways)]),
+              CodeLabKeycaps(combos: CodeLabShortcut.fileTreeMove.combos),
+            ],
+          ),
+        ),
+      );
+
+      final reference = styleOf(tester, '⌘').fontFamily;
+      final size = styleOf(tester, '⌘').fontSize;
+      for (final symbol in const ['⇧', '⌥', '⏎', '⌫', '↑', '↓']) {
+        final style = tester.widgetList<Text>(find.text(symbol)).first.style!;
+        expect(style.fontFamily, reason: symbol, reference);
+        expect(style.fontSize, size, reason: symbol);
+      }
+      // Буквы и слова остаются в моноширинном шрифте роли `mono`.
+      expect(styleOf(tester, 'K').fontFamily, isNot(reference));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+  });
+
   group('CodeLabShortcutTable', () {
     testWidgets('шапка из переданных подписей и группы с заголовками', (
       tester,
@@ -251,44 +312,55 @@ void main() {
       expect(primary == null || !inTable(primary), isTrue);
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-    testWidgets('ширина 400 px: горизонтальная прокрутка без переполнения, '
-        'кейкапы не переносятся, текст действия переносится', (tester) async {
-      await tester.pumpWidget(_enHost(_table(), width: 400));
+    testWidgets(
+      'ширина 340 px (уже minWidth 380): горизонтальная прокрутка без переполнения, '
+      'кейкапы не переносятся, текст действия переносится',
+      (tester) async {
+        // Шрифт тестов (Ahem) широкий: перенос делает таблицу выше окна 600 px.
+        tester.view.physicalSize = const Size(800, 4000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        await tester.pumpWidget(_enHost(_table(), width: 340));
 
-      expect(tester.takeException(), isNull);
-      final scrolls = tester
-          .widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView))
-          .where((s) => s.scrollDirection == Axis.horizontal);
-      expect(scrolls, isNotEmpty, reason: 'горизонтальная прокрутка');
+        expect(tester.takeException(), isNull);
+        final scrolls = tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .where((s) => s.scrollDirection == Axis.horizontal);
+        expect(scrolls, isNotEmpty, reason: 'горизонтальная прокрутка');
 
-      // Кейкапы одной строки стоят на одной линии и не сжаты до переноса.
-      final allowRow = find.byKey(const ValueKey('row-allow-always'));
-      final caps = [
-        for (final label in const ['Ctrl', 'Alt', 'Enter'])
-          find.descendant(of: allowRow, matching: find.text(label)),
-      ];
-      final tops = [for (final f in caps) tester.getRect(f).center.dy];
-      expect(tops.toSet(), hasLength(1), reason: 'кейкапы на одной линии');
+        // Кейкапы одной строки стоят на одной линии и не сжаты до переноса.
+        final allowRow = find.byKey(const ValueKey('row-allow-always'));
+        final caps = [
+          for (final label in const ['Ctrl', 'Alt', 'Enter'])
+            find.descendant(of: allowRow, matching: find.text(label)),
+        ];
+        final tops = [for (final f in caps) tester.getRect(f).center.dy];
+        expect(tops.toSet(), hasLength(1), reason: 'кейкапы на одной линии');
 
-      // Длинное «действие» переносится: выше однострочного «Allow always».
-      final longAction = tester.getSize(
-        find.text('Close the command palette, a dialog or a sliding panel'),
-      );
-      final shortAction = tester.getSize(find.text('Allow always'));
-      expect(longAction.height, greaterThan(shortAction.height));
-
-      // После прокрутки все кейкапы строки видны целиком.
-      await tester.ensureVisible(caps.last);
-      await tester.pump();
-      final viewport = tester.getRect(find.byType(CodeLabShortcutTable));
-      for (final f in caps) {
-        expect(
-          tester.getRect(f).right,
-          lessThanOrEqualTo(viewport.right),
-          reason: 'кейкап виден после прокрутки',
+        // Длинное «действие» переносится: выше однострочного «Allow always».
+        final longAction = tester.getSize(
+          find.text('Close the command palette, a dialog or a sliding panel'),
         );
-      }
-      expect(tester.takeException(), isNull);
-    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+        final shortAction = tester.getSize(find.text('Allow always'));
+        expect(longAction.height, greaterThan(shortAction.height));
+
+        // После прокрутки все кейкапы строки видны целиком.
+        await tester.ensureVisible(caps.last);
+        await tester.pump();
+        final viewport = tester.getRect(find.byType(CodeLabShortcutTable));
+        for (final f in caps) {
+          expect(
+            tester.getRect(f).right,
+            lessThanOrEqualTo(viewport.right),
+            reason: 'кейкап виден после прокрутки',
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.linux),
+    );
   });
 }

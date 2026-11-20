@@ -79,7 +79,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - «Сочетаний без поведения нет», «Строка «Agent commands»»;
   - «macOS», «Windows»;
   - «Ничего не найдено»: скрытые группы, `settings-keyboard-empty`, footer на месте;
-  - «Узкое окно» 600 px, «Обход с клавиатуры».
+  - «Минимальное окно» 800 px, «Узкое окно» (область уже 380 px), «Обход с клавиатуры».
 - [x] 3.4 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/keyboard_page_l10n_test.dart`:
   - «Русский интерфейс»;
   - «Английский текст при русском интерфейсе», «Переведённый текст при русском интерфейсе»;
@@ -121,7 +121,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - `fvm flutter analyze` для `apps/codelab_desktop/integration_test` (только компиляция, `feature/*`);
   - `openspec validate add-app-keyboard-page --strict`;
   - если правились опубликованные на сайте документы и установлен Node — `cd site && npm ci && npm run verify`.
-- [ ] 5.2 `[desktop]` Ручная проверка app на macOS: кейкапы ⌘, поиск `⌘K` и `ctrl k`, русский интерфейс, окно 600 px. Каждая строка таблицы нажимается в своём месте.
+- [ ] 5.2 `[desktop]` Ручная проверка app на macOS: кейкапы ⌘, поиск `⌘K` и `ctrl k`, русский интерфейс, минимальное окно 800 px. Каждая строка таблицы нажимается в своём месте.
 - [ ] 5.3 `[desktop]` При архивации: если `add-app-skills-page` и `add-desktop-localization` уже в архиве, свести фразу «остальные страницы остаются скрытыми» требования «Страницы Providers и MCP servers в навигации» с перечнем видимых страниц, включая «General» и «Keyboard» (D7).
 - [ ] 5.4 `[desktop]` PR в `develop`. В описании:
   - какие проверки запускались локально, и что полный `melos run check` не запускался;

@@ -454,6 +454,8 @@ void main() {
         ),
       );
       addTearDown(cubit.close);
+      // Страница берёт тексты из ARB (`add-desktop-localization`, итерация 5),
+      // поэтому `FluentApp` — с делегатами локализации.
       await tester.pumpWidget(
         localizedFluentApp(
           ScaffoldPage(

@@ -3250,9 +3250,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsKeyboardActionCommandMenuClose => 'Close the command menu';
 
   @override
-  String get settingsKeyboardActionGoToApproval => 'Go to approval';
-
-  @override
   String get settingsKeyboardActionAllowOnce => 'Allow once';
 
   @override
@@ -3303,10 +3300,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Pending approval with keyboard focus, when the agent offers this option';
 
   @override
-  String get settingsKeyboardWhereApprovalPending =>
-      'Workbench, while an approval is pending';
-
-  @override
   String get settingsSearchKeywordsKeyboard =>
       'shortcut, hotkey, keybinding, key';
+
+  @override
+  String get settingsKeyboardActionGoToApproval => 'Go to approval';
+
+  @override
+  String get settingsKeyboardWhereApprovalPending =>
+      'Workbench, while an approval is pending';
 }

@@ -3300,9 +3300,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsKeyboardActionCommandMenuClose => 'Закрыть меню команд';
 
   @override
-  String get settingsKeyboardActionGoToApproval => 'Перейти к одобрению';
-
-  @override
   String get settingsKeyboardActionAllowOnce => 'Разрешить только сейчас';
 
   @override
@@ -3353,10 +3350,13 @@ class AppLocalizationsRu extends AppLocalizations {
       'Ожидающее одобрение с фокусом клавиатуры, когда агент предлагает этот вариант';
 
   @override
-  String get settingsKeyboardWhereApprovalPending =>
-      'Рабочее место, пока ждёт одобрение';
-
-  @override
   String get settingsSearchKeywordsKeyboard =>
       'сочетание, горячие клавиши, клавиатура, клавиша';
+
+  @override
+  String get settingsKeyboardActionGoToApproval => 'Перейти к одобрению';
+
+  @override
+  String get settingsKeyboardWhereApprovalPending =>
+      'Рабочее место, пока ждёт одобрение';
 }
