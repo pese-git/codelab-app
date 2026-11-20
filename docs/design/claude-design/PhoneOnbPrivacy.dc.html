@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Onboarding, privacy</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.fc{display:flex;flex-direction:column;gap:6px;padding:14px 16px}
+.fc .f-sci{color:var(--accent-text)}
+.rows{display:flex;flex-direction:column;gap:4px}
+.grid{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}
+.grid legend{grid-column:1/-1}
+.pr{cursor:pointer;min-height:56px}
+.pr.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.pri{appearance:none;-webkit-appearance:none;margin:0;width:20px;height:20px;border-radius:50%;border:1px solid var(--strong);background:var(--control);flex:none;box-sizing:border-box}
+.pri:checked{border:5px solid var(--accent);background:var(--on-accent)}
+.links{display:flex;gap:8px;flex-wrap:wrap}
+.links a{text-decoration:none}
+.tbtn{min-height:44px;min-width:44px}
+.f-rb .f-tb input{appearance:auto;-webkit-appearance:auto;width:auto;height:auto;border:0;border-radius:0;background:transparent;flex:1;min-width:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}
+.bar{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px 0 16px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.steps{display:grid;gap:4px}
+.steps i{height:4px;border-radius:2px;background:var(--sel)}
+.steps i.done{background:var(--accent)}
+.pbody{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:12px;padding:14px 16px}
+.pbody h1{margin:0;font-size:22px;line-height:28px;font-weight:600}
+.pbody .lead{margin:0;font-size:14px;line-height:20px}
+.pfoot{flex:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px 16px 16px;border-top:1px solid var(--stroke);background:var(--layer)}
+.pfoot.one{grid-template-columns:1fr}
+.cards{grid-template-columns:1fr;gap:6px}
+.fc{flex-direction:row;flex-wrap:wrap;align-items:center;column-gap:10px;padding:10px 12px}
+.fc .t-cap{flex-basis:100%}
+.f-sc{min-height:56px;padding:8px 12px;gap:12px}
+.grid{grid-template-columns:1fr;gap:6px}
+.grid .f-sc{min-height:48px;padding:4px 12px}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:6px 10px}
+.ml{display:flex;flex-direction:column;gap:2px;border:1px solid var(--stroke);border-radius:4px;padding:4px;background:var(--card)}
+.ml .f-li{min-height:44px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <span class="f-logo" aria-hidden="true">CL</span>
+    <span class="t-strong" style="flex: 1; font-size: 15px; padding-left: 8px">Welcome to CodeLab</span>
+    <span class="t-cap t2" style="padding-right: 8px">Step 4 of 4</span>
+  </header>
+  <div class="pbody">
+    <div class="steps" style="grid-template-columns: repeat(4, minmax(0, 1fr))" role="img" aria-label="Step 4 of 4"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i></div>
+    <div class="t-cap t2">What CodeLab does → Permissions → Choose a model → <b style="color: var(--text)">Privacy</b></div>
+    <h1>What leaves this device</h1>
+    <p class="lead t2">Only what the agent needs for the work you ask for, and only to services you set up. CodeLab itself collects nothing.</p>
+    <div class="rows"><div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg><div style="flex: 1; min-width: 0"><div>Your model provider</div><div class="t-cap t2">Every turn: your prompt, the session history, files the agent read</div></div><span class="tag acc">Every turn</span></div><div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/></svg><div style="flex: 1; min-width: 0"><div>MCP servers and web tools</div><div class="t-cap t2">HTTP MCP servers get tool arguments; web access asks you first</div></div><span class="tag acc">When used</span></div><div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18M8 8a5 5 0 0 0 8 8M12 4v2M4 12h2M18 12h2"/></svg><div style="flex: 1; min-width: 0"><div>Telemetry, crash reports, usage analytics</div><div class="t-cap t2">Not collected by the app or the embedded agent</div></div><span class="tag ok">Never</span></div><div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><div style="flex: 1; min-width: 0"><div>Stays here</div><div class="t-cap t2">Config, sessions and logs in CodeLab's Documents folder; API keys in the system keychain (Keychain on iOS, Keystore on Android)</div></div><span class="tag">Local</span></div></div><div class="links" data-fluent="HyperlinkButton ×2"><a href="PhoneLegal.dc.html" class="f-btn subtle tbtn" style="color: var(--accent-text)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>Read the privacy policy</a><a href="PhoneTerms.dc.html" class="f-btn subtle tbtn" style="color: var(--accent-text)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/></svg>Terms of use</a></div>
+<div class="f-ib" data-fluent="InfoBar (informational)"><span class="f-ibi" aria-hidden="true">i</span><div><span class="ttl">Nothing to agree to</span>The documents open inside the app and work offline; Back returns here. Later: Settings › Legal.</div></div>
+  </div>
+  <div class="pfoot"><a href="PhoneOnbModelDone.dc.html" class="f-btn tbtn" style="text-decoration: none; justify-content: center">Back</a><a href="PhoneSessions.dc.html" class="f-btn accent tbtn" style="text-decoration: none; justify-content: center">Start using CodeLab</a></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

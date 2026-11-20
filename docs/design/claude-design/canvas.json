@@ -683,10 +683,10 @@
   "PhoneWizard.dc.html": {
    "h": 844,
    "page": "phone",
-   "title": "P11 First run — provider wizard",
+   "title": "P11 Provider wizard — Check",
    "w": 390,
-   "x": 1880,
-   "y": 1264
+   "x": 2350,
+   "y": 5432
   },
   "Projects-dark.dc.html": {
    "expand": "fill",
@@ -1221,10 +1221,10 @@
   "PhoneWizard-dark.dc.html": {
    "h": 844,
    "w": 390,
-   "x": 1880,
-   "y": 1264,
+   "x": 2350,
+   "y": 5432,
    "page": "phone-dark",
-   "title": "P11 First run — provider wizard — dark"
+   "title": "P11 Provider wizard — Check — dark"
   },
   "TabletFiles-dark.dc.html": {
    "h": 820,
@@ -1551,6 +1551,422 @@
    "page": "dark",
    "x": 10640,
    "y": 19100
+  },
+  "PhoneOnbWelcome.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P17 First run — step 1 What CodeLab does",
+   "w": 390,
+   "x": 0,
+   "y": 5432
+  },
+  "PhoneOnbWelcome-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P17 First run — step 1 What CodeLab does — dark",
+   "w": 390,
+   "x": 0,
+   "y": 5432
+  },
+  "PhoneOnbPermissions.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P18 First run — step 2 Permissions (no shell on the device)",
+   "w": 390,
+   "x": 470,
+   "y": 5432
+  },
+  "PhoneOnbPermissions-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P18 First run — step 2 Permissions (no shell on the device) — dark",
+   "w": 390,
+   "x": 470,
+   "y": 5432
+  },
+  "PhoneOnbModel.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P19 First run — step 3 Choose a model",
+   "w": 390,
+   "x": 940,
+   "y": 5432
+  },
+  "PhoneOnbModel-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P19 First run — step 3 Choose a model — dark",
+   "w": 390,
+   "x": 940,
+   "y": 5432
+  },
+  "PhoneWizardUrl.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11a Provider wizard — Base URL",
+   "w": 390,
+   "x": 1410,
+   "y": 5432
+  },
+  "PhoneWizardUrl-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11a Provider wizard — Base URL — dark",
+   "w": 390,
+   "x": 1410,
+   "y": 5432
+  },
+  "PhoneWizardKey.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11b Provider wizard — API key (Keychain or none)",
+   "w": 390,
+   "x": 1880,
+   "y": 5432
+  },
+  "PhoneWizardKey-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11b Provider wizard — API key (Keychain or none) — dark",
+   "w": 390,
+   "x": 1880,
+   "y": 5432
+  },
+  "PhoneWizardModel.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11c Provider wizard — Model",
+   "w": 390,
+   "x": 2820,
+   "y": 5432
+  },
+  "PhoneWizardModel-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11c Provider wizard — Model — dark",
+   "w": 390,
+   "x": 2820,
+   "y": 5432
+  },
+  "PhoneWizardReview.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11d Provider wizard — Review and Save",
+   "w": 390,
+   "x": 3290,
+   "y": 5432
+  },
+  "PhoneWizardReview-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11d Provider wizard — Review and Save — dark",
+   "w": 390,
+   "x": 3290,
+   "y": 5432
+  },
+  "PhoneOnbModelDone.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P19a First run — step 3 done, provider connected",
+   "w": 390,
+   "x": 3760,
+   "y": 5432
+  },
+  "PhoneOnbModelDone-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P19a First run — step 3 done, provider connected — dark",
+   "w": 390,
+   "x": 3760,
+   "y": 5432
+  },
+  "PhoneOnbPrivacy.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P20 First run — step 4 Privacy",
+   "w": 390,
+   "x": 4230,
+   "y": 5432
+  },
+  "PhoneOnbPrivacy-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P20 First run — step 4 Privacy — dark",
+   "w": 390,
+   "x": 4230,
+   "y": 5432
+  },
+  "TabletOnbWelcome.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T11 Tablet — first run, step 1 What CodeLab does",
+   "w": 1180,
+   "x": 0,
+   "y": 5620
+  },
+  "TabletOnbWelcome-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T11 Tablet — first run, step 1 What CodeLab does — dark",
+   "w": 1180,
+   "x": 0,
+   "y": 5620
+  },
+  "TabletOnbPermissions.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T12 Tablet — first run, step 2 Permissions",
+   "w": 1180,
+   "x": 1260,
+   "y": 5620
+  },
+  "TabletOnbPermissions-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T12 Tablet — first run, step 2 Permissions — dark",
+   "w": 1180,
+   "x": 1260,
+   "y": 5620
+  },
+  "TabletOnbModel.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13 Tablet — first run, step 3 Choose a model",
+   "w": 1180,
+   "x": 2520,
+   "y": 5620
+  },
+  "TabletOnbModel-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13 Tablet — first run, step 3 Choose a model — dark",
+   "w": 1180,
+   "x": 2520,
+   "y": 5620
+  },
+  "TabletOnbWizardUrl.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13a Tablet — provider wizard: Base URL",
+   "w": 1180,
+   "x": 3780,
+   "y": 5620
+  },
+  "TabletOnbWizardUrl-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13a Tablet — provider wizard: Base URL — dark",
+   "w": 1180,
+   "x": 3780,
+   "y": 5620
+  },
+  "TabletOnbWizardKey.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13b Tablet — provider wizard: key (Keychain or none)",
+   "w": 1180,
+   "x": 5040,
+   "y": 5620
+  },
+  "TabletOnbWizardKey-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13b Tablet — provider wizard: key (Keychain or none) — dark",
+   "w": 1180,
+   "x": 5040,
+   "y": 5620
+  },
+  "TabletOnbWizardModel.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13c Tablet — provider wizard: check passed, model",
+   "w": 1180,
+   "x": 6300,
+   "y": 5620
+  },
+  "TabletOnbWizardModel-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13c Tablet — provider wizard: check passed, model — dark",
+   "w": 1180,
+   "x": 6300,
+   "y": 5620
+  },
+  "TabletOnbWizardReview.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13d Tablet — provider wizard: review and Save",
+   "w": 1180,
+   "x": 7560,
+   "y": 5620
+  },
+  "TabletOnbWizardReview-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13d Tablet — provider wizard: review and Save — dark",
+   "w": 1180,
+   "x": 7560,
+   "y": 5620
+  },
+  "TabletOnbModelDone.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13e Tablet — step 3 done, provider connected",
+   "w": 1180,
+   "x": 8820,
+   "y": 5620
+  },
+  "TabletOnbModelDone-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13e Tablet — step 3 done, provider connected — dark",
+   "w": 1180,
+   "x": 8820,
+   "y": 5620
+  },
+  "TabletOnbPrivacy.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T14 Tablet — first run, step 4 Privacy",
+   "w": 1180,
+   "x": 10080,
+   "y": 5620
+  },
+  "TabletOnbPrivacy-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T14 Tablet — first run, step 4 Privacy — dark",
+   "w": 1180,
+   "x": 10080,
+   "y": 5620
+  },
+  "PhoneWizardFailKey.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11e Provider wizard — check failed: key rejected (401)",
+   "w": 390,
+   "x": 2350,
+   "y": 6416
+  },
+  "PhoneWizardFailKey-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11e Provider wizard — check failed: key rejected (401) — dark",
+   "w": 390,
+   "x": 2350,
+   "y": 6416
+  },
+  "PhoneWizardFailNet.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11f Provider wizard — check failed: unreachable or timeout",
+   "w": 390,
+   "x": 2820,
+   "y": 6416
+  },
+  "PhoneWizardFailNet-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11f Provider wizard — check failed: unreachable or timeout — dark",
+   "w": 390,
+   "x": 2820,
+   "y": 6416
+  },
+  "PhoneWizardSkip.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11g Provider wizard — confirm “Save without check”",
+   "w": 390,
+   "x": 3290,
+   "y": 6416
+  },
+  "PhoneWizardSkip-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11g Provider wizard — confirm “Save without check” — dark",
+   "w": 390,
+   "x": 3290,
+   "y": 6416
+  },
+  "PhoneWizardManual.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P11h Provider wizard — model entered by hand (not verified)",
+   "w": 390,
+   "x": 3760,
+   "y": 6416
+  },
+  "PhoneWizardManual-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P11h Provider wizard — model entered by hand (not verified) — dark",
+   "w": 390,
+   "x": 3760,
+   "y": 6416
+  },
+  "TabletOnbWizardFailKey.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13f Tablet — wizard: check failed, key rejected (401)",
+   "w": 1180,
+   "x": 5040,
+   "y": 6580
+  },
+  "TabletOnbWizardFailKey-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13f Tablet — wizard: check failed, key rejected (401) — dark",
+   "w": 1180,
+   "x": 5040,
+   "y": 6580
+  },
+  "TabletOnbWizardFailNet.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13g Tablet — wizard: check failed, unreachable",
+   "w": 1180,
+   "x": 6300,
+   "y": 6580
+  },
+  "TabletOnbWizardFailNet-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13g Tablet — wizard: check failed, unreachable — dark",
+   "w": 1180,
+   "x": 6300,
+   "y": 6580
+  },
+  "TabletOnbWizardSkip.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13h Tablet — wizard: confirm “Save without check”",
+   "w": 1180,
+   "x": 7560,
+   "y": 6580
+  },
+  "TabletOnbWizardSkip-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13h Tablet — wizard: confirm “Save without check” — dark",
+   "w": 1180,
+   "x": 7560,
+   "y": 6580
+  },
+  "TabletOnbWizardManual.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T13i Tablet — wizard: model entered by hand (not verified)",
+   "w": 1180,
+   "x": 8820,
+   "y": 6580
+  },
+  "TabletOnbWizardManual-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T13i Tablet — wizard: model entered by hand (not verified) — dark",
+   "w": 1180,
+   "x": 8820,
+   "y": 6580
   }
  },
  "createdOnFiles": {
@@ -1621,7 +2037,15 @@
   "d-row10",
   "row11",
   "d-row11",
-  "row11s"
+  "row11s",
+  "p-row5",
+  "dp-row5",
+  "t-row5",
+  "dt-row5",
+  "p-row5s",
+  "t-row5s",
+  "p-row5f",
+  "t-row5f"
  ],
  "notes": {
   "c-row1": {
@@ -1888,7 +2312,7 @@
    "kind": "title1",
    "maxW": 2740,
    "page": "phone",
-   "text": "Смартфон: файлы, настройки, первый запуск, состояния",
+   "text": "Смартфон: файлы, настройки, состояния",
    "w": 240,
    "x": 0,
    "y": 964
@@ -2167,7 +2591,7 @@
    "kind": "title1",
    "maxW": 2740,
    "page": "phone-dark",
-   "text": "Тёмная тема — смартфон: файлы, настройки, первый запуск, состояния",
+   "text": "Тёмная тема — смартфон: файлы, настройки, состояния",
    "w": 240,
    "x": 0,
    "y": 964
@@ -2256,6 +2680,78 @@
    "x": 13680,
    "y": 19100,
    "text": "Onboarding app (D-11, §12.4.9): 07b → 07 → 07c → 07a, после BootReady, флаг onboarding_done.\n07b — шаг 1 «What CodeLab does»: проектная папка, одобрения, своя модель и ключ; встроенный агент по умолчанию. Back нет.\n07 — шаг 2 «Permissions»: что агент делает сам, где спрашивает, что запрещено.\n07c — шаг 3 «Choose a model»: пресеты ProviderPresets.all; кнопка открывает ProviderWizardDialog (тот же ProviderSetupFlow, §12.4.4). Шаг пропускается при ProviderReady.\n07c.1–07c.4 — мастер поверх шага 3: Base URL → Key → Check (успех сразу ведёт на Model; отказ — 06) → Model → Review, Save.\n07c.5 — шаг 3 после Save: провайдер подключён, Next ведёт на 07a.\n07a — шаг 4 «Privacy»: ссылки на 32 и 33 (ряд «Правовые документы»), «Start using CodeLab» → 01.\nГраф переходов — NavOnboarding на странице навигации."
+  },
+  "p-row5": {
+   "kind": "title1",
+   "maxW": 4700,
+   "page": "phone",
+   "w": 240,
+   "x": 0,
+   "y": 5172,
+   "text": "Смартфон: первый запуск и мастер провайдера"
+  },
+  "dp-row5": {
+   "kind": "title1",
+   "maxW": 4700,
+   "page": "phone-dark",
+   "w": 240,
+   "x": 0,
+   "y": 5172,
+   "text": "Тёмная тема — смартфон: первый запуск и мастер провайдера"
+  },
+  "t-row5": {
+   "kind": "title1",
+   "maxW": 11340,
+   "page": "tablet",
+   "w": 240,
+   "x": 0,
+   "y": 5360,
+   "text": "Планшет: первый запуск и мастер провайдера"
+  },
+  "dt-row5": {
+   "kind": "title1",
+   "maxW": 11340,
+   "page": "tablet-dark",
+   "w": 240,
+   "x": 0,
+   "y": 5360,
+   "text": "Тёмная тема — планшет: первый запуск и мастер провайдера"
+  },
+  "p-row5s": {
+   "fill": "purple",
+   "size": 24,
+   "page": "phone",
+   "w": 460,
+   "x": 4700,
+   "y": 5432,
+   "text": "Онбординг на смартфоне (D-11, §12.4.9, §12.8.4): P17 → P18 → P19 → мастер P11a → P11b → P11 → P11c → P11d → P19a → P20 → P1.\nПрофиль mobile (§12.8.2): в P18 «Run commands» — «Not here», shell нет; рабочая папка — каталог Documents приложения.\nМастер — отдельные экраны во всю ширину, 7 шагов как у P11; ключ — Keychain (Keystore на Android) или «No key», переменной окружения нет (§12.8.4, шаг 9). Close возвращает на P19.\nP19 пропускается при ProviderReady. P20 ведёт в P13 и P15; Back возвращает на P20. Граф переходов — тот же, что NavOnboarding."
+  },
+  "t-row5s": {
+   "fill": "purple",
+   "size": 24,
+   "page": "tablet",
+   "w": 460,
+   "x": 11340,
+   "y": 5620,
+   "text": "Онбординг на планшете (D-11, §12.4.9, §12.8.5): T11 → T12 → T13 → мастер T13a–T13d диалогом поверх шага 3 → T13e → T14 → T1.\nКак на десктопе (07b–07a), с ограничениями профиля mobile: в T12 команд нет, в T13b ключ — Keychain или «No key». Отказ проверки — как 06.\nКнопки и строки ≥ 44 px. Граф переходов — NavOnboarding."
+  },
+  "p-row5f": {
+   "fill": "orange",
+   "size": 24,
+   "page": "phone",
+   "w": 460,
+   "x": 4230,
+   "y": 6416,
+   "text": "Отказ проверки (§12.4.4, шаги 4–5), под P11 Check.\nP11e — 401/403: ключ не принят; Back → P11b (ключ), Retry повторяет проверку.\nP11f — нет ответа или таймаут 10 с: Retry, Back → P11a (Base URL) и «Save without check…».\nP11g — подтверждение; после него P11h: модель и окно контекста вручную, Review покажет «Not verified: timeout».\nВ сообщении только код и вид отказа, тело ответа не показывается; редиректы не выполняются (SETUP-23). 404 на OpenAI-совместимом адресе — как 06 десктопа."
+  },
+  "t-row5f": {
+   "fill": "orange",
+   "size": 24,
+   "page": "tablet",
+   "w": 460,
+   "x": 10080,
+   "y": 6580,
+   "text": "Отказ проверки на планшете (§12.4.4, шаги 4–5), под T13b–T13c: T13f — 401, Back → T13b; T13g — недоступен или таймаут, Back → T13a, «Save without check…»; T13h — подтверждение; T13i — модель вручную, Review с «Not verified: timeout». 404 — как 06."
   }
  },
  "order": [
@@ -2441,7 +2937,59 @@
   "OnbWizardReview.dc.html",
   "OnbWizardReview-dark.dc.html",
   "OnboardingModelDone.dc.html",
-  "OnboardingModelDone-dark.dc.html"
+  "OnboardingModelDone-dark.dc.html",
+  "PhoneOnbWelcome.dc.html",
+  "PhoneOnbWelcome-dark.dc.html",
+  "PhoneOnbPermissions.dc.html",
+  "PhoneOnbPermissions-dark.dc.html",
+  "PhoneOnbModel.dc.html",
+  "PhoneOnbModel-dark.dc.html",
+  "PhoneWizardUrl.dc.html",
+  "PhoneWizardUrl-dark.dc.html",
+  "PhoneWizardKey.dc.html",
+  "PhoneWizardKey-dark.dc.html",
+  "PhoneWizardModel.dc.html",
+  "PhoneWizardModel-dark.dc.html",
+  "PhoneWizardReview.dc.html",
+  "PhoneWizardReview-dark.dc.html",
+  "PhoneOnbModelDone.dc.html",
+  "PhoneOnbModelDone-dark.dc.html",
+  "PhoneOnbPrivacy.dc.html",
+  "PhoneOnbPrivacy-dark.dc.html",
+  "TabletOnbWelcome.dc.html",
+  "TabletOnbWelcome-dark.dc.html",
+  "TabletOnbPermissions.dc.html",
+  "TabletOnbPermissions-dark.dc.html",
+  "TabletOnbModel.dc.html",
+  "TabletOnbModel-dark.dc.html",
+  "TabletOnbWizardUrl.dc.html",
+  "TabletOnbWizardUrl-dark.dc.html",
+  "TabletOnbWizardKey.dc.html",
+  "TabletOnbWizardKey-dark.dc.html",
+  "TabletOnbWizardModel.dc.html",
+  "TabletOnbWizardModel-dark.dc.html",
+  "TabletOnbWizardReview.dc.html",
+  "TabletOnbWizardReview-dark.dc.html",
+  "TabletOnbModelDone.dc.html",
+  "TabletOnbModelDone-dark.dc.html",
+  "TabletOnbPrivacy.dc.html",
+  "TabletOnbPrivacy-dark.dc.html",
+  "PhoneWizardFailKey.dc.html",
+  "PhoneWizardFailKey-dark.dc.html",
+  "PhoneWizardFailNet.dc.html",
+  "PhoneWizardFailNet-dark.dc.html",
+  "PhoneWizardSkip.dc.html",
+  "PhoneWizardSkip-dark.dc.html",
+  "PhoneWizardManual.dc.html",
+  "PhoneWizardManual-dark.dc.html",
+  "TabletOnbWizardFailKey.dc.html",
+  "TabletOnbWizardFailKey-dark.dc.html",
+  "TabletOnbWizardFailNet.dc.html",
+  "TabletOnbWizardFailNet-dark.dc.html",
+  "TabletOnbWizardSkip.dc.html",
+  "TabletOnbWizardSkip-dark.dc.html",
+  "TabletOnbWizardManual.dc.html",
+  "TabletOnbWizardManual-dark.dc.html"
  ],
  "pages": [
   {

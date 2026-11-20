@@ -335,7 +335,7 @@
 
 ### Страница «Appearance»
 
-Термины страницы «Settings › Appearance» (change [`add-app-appearance-page`](../../openspec/changes/add-app-appearance-page/design.md), D15; каталоги — сообщения `appearance*` в `app_en.arb`/`app_ru.arb`). Не переводятся (§2): имена тем (`acme-night`, `Fluent Light`, `Fluent Dark`), ключи и значения JSON (`extends`, `accent`, `#rrggbb`), роли (`code.number`), имя файла и путь, позиция `файл:строка:колонка`, отношение контраста (`4.8:1`), вердикт `AA`, `JSON` в «Import JSON…».
+Термины страницы «Settings › Appearance» (change [`add-app-appearance-page`](../../openspec/changes/archive/2026-11-20-add-app-appearance-page/design.md), D15; каталоги — сообщения `appearance*` в `app_en.arb`/`app_ru.arb`). Не переводятся (§2): имена тем (`acme-night`, `Fluent Light`, `Fluent Dark`), ключи и значения JSON (`extends`, `accent`, `#rrggbb`), роли (`code.number`), имя файла и путь, позиция `файл:строка:колонка`, отношение контраста (`4.8:1`), вердикт `AA`, `JSON` в «Import JSON…».
 
 | en | ru | Примечание |
 |---|---|---|

@@ -2,7 +2,7 @@
 
 Экспорт канваса UI/UX из Claude Design: макеты `codelab_desktop` (десктоп, планшет, смартфон, светлая и тёмная темы), `codelab_cli` (TUI, REPL, headless), графы навигации, покрытие целей паритета и живой прототип.
 
-Экспорт снят 2026-11-20 с опубликованной версии канваса (первый экспорт — 2026-10-29, предыдущий — 2026-11-12). В этот экспорт вошли правовые документы (`TERMS.md`, D-29, §12.7.7а): шаг onboarding 07a, страница настроек Legal 32–35 и состояния поиска 35a на десктопе, P13–P16 на смартфоне, T7–T10 на планшете и граф навигации планшета. Legal стал последним пунктом группы App в панели настроек всех страниц. Позже в тот же день онбординг десктопа получил все четыре шага: к 07 (Permissions) и 07a (Privacy) добавились 07b (What CodeLab does) и 07c (Choose a model), шаги связаны кнопками Back и Next, а подсказка 07a ведёт в Settings › Legal. На странице графов к ним добавился граф первого запуска `NavOnboarding`. Затем все экраны онбординга встали в один ряд «Первый запуск» в порядке прохождения, а мастер провайдера получил собственные экраны 07c.1–07c.4 и состояние 07c.5. Тогда же у смартфона и планшета появились тёмные темы — страницы «Смартфон — тёмная тема» и «Планшет — тёмная тема». Канвас переехал в Claude и теперь опубликован как артефакт типа «Design»; отдельный Claude Design (claude.ai/design) закрывается 14 декабря 2026 года. Ссылка на канвас приватная и в репозиторий намеренно не попадает, как и у [`../ui-canvas`](../ui-canvas/README.md). Если канвас поменялся, файлы здесь надо экспортировать заново: правки в этом каталоге обратно в канвас не уходят.
+Экспорт снят 2026-11-20 с опубликованной версии канваса (первый экспорт — 2026-10-29, предыдущий — 2026-11-12). В этот экспорт вошли правовые документы (`TERMS.md`, D-29, §12.7.7а): шаг onboarding 07a, страница настроек Legal 32–35 и состояния поиска 35a на десктопе, P13–P16 на смартфоне, T7–T10 на планшете и граф навигации планшета. Legal стал последним пунктом группы App в панели настроек всех страниц. Позже в тот же день онбординг десктопа получил все четыре шага: к 07 (Permissions) и 07a (Privacy) добавились 07b (What CodeLab does) и 07c (Choose a model), шаги связаны кнопками Back и Next, а подсказка 07a ведёт в Settings › Legal. На странице графов к ним добавился граф первого запуска `NavOnboarding`. Затем все экраны онбординга встали в один ряд «Первый запуск» в порядке прохождения, а мастер провайдера получил собственные экраны 07c.1–07c.4 и состояние 07c.5. Потом онбординг появился у смартфона (P17–P20, мастер P11a–P11d вокруг P11) и планшета (T11–T14, мастер T13a–T13e) с ограничениями профиля `mobile`: команд нет, ключ — Keychain или «No key». К ним добавились экраны отказа проверки: P11e–P11h и T13f–T13i. Тогда же у смартфона и планшета появились тёмные темы — страницы «Смартфон — тёмная тема» и «Планшет — тёмная тема». Канвас переехал в Claude и теперь опубликован как артефакт типа «Design»; отдельный Claude Design (claude.ai/design) закрывается 14 декабря 2026 года. Ссылка на канвас приватная и в репозиторий намеренно не попадает, как и у [`../ui-canvas`](../ui-canvas/README.md). Если канвас поменялся, файлы здесь надо экспортировать заново: правки в этом каталоге обратно в канвас не уходят.
 
 Канвас — проектный референс. При расхождении источник истины — документы `docs/architecture/proposals/dart-agent-and-clients/` (§12.x) и `openspec/`; номера целей (D-28, U-37, T-22 …) — из `agent-parity-goals.md`.
 
@@ -124,13 +124,26 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `PhoneConnection.dc.html` | P9 Настройки › Connection |
 | `PhoneAddProfile.dc.html` | P9a Connection › добавить WebSocket-агента |
 | `PhoneProviders.dc.html` | P10 Настройки › Providers |
-| `PhoneWizard.dc.html` | P11 Первый запуск — мастер провайдера |
+| `PhoneWizard.dc.html` | P11 Мастер провайдера — Check: проверка адреса и ключа |
 | `PhoneStates.dc.html` | P12 Состояния |
 | `PhoneLegal.dc.html` | P13 Настройки › Legal — Privacy policy |
 | `PhoneNotices.dc.html` | P14 Legal — Third-party notices, поиск по пакетам: состояние «M of N» с подсветкой |
 | `PhoneNoticesEmpty.dc.html` | P14a Legal — Third-party notices, поиск: состояние «No packages match» с кнопкой «Clear search» |
 | `PhoneTerms.dc.html` | P15 Legal — Terms of use |
 | `PhoneLicense.dc.html` | P16 Legal — License |
+| `PhoneOnbWelcome.dc.html` | P17 Первый запуск — шаг 1 What CodeLab does: папка Documents, одобрения, своя модель; shell на устройстве нет (D-11, §12.8.2) |
+| `PhoneOnbPermissions.dc.html` | P18 Первый запуск — шаг 2 Permissions: «Run commands» — «Not here» |
+| `PhoneOnbModel.dc.html` | P19 Первый запуск — шаг 3 Choose a model: пресеты, кнопка открывает мастер P11a |
+| `PhoneWizardUrl.dc.html` | P11a Мастер провайдера — Base URL |
+| `PhoneWizardKey.dc.html` | P11b Мастер провайдера — ключ: Keychain или «No key», переменной окружения нет (§12.8.4, шаг 9) |
+| `PhoneWizardModel.dc.html` | P11c Мастер провайдера — выбор модели |
+| `PhoneWizardReview.dc.html` | P11d Мастер провайдера — проверка плана и Save |
+| `PhoneWizardFailKey.dc.html` | P11e Мастер провайдера — отказ проверки: ключ не принят (401), Back → P11b (§12.4.4, шаги 4–5) |
+| `PhoneWizardFailNet.dc.html` | P11f Мастер — отказ проверки: сервер недоступен или таймаут; Retry, Back → P11a, «Save without check…» |
+| `PhoneWizardSkip.dc.html` | P11g Мастер — подтверждение «Save without check» |
+| `PhoneWizardManual.dc.html` | P11h Мастер — модель и окно контекста вручную, «Not verified: timeout» |
+| `PhoneOnbModelDone.dc.html` | P19a Первый запуск — шаг 3 после Save: провайдер подключён |
+| `PhoneOnbPrivacy.dc.html` | P20 Первый запуск — шаг 4 Privacy: ссылки на P13 и P15, «Start using CodeLab» → P1 |
 
 ### Планшет
 
@@ -148,6 +161,19 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `TabletNotices.dc.html` | T10 Планшет — Legal › Third-party notices |
 | `TabletNoticesMatch.dc.html` | T10a Планшет — Third-party notices, поиск: состояние «M of N» с подсветкой (записи реестра свёрнуты) |
 | `TabletNoticesEmpty.dc.html` | T10b Планшет — Third-party notices, поиск: состояние «No packages match» с кнопкой «Clear search» |
+| `TabletOnbWelcome.dc.html` | T11 Планшет — первый запуск, шаг 1 What CodeLab does |
+| `TabletOnbPermissions.dc.html` | T12 Планшет — шаг 2 Permissions, команд нет (профиль `mobile`) |
+| `TabletOnbModel.dc.html` | T13 Планшет — шаг 3 Choose a model |
+| `TabletOnbWizardUrl.dc.html` | T13a Планшет — мастер провайдера диалогом поверх T13: Base URL |
+| `TabletOnbWizardKey.dc.html` | T13b Планшет — мастер: ключ в Keychain или «No key» |
+| `TabletOnbWizardModel.dc.html` | T13c Планшет — мастер: проверка прошла, выбор модели |
+| `TabletOnbWizardReview.dc.html` | T13d Планшет — мастер: проверка плана и Save |
+| `TabletOnbWizardFailKey.dc.html` | T13f Планшет — мастер: ключ не принят (401) |
+| `TabletOnbWizardFailNet.dc.html` | T13g Планшет — мастер: сервер недоступен или таймаут, «Save without check…» |
+| `TabletOnbWizardSkip.dc.html` | T13h Планшет — мастер: подтверждение «Save without check» |
+| `TabletOnbWizardManual.dc.html` | T13i Планшет — мастер: модель вручную, «Not verified: timeout» |
+| `TabletOnbModelDone.dc.html` | T13e Планшет — шаг 3 после Save: провайдер подключён |
+| `TabletOnbPrivacy.dc.html` | T14 Планшет — шаг 4 Privacy, «Start using CodeLab» → T1 |
 
 ### Навигация, покрытие и прототип
 

@@ -45,7 +45,7 @@
 | Markdown ответа агента в ленте (`codelab_ui`, только `lib/src/rendering/`) | `gpt_markdown` (change [`add-desktop-markdown`](../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md), D1; без Material-предка, свои builder'ы) |
 | Подсветка кода (`codelab_ui`, только `lib/src/rendering/`) | `val_highlight` (change `add-desktop-markdown`, D4) |
 | Открытие внешних ссылок (`codelab_desktop`, только `lib/core/platform/`) | `url_launcher` (change `add-desktop-markdown`, D5) |
-| Системный цвет акцента (`codelab_desktop`, только `lib/core/platform/`) | `system_theme` (change [`add-app-appearance-page`](../../openspec/changes/add-app-appearance-page/design.md), D7; §20з) |
+| Системный цвет акцента (`codelab_desktop`, только `lib/core/platform/`) | `system_theme` (change [`add-app-appearance-page`](../../openspec/changes/archive/2026-11-20-add-app-appearance-page/design.md), D7; §20з) |
 | Локализация интерфейса (`codelab_desktop`, `codelab_ui`) | `flutter_localizations`, `gen-l10n` (ARB), `intl` для сгенерированного кода (change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md), D1; §20ж) |
 | Сайт-визитка (`site/`, вне pub workspace и Melos) | Astro на Node, пакетный менеджер npm (ADR-0003, §28) |
 
@@ -955,7 +955,7 @@ Architectural dependency rules важнее технической доступ�
 
 ## 20з. `codelab_desktop`: системный цвет акцента — `system_theme`
 
-**Статус: утверждено** решением пользователя 2026-11-20 (Q5 (б) change [`add-app-appearance-page`](../../openspec/changes/add-app-appearance-page/design.md), D7). Добавлен в `pubspec.yaml` app задачей 4.10 change.
+**Статус: утверждено** решением пользователя 2026-11-20 (Q5 (б) change [`add-app-appearance-page`](../../openspec/changes/archive/2026-11-20-add-app-appearance-page/design.md), D7). Добавлен в `pubspec.yaml` app задачей 4.10 change.
 
 Технология: [`system_theme`](https://pub.dev/packages/system_theme) **3.3.0** (опубликован 2026-05-26; BSD-3-Clause; publisher `bdlukaa.dev` — тот же автор, что у `fluent_ui`). Требует Dart `^3.12.0` и Flutter `>=3.44.0`; проект на Flutter 3.47.0 (`.fvmrc`) — совместимо. Транзитивно добавляется `system_theme_web` 0.0.5 (BSD-3-Clause, тот же publisher; зависит от `web` — уже в lock — и SDK `flutter_web_plugins`). Пин — точная версия `3.3.0`, как у `url_launcher` (§20е).
 

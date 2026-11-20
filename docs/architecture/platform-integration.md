@@ -210,7 +210,7 @@ Flutter plugin
 
 ### 8а. Нативное меню macOS и канал `codelab/app_menu`
 
-Источник — change [`add-app-appearance-page`](../../openspec/changes/add-app-appearance-page/design.md), D15а; spec `app-settings` «Открытие настроек из меню macOS».
+Источник — change [`add-app-appearance-page`](../../openspec/changes/archive/2026-11-20-add-app-appearance-page/design.md), D15а; spec `app-settings` «Открытие настроек из меню macOS».
 
 Главное меню macOS (`apps/codelab_desktop/macos/Runner/Base.lproj/MainMenu.xib`, переводы — `ru.lproj/MainMenu.strings`) обрабатывает `keyEquivalent` своих пунктов раньше Flutter. Поэтому:
 

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Onboarding, what CodeLab does</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.fc{display:flex;flex-direction:column;gap:6px;padding:14px 16px}
+.fc .f-sci{color:var(--accent-text)}
+.rows{display:flex;flex-direction:column;gap:4px}
+.grid{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}
+.grid legend{grid-column:1/-1}
+.pr{cursor:pointer;min-height:56px}
+.pr.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.pri{appearance:none;-webkit-appearance:none;margin:0;width:20px;height:20px;border-radius:50%;border:1px solid var(--strong);background:var(--control);flex:none;box-sizing:border-box}
+.pri:checked{border:5px solid var(--accent);background:var(--on-accent)}
+.links{display:flex;gap:8px;flex-wrap:wrap}
+.links a{text-decoration:none}
+.tbtn{min-height:44px;min-width:44px}
+.f-rb .f-tb input{appearance:auto;-webkit-appearance:auto;width:auto;height:auto;border:0;border-radius:0;background:transparent;flex:1;min-width:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}
+.bar{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px 0 16px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.steps{display:grid;gap:4px}
+.steps i{height:4px;border-radius:2px;background:var(--sel)}
+.steps i.done{background:var(--accent)}
+.pbody{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:12px;padding:14px 16px}
+.pbody h1{margin:0;font-size:22px;line-height:28px;font-weight:600}
+.pbody .lead{margin:0;font-size:14px;line-height:20px}
+.pfoot{flex:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px 16px 16px;border-top:1px solid var(--stroke);background:var(--layer)}
+.pfoot.one{grid-template-columns:1fr}
+.cards{grid-template-columns:1fr;gap:6px}
+.fc{flex-direction:row;flex-wrap:wrap;align-items:center;column-gap:10px;padding:10px 12px}
+.fc .t-cap{flex-basis:100%}
+.f-sc{min-height:56px;padding:8px 12px;gap:12px}
+.grid{grid-template-columns:1fr;gap:6px}
+.grid .f-sc{min-height:48px;padding:4px 12px}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:6px 10px}
+.ml{display:flex;flex-direction:column;gap:2px;border:1px solid var(--stroke);border-radius:4px;padding:4px;background:var(--card)}
+.ml .f-li{min-height:44px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <span class="f-logo" aria-hidden="true">CL</span>
+    <span class="t-strong" style="flex: 1; font-size: 15px; padding-left: 8px">Welcome to CodeLab</span>
+    <span class="t-cap t2" style="padding-right: 8px">Step 1 of 4</span>
+  </header>
+  <div class="pbody">
+    <div class="steps" style="grid-template-columns: repeat(4, minmax(0, 1fr))" role="img" aria-label="Step 1 of 4"><i class="done"></i><i></i><i></i><i></i></div>
+    <div class="t-cap t2"><b style="color: var(--text)">What CodeLab does</b> → Permissions → Choose a model → Privacy</div>
+    <h1>An AI coding agent that works on this device</h1>
+    <p class="lead t2">Ask in plain words. The agent reads and edits files in CodeLab's Documents folder and shows each step in the conversation.</p>
+    <div class="cards">
+  <div class="f-card fc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="t-strong">Works in the Documents folder</span><span class="t-cap t2">Projects are its subfolders. Import from Files copies files in; Share sends them out.</span></div>
+  <div class="f-card fc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg><span class="t-strong">You approve the changes</span><span class="t-cap t2">Edits wait for your decision, with the diff in front of you.</span></div>
+  <div class="f-card fc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg><span class="t-strong">Your model, your key</span><span class="t-cap t2">A cloud provider or a model on your network. Keys go to the system keychain (Keychain on iOS, Keystore on Android).</span></div>
+</div>
+<div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg><div style="flex: 1; min-width: 0"><div>The agent runs on this device</div><div class="t-cap t2">There is no shell here, so it cannot run commands. A WebSocket agent on another computer can — add it later in Settings › Connection.</div></div><span class="tag">Built-in</span></div>
+  </div>
+  <div class="pfoot one"><a href="PhoneOnbPermissions.dc.html" class="f-btn accent tbtn" style="text-decoration: none; justify-content: center">Next</a></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>
