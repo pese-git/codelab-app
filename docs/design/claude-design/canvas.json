@@ -2088,6 +2088,22 @@
    "page": "dark",
    "x": 7600,
    "y": 7100
+  },
+  "TabletProtocolLog.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T15 Tablet — Protocol pane, Log tab",
+   "w": 1180,
+   "x": 3780,
+   "y": 1600
+  },
+  "TabletProtocolLog-dark.dc.html": {
+   "h": 820,
+   "w": 1180,
+   "x": 3780,
+   "y": 1600,
+   "page": "tablet-dark",
+   "title": "T15 Tablet — Protocol pane, Log tab — dark"
   }
  },
  "createdOnFiles": {
@@ -2144,6 +2160,7 @@
   "p-note",
   "t-row1",
   "t-row2",
+  "t-row2s",
   "t-note",
   "p-how",
   "c-row4s",
@@ -2645,9 +2662,9 @@
   },
   "t-row2": {
    "kind": "title1",
-   "maxW": 3700,
+   "maxW": 5500,
    "page": "tablet",
-   "text": "Планшет: настройки, файлы, палитра",
+   "text": "Планшет: настройки, файлы, палитра, протокол",
    "w": 240,
    "x": 0,
    "y": 1300
@@ -2902,6 +2919,15 @@
    "x": 0,
    "y": 7540,
    "text": "Планшет: граф первого запуска"
+  },
+  "t-row2s": {
+   "x": 5040,
+   "y": 1600,
+   "w": 460,
+   "size": "m",
+   "fill": "teal",
+   "page": "tablet",
+   "text": "T15 — панель Protocol на планшете, вкладка Log: та же панель, что 18a на десктопе, в выдвижном доке поверх ленты (§12.8.5). Открывается из палитры или Cmd+Shift+I, в шапке своего переключателя нет. Колонка Category ушла в фильтр, имя компонента — в начале события. Строки и кнопки ≥ 44 px. Export… отдаёт файл системному меню «Поделиться»."
   }
  },
  "order": [
@@ -2998,6 +3024,7 @@
   "TabletSettings.dc.html",
   "TabletFiles.dc.html",
   "TabletPalette.dc.html",
+  "TabletProtocolLog.dc.html",
   "Terminal.dc.html",
   "Terminal-dark.dc.html",
   "SplitView.dc.html",
@@ -3051,6 +3078,7 @@
   "PhoneWizard-dark.dc.html",
   "TabletFiles-dark.dc.html",
   "TabletPalette-dark.dc.html",
+  "TabletProtocolLog-dark.dc.html",
   "TabletPortrait-dark.dc.html",
   "TabletSettings-dark.dc.html",
   "TabletSplit-dark.dc.html",
