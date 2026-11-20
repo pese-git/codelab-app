@@ -378,7 +378,7 @@
   "Inspector.dc.html": {
    "expand": "fill",
    "h": 900,
-   "title": "18 Protocol pane — frames and log",
+   "title": "18 Protocol pane — Frames tab",
    "w": 1440,
    "x": 4560,
    "y": 7100
@@ -2071,6 +2071,23 @@
    "w": 2960,
    "x": 0,
    "y": 7800
+  },
+  "InspectorLog.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "18a Protocol pane — Log tab",
+   "w": 1440,
+   "x": 7600,
+   "y": 7100
+  },
+  "InspectorLog-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "18a Protocol pane, log — dark",
+   "w": 1440,
+   "page": "dark",
+   "x": 7600,
+   "y": 7100
   }
  },
  "createdOnFiles": {
@@ -2547,9 +2564,9 @@
   "row6s": {
    "fill": "teal",
    "size": 24,
-   "text": "14 — S-06…S-08 rename, fork, ветки, rewind с dry run; S-21 экспорт\n16 — D-25 / T-10 доска субагентов и фоновых задач\n17 — D-09 / L-29 usage, бюджет хода, дедлайн\n18 — R-23 инспектор протокола и логи, секреты замаскированы\n19 — состояния соединения и ошибки хода",
+   "text": "14 — S-06…S-08 rename, fork, ветки, rewind с dry run; S-21 экспорт\n16 — D-25 / T-10 доска субагентов и фоновых задач\n17 — D-09 / L-29 usage, бюджет хода, дедлайн\n18 — R-23 инспектор протокола: вкладка Frames — кадры JSON-RPC всего соединения, секреты замаскированы\n18a — вкладка Log: тот же буфер, что у /logs и Expand (FluentLogViewer: поиск, категория application/protocol, уровень, сессия); детали записи с полями корреляции и переходом «Show frame in Frames» по request_id\n19 — состояния соединения и ошибки хода",
    "w": 440,
-   "x": 7600,
+   "x": 9120,
    "y": 7100
   },
   "row7": {
@@ -3135,7 +3152,9 @@
   "CliSetupUnreachable.dc.html",
   "CliSetupKeyMissing.dc.html",
   "CliSetupNoTty.dc.html",
-  "NavTabletOnboarding.dc.html"
+  "NavTabletOnboarding.dc.html",
+  "InspectorLog.dc.html",
+  "InspectorLog-dark.dc.html"
  ],
  "pages": [
   {
