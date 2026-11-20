@@ -625,7 +625,7 @@ sequenceDiagram
   клавишей Tab или Cmd/Ctrl+Shift+A «Go to approval»: сочетание прокручивает ленту к полосе и
   фокусирует саму полосу, а не кнопку. После ухода полосы фокус возвращается в композер,
   следующее одобрение фокус сам не получает (change
-  [`fix-approval-focus`](../../../../openspec/changes/fix-approval-focus/design.md), D1–D5).
+  [`fix-approval-focus`](../../../../openspec/changes/archive/2026-11-20-fix-approval-focus/design.md), D1–D5).
 * Ответ с клавиатуры (решение пользователя 2026-11-20, по образцу Zed): с любого места рабочего
   места, включая композер, самому раннему ожидающему одобрению активной сессии. macOS: ⌘Y —
   `allow_once`, ⌥⌘Y — `allow_always`, ⌥⌘Z — `reject_once`, ⌥⇧⌘Z — `reject_always`; Windows и Linux:
@@ -816,13 +816,13 @@ workbench) и сочетания шага 3 вместе с их экранам�
    терминала возвращает фокус композеру, а панель закрывают переключатель или крестик вкладки дока
    (A16, шаг 2). Cmd/Ctrl+/ — список сочетаний (страница 27). Cmd/Ctrl+Shift+A — перейти к
    ожидающему одобрению активной сессии (A9; change
-   [`fix-approval-focus`](../../../../openspec/changes/fix-approval-focus/design.md), D3). Существующие по DSK-18 не меняются.
+   [`fix-approval-focus`](../../../../openspec/changes/archive/2026-11-20-fix-approval-focus/design.md), D3). Существующие по DSK-18 не меняются.
    Сочетание входит в сборку вместе с экраном или действием, которое оно вызывает; до этого его
    нет ни в привязках, ни на странице 27. Активаторы всех привязок app и кита берутся из одного
    каталога `CodeLabShortcut` (`codelab_ui`, `atomics/`), и страница «Settings › Keyboard»
    строится из него же: новое сочетание добавляется строкой каталога, текстами строки в ARB и
    тестом привязки в том же change (change
-   [`add-app-keyboard-page`](../../../../openspec/changes/add-app-keyboard-page/design.md), D2, D3).
+   [`add-app-keyboard-page`](../../../../openspec/changes/archive/2026-11-20-add-app-keyboard-page/design.md), D2, D3).
 4. **Палитра (R-20).** `CommandPaletteCubit` строит четыре группы: «Agent commands» — команды из
    `available_commands_update` с меткой источника (агент, MCP-prompt, skill, шаблон); выбор
    отправляет `session/prompt`, а `/compact` и `/plan` выполняют действие; «Session» — Rename,

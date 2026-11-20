@@ -371,7 +371,7 @@
 
 ### Страница «Keyboard»
 
-Термины страницы «Settings › Keyboard» (change [`add-app-keyboard-page`](../../openspec/changes/add-app-keyboard-page/design.md), D5). Сообщения — `settingsKeyboard…` в `app_en.arb` и `app_ru.arb`. Обозначения клавиш (`⌘`, `Ctrl`, `Esc`, `⏎`) и `/` в «Command menu after /» не переводятся (§2): их выбирает каталог сочетаний кита по платформе. Строки одобрения несут метку `security`. Все термины вычитаны пользователем 2026-11-19 и приняты без правок (задача 3.6); строки «Go to approval» и места одобрения добавлены change [`fix-approval-focus`](../../openspec/changes/fix-approval-focus/design.md) (D7) и вычитаны 2026-11-20 (задача 4.3).
+Термины страницы «Settings › Keyboard» (change [`add-app-keyboard-page`](../../openspec/changes/archive/2026-11-20-add-app-keyboard-page/design.md), D5). Сообщения — `settingsKeyboard…` в `app_en.arb` и `app_ru.arb`. Обозначения клавиш (`⌘`, `Ctrl`, `Esc`, `⏎`) и `/` в «Command menu after /» не переводятся (§2): их выбирает каталог сочетаний кита по платформе. Строки одобрения несут метку `security`. Все термины вычитаны пользователем 2026-11-19 и приняты без правок (задача 3.6); строки «Go to approval» и места одобрения добавлены change [`fix-approval-focus`](../../openspec/changes/archive/2026-11-20-fix-approval-focus/design.md) (D7) и вычитаны 2026-11-20 (задача 4.3).
 
 | en | ru | Примечание |
 |---|---|---|

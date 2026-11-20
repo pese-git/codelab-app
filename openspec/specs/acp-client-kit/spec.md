@@ -1118,3 +1118,34 @@ Kit SHALL предоставлять `formatUsageMoneyExact(Money)` — точн
 - **WHEN** `ProfileSecrets.store` возвращает `Failed('disk full')`
 - **THEN** результат — `ProfileSaveFailed` с причиной `secretWrite` и `storeReason` `null`
 
+### Requirement: Одобрение в элементе вызова транскрипта
+Проекция транскрипта SHALL показывать в элементе вызова ожидающий запрос разрешения этого вызова, даже если у вызова в ходе несколько запросов `session/request_permission` с одним `toolCallId`. ACP этого не запрещает: агент вправе спросить снова тот же вызов. Каждый такой запрос — своё одобрение со своим `ApprovalRequestId`.
+
+`ToolCallItem.approval` элемента вызова SHALL выбираться среди одобрений хода с этим `toolCallId` так:
+1. если среди них есть ожидающие — самое раннее ожидающее по `requestedAt`, при равенстве или без `requestedAt` — первое по порядку прихода;
+2. иначе — последнее по порядку прихода решённое или снятое одобрение (его исход показывает тег строки).
+
+То же правило SHALL действовать для элемента вызова, который известен только из `session/request_permission` (без кадра `tool_call`): элемент один на `toolCallId`, его одобрение выбирается по правилу выше.
+
+Инвариант видимости: каждое ожидающее одобрение корня из `SessionView.pendingApprovals`, которое по признаку `focused` активно, SHALL быть одобрением своего элемента вызова в `SessionView.transcript`. Ожидающее одобрение субагента SHALL быть в `ToolCallItem.childApprovals` строки `agent` корня, как раньше (требование «Запрос одобрения от субагента»). Правило выбора НЕ SHALL менять `pendingApprovals`, `focused`, `childApprovals`, `approvalWaits` и ответ `SessionHandle.respond`.
+
+#### Scenario: Повторный запрос после ответа
+- **WHEN** вызов `c1` объявлен `tool_call`, агент присылает `session/request_permission` для `c1`, пользователь отвечает `allow_once`, и агент присылает второй `session/request_permission` для `c1`
+- **THEN** `ToolCallItem.approval` элемента `c1` — `PendingApprovalView` второго запроса с `focused == true`, а в `pendingApprovals` ровно этот запрос
+
+#### Scenario: После ответа на повторный запрос
+- **WHEN** пользователь отвечает на второй запрос вызова `c1` вариантом `reject_once`
+- **THEN** `ToolCallItem.approval` элемента `c1` — `ResolvedApprovalView` второго запроса с исходом `rejected`
+
+#### Scenario: Повторный запрос вызова без `tool_call`
+- **WHEN** вызов `c2` известен только из `session/request_permission`, первый запрос решён, и агент присылает второй запрос для `c2`
+- **THEN** в транскрипте один элемент `c2`, и его одобрение — ожидающий второй запрос
+
+#### Scenario: Два ожидающих запроса одного вызова
+- **WHEN** для вызова `c1` ждут два запроса, `p1` раньше `p2` по `requestedAt`
+- **THEN** одобрение элемента `c1` — `p1` с `focused == true`; после ответа на `p1` одобрение элемента — `p2`
+
+#### Scenario: Один запрос — без изменений
+- **WHEN** у вызова ровно один запрос `session/request_permission`
+- **THEN** элемент вызова показывает его так же, как до этого требования: ожидающим, а после ответа — с исходом
+
