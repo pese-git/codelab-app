@@ -1118,7 +1118,7 @@
    "x": 0,
    "y": 4200,
    "w": 2160,
-   "h": 780,
+   "h": 900,
    "page": "tablet",
    "title": "Navigation graph — tablet"
   },
@@ -1354,6 +1354,40 @@
    "h": 844,
    "page": "phone-dark",
    "title": "P14a Legal — Third-party notices, no packages match — dark"
+  },
+  "TabletNoticesMatch.dc.html": {
+   "x": 5040,
+   "y": 2880,
+   "w": 1180,
+   "h": 820,
+   "page": "tablet",
+   "title": "T10a Tablet — Legal › Third-party notices, search: M of N",
+   "is_interactive": true
+  },
+  "TabletNoticesMatch-dark.dc.html": {
+   "x": 5040,
+   "y": 2880,
+   "w": 1180,
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T10a Tablet — Legal › Third-party notices, search: M of N — dark"
+  },
+  "TabletNoticesEmpty.dc.html": {
+   "x": 6300,
+   "y": 2880,
+   "w": 1180,
+   "h": 820,
+   "page": "tablet",
+   "title": "T10b Tablet — Legal › Third-party notices, no packages match",
+   "is_interactive": true
+  },
+  "TabletNoticesEmpty-dark.dc.html": {
+   "x": 6300,
+   "y": 2880,
+   "w": 1180,
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T10b Tablet — Legal › Third-party notices, no packages match — dark"
   }
  },
  "createdOnFiles": {
@@ -1933,12 +1967,12 @@
    "x": 0,
    "y": 2620,
    "kind": "title1",
-   "maxW": 4960,
+   "maxW": 7480,
    "page": "tablet",
    "text": "Планшет: правовые документы"
   },
   "t-row3s": {
-   "x": 5040,
+   "x": 7560,
    "y": 2880,
    "w": 460,
    "size": "m",
@@ -2002,7 +2036,7 @@
    "x": 0,
    "y": 2620,
    "kind": "title1",
-   "maxW": 4960,
+   "maxW": 7480,
    "page": "tablet-dark",
    "text": "Тёмная тема — планшет: правовые документы"
   },
@@ -2193,7 +2227,11 @@
   "TabletLicense-dark.dc.html",
   "TabletNotices-dark.dc.html",
   "PhoneNoticesEmpty.dc.html",
-  "PhoneNoticesEmpty-dark.dc.html"
+  "PhoneNoticesEmpty-dark.dc.html",
+  "TabletNoticesMatch.dc.html",
+  "TabletNoticesMatch-dark.dc.html",
+  "TabletNoticesEmpty.dc.html",
+  "TabletNoticesEmpty-dark.dc.html"
  ],
  "pages": [
   {
