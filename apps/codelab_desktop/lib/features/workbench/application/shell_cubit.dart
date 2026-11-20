@@ -669,12 +669,17 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   /// без фокуса. [isVisible] — ручка ленты (`CodeLabApprovalVisibility`),
   /// виджет решения не принимает (AGENTS.md §10).
   ///
+  /// [visibilityDetail] — диагностика ленты (`CodeLabApprovalVisibility.check`
+  /// → `diagnostic`): при `not_visible` уходит в поле `visibility_detail`
+  /// события, чтобы видеть причину (геометрия и тип перекрывшего слоя).
+  ///
   /// [modifiersHeldFor] — сколько Alt и Shift зажаты вместе к нажатию буквы
   /// (Windows и Linux; смена раскладки не должна отвечать), `null` на macOS.
   void answerApprovalByShortcut(
     CodeLabApprovalOptionKind kind, {
     required bool Function(String sessionId, String approvalId) isVisible,
     required Duration? modifiersHeldFor,
+    String Function(String sessionId, String approvalId)? visibilityDetail,
   }) {
     // Палитра и диалог открытия сессии в корне диска закрывают рабочее место:
     // ответ из них не уходит (D14); оба лежат внутри поддерева сочетаний.
@@ -715,7 +720,17 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
           ),
         );
       case ApprovalShortcutSkipped():
-        _parts.activeSession.logApprovalShortcutSkipped(decision);
+        _parts.activeSession.logApprovalShortcutSkipped(
+          decision,
+          visibilityDetail:
+              decision.reason == ApprovalShortcutSkipReason.notVisible &&
+                  decision.approvalId != null
+              ? visibilityDetail?.call(
+                  decision.sessionId!,
+                  decision.approvalId!.value,
+                )
+              : null,
+        );
         // Полоса, которую пользователь увидит только сейчас, получает свои
         // 500 мс от показа, а не от активации (D14, п. 2).
         if (decision.reason == ApprovalShortcutSkipReason.notVisible &&

@@ -660,13 +660,22 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
 
   /// Пишет `workbench.approval_shortcut_skipped` (D9): нажатие сочетания
   /// ответа, не давшее ответа. `request_id` — только если цель есть.
-  void logApprovalShortcutSkipped(ApprovalShortcutSkipped skipped) {
+  ///
+  /// [visibilityDetail] — только для `not_visible`: типы и геометрия из
+  /// `CodeLabApprovalVisibilityResult.diagnostic` (`out_of_viewport bar=…`,
+  /// `obscured by=<Type> at=(x,y)`, `not_built`); подписей и текста ленты нет
+  /// (AGENTS.md §16).
+  void logApprovalShortcutSkipped(
+    ApprovalShortcutSkipped skipped, {
+    String? visibilityDetail,
+  }) {
     _approvalLogger?.info(
       'workbench.approval_shortcut_skipped',
       context: {
         'session_id': ?skipped.sessionId,
         'request_id': ?skipped.approvalId?.value,
         'reason': skipped.reason.wireName,
+        'visibility_detail': ?visibilityDetail,
       },
     );
   }

@@ -113,6 +113,11 @@ class CodeLabShell extends StatelessWidget {
             isVisible:
                 WorkbenchFocus.maybeOf(context)?.approvalVisibility.isVisible ??
                 (_, _) => false,
+            visibilityDetail: (session, approval) =>
+                WorkbenchFocus.maybeOf(
+                  context,
+                )?.approvalVisibility.check(session, approval).diagnostic ??
+                'no_transcript',
           ),
           onOpenSettings: () =>
               _openSettings(context, SettingsOpenSource.shortcut),

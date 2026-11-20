@@ -214,4 +214,66 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
     expect(visible, isTrue);
   });
+
+  group('причина отказа (check)', () {
+    testWidgets('видимая полоса — CodeLabApprovalVisible', (tester) async {
+      final visibility = CodeLabApprovalVisibility();
+      await tester.pumpWidget(_host(visibility));
+      await tester.pump();
+
+      final result = visibility.check('s1', 'perm-1');
+      expect(result, isA<CodeLabApprovalVisible>());
+      expect(result.diagnostic, 'visible');
+    });
+
+    testWidgets('полоса не построена и чужой запрос — NotBuilt', (
+      tester,
+    ) async {
+      final visibility = CodeLabApprovalVisibility();
+      expect(
+        visibility.check('s1', 'perm-1'),
+        isA<CodeLabApprovalNotBuilt>(),
+        reason: 'ленты нет',
+      );
+      await tester.pumpWidget(_host(visibility));
+      await tester.pump();
+
+      expect(visibility.check('s1', 'perm-2').diagnostic, 'not_built');
+    });
+
+    testWidgets('полоса за краем области — OutOfViewport с прямоугольниками', (
+      tester,
+    ) async {
+      final visibility = CodeLabApprovalVisibility();
+      await tester.pumpWidget(_host(visibility));
+      await tester.pump();
+      await _scrollToTopByUser(tester);
+      final viewport = tester.getRect(find.byType(CodeLabTranscriptPanel));
+      final rect = tester.getRect(bar);
+      await _jumpTo(tester, rect.top - viewport.top + rect.height / 2);
+
+      final result = visibility.check('s1', 'perm-1');
+      expect(result, isA<CodeLabApprovalOutOfViewport>());
+      final out = result as CodeLabApprovalOutOfViewport;
+      expect(out.bar, tester.getRect(bar));
+      expect(out.viewport, viewport);
+      expect(result.diagnostic, startsWith('out_of_viewport bar=('));
+    });
+
+    testWidgets('непрозрачный слой поверх — Obscured с типом и точкой', (
+      tester,
+    ) async {
+      final visibility = CodeLabApprovalVisibility();
+      await tester.pumpWidget(_host(visibility, covered: true));
+      await tester.pump();
+
+      final result = visibility.check('s1', 'perm-1');
+      expect(result, isA<CodeLabApprovalObscured>());
+      final obscured = result as CodeLabApprovalObscured;
+      expect(obscured.blocker, isNotNull);
+      expect(tester.getRect(bar).contains(obscured.point), isTrue);
+      expect(result.diagnostic, startsWith('obscured by='));
+      expect(result.diagnostic, contains(' at=('));
+    });
+  });
 }

@@ -199,12 +199,89 @@ final class CodeLabTranscriptShowRequest {
 /// Лента подключает ручку в `initState` и отключает в `dispose`; пока ленты
 /// нет, полоса считается невидимой (безопасная сторона, §10).
 final class CodeLabApprovalVisibility {
-  bool Function(String sessionId, String approvalId)? _resolver;
+  CodeLabApprovalVisibilityResult Function(String sessionId, String approvalId)?
+  _resolver;
 
   /// Видна ли полоса одобрения [approvalId] сессии [sessionId] целиком.
   bool isVisible(String sessionId, String approvalId) =>
-      _resolver?.call(sessionId, approvalId) ?? false;
+      check(sessionId, approvalId) is CodeLabApprovalVisible;
+
+  /// То же, что [isVisible], но с причиной отказа для диагностики (журнал
+  /// `not_visible`): ленты нет — [CodeLabApprovalNotBuilt].
+  CodeLabApprovalVisibilityResult check(String sessionId, String approvalId) =>
+      _resolver?.call(sessionId, approvalId) ?? const CodeLabApprovalNotBuilt();
 }
+
+/// Результат проверки видимости полосы одобрения.
+///
+/// Почему: «не видна» без причины не диагностируется (ручная проверка на
+/// macOS, change `fix-approval-focus`, D14 п. 1). Для чего: журнал app
+/// показывает, что именно мешает. Данные — только типы и геометрия, без
+/// подписей, путей и текста ленты (AGENTS.md §16).
+sealed class CodeLabApprovalVisibilityResult {
+  const CodeLabApprovalVisibilityResult();
+
+  /// Краткая запись для журнала: `visible`, `not_built`,
+  /// `out_of_viewport bar=<rect> viewport=<rect>` или
+  /// `obscured by=<Type> owner=<Type> at=(x,y)`.
+  String get diagnostic;
+}
+
+/// Полоса целиком в области и не перекрыта.
+final class CodeLabApprovalVisible extends CodeLabApprovalVisibilityResult {
+  const CodeLabApprovalVisible();
+
+  @override
+  String get diagnostic => 'visible';
+}
+
+/// Ленты нет, полоса не построена или не имеет размера.
+final class CodeLabApprovalNotBuilt extends CodeLabApprovalVisibilityResult {
+  const CodeLabApprovalNotBuilt();
+
+  @override
+  String get diagnostic => 'not_built';
+}
+
+/// Полоса выходит за область ленты; [bar] и [viewport] — глобальные
+/// прямоугольники.
+final class CodeLabApprovalOutOfViewport
+    extends CodeLabApprovalVisibilityResult {
+  const CodeLabApprovalOutOfViewport({
+    required this.bar,
+    required this.viewport,
+  });
+
+  final Rect bar;
+  final Rect viewport;
+
+  @override
+  String get diagnostic =>
+      'out_of_viewport bar=${_rectText(bar)} viewport=${_rectText(viewport)}';
+}
+
+/// Проверочную точку [point] получает [blocker] (тип `RenderObject`), а не
+/// полоса; [owner] — тип виджета-создателя (`debugCreator`), в release `null`.
+final class CodeLabApprovalObscured extends CodeLabApprovalVisibilityResult {
+  const CodeLabApprovalObscured({
+    required this.blocker,
+    required this.point,
+    this.owner,
+  });
+
+  final Type blocker;
+  final Type? owner;
+  final Offset point;
+
+  @override
+  String get diagnostic =>
+      'obscured by=$blocker${owner == null ? '' : ' owner=$owner'} '
+      'at=(${point.dx.toStringAsFixed(1)},${point.dy.toStringAsFixed(1)})';
+}
+
+String _rectText(Rect r) =>
+    '(${r.left.toStringAsFixed(1)},${r.top.toStringAsFixed(1)},'
+    '${r.right.toStringAsFixed(1)},${r.bottom.toStringAsFixed(1)})';
 
 /// Состояние ленты: владеет `ScrollController` и решает, когда двигать
 /// прокрутку.
@@ -264,7 +341,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   @override
   void initState() {
     super.initState();
-    widget.approvalVisibility?._resolver = _isApprovalBarVisible;
+    widget.approvalVisibility?._resolver = _checkApprovalBar;
 
     // Панель может появиться сразу с pending approval в первых записях (хост
     // обычно подставляет ленту, только когда записи уже есть) — предыдущей
@@ -279,7 +356,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
 
   @override
   void dispose() {
-    if (widget.approvalVisibility?._resolver == _isApprovalBarVisible) {
+    if (widget.approvalVisibility?._resolver == _checkApprovalBar) {
       widget.approvalVisibility?._resolver = null;
     }
     _showToken++;
@@ -294,7 +371,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
 
     if (oldWidget.approvalVisibility != widget.approvalVisibility) {
       oldWidget.approvalVisibility?._resolver = null;
-      widget.approvalVisibility?._resolver = _isApprovalBarVisible;
+      widget.approvalVisibility?._resolver = _checkApprovalBar;
     }
 
     // Запрос показа важнее следования за хвостом: он сам переводит ленту в
@@ -521,12 +598,17 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
   /// прямоугольник внутри области ленты, и в центре и у углов полосы указатель
   /// доходит до неё, а не до панели поверх ленты. Только читает дерево, ничего не
   /// меняет.
-  bool _isApprovalBarVisible(String sessionId, String approvalId) {
-    if (!mounted) return false;
+  CodeLabApprovalVisibilityResult _checkApprovalBar(
+    String sessionId,
+    String approvalId,
+  ) {
+    if (!mounted) return const CodeLabApprovalNotBuilt();
     final prompt = _findKeyed(
       CodeLabApprovalPrompt.keyFor(sessionId, approvalId),
     );
-    if (prompt is! Element || !prompt.mounted) return false;
+    if (prompt is! Element || !prompt.mounted) {
+      return const CodeLabApprovalNotBuilt();
+    }
     final bar = prompt.renderObject;
     final viewport = context.findRenderObject();
     if (bar is! RenderBox ||
@@ -535,7 +617,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
         !viewport.attached ||
         !bar.hasSize ||
         !viewport.hasSize) {
-      return false;
+      return const CodeLabApprovalNotBuilt();
     }
     final barRect = bar.localToGlobal(Offset.zero) & bar.size;
     final viewRect = viewport.localToGlobal(Offset.zero) & viewport.size;
@@ -544,7 +626,7 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
         barRect.top < viewRect.top - epsilon ||
         barRect.right > viewRect.right + epsilon ||
         barRect.bottom > viewRect.bottom + epsilon) {
-      return false;
+      return CodeLabApprovalOutOfViewport(bar: barRect, viewport: viewRect);
     }
     // Полосу закрывает то, что получает указатель в её прямоугольнике и не
     // лежит ни внутри полосы, ни среди её предков (выдвижная панель поверх
@@ -576,11 +658,18 @@ class _AcpTranscriptPanelState extends State<CodeLabTranscriptPanel> {
         if (target is RenderObject &&
             !ancestors.contains(target) &&
             !inside(target)) {
-          return false;
+          final creator = target.debugCreator;
+          return CodeLabApprovalObscured(
+            blocker: target.runtimeType,
+            owner: creator is DebugCreator
+                ? creator.element.widget.runtimeType
+                : null,
+            point: point,
+          );
         }
       }
     }
-    return true;
+    return const CodeLabApprovalVisible();
   }
 
   /// Ключ цели: строка верхнего уровня — её `rowKey`, иначе ключ цели внутри.

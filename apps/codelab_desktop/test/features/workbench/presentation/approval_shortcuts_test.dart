@@ -590,6 +590,9 @@ void main() {
       final skipped = journal(_skippedEvent);
       expect(skipped, hasLength(1));
       expect(skipped.single['reason'], 'not_visible');
+      // Диагностика причины: на момент записи полоса уже показана, поэтому
+      // деталь — одна из записей ленты, а не пустая.
+      expect(skipped.single['visibility_detail'], isA<String>());
       expect(skipped.single['request_id'], 'permission-821');
       expect(skipped.single['session_id'], 'session-1');
 
