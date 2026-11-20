@@ -2,7 +2,7 @@
 
 Экспорт канваса UI/UX из Claude Design: макеты `codelab_desktop` (десктоп, планшет, смартфон, светлая и тёмная темы), `codelab_cli` (TUI, REPL, headless), графы навигации, покрытие целей паритета и живой прототип.
 
-Экспорт снят 2026-11-12 с опубликованной версии канваса (первый экспорт — 2026-10-29; артборд 16 обновлён в тот же день под панель Agents v1). Канвас переехал в Claude и теперь опубликован как артефакт типа «Design»; отдельный Claude Design (claude.ai/design) закрывается 14 декабря 2026 года. Ссылка на канвас приватная и в репозиторий намеренно не попадает, как и у [`../ui-canvas`](../ui-canvas/README.md). Если канвас поменялся, файлы здесь надо экспортировать заново: правки в этом каталоге обратно в канвас не уходят.
+Экспорт снят 2026-11-20 с опубликованной версии канваса (первый экспорт — 2026-10-29, предыдущий — 2026-11-12). В этот экспорт вошли правовые документы (`TERMS.md`, D-29, §12.7.7а): шаг onboarding 07a, страница настроек Legal 32–35 и состояния поиска 35a на десктопе, P13–P16 на смартфоне, T7–T10 на планшете и граф навигации планшета. Legal стал последним пунктом группы App в панели настроек всех страниц. Канвас переехал в Claude и теперь опубликован как артефакт типа «Design»; отдельный Claude Design (claude.ai/design) закрывается 14 декабря 2026 года. Ссылка на канвас приватная и в репозиторий намеренно не попадает, как и у [`../ui-canvas`](../ui-canvas/README.md). Если канвас поменялся, файлы здесь надо экспортировать заново: правки в этом каталоге обратно в канвас не уходят.
 
 Канвас — проектный референс. При расхождении источник истины — документы `docs/architecture/proposals/dart-agent-and-clients/` (§12.x) и `openspec/`; номера целей (D-28, U-37, T-22 …) — из `agent-parity-goals.md`.
 
@@ -30,7 +30,7 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 
 ## Артборды
 
-Для каждого светлого артборда приложения (страница «Светлая тема», 35 файлов) есть тёмная копия `<Имя>-dark.dc.html` на странице «Тёмная тема», кроме `TranscriptRows` и неутверждённого варианта `SubagentsAlt`.
+Для каждого светлого артборда приложения (страница «Светлая тема», 42 файла) есть тёмная копия `<Имя>-dark.dc.html` на странице «Тёмная тема», кроме `TranscriptRows` и неутверждённого варианта `SubagentsAlt`.
 
 ### Приложение — светлая тема
 
@@ -46,6 +46,7 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `Mcp.dc.html` | 05b Настройки — MCP-серверы |
 | `Wizard.dc.html` | 06 Мастер провайдера — проверка перед сохранением |
 | `Onboarding.dc.html` | 07 Первый запуск |
+| `OnboardingPrivacy.dc.html` | 07a Первый запуск — шаг 4 Privacy: что уходит с компьютера, ссылки на политику и условия, принимать нечего (D-11, D-29) |
 | `Boot.dc.html` | 08 Сторож запуска — диагностика |
 | `Narrow.dc.html` | 09 Узкая раскладка < 900 px |
 | `Appearance.dc.html` | 10 Настройки — Appearance |
@@ -72,6 +73,11 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `Subagents.dc.html` | 30 Субагенты в ленте — компактный вид: свёрнутые агенты, тихие строки задач, вопрос с путём (change `add-subagents-and-tasks`, D27) |
 | `SubagentsAlt.dc.html` | 30a Вариант, не утверждён — список задач под последним сообщением |
 | `TaskList.dc.html` | 31 Строки агентов и список задач — все состояния |
+| `Legal.dc.html` | 32 Настройки › Legal — Privacy policy (`PRIVACY.md`, D-18) |
+| `Terms.dc.html` | 33 Настройки › Legal — Terms of use (`TERMS.md`, D-29, §12.7.7а) |
+| `License.dc.html` | 34 Настройки › Legal — License: краткое содержание MIT и полный текст `LICENSE` |
+| `Notices.dc.html` | 35 Настройки › Legal — Third-party notices: записи реестра и лицензии пакетов с поиском (D13 `add-app-general-page`, §12.7.7а) |
+| `NoticesSearch.dc.html` | 35a Поиск по пакетам — состояния «M of N» с подсветкой и «No packages match» |
 
 ### codelab_cli
 
@@ -111,6 +117,10 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `PhoneProviders.dc.html` | P10 Настройки › Providers |
 | `PhoneWizard.dc.html` | P11 Первый запуск — мастер провайдера |
 | `PhoneStates.dc.html` | P12 Состояния |
+| `PhoneLegal.dc.html` | P13 Настройки › Legal — Privacy policy |
+| `PhoneNotices.dc.html` | P14 Legal — Third-party notices, поиск по пакетам |
+| `PhoneTerms.dc.html` | P15 Legal — Terms of use |
+| `PhoneLicense.dc.html` | P16 Legal — License |
 
 ### Планшет
 
@@ -122,6 +132,10 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `TabletFiles.dc.html` | T4 Планшет — файлы и просмотр |
 | `TabletPalette.dc.html` | T5 Планшет — палитра команд |
 | `TabletSplit.dc.html` | T6 Планшет — split view при 1366 px |
+| `TabletLegal.dc.html` | T7 Планшет — настройки › Legal, Privacy policy (master–detail) |
+| `TabletTerms.dc.html` | T8 Планшет — Legal › Terms of use |
+| `TabletLicense.dc.html` | T9 Планшет — Legal › License |
+| `TabletNotices.dc.html` | T10 Планшет — Legal › Third-party notices |
 
 ### Навигация, покрытие и прототип
 
@@ -130,5 +144,6 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `NavApp.dc.html` | Граф навигации `codelab_desktop` |
 | `NavCli.dc.html` | Граф навигации `codelab_cli` |
 | `NavPhone.dc.html` | Граф навигации смартфона |
+| `NavTablet.dc.html` | Граф навигации планшета |
 | `Coverage.dc.html` | Покрытие целей: цель → экран |
 | `Prototype.dc.html` | Живой прототип: десктоп, планшет, смартфон; темы, состояния соединения, раскладка (A13, §12.8) |
