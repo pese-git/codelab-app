@@ -22,6 +22,7 @@ import '../../../support/settings_search.dart';
 /// «App» нет.
 final _agentPages = {...defaultSettingsPages.available}
   ..remove(SettingsPage.general)
+  ..remove(SettingsPage.appearance)
   ..remove(SettingsPage.keyboard);
 
 Finder _nav(SettingsPage page) => find.byKey(ValueKey(page.navKey));
@@ -409,6 +410,7 @@ void main() {
       SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
       SettingsPage.general,
+      SettingsPage.appearance,
       SettingsPage.keyboard,
     ]);
   });
@@ -464,6 +466,7 @@ void main() {
       SettingsPage.agentsAndModes,
       SettingsPage.skillsAndExtensions,
       SettingsPage.general,
+      SettingsPage.appearance,
       SettingsPage.keyboard,
     ]);
   });

@@ -1,5 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
+import 'codelab_palette.dart';
 import 'codelab_tone.dart';
 
 class CodeLabBadge extends StatelessWidget {
@@ -14,8 +15,10 @@ class CodeLabBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _backgroundColorForTone(tone);
-    final foreground = _foregroundColorForTone(tone);
+    final theme = FluentTheme.of(context);
+    final palette = CodeLabPalette.of(theme);
+    final color = _backgroundColorForTone(palette, theme, tone);
+    final foreground = palette.toneColor(tone, theme);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -38,22 +41,14 @@ class CodeLabBadge extends StatelessWidget {
   }
 }
 
-Color _backgroundColorForTone(CodeLabTone tone) {
-  return switch (tone) {
-    CodeLabTone.neutral => Colors.grey.withAlpha(46),
-    CodeLabTone.accent => Colors.blue.withAlpha(46),
-    CodeLabTone.success => Colors.green.withAlpha(46),
-    CodeLabTone.warning => Colors.warningPrimaryColor.withAlpha(56),
-    CodeLabTone.danger => Colors.red.withAlpha(46),
-  };
-}
-
-Color _foregroundColorForTone(CodeLabTone tone) {
-  return switch (tone) {
-    CodeLabTone.neutral => Colors.grey,
-    CodeLabTone.accent => Colors.blue,
-    CodeLabTone.success => Colors.green,
-    CodeLabTone.warning => Colors.warningPrimaryColor,
-    CodeLabTone.danger => Colors.red,
-  };
+Color _backgroundColorForTone(
+  CodeLabPalette palette,
+  FluentThemeData theme,
+  CodeLabTone tone,
+) {
+  final base = palette.toneColor(tone, theme);
+  return base.withAlpha(switch (tone) {
+    CodeLabTone.warning => 56,
+    _ => 46,
+  });
 }

@@ -5027,6 +5027,506 @@ abstract class AppLocalizations {
   /// **'The definition cannot be loaded.'**
   String get agentsErrorFallbackOther;
 
+  /// Ключевые слова поиска настроек для страницы Appearance (через запятую; английские слова ищутся при любом языке).
+  ///
+  /// In en, this message translates to:
+  /// **'theme, dark, light, mode, color, accent, contrast, json'**
+  String get settingsSearchKeywordsAppearance;
+
+  /// Заголовок блока выбора режима оформления на странице Appearance.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode'**
+  String get appearanceModeTitle;
+
+  /// Пояснение блока Mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Light, dark, or follow the system setting'**
+  String get appearanceModeDescription;
+
+  /// Значение режима: светлая тема.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get appearanceModeLight;
+
+  /// Значение режима: тёмная тема.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get appearanceModeDark;
+
+  /// Значение режима: следовать системе; {current} — текущий режим системы (appearanceSystemLight или appearanceSystemDark).
+  ///
+  /// In en, this message translates to:
+  /// **'Match system ({current})'**
+  String appearanceModeSystem(String current);
+
+  /// Текущий режим системы в скобках у значения Match system: светлый.
+  ///
+  /// In en, this message translates to:
+  /// **'light'**
+  String get appearanceSystemLight;
+
+  /// Текущий режим системы в скобках у значения Match system: тёмный.
+  ///
+  /// In en, this message translates to:
+  /// **'dark'**
+  String get appearanceSystemDark;
+
+  /// Заголовок строки системного акцента.
+  ///
+  /// In en, this message translates to:
+  /// **'Accent color'**
+  String get appearanceAccentTitle;
+
+  /// Пояснение строки системного акцента.
+  ///
+  /// In en, this message translates to:
+  /// **'Buttons, selection and focus use the system accent'**
+  String get appearanceAccentDescription;
+
+  /// Подпись переключателя системного акцента.
+  ///
+  /// In en, this message translates to:
+  /// **'Use system accent'**
+  String get appearanceAccentToggle;
+
+  /// Заголовок блока карточек тем.
+  ///
+  /// In en, this message translates to:
+  /// **'Color theme'**
+  String get appearanceThemesTitle;
+
+  /// Имя встроенной светлой темы; не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Fluent Light'**
+  String get appearanceThemeFluentLight;
+
+  /// Имя встроенной тёмной темы; не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Fluent Dark'**
+  String get appearanceThemeFluentDark;
+
+  /// Имя встроенной темы высокого контраста.
+  ///
+  /// In en, this message translates to:
+  /// **'High contrast'**
+  String get appearanceThemeHighContrast;
+
+  /// Вид карточки встроенной темы по умолчанию.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in · default'**
+  String get appearanceKindBuiltInDefault;
+
+  /// Вид карточки встроенной темы.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in'**
+  String get appearanceKindBuiltIn;
+
+  /// Вид карточки пользовательской темы; {base} — значение extends (light, dark, high-contrast), не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom · extends {base}'**
+  String appearanceKindCustom(String base);
+
+  /// Вид карточки пользовательской темы, которая не загрузилась.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get appearanceKindCustomUnknown;
+
+  /// Тег карточки темы светлого режима.
+  ///
+  /// In en, this message translates to:
+  /// **'Light mode'**
+  String get appearanceTagLightMode;
+
+  /// Тег карточки темы тёмного режима.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark mode'**
+  String get appearanceTagDarkMode;
+
+  /// Тег карточки темы, которая не загрузилась.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid'**
+  String get appearanceTagInvalid;
+
+  /// Бейдж карточки: число предупреждений (разбора и низкого контраста).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} warning} other{{count} warnings}}'**
+  String appearanceWarningsBadge(int count);
+
+  /// Заголовок блока пользовательских тем.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom themes'**
+  String get appearanceCustomTitle;
+
+  /// Кнопка импорта файла темы.
+  ///
+  /// In en, this message translates to:
+  /// **'Import JSON…'**
+  String get appearanceImportButton;
+
+  /// InfoBar панели проблем: тема загружена с предупреждениями; {name} — имя темы как есть.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} loaded with {count, plural, one{{count} warning} other{{count} warnings}}'**
+  String appearanceIssuesSummary(String name, int count);
+
+  /// InfoBar ошибки темы; {name} — имя темы как есть.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} couldn\'t be loaded'**
+  String appearanceIssuesError(String name);
+
+  /// Кнопка открытия каталога тем.
+  ///
+  /// In en, this message translates to:
+  /// **'Open folder'**
+  String get appearanceOpenFolder;
+
+  /// Кнопка перечитывания каталога тем.
+  ///
+  /// In en, this message translates to:
+  /// **'Reload'**
+  String get appearanceReload;
+
+  /// Строка списка проблем; {file} — имя файла, {key} — ключ из файла, как есть.
+  ///
+  /// In en, this message translates to:
+  /// **'{file}:{line}:{column} unknown key \"{key}\"'**
+  String appearanceIssueUnknownKey(
+    String file,
+    int line,
+    int column,
+    String key,
+  );
+
+  /// Пояснение к неизвестному ключу с подсказкой; {role} — имя роли.
+  ///
+  /// In en, this message translates to:
+  /// **'Ignored. Did you mean \"{role}\"?'**
+  String appearanceIssueUnknownKeyHint(String role);
+
+  /// Пояснение к неизвестному ключу без подсказки.
+  ///
+  /// In en, this message translates to:
+  /// **'Ignored — not a theme role.'**
+  String get appearanceIssueUnknownKeyNoHint;
+
+  /// Строка списка проблем: повтор ключа.
+  ///
+  /// In en, this message translates to:
+  /// **'{file}:{line}:{column} duplicate key \"{key}\"'**
+  String appearanceIssueDuplicateKey(
+    String file,
+    int line,
+    int column,
+    String key,
+  );
+
+  /// Пояснение к повтору ключа.
+  ///
+  /// In en, this message translates to:
+  /// **'The last value is used.'**
+  String get appearanceIssueDuplicateKeyHint;
+
+  /// Строка списка проблем: терминальный цвет вместо #rrggbb.
+  ///
+  /// In en, this message translates to:
+  /// **'{file}:{line}:{column} terminal color \"{value}\"'**
+  String appearanceIssueTerminalColor(
+    String file,
+    int line,
+    int column,
+    String value,
+  );
+
+  /// Пояснение к терминальному цвету.
+  ///
+  /// In en, this message translates to:
+  /// **'Terminal colors are not used by the app; the role comes from extends.'**
+  String get appearanceIssueTerminalColorHint;
+
+  /// Строка списка проблем: роль ниже порога 4,5:1; {role} — имя роли, {ratio} — отношение.
+  ///
+  /// In en, this message translates to:
+  /// **'Low contrast: {role}, {ratio}:1'**
+  String appearanceIssueLowContrast(String role, String ratio);
+
+  /// Пояснение к низкому контрасту.
+  ///
+  /// In en, this message translates to:
+  /// **'Applied as set. Text roles need 4.5:1.'**
+  String get appearanceIssueLowContrastHint;
+
+  /// Причина ошибки темы: файл слишком большой.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is larger than 64 KiB.'**
+  String get appearanceIssueTooLarge;
+
+  /// Причина ошибки темы: не UTF-8.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is not valid UTF-8.'**
+  String get appearanceIssueNotUtf8;
+
+  /// Причина ошибки темы: JSON не разобран.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is not valid JSON.'**
+  String get appearanceIssueInvalidJson;
+
+  /// Причина ошибки темы: корень не объект.
+  ///
+  /// In en, this message translates to:
+  /// **'The top level must be a JSON object.'**
+  String get appearanceIssueNotAnObject;
+
+  /// Причина ошибки темы: нет name.
+  ///
+  /// In en, this message translates to:
+  /// **'The \"name\" key is missing.'**
+  String get appearanceIssueMissingName;
+
+  /// Причина ошибки темы: недопустимое имя.
+  ///
+  /// In en, this message translates to:
+  /// **'The theme name must be 1–32 characters: a–z, 0–9 and hyphens.'**
+  String get appearanceIssueInvalidName;
+
+  /// Причина ошибки темы: имя не совпадает с файлом.
+  ///
+  /// In en, this message translates to:
+  /// **'The \"name\" value must match the file name.'**
+  String get appearanceIssueNameMismatch;
+
+  /// Причина ошибки темы: имя встроенной темы.
+  ///
+  /// In en, this message translates to:
+  /// **'The name is taken by a built-in theme.'**
+  String get appearanceIssueReservedName;
+
+  /// Причина ошибки темы: недопустимое extends.
+  ///
+  /// In en, this message translates to:
+  /// **'\"extends\" must be light, dark or high-contrast.'**
+  String get appearanceIssueInvalidExtends;
+
+  /// Причина ошибки темы: недопустимое значение цвета.
+  ///
+  /// In en, this message translates to:
+  /// **'The color value is not valid: use #rrggbb, default, an ANSI color name or 256:n.'**
+  String get appearanceIssueInvalidValue;
+
+  /// Причина: файл темы не прочитан.
+  ///
+  /// In en, this message translates to:
+  /// **'The file could not be read.'**
+  String get appearanceIssueUnreadable;
+
+  /// Ошибка темы с позицией; {problem} — одна из причин appearanceIssue*.
+  ///
+  /// In en, this message translates to:
+  /// **'{file}:{line}:{column} {problem}'**
+  String appearanceIssueWithPosition(
+    String file,
+    int line,
+    int column,
+    String problem,
+  );
+
+  /// Справка о незаданных ролях; {base} — значение extends, не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} role not set} other{{count} roles not set}} — taken from \"{base}\"'**
+  String appearanceUnsetRoles(int count, String base);
+
+  /// Пояснение к списку незаданных ролей.
+  ///
+  /// In en, this message translates to:
+  /// **'For reference, not a warning'**
+  String get appearanceUnsetRolesNote;
+
+  /// Заголовок блока предпросмотра темы.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get appearancePreviewTitle;
+
+  /// Образец ссылки в предпросмотре; роль info.
+  ///
+  /// In en, this message translates to:
+  /// **'Link'**
+  String get appearancePreviewLink;
+
+  /// Образец статуса успеха в предпросмотре.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get appearancePreviewDone;
+
+  /// Образец статуса предупреждения в предпросмотре.
+  ///
+  /// In en, this message translates to:
+  /// **'84% context'**
+  String get appearancePreviewContext;
+
+  /// Образец статуса ошибки в предпросмотре.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get appearancePreviewFailed;
+
+  /// Заголовок блока проверки контраста.
+  ///
+  /// In en, this message translates to:
+  /// **'Contrast on code background'**
+  String get appearanceContrastTitle;
+
+  /// Строка контраста: роль text.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get appearanceContrastText;
+
+  /// Строка контраста: роль code.comment.
+  ///
+  /// In en, this message translates to:
+  /// **'Comment'**
+  String get appearanceContrastComment;
+
+  /// Строка контраста: роль code.keyword.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyword'**
+  String get appearanceContrastKeyword;
+
+  /// Строка контраста: роль error.
+  ///
+  /// In en, this message translates to:
+  /// **'Error'**
+  String get appearanceContrastError;
+
+  /// Вердикт контраста не ниже 4,5:1; обозначение WCAG, не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'AA'**
+  String get appearanceContrastPass;
+
+  /// Вердикт контраста ниже 4,5:1.
+  ///
+  /// In en, this message translates to:
+  /// **'Low'**
+  String get appearanceContrastLow;
+
+  /// Пояснение под строками контраста.
+  ///
+  /// In en, this message translates to:
+  /// **'Text roles need 4.5:1. A role below that still applies, with a warning on its card.'**
+  String get appearanceContrastNote;
+
+  /// Кнопка возврата встроенной темы режима.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get appearanceReset;
+
+  /// Кнопка назначения выбранной темы; {name} — имя темы как есть.
+  ///
+  /// In en, this message translates to:
+  /// **'Use {name}'**
+  String appearanceUse(String name);
+
+  /// InfoBar отката к встроенной теме; {name} — имя темы как есть, {builtIn} — имя встроенной темы.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{name}\" couldn\'t be loaded. Using {builtIn} until it is fixed.'**
+  String appearanceFallback(String name, String builtIn);
+
+  /// InfoBar сбоя записи выбора оформления.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the appearance. CodeLab will use the previous appearance after restart.'**
+  String get appearanceSaveFailed;
+
+  /// Кнопка повтора записи оформления.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get appearanceSaveRetry;
+
+  /// InfoBar ошибки импорта; {file} — имя файла, {problem} — причина с позицией.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t import {file}: {problem}'**
+  String appearanceImportFailed(String file, String problem);
+
+  /// InfoBar ошибки импорта без причины в порте: файл не прочитан или не записан (порт ThemeLibrary их не различает).
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t import the theme. Check that the file is readable and try again.'**
+  String get appearanceImportFailedGeneric;
+
+  /// Заголовок диалога замены; {name} — имя темы как есть.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace the theme \"{name}\"?'**
+  String appearanceReplaceTitle(String name);
+
+  /// Текст диалога замены.
+  ///
+  /// In en, this message translates to:
+  /// **'A theme with this name is already in the folder. Its file will be replaced.'**
+  String get appearanceReplaceBody;
+
+  /// Кнопка подтверждения замены.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get appearanceReplaceConfirm;
+
+  /// Позиция ошибки темы без имени файла (для InfoBar ошибки импорта); {problem} — одна из причин appearanceIssue*.
+  ///
+  /// In en, this message translates to:
+  /// **'{line}:{column} {problem}'**
+  String appearanceIssuePosition(int line, int column, String problem);
+
+  /// InfoBar сбоя чтения каталога тем; {path} — каталог тем с ~, не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t read {path}. Custom themes are not shown.'**
+  String appearanceCatalogFailed(String path);
+
+  /// Строка под списком проблем, когда показаны первые 50 из многих предупреждений; {count} — сколько не показано.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{… and {count} more warning} other{… and {count} more warnings}}'**
+  String appearanceIssuesMore(int count);
+
+  /// InfoBar сбоя системного диалога выбора файла темы (исключение порта, не ошибка записи).
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open the file dialog.'**
+  String get appearanceImportPickerFailed;
+
+  /// InfoBar отказа замены: источник изменился между проверкой и подтверждением.
+  ///
+  /// In en, this message translates to:
+  /// **'The file changed after you chose it. Choose it again.'**
+  String get appearanceImportSourceChanged;
+
   /// Заголовок страницы настроек «Keyboard».
   ///
   /// In en, this message translates to:
@@ -5284,6 +5784,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'shortcut, hotkey, keybinding, key'**
   String get settingsSearchKeywordsKeyboard;
+
+  /// Пояснение под InfoBar предупреждений, когда в файле есть неизвестные ключи.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown keys were ignored; the theme is applied.'**
+  String get appearanceIssuesHintUnknownKeys;
+
+  /// Пояснение под InfoBar предупреждений, когда неизвестных ключей нет (например, только низкий контраст).
+  ///
+  /// In en, this message translates to:
+  /// **'The theme is applied with warnings.'**
+  String get appearanceIssuesHintApplied;
+
+  /// Дополнение к пояснению, когда у темы есть незаданные роли; {base} — значение extends, {builtIn} — имя встроенной темы базы.
+  ///
+  /// In en, this message translates to:
+  /// **'Missing roles come from extends: \"{base}\" ({builtIn}).'**
+  String appearanceIssuesHintExtends(String base, String builtIn);
 }
 
 class _AppLocalizationsDelegate

@@ -81,7 +81,9 @@ CODELAB_HOME="$HOME/.codelab-test" \
 
 ### `CODELAB_HOME`
 
-Конфигурация агента, профили подключения, секреты и журналы сессий встроенного агента лежат в `CODELAB_HOME` (по умолчанию `~/.codelab`) и общие с терминальным клиентом `codelab` — [каталог `CODELAB_HOME`](../../../docs/ops/codelab-home.md).
+Конфигурация агента, профили подключения, секреты, журналы сессий встроенного агента и пользовательские цветовые темы app лежат в `CODELAB_HOME` (по умолчанию `~/.codelab`) и общие с терминальным клиентом `codelab` — [каталог `CODELAB_HOME`](../../../docs/ops/codelab-home.md).
+
+Темы — файлы `$CODELAB_HOME/themes/<имя>.json`: их кладёт пользователь или «Import JSON…» на странице «Appearance» (файл копируется без изменений, замена атомарная). Если каталога нет, своих тем просто нет; app создаёт его при «Import JSON…» и при «Open folder»; файл больше 64 КиБ не загружается. Формат и правила — [руководство пользователя](user-guide.md#своя-тема). В каталог app ничего другого не пишет, а файлы тем сам не открывает.
 
 Если `CODELAB_HOME` задан неверно (например, `~user/…`), страница «Connection» показывает причину, а профили недоступны для записи.
 
@@ -89,7 +91,7 @@ CODELAB_HOME="$HOME/.codelab-test" \
 
 | Где | Что |
 |---|---|
-| `~/Library/Preferences/com.example.codelabApp.plist` | настройки окна через `shared_preferences` (ключи с префиксом `flutter.`): недавние проекты `codelab.recent_projects`, снимок рабочего места `codelab.workspace.snapshot` (проект и активная сессия), профиль по умолчанию `codelab.connection.default_profile`, раскладка панелей `codelab.dock.*`, последняя страница настроек `codelab.settings.last_page`, язык интерфейса `codelab.app.language` (`en` или `ru`; для «System» ключа нет) |
+| `~/Library/Preferences/com.example.codelabApp.plist` | настройки окна через `shared_preferences` (ключи с префиксом `flutter.`): недавние проекты `codelab.recent_projects`, снимок рабочего места `codelab.workspace.snapshot` (проект и активная сессия), профиль по умолчанию `codelab.connection.default_profile`, раскладка панелей `codelab.dock.*`, последняя страница настроек `codelab.settings.last_page`, язык интерфейса `codelab.app.language` (`en` или `ru`; для «System» ключа нет), оформление `codelab.app.appearance` (JSON: `version`, `mode` — `light`, `dark` или `system`, `light_theme`, `dark_theme`, `system_accent`; ключа нет, пока оформление не меняли) |
 | `~/Library/Application Support/com.example.codelabApp/logs/` | логи приложения — [ниже](#логи-и-диагностика) |
 
 Имя файла настроек и каталога берётся из идентификатора бандла: другая сборка с другим идентификатором получит отдельные настройки.
@@ -145,6 +147,22 @@ defaults delete com.example.codelabApp
   | `settings.language_save_timeout` | `settings`, warning | `timeout_ms` | при выходе запись выбора языка не завершилась за 3 с; выбор мог не сохраниться |
   | `app.language_preference_invalid` | `app`, warning | нет | при старте после настройки журнала: сохранённое значение незнакомо или не строка; приложение читает его как «System», само значение не пишется |
   | `app.language_preference_read_failed` | `app`, warning | `error_class` | при старте после настройки журнала: хранилище настроек не прочиталось (например, повреждено); приложение стартует как при «System», текста ошибки нет |
+
+- Оформление пишет события в компоненте `settings` (имя своей темы в них не попадает — вместо него `custom`; путей, ключей и значений из файла нет):
+
+  | Событие | Уровень | Поля | Когда |
+  |---|---|---|---|
+  | `app.appearance_resolved` | info | `mode`, `light_theme`, `dark_theme`, `system_accent`, `fallback` | один раз при сборке приложения |
+  | `settings.appearance_changed` | info | `field` (`mode`, `light_theme`, `dark_theme`, `system_accent`), `value`; у тем — `light`, `dark`, `high-contrast` или `custom` | пользователь изменил оформление |
+  | `appearance.theme_loaded` | info | `theme`, `extends`, `warnings`, `code_counts` (число предупреждений по кодам) | пользовательская тема прочитана и применена |
+  | `appearance.theme_invalid` | warning | `theme`, `code`, `line`, `column`, `error_class` | файл темы отклонён; `code` — код проблемы, например `invalidJson` |
+  | `appearance.theme_imported` | info | `outcome`, `error_class` | исход «Import JSON…» |
+  | `appearance.system_accent_failed` | warning | `error_class` | не удалось прочитать системный акцент |
+  | `appearance.catalog_failed` | warning | `error_class`, `failure` (`notADirectory` или `unreadable`) | каталог тем не прочитался; страница показывает встроенные темы и предупреждение с «Reload», пути в событии нет |
+  | `appearance.catalog_discarded` | debug | `reason` | результат устаревшего чтения каталога отброшен |
+  | `appearance.stored_value_invalid`, `appearance.read_failed` | warning | `error_class` (у второго) | при старте: сохранённое значение незнакомо или хранилище не прочиталось |
+  | `appearance.save_failed` | warning | `error_class` | запись выбора не удалась |
+  | `appearance.save_timeout` | warning | `timeout_ms` | при выходе запись не завершилась в срок; выбор мог не сохраниться |
 
 - До выпуска 1.0 тексты сообщений и вывод инструментов в журналах сессий не редактируются — [что попадает в логи и журналы](../../../docs/user/configuration.md#что-попадает-в-логи-и-журналы).
 - Отправка событий на сервер логов включается только при сборке разработчиком через `--dart-define=CODELAB_LOG_SERVER_URL=…` и `--dart-define=CODELAB_LOG_SERVER_KEY=…`. В обычной сборке её нет.

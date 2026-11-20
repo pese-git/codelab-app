@@ -109,7 +109,7 @@ class _CodeLabToolCallTileState extends State<CodeLabToolCallTile> {
                 CodeLabText(
                   secondary,
                   color: row.status == CodeLabToolCallStatus.failed
-                      ? Colors.red
+                      ? CodeLabPalette.of(FluentTheme.of(context)).danger
                       : null,
                 ),
               if (row.children.isNotEmpty) ...[

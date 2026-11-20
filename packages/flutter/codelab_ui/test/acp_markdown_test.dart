@@ -16,7 +16,6 @@ import 'dart:ui' as ui;
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:codelab_ui/src/rendering/codelab_markdown_row.dart';
-import 'package:codelab_ui/src/rendering/escape_for_display.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart'
     show SynchronousFuture, defaultTargetPlatform;

@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 
 import 'codelab_icon.dart';
+import 'codelab_palette.dart';
 import 'codelab_tone.dart';
 
 /// Акцент кнопки.
@@ -59,7 +60,10 @@ class CodeLabButton extends StatelessWidget {
       ),
       CodeLabButtonEmphasis.danger => Button(
         onPressed: onPressed,
-        style: _subtleStyle(context, Colors.red),
+        style: _subtleStyle(
+          context,
+          CodeLabPalette.of(FluentTheme.of(context)).danger,
+        ),
         child: child,
       ),
     };

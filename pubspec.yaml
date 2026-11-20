@@ -159,6 +159,10 @@ melos:
       description: Run codelab_desktop macOS language switch integration test (General -> Русский -> English on a live session without restart; change add-desktop-localization, D9; release/* only).
       run: fvm dart run melos exec --scope=codelab_desktop -- "fvm flutter test integration_test/settings_language_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
 
+    test:e2e:app:appearance:
+      description: Run codelab_desktop macOS appearance page integration test (import acme-night, preview, Use under Dark, restart keeps the theme; change add-app-appearance-page, D9; release/* only).
+      run: fvm dart run melos exec --scope=codelab_desktop -- "fvm flutter test integration_test/settings_appearance_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
+
     test:e2e:app:usage:
       description: Run codelab_desktop macOS session status bar usage integration test (turn and session cost, five counters, context warning; change add-usage-extension) and the Usage pane test (budget block, ledger, CSV; change add-desktop-usage-pane), one file per flutter test run; release/* only.
       # По одному файлу на запуск (как в test:e2e:app:dart-agent); итог ненулевой

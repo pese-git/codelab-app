@@ -14,6 +14,7 @@ import 'navigation/settings_page.dart';
 /// `add-settings-agents-modes` — «Agents & modes» (итерация 1, D9), change
 /// `add-app-skills-page` — «Skills & extensions» (итерация 4, только чтение),
 /// `add-desktop-localization` — «General» с выбором языка (итерация 1, D2),
+/// `add-app-appearance-page` — «Appearance» (итерация 5, D14),
 /// `add-app-keyboard-page` — «Keyboard» (итерация 3, только чтение; у неё нет
 /// ключей конфигурации, её содержимое — каталог сочетаний сборки, поэтому
 /// SETUP-17 её не скрывает, D7); следующие страницы появятся вместе со
@@ -27,6 +28,7 @@ const defaultSettingsPages = SettingsPages(
     SettingsPage.agentsAndModes,
     SettingsPage.skillsAndExtensions,
     SettingsPage.general,
+    SettingsPage.appearance,
     SettingsPage.keyboard,
   },
 );

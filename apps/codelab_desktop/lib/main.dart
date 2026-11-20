@@ -1,13 +1,17 @@
 import 'dart:io' show Platform;
 
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show ProfileSecrets;
+    show InMemoryThemeLibrary, ProfileSecrets, ThemeLibrary;
+import 'package:codelab_client_io/codelab_client_io.dart' show IoThemeLibrary;
 import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'app/app_scope.dart';
+import 'app/appearance/app_appearance_start.dart';
 import 'app/language/app_language_start.dart';
+import 'core/platform/app_appearance_preferences.dart';
+import 'core/platform/system_accent_source.dart';
 import 'core/platform/app_language_preferences.dart';
 import 'app/client_profile_secrets.dart';
 import 'app/codelab_app_widget.dart';
@@ -37,12 +41,32 @@ Future<void> main() async {
     WidgetsBinding.instance.platformDispatcher.locales,
   );
 
+  // Оформление читается до `runApp`, как язык: первый кадр сразу в итоговой
+  // теме, без мигания (`add-app-appearance-page`, D13). Документ, файлы тем двух
+  // режимов (по 1 с на файл) и первое чтение системного акцента (1 с) идут здесь;
+  // `load` и `resolve` не бросают, диагностику пишет `CodeLabAppearanceModule`.
+  final environment = ConnectionEnvironment.of(Platform.environment);
+  final codelabHome = environment.codelabHome;
+  // Недопустимый `CODELAB_HOME` не мешает запуску: пользовательских тем нет.
+  final ThemeLibrary themeLibrary = codelabHome == null
+      ? InMemoryThemeLibrary()
+      : IoThemeLibrary(home: codelabHome);
+  final accentSource = await SystemThemeAccentSource.start();
+  final appearance = await AppAppearanceStart.resolve(
+    load: await const SharedPreferencesAppAppearancePreferences().load(),
+    library: themeLibrary,
+    accentSource: accentSource,
+  );
+
   runApp(
     CodeLabBootstrap(
       logDirectoryPath: logDirectoryPath,
       profileSecrets: profileSecrets,
       profileSecretsOpener: openSecrets,
       language: language,
+      appearance: appearance,
+      systemAccentSource: accentSource,
+      themeLibrary: themeLibrary,
       child: const CodeLabApp(),
     ),
   );

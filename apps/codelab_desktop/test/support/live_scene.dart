@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_client_core/codelab_client_core.dart' show ProjectFiles;
+import 'package:codelab_desktop/app/appearance/app_appearance_start.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/language/app_language_cubit.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
@@ -58,6 +59,7 @@ final class LiveScene {
     CodeLabStdioTransportFactory? stdioTransportFactory,
     ProviderSettingsOpener? providerSettingsOpener,
     Size size = const Size(1440, 900),
+    AppAppearanceStart? appearance,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -73,6 +75,7 @@ final class LiveScene {
       userShellLauncher: userShellLauncher,
       usageCsvSaver: usageCsvSaver,
       providerSettingsOpener: providerSettingsOpener,
+      appearance: appearance,
     );
     final cubit = binding.scope.resolve<CodeLabShellCubit>();
     await tester.pumpWidget(

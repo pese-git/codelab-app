@@ -569,7 +569,7 @@ class SkillsPage extends StatelessWidget {
   ///
   /// Почему таблица: подсказка отказа содержит путь файла из конфигурации, а
   /// переключатель строки таблицы всегда экранирует подпись и подсказку
-  /// (`escapeForDisplay` пакета не экспортируется, D12). Ключ строки —
+  /// (`escapeForDisplay` кита, D12). Ключ строки —
   /// `skills-consent-note-<kind>`, переключателя — `skills-consent-<kind>`.
   Widget _consentTable(
     AppLocalizations l10n,
@@ -676,7 +676,7 @@ class SkillsPage extends StatelessWidget {
 
   /// Тексты диагностик ядра фиксированы, пути — из файлов и недоверенны:
   /// строки рисует таблица с `untrusted`, чтобы управляющие и bidi-символы
-  /// стали видимыми (D12; `escapeForDisplay` пакета не экспортируется).
+  /// стали видимыми (D12; `escapeForDisplay` кита).
   static Widget _diagnosticLines(
     AppLocalizations l10n,
     List<ExtensionDiagnostic> shown,

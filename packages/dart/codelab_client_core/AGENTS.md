@@ -25,6 +25,7 @@
 * `ClientWorkspace.dispose` отписывается от бэкенда и закрывает потоки kit; бэкенд и `AcpClientApplication` закрывает их владелец.
 * Список сессий проекта — часть `WorkspaceState`: открытые сессии, затем сессии агента со статусом `notLoaded`; курсор `session/list` живёт только в kit и не сохраняется (ACP), следующую страницу даёт `loadMoreSessions` (design D3 `add-session-list-and-reload`).
 * `reconnect` загружает открытые сессии через `session/load`, сначала активную; без `loadSession` или при ошибке загрузки сессия становится `detached` с уведомлением, а не подменяется новой (design D5). `session/cancel` перед заменой транспорта kit не шлёт.
+* **Темы (`src/themes/`, change `add-app-appearance-page`, D2, D3).** Формат пользовательской темы, разбор (`ThemeFile.parse`, нестрогий: предупреждения не отменяют тему, ошибки отменяют), закрытый набор ролей `ThemeRole`, значения цвета `ThemeColorValue`, читатель JSON с позициями `json_spans.dart` и порт каталога `ThemeLibrary` (`list`, `read`, `import`) с `InMemoryThemeLibrary`. Результат разбора ЯЗЫКОНЕЗАВИСИМ: `ThemeIssue` — код (`ThemeIssueCode`), позиция (строка и колонка с 1, UTF-16) и аргументы (`key`, `value`, `hint`), без английской строки; текст строит клиент (app — по ARB, CLI — своими строками). Файлов пакет не читает: `dart:io`-адаптер — `IoThemeLibrary` в `codelab_client_io`. Применять роли к виджетам ядро не умеет и не должно: это дело app.
 
 ## 4. Восстановление и снимок
 
