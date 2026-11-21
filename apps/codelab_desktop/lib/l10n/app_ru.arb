@@ -42,7 +42,7 @@
   "workbenchOpenProjectAgentWebSocket": "WebSocket · {detail} · профиль этого окна",
   "workbenchOpenProjectAgentNoteStarts": "Запускается, когда вы откроете папку. До этого ничего не работает.",
   "workbenchOpenProjectAgentNoteConnects": "Подключается, когда вы откроете папку. До этого подключений нет.",
-  "workbenchOpenProjectSettingsLink": "Изменить в Настройки › Подключение",
+  "workbenchOpenProjectSettingsLink": "Изменить в «Настройки › Подключение»",
   "workbenchOpenProjectInfoTitle": "Для новой сессии нужна папка",
   "workbenchOpenProjectInfoBody": "{shortcut} без проекта открывает тот же выбор папки. Открытые папки появляются в боковой панели как недавние проекты.",
   "workbenchOpenProjectDropNotAFolder": "Это файл. Перетащите папку, чтобы открыть её как проект.",

@@ -153,7 +153,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get workbenchOpenProjectSettingsLink =>
-      'Изменить в Настройки › Подключение';
+      'Изменить в «Настройки › Подключение»';
 
   @override
   String get workbenchOpenProjectInfoTitle => 'Для новой сессии нужна папка';

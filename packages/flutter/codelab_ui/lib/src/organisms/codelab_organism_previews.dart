@@ -712,7 +712,7 @@ Widget codelabOpenProjectScreenRuPreview() => _openProjectPreview(
   dropHint: 'Файлы не принимаются — только папка',
   agentName: 'Встроенный агент',
   agentNote: 'Запускается, когда вы откроете папку. До этого ничего не идёт.',
-  settingsLinkLabel: 'Изменить в Настройки › Подключение',
+  settingsLinkLabel: 'Изменить в «Настройки › Подключение»',
   infoTitle: 'Для новой сессии нужна папка',
   infoBody:
       'Ctrl+N без проекта открывает тот же выбор папки. Открытые папки '
