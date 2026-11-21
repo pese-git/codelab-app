@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open project — folder not found</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{height:900px;display:flex;flex-direction:column;overflow:hidden}
+.side{width:272px}
+.grp{display:flex;align-items:center;gap:8px;min-height:32px;margin:2px 0;padding:0 8px;border:0;background:transparent;color:var(--text);border-radius:4px;width:100%;box-sizing:border-box;text-align:left;font-weight:600;cursor:pointer}
+.grp:hover{background:var(--hover)}
+.grp.on{background:var(--sel)}
+.sess{padding-left:30px;gap:10px;min-height:32px}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.center{flex:1;display:flex;align-items:center;justify-content:center;padding:32px 24px;box-sizing:border-box;min-height:0;overflow:auto}
+.col{width:100%;max-width:620px;display:flex;flex-direction:column;gap:16px}
+.hero{width:56px;height:56px;border-radius:12px;background:var(--accent-weak);color:var(--accent-text);display:flex;align-items:center;justify-content:center}
+.hero .ic{width:28px;height:28px}
+.drop{border:1px dashed var(--strong);border-radius:6px;padding:20px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.steps{display:flex;flex-direction:column;gap:0;padding:4px 0}
+.step{display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid var(--divider)}
+.step:first-child{border-top:0}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:8px 12px;align-items:center}
+.empty{padding:6px 12px 6px 30px;font-size:12px;line-height:16px;color:var(--text2)}
+@media (max-width:760px){.root{height:auto}.f-pane,.side{width:100%}.f-nv{flex-wrap:wrap}}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="f-appbar" data-fluent="NavigationAppBar">
+  <span class="f-logo">CL</span>
+  <span class="t-cap">CodeLab</span>
+  <span style="flex: 1"></span>
+  <label class="f-tb" data-fluent="AutoSuggestBox (Ctrl+K)" style="width: 360px">
+    <input type="search" placeholder="Search or run a command" aria-label="Command palette">
+    <span class="t-cap">Ctrl+K</span>
+    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+  </label>
+  <span style="flex: 1"></span>
+  <span class="tag"><span class="f-dot"></span>Agent not started</span>
+</header>
+<div class="f-nv" data-fluent="NavigationView">
+  <nav class="f-pane side" aria-label="Sessions" data-fluent="NavigationPane (open, collapsible)">
+    <div style="display: flex; gap: 4px; align-items: center; padding: 4px 4px 2px">
+      <button class="f-pi" data-fluent="PaneItemAction" style="flex: 1; margin: 0"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session<span class="t-cap t2" style="margin-left: auto">Ctrl+N</span></button>
+    </div>
+    <label class="f-tb" data-fluent="AutoSuggestBox" style="margin: 4px 8px 6px">
+      <input type="search" placeholder="Search sessions" aria-label="Search sessions">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg>
+    </label>
+    <div style="flex: 1; overflow: auto; min-height: 0">
+      <div class="f-ph" data-fluent="PaneItemHeader">Projects</div>
+      <div data-fluent="PaneItemExpander (expanded, selected project)">
+        <button class="grp on" aria-expanded="true" title="legacy-python-agent"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--warn)"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg><span class="nm">legacy-python-agent</span></button>
+        <div class="empty" style="color: var(--warn)">Folder not found</div>
+      </div>
+      <div data-fluent="PaneItemExpander (collapsed)"><button class="grp" aria-expanded="false" title="codelab-agent-workspace"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">codelab-agent-workspace</span><span class="t-cap t2">14</span></button></div>
+      <div data-fluent="PaneItemExpander (collapsed)"><button class="grp" aria-expanded="false" title="notes"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">notes</span><span class="t-cap t2">1</span></button></div>
+      <button class="f-pi" data-fluent="PaneItemAction" style="gap: 10px; color: var(--text2)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Open folder…<span class="t-cap t2" style="margin-left: auto">Ctrl+O</span></button>
+    </div>
+    <div class="f-psep" data-fluent="PaneItemSeparator"></div>
+    <a href="Connection.dc.html" class="f-pi" data-fluent="PaneItem (footer)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Settings</a>
+  </nav>
+  <section class="f-content" data-fluent="NavigationBody">
+    <div class="center" data-fluent="ScaffoldPage">
+      <div class="col">
+        <div style="display: flex; gap: 14px; align-items: center">
+          <div class="hero" style="background: var(--warn-bg); color: var(--warn)"><svg class="ic"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="width: 28px; height: 28px"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg></div>
+          <div style="min-width: 0"><h1 class="t-sub" style="margin: 0">legacy-python-agent</h1><span class="t-cap t2 mono">/Volumes/Work/legacy-python-agent</span></div>
+        </div>
+        <div class="f-ib error" role="alert" data-fluent="InfoBar (error)"><span class="f-ibi">×</span><div style="flex: 1; min-width: 0"><span class="ttl">Can't open the project</span><span class="mono t-cap" style="display: block; margin-top: 4px; overflow-wrap: anywhere">Project folder not found: /Volumes/Work/legacy-python-agent. Choose an existing folder with Open folder….</span>
+          <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap"><button class="f-btn accent"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Open folder…</button><button class="f-btn">Retry</button><button class="f-btn subtle">Remove from recent projects</button></div></div></div>
+        <section class="f-card" style="padding: 16px; display: flex; flex-direction: column; gap: 8px" aria-label="What happened">
+          <span class="t-strong">Nothing was started</span>
+          <span class="t-cap t2">No agent was started for this folder, and no session was created or loaded. If the folder is on a removable or network drive, connect it and press Retry.</span>
+          <span class="t-cap t2">The reason is in diagnostics: level <span class="ic-code">error</span>, source <span class="ic-code">project</span>.</span>
+          <a href="InspectorLog.dc.html" class="f-hl t-cap">Open diagnostics</a>
+        </section>
+      </div>
+    </div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

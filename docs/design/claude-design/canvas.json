@@ -2241,6 +2241,74 @@
    "w": 1180,
    "x": 6300,
    "y": 1600
+  },
+  "ProjectsEmpty.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11a Open project — first start, no project",
+   "w": 1440,
+   "x": 0,
+   "y": 20540
+  },
+  "ProjectsEmpty-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11a Open project — dark",
+   "w": 1440,
+   "x": 0,
+   "y": 20540,
+   "page": "dark"
+  },
+  "ProjectOpening.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11b Open project — starting the agent in the folder",
+   "w": 1440,
+   "x": 1520,
+   "y": 20540
+  },
+  "ProjectOpening-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11b Open project — dark",
+   "w": 1440,
+   "x": 1520,
+   "y": 20540,
+   "page": "dark"
+  },
+  "ProjectReady.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11c Open project — ready, no sessions yet",
+   "w": 1440,
+   "x": 3040,
+   "y": 20540
+  },
+  "ProjectReady-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11c Open project — dark",
+   "w": 1440,
+   "x": 3040,
+   "y": 20540,
+   "page": "dark"
+  },
+  "ProjectNotFound.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11d Open project — folder not found",
+   "w": 1440,
+   "x": 4560,
+   "y": 20540
+  },
+  "ProjectNotFound-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11d Open project — dark",
+   "w": 1440,
+   "x": 4560,
+   "y": 20540,
+   "page": "dark"
   }
  },
  "createdOnFiles": {
@@ -2325,7 +2393,10 @@
   "t-row5f",
   "c-row9",
   "c-row9s",
-  "t-row6"
+  "t-row6",
+  "row12",
+  "row12s",
+  "d-row12"
  ],
  "notes": {
   "c-row1": {
@@ -3085,6 +3156,31 @@
    "fill": "teal",
    "page": "cli",
    "text": "C17 — панели Protocol у CLI нет; кадры ACP видны в headless (§12.5, §9.11). --include-acp добавляет в stream-json строки acp {direction, frame} из того же отвода, что --trace-file, уже после SecretRedactor; без stream-json — код 64. --trace-file пишет кадры прогона в файл. Флаги — change add-cli-stream-json, ещё не реализованы: экран — макет по архитектуре."
+  },
+  "row12": {
+   "kind": "title1",
+   "maxW": 6000,
+   "w": 240,
+   "x": 0,
+   "y": 20280,
+   "text": "Открытие проекта: от пустого окна до готовой папки"
+  },
+  "row12s": {
+   "fill": "blue",
+   "size": 24,
+   "w": 460,
+   "x": 6080,
+   "y": 20540,
+   "text": "R-22, требования «Без выбранного проекта нет папки агента и сессий» и «Агент стартует сам» (agent-workbench-ui; change require-project-folder, D1–D17).\n11a — окно без проекта: агент не стартует, «New session» (Ctrl+N) открывает тот же выбор папки, что «Open folder…». Сюда же ведёт «Start using CodeLab» (07a), если проекта нет.\n11b — папка выбрана: проверка существования, старт агента профиля окна в этой папке, затем session/list. Сессия сама не создаётся; «New session» ждёт агента, второй транспорт не открывается.\n11c — агент готов, сессий в проекте нет. Смена проекта не перезапускает агента и не прерывает ходы других папок.\n11d — папки нет на диске: агент не стартует, сессия не создаётся и не загружается; текст из спецификации, запись в диагностике error / project; Retry — тот же триггер.\n11 (ряд «Вход, команды и диалоги») — выбор проекта со списком недавних."
+  },
+  "d-row12": {
+   "kind": "title1",
+   "maxW": 6000,
+   "page": "dark",
+   "w": 240,
+   "x": 0,
+   "y": 20280,
+   "text": "Открытие проекта — тёмная тема"
   }
  },
  "order": [
@@ -3356,7 +3452,15 @@
   "PhoneDiff.dc.html",
   "PhoneDiff-dark.dc.html",
   "TabletDiff.dc.html",
-  "TabletDiff-dark.dc.html"
+  "TabletDiff-dark.dc.html",
+  "ProjectsEmpty.dc.html",
+  "ProjectsEmpty-dark.dc.html",
+  "ProjectOpening.dc.html",
+  "ProjectOpening-dark.dc.html",
+  "ProjectReady.dc.html",
+  "ProjectReady-dark.dc.html",
+  "ProjectNotFound.dc.html",
+  "ProjectNotFound-dark.dc.html"
  ],
  "pages": [
   {
