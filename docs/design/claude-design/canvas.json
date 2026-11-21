@@ -2591,6 +2591,78 @@
    "x": 7600,
    "y": 20540,
    "page": "dark"
+  },
+  "PhoneProjectSecondPick.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone",
+   "title": "P22f Projects — second project while a turn runs",
+   "w": 390,
+   "x": 2820,
+   "y": 9480
+  },
+  "PhoneProjectSecondPick-dark.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P22f Projects — second project while a turn runs — dark",
+   "w": 390,
+   "x": 2820,
+   "y": 9480
+  },
+  "PhoneProjectSecondOpen.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone",
+   "title": "P22g Sessions — two projects, agent not restarted",
+   "w": 390,
+   "x": 3290,
+   "y": 9480
+  },
+  "PhoneProjectSecondOpen-dark.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P22g Sessions — two projects, agent not restarted — dark",
+   "w": 390,
+   "x": 3290,
+   "y": 9480
+  },
+  "TabletProjectSecondPick.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet",
+   "title": "T16f Tablet — Projects dialog while a turn runs",
+   "w": 1180,
+   "x": 7560,
+   "y": 9620
+  },
+  "TabletProjectSecondPick-dark.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T16f Tablet — Projects dialog while a turn runs — dark",
+   "w": 1180,
+   "x": 7560,
+   "y": 9620
+  },
+  "TabletProjectSecondOpen.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet",
+   "title": "T16g Tablet — second project opened next to the first",
+   "w": 1180,
+   "x": 8820,
+   "y": 9620
+  },
+  "TabletProjectSecondOpen-dark.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T16g Tablet — second project opened next to the first — dark",
+   "w": 1180,
+   "x": 8820,
+   "y": 9620
   }
  },
  "createdOnFiles": {
@@ -3483,7 +3555,7 @@
   },
   "p-row7": {
    "kind": "title1",
-   "maxW": 2740,
+   "maxW": 3680,
    "page": "phone",
    "w": 240,
    "x": 0,
@@ -3495,13 +3567,13 @@
    "page": "phone",
    "size": 24,
    "w": 460,
-   "x": 2820,
+   "x": 3760,
    "y": 9480,
-   "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nP22 — первый старт, проектов нет: «New project»; New session без проекта ведёт сюда.\nP22a — Projects (из P6 / P1): список подпапок, текущий отмечен.\nP22b — New project: имя → папка; занятое имя делает Create недоступной.\nP22c — старт агента «On this device» в папке, затем session/list.\nP22d — сессий нет: New session, Import from Files….\nP22e — папку удалили или переименовали в «Файлах»: текст ошибки — мобильный вариант, на десктопе он ссылается на «Open folder…», которого здесь нет; нужна правка требования.\nWebSocket-профиль: папки на машине агента — здесь не нарисовано, требований нет."
+   "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nP22 — первый старт, проектов нет: «New project»; New session без проекта ведёт сюда.\nP22a — Projects (из P6 / P1): список подпапок, текущий отмечен.\nP22b — New project: имя → папка; занятое имя делает Create недоступной.\nP22c — старт агента «On this device» в папке, затем session/list.\nP22d — сессий нет: New session, Import from Files….\nP22e — папку удалили или переименовали в «Файлах»: текст ошибки — мобильный вариант, на десктопе он ссылается на «Open folder…», которого здесь нет; нужна правка требования.\nP22f — второй проект, пока в notes-app идёт ход: Projects из P6. P22g — P1 с двумя проектами: агент не перезапущен, ход и одобрение в notes-app продолжаются.\nWebSocket-профиль: папки на машине агента — здесь не нарисовано, требований нет."
   },
   "t-row7": {
    "kind": "title1",
-   "maxW": 7480,
+   "maxW": 10000,
    "page": "tablet",
    "w": 240,
    "x": 0,
@@ -3513,13 +3585,13 @@
    "page": "tablet",
    "size": 24,
    "w": 460,
-   "x": 7560,
+   "x": 10080,
    "y": 9620,
-   "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nT16 — первый старт, проектов нет. T16a — диалог Projects (⌘O, пункт «Projects…» в сайдбаре). T16b — New project. T16c — старт агента, сайдбар показывает загрузку сессий. T16d — сессий нет. T16e — папки нет.\nРаскладка — T1 (альбомная, класс «средний»); в портрете то же содержимое с сайдбаром minimal (MOB-3)."
+   "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nT16 — первый старт, проектов нет. T16a — диалог Projects (⌘O, пункт «Projects…» в сайдбаре). T16b — New project. T16c — старт агента, сайдбар показывает загрузку сессий. T16d — сессий нет. T16e — папки нет.\nT16f — диалог Projects, пока в notes-app идёт ход. T16g — второй проект рядом с первым: обе группы в сайдбаре, агент не перезапущен.\nРаскладка — T1 (альбомная, класс «средний»); в портрете то же содержимое с сайдбаром minimal (MOB-3)."
   },
   "dp-row7": {
    "kind": "title1",
-   "maxW": 2740,
+   "maxW": 3680,
    "page": "phone-dark",
    "w": 240,
    "x": 0,
@@ -3528,7 +3600,7 @@
   },
   "dt-row7": {
    "kind": "title1",
-   "maxW": 7480,
+   "maxW": 10000,
    "page": "tablet-dark",
    "w": 240,
    "x": 0,
@@ -3863,7 +3935,15 @@
   "ProjectSecondPick.dc.html",
   "ProjectSecondPick-dark.dc.html",
   "ProjectSecondOpen.dc.html",
-  "ProjectSecondOpen-dark.dc.html"
+  "ProjectSecondOpen-dark.dc.html",
+  "PhoneProjectSecondPick.dc.html",
+  "PhoneProjectSecondPick-dark.dc.html",
+  "PhoneProjectSecondOpen.dc.html",
+  "PhoneProjectSecondOpen-dark.dc.html",
+  "TabletProjectSecondPick.dc.html",
+  "TabletProjectSecondPick-dark.dc.html",
+  "TabletProjectSecondOpen.dc.html",
+  "TabletProjectSecondOpen-dark.dc.html"
  ],
  "pages": [
   {
