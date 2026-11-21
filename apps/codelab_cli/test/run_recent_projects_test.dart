@@ -151,6 +151,57 @@ void main() {
     });
   });
 
+  // Точка записи — после успешного `connect` (D6, уточнение 2026-11-22;
+  // spec «Неудачный старт не записывает папку», задача 3.7). Запуск, который
+  // не начался, не попадает в список; `--resume` идёт после записи, поэтому
+  // проверяет именно порядок «подключение, запись, загрузка сессии».
+  group('неудачный старт агента не записывает папку (задача 3.7)', () {
+    test('встроенный агент без модели: код 64, файла нет', () async {
+      // Конфига нет: модель не настроена. Настоящий открыватель (без шва)
+      // бросает `EmbeddedAgentConfigException`; `stdoutIsTerminal: false` —
+      // мастер первого запуска не стартует.
+      final io = FakeCliIo(stdinIsTerminal: true);
+
+      final code = await runCodelab(
+        ['-C', project, '--resume', 'no-such-session'],
+        environment: env(),
+        io: io,
+      );
+
+      expect(code, 64, reason: io.stderrText);
+      expect(recent.existsSync(), isFalse);
+    });
+
+    test('stdio: с несуществующей командой: код 1, файла нет', () async {
+      final io = FakeCliIo(stdinIsTerminal: true);
+
+      final code = await runCodelab(
+        [
+          '-C',
+          project,
+          '-a',
+          'stdio:$home/no-such-agent',
+          '--resume',
+          'no-such-session',
+        ],
+        environment: env(),
+        io: io,
+      );
+
+      expect(code, 1, reason: io.stderrText);
+      expect(recent.existsSync(), isFalse);
+    });
+
+    test('страж: --resume без такой сессии после успешного подключения '
+        'по-прежнему записывает папку (Q3)', () async {
+      File('$home/config.yaml').writeAsStringSync(_readyConfig);
+
+      await repl(['-C', project]);
+
+      expect(recordedPaths(), [project]);
+    });
+  });
+
   group('остальные режимы не создают и не меняют файл', () {
     test('-p: файла нет', () async {
       final io = FakeCliIo();

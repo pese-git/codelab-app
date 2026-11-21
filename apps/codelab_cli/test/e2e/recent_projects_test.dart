@@ -176,4 +176,33 @@ void main() async {
     expect(await p.exitCode, 130, reason: p.text);
     expect(recent.existsSync(), isFalse);
   }, skip: skip);
+
+  // Точка записи — после успешного подключения (D6, уточнение 2026-11-22;
+  // spec «Неудачный старт не записывает папку», задача 3.7).
+  test('cli/recent-projects-no-model: обычный REPL без модели — код 64, '
+      'папка не записана', () async {
+    // Нет провайдера и модели, а мастер первого запуска пропущен: stdout
+    // перенаправлен, поэтому терминалом остаётся только stdin.
+    File('$home/config.yaml').writeAsStringSync(_emptyConfig);
+
+    final p = await PtyProcess.start('sh', [
+      '-c',
+      '"\$0" "\$@" >/dev/null',
+      dartExecutable(),
+      await CliProcess.kernelOf(CliEntry.production),
+      '-C',
+      project,
+    ], environment: env());
+
+    expect(await p.exitCode, 64, reason: p.text);
+    expect(recent.existsSync(), isFalse);
+  }, skip: skip);
+
+  test('cli/recent-projects-start-failure: REPL с несуществующим агентом '
+      '— код 1, папка не записана', () async {
+    final p = await pty(['-a', 'stdio:$home/no-such-agent']);
+
+    expect(await p.exitCode, 1, reason: p.text);
+    expect(recent.existsSync(), isFalse);
+  }, skip: skip);
 }
