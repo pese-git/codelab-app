@@ -2,15 +2,26 @@ import 'package:codelab_client_core/codelab_client_core.dart';
 
 import 'json_file.dart';
 
-/// [RecentProjectsStore] в JSON-файле.
+/// [RecentProjectsStore] в общем JSON-файле `$CODELAB_HOME/recent_projects.json`.
 ///
-/// Почему: у CLI нет `shared_preferences`, а правило недавних проектов то же,
-/// что в app: последний открытый — первым, не больше `recentProjectsLimit`
-/// (add-open-project-picker/design.md, Decision 4; `09-10`, задача 5.8).
+/// Почему: список недавних проектов общий у app и CLI и не должен зависеть
+/// от идентификатора бандла app (change `share-recent-projects-store`, D1).
+/// Формат — `{"version": 1, "projects": [{"path", "lastOpenedAt"}]}` по
+/// образцу `profiles.json`.
+///
+/// Для чего: хранит список; правило «одна запись на путь, последний первым,
+/// не больше `recentProjectsLimit`» не содержит, а берёт у kit
+/// ([mergeRecentProjects], D5).
 ///
 /// Как использовать: `JsonFileRecentProjectsStore(path)`; [clock] — для
-/// детерминированных тестов. Нет файла — пустой список; битый файл —
-/// `FormatException`.
+/// детерминированных тестов. Нет файла — пустой список. Файл не JSON-объект,
+/// с другой `version`, без списка `projects` или с записью неверного вида —
+/// `FormatException` (не `TypeError`); [record] и [merge] при этом файл НЕ
+/// меняют, чтобы не затереть данные более нового клиента или правку
+/// пользователя (D2). Операции одного экземпляра идут по очереди — две
+/// записи без ожидания друг друга не теряются, ошибка одной не отменяет
+/// следующие (D3). Между процессами порядок не гарантирован: при столкновении
+/// может потеряться одна запись, файл остаётся целым (D3).
 final class JsonFileRecentProjectsStore implements RecentProjectsStore {
   JsonFileRecentProjectsStore(this.path, {DateTime Function()? clock})
     : _clock = clock ?? DateTime.now;
@@ -18,31 +29,78 @@ final class JsonFileRecentProjectsStore implements RecentProjectsStore {
   final String path;
   final DateTime Function() _clock;
 
+  static const _version = 1;
+
+  /// Хвост очереди операций; ошибки в нём погашены, их получает вызывающий.
+  Future<void> _tail = Future<void>.value();
+
   @override
-  Future<List<RecentProject>> load() async {
+  Future<List<RecentProject>> load() => _enqueue(_read);
+
+  @override
+  Future<void> record(String projectPath) => _enqueue(() async {
+    final current = await _read();
+    await _write(
+      mergeRecentProjects([
+        RecentProject(path: projectPath, lastOpenedAt: _clock()),
+      ], current),
+    );
+  });
+
+  /// Сливает [projects] с текущим списком: `mergeRecentProjects(projects,
+  /// текущий)` (D5).
+  ///
+  /// Нужен одному потребителю — одноразовому переносу из прежнего хранилища
+  /// (D4), поэтому в порт не входит (§13).
+  Future<void> merge(Iterable<RecentProject> projects) => _enqueue(() async {
+    final current = await _read();
+    await _write(mergeRecentProjects(projects, current));
+  });
+
+  /// Ставит [operation] после предыдущих; результат или ошибка уходят
+  /// вызывающему, а очередь продолжается (D3).
+  Future<T> _enqueue<T>(Future<T> Function() operation) {
+    final result = _tail.then((_) => operation());
+    _tail = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
+
+  Future<List<RecentProject>> _read() async {
     final json = await readJsonObject(path);
-    final projects = json?['projects'];
     if (json == null) {
       return const [];
     }
+    if (json['version'] != _version) {
+      throw FormatException('Unsupported recent projects version in $path.');
+    }
+    final projects = json['projects'];
     if (projects is! List<Object?>) {
       throw FormatException('Expected a "projects" list in $path.');
     }
-    return [
-      for (final project in projects)
-        RecentProject.fromJson(project as Map<String, Object?>),
-    ];
+    return [for (final project in projects) _decode(project)];
   }
 
-  @override
-  Future<void> record(String projectPath) async {
-    final current = await load();
-    final updated = [
-      RecentProject(path: projectPath, lastOpenedAt: _clock()),
-      ...current.where((project) => project.path != projectPath),
-    ].take(recentProjectsLimit);
-    await writeJsonObject(path, {
-      'projects': [for (final project in updated) project.toJson()],
-    });
+  RecentProject _decode(Object? json) {
+    if (json is! Map<String, Object?>) {
+      throw FormatException('Expected a project object in $path.');
+    }
+    final projectPath = json['path'];
+    final openedAt = json['lastOpenedAt'];
+    if (projectPath is! String || projectPath.isEmpty) {
+      throw FormatException('Expected a non-empty "path" in $path.');
+    }
+    if (openedAt is! String) {
+      throw FormatException('Expected a "lastOpenedAt" string in $path.');
+    }
+    // `DateTime.parse` сам бросает `FormatException` на неверной дате.
+    return RecentProject(
+      path: projectPath,
+      lastOpenedAt: DateTime.parse(openedAt),
+    );
   }
+
+  Future<void> _write(List<RecentProject> projects) => writeJsonObject(path, {
+    'version': _version,
+    'projects': [for (final project in projects) project.toJson()],
+  });
 }

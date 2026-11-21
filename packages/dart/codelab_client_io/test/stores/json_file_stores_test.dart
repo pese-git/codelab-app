@@ -379,7 +379,7 @@ void main() {
       test(
         'merge() takes the later time per path and keeps the order',
         () async {
-          var now = DateTime.utc(2026, 11, 22, 9);
+          final now = DateTime.utc(2026, 11, 22, 9);
           final store = JsonFileRecentProjectsStore(path, clock: () => now);
           await store.record('/work/a');
           final incoming = [
