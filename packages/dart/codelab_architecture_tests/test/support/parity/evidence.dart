@@ -478,6 +478,23 @@ ExistenceReport checkEvidenceExists({
     for (final item in evidence) {
       if (!evidenceExists(item, repoRoot, index: index)) {
         failures.add('${row.id} ${item.label} missing');
+        continue;
+      }
+      // Строка матрицы — цель агента, а фикстуру без роли `agent` агентский
+      // корпус пропускает: ночной `parity` дал бы ей `skipped` (D5). Ловим
+      // такую ссылку уже здесь, в каждом прогоне сторожа: так 2026-11-16
+      // упоминание клиентской фикстуры в пояснении C-05 молча стало
+      // доказательством и уронило ночные прогоны.
+      if (item.kind == EvidenceKind.acp) {
+        final roles = fixtureRoles(
+          File(p.join(repoRoot, acpFixturesDir, '${item.id}.json')),
+        );
+        if (!roles.contains('agent')) {
+          failures.add(
+            '${row.id} ${item.label} has roles [${roles.join(', ')}] '
+            'without "agent"',
+          );
+        }
       }
     }
   }

@@ -115,6 +115,26 @@ void main() {
 
       expect(report.failures, ['R-02 acp/b missing']);
     });
+
+    // Фикстуру только с ролью `client` агентский корпус пропускает, и ночной
+    // `parity` даёт ей `skipped` (C-05, 2026-11-16 — 2026-11-21). Сторож
+    // ловит такую ссылку сразу, в каждом прогоне, а не только ночью.
+    test('фикстура без роли agent — не доказательство строки', () {
+      _write(
+        'packages/dart/codelab_acp_testing/fixtures/acp/client-only.json',
+        '{"roles": ["client"]}',
+      );
+      _write(
+        'packages/dart/codelab_acp_testing/fixtures/acp/both.json',
+        '{"roles": ["client", "agent"]}',
+      );
+
+      final report = _check([_row('C-05', '`acp/client-only`, `acp/both`')]);
+
+      expect(report.failures, [
+        'C-05 acp/client-only has roles [client] without "agent"',
+      ]);
+    });
   });
 
   group('cli/<id> и core/<id>: поиск по первому литералу test( и group(', () {
