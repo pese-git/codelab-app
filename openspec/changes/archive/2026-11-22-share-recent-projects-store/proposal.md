@@ -2,10 +2,10 @@
 
 Список недавних проектов у двух клиентов CodeLab сейчас разный и хранится в разных местах:
 
-- CodeLab app пишет его в `shared_preferences` под ключом `codelab.recent_projects` (`SharedPreferencesRecentProjectsStore`, `apps/codelab_desktop/lib/core/platform/`). На macOS это `flutter.codelab.recent_projects` в `~/Library/Preferences/com.example.codelabApp.plist`. Имя файла берётся из идентификатора бандла, а задача 9.4 дорожной карты ([`delivery-roadmap.md`](../../../docs/architecture/proposals/delivery-roadmap.md), §4.5) заменит `com.example.codelabApp` постоянным идентификатором. После этого список пропадёт.
+- CodeLab app пишет его в `shared_preferences` под ключом `codelab.recent_projects` (`SharedPreferencesRecentProjectsStore`, `apps/codelab_desktop/lib/core/platform/`). На macOS это `flutter.codelab.recent_projects` в `~/Library/Preferences/com.example.codelabApp.plist`. Имя файла берётся из идентификатора бандла, а задача 9.4 дорожной карты ([`delivery-roadmap.md`](../../../../docs/architecture/proposals/delivery-roadmap.md), §4.5) заменит `com.example.codelabApp` постоянным идентификатором. После этого список пропадёт.
 - `codelab` недавние проекты не пишет и не читает. `JsonFileRecentProjectsStore` из `codelab_client_io` есть, он описан в spec `acp-client-kit` («IO-адаптеры клиента»), но ни одно приложение его не создаёт.
 
-Профили подключения уже решают ту же задачу: один файл `$CODELAB_HOME/profiles.json` на app и CLI (design.md change [`add-app-settings-shell`](../archive/2026-11-05-add-app-settings-shell/design.md), D5, D7). Недавние проекты должны лежать так же: папка, открытая в `codelab`, видна в app, и список не зависит от идентификатора бандла.
+Профили подключения уже решают ту же задачу: один файл `$CODELAB_HOME/profiles.json` на app и CLI (design.md change [`add-app-settings-shell`](../2026-11-05-add-app-settings-shell/design.md), D5, D7). Недавние проекты должны лежать так же: папка, открытая в `codelab`, видна в app, и список не зависит от идентификатора бандла.
 
 Ещё одно требование: прогоны не должны засорять список. На машине разработчика список app сейчас целиком состоит из временных папок `/private/tmp/...` от smoke-прогонов. Когда список станет общим, это правило нужно и для CLI: его запускают скрипты, CI и e2e-тесты.
 
