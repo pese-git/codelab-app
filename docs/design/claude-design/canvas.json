@@ -2533,6 +2533,136 @@
    "w": 1180,
    "x": 6300,
    "y": 9620
+  },
+  "NavProject.dc.html": {
+   "h": 900,
+   "page": "nav",
+   "title": "Open project flow — codelab_app",
+   "w": 2160,
+   "x": 0,
+   "y": 4700
+  },
+  "NavPhoneProject.dc.html": {
+   "h": 900,
+   "page": "phone",
+   "title": "Navigation graph — phone, opening a project",
+   "w": 2160,
+   "x": 0,
+   "y": 10844
+  },
+  "NavTabletProject.dc.html": {
+   "h": 900,
+   "page": "tablet",
+   "title": "Navigation graph — tablet, opening a project",
+   "w": 2160,
+   "x": 0,
+   "y": 10960
+  },
+  "ProjectSecondPick.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11e Open project — second project: Open folder… while a turn runs",
+   "w": 1440,
+   "x": 6080,
+   "y": 20540
+  },
+  "ProjectSecondPick-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11e Open project — dark",
+   "w": 1440,
+   "x": 6080,
+   "y": 20540,
+   "page": "dark"
+  },
+  "ProjectSecondOpen.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11f Open project — second project opened next to the first",
+   "w": 1440,
+   "x": 7600,
+   "y": 20540
+  },
+  "ProjectSecondOpen-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11f Open project — dark",
+   "w": 1440,
+   "x": 7600,
+   "y": 20540,
+   "page": "dark"
+  },
+  "PhoneProjectSecondPick.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone",
+   "title": "P22f Projects — second project while a turn runs",
+   "w": 390,
+   "x": 2820,
+   "y": 9480
+  },
+  "PhoneProjectSecondPick-dark.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P22f Projects — second project while a turn runs — dark",
+   "w": 390,
+   "x": 2820,
+   "y": 9480
+  },
+  "PhoneProjectSecondOpen.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone",
+   "title": "P22g Sessions — two projects, agent not restarted",
+   "w": 390,
+   "x": 3290,
+   "y": 9480
+  },
+  "PhoneProjectSecondOpen-dark.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P22g Sessions — two projects, agent not restarted — dark",
+   "w": 390,
+   "x": 3290,
+   "y": 9480
+  },
+  "TabletProjectSecondPick.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet",
+   "title": "T16f Tablet — Projects dialog while a turn runs",
+   "w": 1180,
+   "x": 7560,
+   "y": 9620
+  },
+  "TabletProjectSecondPick-dark.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T16f Tablet — Projects dialog while a turn runs — dark",
+   "w": 1180,
+   "x": 7560,
+   "y": 9620
+  },
+  "TabletProjectSecondOpen.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet",
+   "title": "T16g Tablet — second project opened next to the first",
+   "w": 1180,
+   "x": 8820,
+   "y": 9620
+  },
+  "TabletProjectSecondOpen-dark.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T16g Tablet — second project opened next to the first — dark",
+   "w": 1180,
+   "x": 8820,
+   "y": 9620
   }
  },
  "createdOnFiles": {
@@ -2627,7 +2757,9 @@
   "t-row7",
   "t-row7s",
   "dp-row7",
-  "dt-row7"
+  "dt-row7",
+  "p-row8",
+  "t-row8"
  ],
  "notes": {
   "c-row1": {
@@ -3390,7 +3522,7 @@
   },
   "row12": {
    "kind": "title1",
-   "maxW": 6000,
+   "maxW": 9040,
    "w": 240,
    "x": 0,
    "y": 20280,
@@ -3400,13 +3532,13 @@
    "fill": "blue",
    "size": 24,
    "w": 460,
-   "x": 6080,
+   "x": 9120,
    "y": 20540,
-   "text": "R-22, требования «Без выбранного проекта нет папки агента и сессий» и «Агент стартует сам» (agent-workbench-ui; change require-project-folder, D1–D17).\n11a — окно без проекта: агент не стартует, «New session» (Ctrl+N) открывает тот же выбор папки, что «Open folder…». Сюда же ведёт «Start using CodeLab» (07a), если проекта нет.\n11b — папка выбрана: проверка существования, старт агента профиля окна в этой папке, затем session/list. Сессия сама не создаётся; «New session» ждёт агента, второй транспорт не открывается.\n11c — агент готов, сессий в проекте нет. Смена проекта не перезапускает агента и не прерывает ходы других папок.\n11d — папки нет на диске: агент не стартует, сессия не создаётся и не загружается; текст из спецификации, запись в диагностике error / project; Retry — тот же триггер.\n11 (ряд «Вход, команды и диалоги») — выбор проекта со списком недавних."
+   "text": "R-22, требования «Без выбранного проекта нет папки агента и сессий» и «Агент стартует сам» (agent-workbench-ui; change require-project-folder, D1–D17).\n11a — окно без проекта: агент не стартует, «New session» (Ctrl+N) открывает тот же выбор папки, что «Open folder…». Сюда же ведёт «Start using CodeLab» (07a), если проекта нет.\n11b — папка выбрана: проверка существования, старт агента профиля окна в этой папке, затем session/list. Сессия сама не создаётся; «New session» ждёт агента, второй транспорт не открывается.\n11c — агент готов, сессий в проекте нет. Смена проекта не перезапускает агента и не прерывает ходы других папок.\n11d — папки нет на диске: агент не стартует, сессия не создаётся и не загружается; текст из спецификации, запись в диагностике error / project; Retry — тот же триггер.\n11e — второй проект при уже открытом: «Open folder…» в сайдбаре (или Ctrl+O → 11) открывает системный выбор папки, пока в первом проекте идёт ход.\n11f — второй проект открыт рядом: обе группы в сайдбаре, агент не перезапущен, ход и одобрение в codelab-app продолжаются; недавний проект открывается так же — раскрытием группы, без диалога.\n11 (ряд «Вход, команды и диалоги») — выбор проекта со списком недавних."
   },
   "d-row12": {
    "kind": "title1",
-   "maxW": 6000,
+   "maxW": 9040,
    "page": "dark",
    "w": 240,
    "x": 0,
@@ -3423,7 +3555,7 @@
   },
   "p-row7": {
    "kind": "title1",
-   "maxW": 2740,
+   "maxW": 3680,
    "page": "phone",
    "w": 240,
    "x": 0,
@@ -3435,13 +3567,13 @@
    "page": "phone",
    "size": 24,
    "w": 460,
-   "x": 2820,
+   "x": 3760,
    "y": 9480,
-   "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nP22 — первый старт, проектов нет: «New project»; New session без проекта ведёт сюда.\nP22a — Projects (из P6 / P1): список подпапок, текущий отмечен.\nP22b — New project: имя → папка; занятое имя делает Create недоступной.\nP22c — старт агента «On this device» в папке, затем session/list.\nP22d — сессий нет: New session, Import from Files….\nP22e — папку удалили или переименовали в «Файлах»: текст ошибки — мобильный вариант, на десктопе он ссылается на «Open folder…», которого здесь нет; нужна правка требования.\nWebSocket-профиль: папки на машине агента — здесь не нарисовано, требований нет."
+   "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nP22 — первый старт, проектов нет: «New project»; New session без проекта ведёт сюда.\nP22a — Projects (из P6 / P1): список подпапок, текущий отмечен.\nP22b — New project: имя → папка; занятое имя делает Create недоступной.\nP22c — старт агента «On this device» в папке, затем session/list.\nP22d — сессий нет: New session, Import from Files….\nP22e — папку удалили или переименовали в «Файлах»: текст ошибки — мобильный вариант, на десктопе он ссылается на «Open folder…», которого здесь нет; нужна правка требования.\nP22f — второй проект, пока в notes-app идёт ход: Projects из P6. P22g — P1 с двумя проектами: агент не перезапущен, ход и одобрение в notes-app продолжаются.\nWebSocket-профиль: папки на машине агента — здесь не нарисовано, требований нет."
   },
   "t-row7": {
    "kind": "title1",
-   "maxW": 7480,
+   "maxW": 10000,
    "page": "tablet",
    "w": 240,
    "x": 0,
@@ -3453,13 +3585,13 @@
    "page": "tablet",
    "size": 24,
    "w": 460,
-   "x": 7560,
+   "x": 10080,
    "y": 9620,
-   "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nT16 — первый старт, проектов нет. T16a — диалог Projects (⌘O, пункт «Projects…» в сайдбаре). T16b — New project. T16c — старт агента, сайдбар показывает загрузку сессий. T16d — сессий нет. T16e — папки нет.\nРаскладка — T1 (альбомная, класс «средний»); в портрете то же содержимое с сайдбаром minimal (MOB-3)."
+   "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nT16 — первый старт, проектов нет. T16a — диалог Projects (⌘O, пункт «Projects…» в сайдбаре). T16b — New project. T16c — старт агента, сайдбар показывает загрузку сессий. T16d — сессий нет. T16e — папки нет.\nT16f — диалог Projects, пока в notes-app идёт ход. T16g — второй проект рядом с первым: обе группы в сайдбаре, агент не перезапущен.\nРаскладка — T1 (альбомная, класс «средний»); в портрете то же содержимое с сайдбаром minimal (MOB-3)."
   },
   "dp-row7": {
    "kind": "title1",
-   "maxW": 2740,
+   "maxW": 3680,
    "page": "phone-dark",
    "w": 240,
    "x": 0,
@@ -3468,12 +3600,30 @@
   },
   "dt-row7": {
    "kind": "title1",
-   "maxW": 7480,
+   "maxW": 10000,
    "page": "tablet-dark",
    "w": 240,
    "x": 0,
    "y": 9360,
    "text": "Тёмная тема — планшет: открытие проекта"
+  },
+  "p-row8": {
+   "kind": "title1",
+   "maxW": 2160,
+   "page": "phone",
+   "w": 240,
+   "x": 0,
+   "y": 10584,
+   "text": "Смартфон: граф открытия проекта"
+  },
+  "t-row8": {
+   "kind": "title1",
+   "maxW": 2160,
+   "page": "tablet",
+   "w": 240,
+   "x": 0,
+   "y": 10700,
+   "text": "Планшет: граф открытия проекта"
   }
  },
  "order": [
@@ -3778,7 +3928,22 @@
   "TabletProjectReady.dc.html",
   "TabletProjectReady-dark.dc.html",
   "TabletProjectNotFound.dc.html",
-  "TabletProjectNotFound-dark.dc.html"
+  "TabletProjectNotFound-dark.dc.html",
+  "NavProject.dc.html",
+  "NavPhoneProject.dc.html",
+  "NavTabletProject.dc.html",
+  "ProjectSecondPick.dc.html",
+  "ProjectSecondPick-dark.dc.html",
+  "ProjectSecondOpen.dc.html",
+  "ProjectSecondOpen-dark.dc.html",
+  "PhoneProjectSecondPick.dc.html",
+  "PhoneProjectSecondPick-dark.dc.html",
+  "PhoneProjectSecondOpen.dc.html",
+  "PhoneProjectSecondOpen-dark.dc.html",
+  "TabletProjectSecondPick.dc.html",
+  "TabletProjectSecondPick-dark.dc.html",
+  "TabletProjectSecondOpen.dc.html",
+  "TabletProjectSecondOpen-dark.dc.html"
  ],
  "pages": [
   {
