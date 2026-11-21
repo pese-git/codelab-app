@@ -180,7 +180,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ];
         final current = state.step.index;
         final document = state.document;
-        final background = FluentTheme.of(context).scaffoldBackgroundColor;
+        final theme = FluentTheme.of(context);
+        final background = theme.scaffoldBackgroundColor;
+        // Фон панели документа непрозрачный: `scaffoldBackgroundColor` у
+        // Fluent полупрозрачный (под ним задумана слюда), и шаг просвечивал бы
+        // сквозь документ (ручная проверка 2026-11-21).
+        final panelBackground = theme.resources.solidBackgroundFillColorBase;
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -248,7 +253,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             if (document != null)
               _DocumentPanel(
                 tab: document,
-                background: background,
+                background: panelBackground,
                 backFocus: _backFocus,
                 onClose: context.read<OnboardingCubit>().closeDocument,
               ),
@@ -311,7 +316,21 @@ class _DocumentPanel extends StatelessWidget {
                 ),
               ),
             ),
-            Expanded(child: LegalPageHost(initialTab: tab)),
+            // Та же прокручиваемая колонка, в которой `settings_shell` держит
+            // страницы настроек: без неё `LegalPage` (колонка без ограничения
+            // высоты) переполняет малое окно.
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(40, 0, 40, 40),
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1000),
+                    child: LegalPageHost(initialTab: tab),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),

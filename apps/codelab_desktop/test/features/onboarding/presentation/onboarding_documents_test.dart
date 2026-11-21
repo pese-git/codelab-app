@@ -105,11 +105,13 @@ void main() {
   /// Доводит onboarding до «Privacy» кнопками.
   Future<void> toPrivacy(WidgetTester tester) async {
     while (_key('onboarding-step-privacy').evaluate().isEmpty) {
-      if (_key('onboarding-next').evaluate().isNotEmpty) {
-        await tester.tap(_key('onboarding-next'));
-      } else {
-        await tester.tap(_key('onboarding-model-later'));
-      }
+      // В малом окне кнопки под сгибом: без прокрутки тап промахивается и
+      // цикл не кончается.
+      final next = _key('onboarding-next').evaluate().isNotEmpty
+          ? _key('onboarding-next')
+          : _key('onboarding-model-later');
+      await tester.ensureVisible(next);
+      await tester.tap(next);
       await tester.pumpAndSettle();
     }
   }
@@ -265,5 +267,57 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(preferences.marked, 1);
+  });
+
+  // Дефекты ручной проверки 2026-11-21: панель документа просвечивала
+  // (фон Fluent `scaffoldBackgroundColor` прозрачный) и `LegalPage` не имела
+  // ограничения по высоте (переполнение на малом окне). Страница настроек
+  // кладёт `LegalPage` в прокручиваемую колонку оболочки (`settings_shell`):
+  // панель обязана делать то же.
+  group('панель документа: фон и размеры (ручная проверка)', () {
+    testWidgets('панель непрозрачна и перекрывает шаг: ни виджеты шага, ни '
+        'нажатия не проходят сквозь неё', (tester) async {
+      await pumpOnboarding(tester, readiness: const ProviderReady('llm/m1'));
+      await toPrivacy(tester);
+      await tester.tap(_key('onboarding-privacy-policy'));
+      await tester.pumpAndSettle();
+
+      final panel = tester.widget<ColoredBox>(_key('onboarding-document'));
+      expect(panel.color.a, 1.0, reason: 'фон панели не прозрачный');
+      expect(_key('onboarding-finish').hitTestable(), findsNothing);
+      expect(_key('onboarding-privacy-policy').hitTestable(), findsNothing);
+    });
+
+    testWidgets('окно 900 × 537: переполнения нет, документ прокручивается', (
+      tester,
+    ) async {
+      // Настоящая политика длиннее окна; короткая фикстура переполнения не
+      // показала бы.
+      fixture = LegalFixture(
+        assets: {
+          ...legalFixtureAssets,
+          'assets/legal/PRIVACY.md':
+              '# Privacy EN\n\n${List.generate(120, (i) => 'Line $i of the policy.\n').join('\n')}',
+        },
+      );
+      await pumpOnboarding(tester, readiness: const ProviderReady('llm/m1'));
+      tester.view.physicalSize = const Size(900, 537);
+      await tester.pumpAndSettle();
+      await toPrivacy(tester);
+
+      await tester.ensureVisible(_key('onboarding-privacy-policy'));
+      await tester.tap(_key('onboarding-privacy-policy'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.descendant(
+          of: _key('onboarding-document'),
+          matching: find.byType(SingleChildScrollView),
+        ),
+        findsWidgets,
+      );
+      expect(_key('onboarding-document-back'), findsOneWidget);
+    });
   });
 }
