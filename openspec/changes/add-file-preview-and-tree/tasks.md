@@ -152,3 +152,4 @@
 
 - [ ] 6.1 `[desktop]` Строка D-13 в `agent-parity-goals.md` — выполнено, со ссылками на тесты; экран 03 в `delivery-roadmap.md` §10.1.
 - [ ] 6.2 Проверки затронутого (§21) по каждой итерации, `openspec validate add-file-preview-and-tree --strict`. Полный `melos run check` — только по просьбе пользователя.
+- [ ] 6.3 Перед архивированием: требование acp-client-kit «IO-адаптеры клиента» в `openspec/specs/` уже изменено архивированным change [`share-recent-projects-store`](../archive/2026-11-22-share-recent-projects-store/tasks.md) (задача 5.4 там). В MODIFIED-дельту этого change перенести из текущей спецификации пункт `JsonFileRecentProjectsStore` (`$CODELAB_HOME/recent_projects.json` …) и первую фразу абзаца о Flutter-плагинах (без `SharedPreferencesRecentProjectsStore`). Иначе архивирование вернёт прежний текст.
