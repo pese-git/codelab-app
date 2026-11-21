@@ -846,12 +846,16 @@ final class CodeLabPlatformModule extends Module {
     );
     // Недавние проекты — файл в `$CODELAB_HOME`, общий с CLI (D1, D8);
     // недопустимый дом — заглушка с причиной, ключ `shared_preferences` и
-    // файлы не трогаются. Перенос прежнего списка — итерация 4 (D4).
+    // файлы не трогаются (D4: ключ сохраняется до исправления окружения).
+    // Обёртка переноса живёт до первого `stable` (D9, Q2 (б)).
     bind<RecentProjectsStore>().toInstance(
       _recentProjectsStore ??
           switch (_environment.codelabHome) {
-            final home? => JsonFileRecentProjectsStore(
-              p.join(home, 'recent_projects.json'),
+            final home? => MigratingRecentProjectsStore(
+              target: JsonFileRecentProjectsStore(
+                p.join(home, 'recent_projects.json'),
+              ),
+              logger: _recentProjectsLogger(),
             ),
             null => UnavailableRecentProjectsStore(
               _environment.homeProblem ?? 'the home folder is not available',
@@ -1500,6 +1504,13 @@ Logger _workbenchLogger() => StructuredLogLogger(
 Logger codeLabAppLogger() => StructuredLogLogger(
   'codelab_desktop.app',
 ).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'app'});
+
+/// Логгер переноса недавних проектов (D11): компонент `recent_projects`.
+Logger _recentProjectsLogger() =>
+    StructuredLogLogger('codelab_desktop.recent_projects').bind({
+      logCategoryKey: applicationLogCategory,
+      logComponentKey: 'recent_projects',
+    });
 
 Logger _settingsLogger() => StructuredLogLogger(
   'codelab_desktop.settings',

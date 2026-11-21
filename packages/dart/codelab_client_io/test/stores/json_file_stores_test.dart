@@ -437,6 +437,29 @@ void main() {
         expect(File(path).readAsStringSync(), '{not json');
       });
 
+      test('record("") and merge with an empty path throw ArgumentError and '
+          'keep the file', () async {
+        // Инварианты записи = инварианты чтения: запись с пустым `path`
+        // сделала бы файл нечитаемым (строгое чтение, D2).
+        final store = JsonFileRecentProjectsStore(path);
+        await store.record('/work/a');
+        final before = File(path).readAsStringSync();
+
+        await expectLater(store.record(''), throwsArgumentError);
+        await expectLater(
+          store.merge([
+            RecentProject(
+              path: '',
+              lastOpenedAt: DateTime.utc(2026, 11, 22, 10),
+            ),
+          ]),
+          throwsArgumentError,
+        );
+
+        expect(File(path).readAsStringSync(), before);
+        expect((await store.load()).map((p) => p.path), ['/work/a']);
+      });
+
       test('a failed operation does not cancel the next one in the '
           'queue', () async {
         File(path).writeAsStringSync('{not json');

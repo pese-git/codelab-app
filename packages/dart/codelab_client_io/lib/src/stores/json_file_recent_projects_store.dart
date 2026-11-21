@@ -37,8 +37,14 @@ final class JsonFileRecentProjectsStore implements RecentProjectsStore {
   @override
   Future<List<RecentProject>> load() => _enqueue(_read);
 
+  /// Отмечает [projectPath] как только что открытый.
+  ///
+  /// Пустой путь — `ArgumentError` до чтения и записи: инварианты записи те
+  /// же, что у строгого чтения (D2), иначе собственная запись сделала бы файл
+  /// нечитаемым и, по D2, не перезаписываемым.
   @override
   Future<void> record(String projectPath) => _enqueue(() async {
+    _requireNonEmptyPath(projectPath);
     final current = await _read();
     await _write(
       mergeRecentProjects([
@@ -51,11 +57,22 @@ final class JsonFileRecentProjectsStore implements RecentProjectsStore {
   /// текущий)` (D5).
   ///
   /// Нужен одному потребителю — одноразовому переносу из прежнего хранилища
-  /// (D4), поэтому в порт не входит (§13).
+  /// (D4), поэтому в порт не входит (§13). Запись с пустым `path` — `ArgumentError`
+  /// до чтения и записи, файл не меняется (инварианты записи = инварианты
+  /// чтения, D2).
   Future<void> merge(Iterable<RecentProject> projects) => _enqueue(() async {
+    for (final project in projects) {
+      _requireNonEmptyPath(project.path);
+    }
     final current = await _read();
     await _write(mergeRecentProjects(projects, current));
   });
+
+  static void _requireNonEmptyPath(String projectPath) {
+    if (projectPath.isEmpty) {
+      throw ArgumentError.value(projectPath, 'path', 'Must not be empty.');
+    }
+  }
 
   /// Ставит [operation] после предыдущих; результат или ошибка уходят
   /// вызывающему, а очередь продолжается (D3).

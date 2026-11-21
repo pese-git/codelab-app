@@ -215,6 +215,28 @@ void main() {
     expect(await keyPresent(), isFalse);
   });
 
+  test('an entry with an empty path: the value is unreadable, the key is '
+      'removed, the file stays readable (D4 item 3)', () async {
+    legacyPrefs(
+      jsonEncode([
+        {
+          'path': '',
+          'lastOpenedAt': DateTime.utc(2026, 1, 1).toIso8601String(),
+        },
+      ]),
+    );
+
+    final loaded = await storeOf().load();
+
+    expect(loaded, isEmpty);
+    expect(events('recent_projects.legacy_unreadable'), hasLength(1));
+    expect(await keyPresent(), isFalse);
+    // Пустой путь не попал в файл: он остаётся читаемым и записываемым.
+    final store = storeOf();
+    await store.record('/work/app');
+    expect(await filePaths(), ['/work/app']);
+  });
+
   test('events carry no project paths (D11)', () async {
     legacyPrefs(_legacy({_markerPath: DateTime.utc(2026, 1, 1, 9)}));
 

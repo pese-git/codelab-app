@@ -1,15 +1,19 @@
 import 'dart:io';
 
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show RecentProject;
+import 'package:codelab_client_io/codelab_client_io.dart'
+    show JsonFileRecentProjectsStore;
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
-import 'package:codelab_desktop/core/platform/shared_preferences_recent_projects_store.dart';
 import 'package:codelab_desktop/features/workbench/application/ui_mappers.dart'
     show projectNameOf;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/e2e_agent.dart';
 
@@ -32,9 +36,12 @@ void main() {
       // have — the native OS folder dialog itself cannot be driven from a
       // headless integration test, so this is the closest automatable
       // stand-in for "the user already has this project in their recents".
-      await const SharedPreferencesRecentProjectsStore().record(
-        projectDirectory.path,
-      );
+      final seeded = DateTime.utc(2020, 1, 1);
+      await JsonFileRecentProjectsStore(
+        E2eAgent.current.recentProjectsPath,
+      ).merge([
+        RecentProject(path: projectDirectory.path, lastOpenedAt: seeded),
+      ]);
 
       await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
@@ -70,6 +77,26 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(shellCubit.state.selectedProjectPath, projectDirectory.path);
+      // Список лежит в файле временного `CODELAB_HOME` (D1), не в
+      // `shared_preferences`.
+      // Выбор обновил время записи (старое, засеянное, заменено новым), а
+      // ключа прежнего хранилища нет вовсе.
+      final recorded = await JsonFileRecentProjectsStore(
+        E2eAgent.current.recentProjectsPath,
+      ).load();
+      expect(
+        recorded
+            .singleWhere((p) => p.path == projectDirectory.path)
+            .lastOpenedAt
+            .isAfter(seeded),
+        isTrue,
+      );
+      expect(
+        (await SharedPreferences.getInstance()).containsKey(
+          'codelab.recent_projects',
+        ),
+        isFalse,
+      );
 
       await tester.tap(find.byKey(const ValueKey('new-session-button')));
       await tester.pumpAndSettle();
@@ -116,9 +143,9 @@ void main() {
           await projectDirectory.delete(recursive: true);
         }
       });
-      await const SharedPreferencesRecentProjectsStore().record(
-        projectDirectory.path,
-      );
+      await JsonFileRecentProjectsStore(
+        E2eAgent.current.recentProjectsPath,
+      ).record(projectDirectory.path);
 
       await tester.pumpWidget(E2eAgent.current.bootstrap());
       await tester.pumpAndSettle();
@@ -139,8 +166,8 @@ void main() {
 
       // Tear down and rebuild the composition root — the closest a single
       // `flutter test` process can get to a real app restart, and enough to
-      // exercise the actual mechanism under test: `SharedPreferences` data
-      // outliving one `Scope`'s lifetime (see
+      // exercise the actual mechanism under test: файл `recent_projects.json`
+      // и снимок, переживающие один `Scope` (see
       // add-open-project-picker/design.md, Decision 4).
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

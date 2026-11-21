@@ -90,7 +90,8 @@ void main() {
   });
 
   test('invalid CODELAB_HOME: load fails with the reason, no file is '
-      'created (D8)', () async {
+      'created, the key of the earlier version is kept (D8)', () async {
+    SharedPreferences.setMockInitialValues({'codelab.recent_projects': '[]'});
     final scope = scopeWith(
       environment: {'CODELAB_HOME': '~bob/cl', 'HOME': home.path},
     );
@@ -111,6 +112,12 @@ void main() {
       throwsA(isA<RecentProjectsUnavailableException>()),
     );
     expect(Directory('${home.path}/cl').existsSync(), isFalse);
+    expect(
+      (await SharedPreferences.getInstance()).containsKey(
+        'codelab.recent_projects',
+      ),
+      isTrue,
+    );
     expect(File('${home.path}/recent_projects.json').existsSync(), isFalse);
   });
 

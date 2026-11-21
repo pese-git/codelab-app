@@ -29,6 +29,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
 
+import '../support/fake_recent_projects_store.dart';
 import '../support/test_app_scope.dart';
 import '../support/transcript_rows.dart';
 import '../support/start_agent.dart';
@@ -190,6 +191,10 @@ void main() {
       embeddedOpener: opener.call,
       directoryExists: (_) async => true,
       logDirectoryPath: temp.path,
+      // Без шва проект теста попал бы в настоящий
+      // `~/.codelab/recent_projects.json` разработчика (D7 change
+      // `share-recent-projects-store`; страж — `test/flutter_test_config.dart`).
+      recentProjectsStore: FakeRecentProjectsStore(),
     );
     addTearDown(closeCodeLabRootScopeInTest);
     return scope;
