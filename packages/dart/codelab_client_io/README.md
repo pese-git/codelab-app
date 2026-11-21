@@ -82,7 +82,7 @@ final resolver = ioTransportResolver(secrets: mySecretSource);
 ### Что хранят JSON-файлы
 
 - `JsonFileProfileStore` пишет `{"version": 1, "profiles": [...]}`. Секреты в файл не попадают: у WebSocket-профиля только ссылка `tokenRef`. Нет файла — пустой список; битый файл, другая версия или неизвестный тип профиля — `FormatException`.
-- `JsonFileRecentProjectsStore` пишет `{"projects": [...]}`: последний открытый проект первым, не больше `recentProjectsLimit`. Приложения сейчас его не используют: CLI не подключает его, а CodeLab app хранит недавние проекты в `shared_preferences`.
+- `JsonFileRecentProjectsStore` пишет `{"version": 1, "projects": [{"path", "lastOpenedAt"}]}`: правило списка (одна запись на путь, последний открытый первым, не больше `recentProjectsLimit`) берёт у `mergeRecentProjects` из `codelab_client_core`. Нет файла — пустой список; нечитаемый файл, другая версия или запись неверного вида — `FormatException`, и `record` с `merge` файл при этом не меняют. Операции одного экземпляра идут по очереди; между процессами порядок не гарантирован, при одновременной записи может потеряться одна запись. Файл `$CODELAB_HOME/recent_projects.json` использует и CLI, и CodeLab app.
 - Запись идёт во временный файл в том же каталоге с `flush: true`, затем `rename`. После сбоя питания остаётся целый старый или целый новый файл.
 
 Где лежат эти файлы и кто их пишет — в [каталоге `CODELAB_HOME`](../../../docs/ops/codelab-home.md), в [эксплуатации `codelab`](../../../apps/codelab_cli/doc/operations.md) и в [эксплуатации CodeLab app](../../../apps/codelab_desktop/doc/operations.md).

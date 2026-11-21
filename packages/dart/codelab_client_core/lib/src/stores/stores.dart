@@ -4,6 +4,46 @@ import '../connection/connection_profile.dart';
 /// Decision 4).
 const recentProjectsLimit = 10;
 
+/// Сливает два списка недавних проектов по общему правилу (D5).
+///
+/// Почему в kit: правило «последний первым, не больше [recentProjectsLimit]»
+/// общее для app и CLI, а `codelab_client_io` политики не содержит
+/// (`codelab_client_io/AGENTS.md` §2); функция без `dart:io` держит
+/// `codelab_client_core` web-безопасным.
+///
+/// Правило: одна запись на путь (точное сравнение строк) с наибольшим
+/// `lastOpenedAt`; порядок — по `lastOpenedAt` по убыванию, при равенстве —
+/// порядок появления (сначала записи [a]); затем первые
+/// [recentProjectsLimit]. Входы не изменяются. Повторное слияние результата
+/// с теми же входами ничего не меняет (идемпотентность).
+///
+/// Как использовать: `record(path)` хранилища —
+/// `mergeRecentProjects([RecentProject(path, now)], current)`.
+List<RecentProject> mergeRecentProjects(
+  Iterable<RecentProject> a,
+  Iterable<RecentProject> b,
+) {
+  // Ключ — путь; значение хранит порядок первого появления для
+  // детерминированной ничьей (`List.sort` в Dart не стабилен).
+  final best = <String, (int, RecentProject)>{};
+  var index = 0;
+  for (final project in [...a, ...b]) {
+    final known = best[project.path];
+    if (known == null) {
+      best[project.path] = (index, project);
+    } else if (project.lastOpenedAt.isAfter(known.$2.lastOpenedAt)) {
+      best[project.path] = (known.$1, project);
+    }
+    index++;
+  }
+  final entries = best.values.toList()
+    ..sort((x, y) {
+      final byTime = y.$2.lastOpenedAt.compareTo(x.$2.lastOpenedAt);
+      return byTime != 0 ? byTime : x.$1.compareTo(y.$1);
+    });
+  return [for (final entry in entries.take(recentProjectsLimit)) entry.$2];
+}
+
 /// Папка, которую пользователь открывал как проект, и когда.
 final class RecentProject {
   const RecentProject({required this.path, required this.lastOpenedAt});
@@ -33,9 +73,15 @@ final class RecentProject {
 
 /// Порт хранилища недавних проектов, переживающего перезапуск клиента.
 ///
-/// Почему: app хранит список в `shared_preferences`, CLI — в файле; правило
+/// Почему: список общий у app и CLI и лежит в одном файле
+/// `$CODELAB_HOME/recent_projects.json` (`JsonFileRecentProjectsStore` из
+/// `codelab_client_io`; change `share-recent-projects-store`, D1); правило
 /// «последний открытый — первым, не больше [recentProjectsLimit]» общее
-/// (add-open-project-picker/design.md, Decision 4).
+/// (add-open-project-picker/design.md, Decision 4) и задано
+/// [mergeRecentProjects].
+///
+/// Для чего: хост не знает, где и как хранится список, и подменяет
+/// реализацию двойником в тестах.
 ///
 /// Как использовать: [record] после выбора проекта; [load] не обязан
 /// возвращать список по порядку — сортировку по `lastOpenedAt` делает

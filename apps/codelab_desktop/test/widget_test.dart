@@ -9,7 +9,6 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
-import 'package:codelab_desktop/core/platform/recent_projects_store.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/debug_log_pane.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/debug_log_viewer_dialog.dart';
@@ -31,6 +30,7 @@ import 'package:structured_log_flutter/structured_log_flutter.dart'
 import 'features/workbench/application/shell_cubit_characterization/harness.dart'
     show ThrowingStartTransport;
 import 'support/app_strings.dart';
+import 'support/fake_recent_projects_store.dart';
 import 'support/l10n_app.dart';
 import 'support/start_agent.dart';
 import 'support/test_app_scope.dart';
@@ -329,7 +329,7 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
 
@@ -385,7 +385,7 @@ void main() {
       stdioTransportFactory: (_) => FakeAcpTransport(),
       webSocketTransportFactory: (_) => agentTransport,
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
     );
 
     // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
@@ -435,7 +435,7 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
     );
 
     // Без проекта нет ни подключения, ни `session/new`.
@@ -487,7 +487,7 @@ void main() {
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
     );
 
     // Сначала «Use», потом выбор проекта: он и стартует агента (D20).
@@ -526,7 +526,7 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
 
@@ -612,7 +612,7 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
     );
     // Проект выбран явно: неявной папки нет (require-project-folder D1).
     await shellCubit.selectProject('/workspace');
@@ -724,7 +724,7 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
     );
     // Проект выбран явно: неявной папки нет (require-project-folder D1).
     await shellCubit.selectProject('/workspace');
@@ -822,7 +822,7 @@ void main() {
         stdioTransportFactory: (_) => agentTransport,
         webSocketTransportFactory: (_) => FakeAcpTransport(),
         projectFolderPicker: _FakeProjectFolderPicker(),
-        recentProjectsStore: _FakeRecentProjectsStore(),
+        recentProjectsStore: FakeRecentProjectsStore(),
       );
       // Проект выбран явно: неявной папки нет (require-project-folder D1).
       await shellCubit.selectProject('/workspace');
@@ -946,7 +946,7 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
     );
     // Проект выбран явно: неявной папки нет (require-project-folder D1).
     await shellCubit.selectProject('/workspace');
@@ -1030,7 +1030,7 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
 
@@ -1111,7 +1111,7 @@ void main() {
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
     // Проект выбран явно: неявной папки нет (require-project-folder D1).
@@ -1162,7 +1162,7 @@ void main() {
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
 
@@ -1605,7 +1605,7 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
     // Проект выбран явно: неявной папки нет (require-project-folder D1).
@@ -1726,7 +1726,7 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
     // Проект выбран явно: неявной папки нет (require-project-folder D1).
@@ -1784,7 +1784,7 @@ void main() {
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
 
@@ -1849,7 +1849,7 @@ void main() {
         },
         webSocketTransportFactory: (_) => FakeAcpTransport(),
         projectFolderPicker: _FakeProjectFolderPicker(),
-        recentProjectsStore: _FakeRecentProjectsStore(),
+        recentProjectsStore: FakeRecentProjectsStore(),
         logger: logger,
       );
 
@@ -1922,7 +1922,7 @@ void main() {
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
     // Проект выбран явно: неявной папки нет (require-project-folder D1).
@@ -1962,7 +1962,7 @@ void main() {
       },
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
     // Проект выбран явно: неявной папки нет (require-project-folder D1).
@@ -2005,7 +2005,7 @@ void main() {
         return agentTransport;
       },
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       // Токен — значение переменной окружения: профиль хранит ссылку `env:`.
       secrets: const ProfileSecretSource({'AGENT_TOKEN': 'secret-token'}),
       logger: logger,
@@ -2069,7 +2069,7 @@ void main() {
         return replacements.removeAt(0);
       },
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       secrets: ProfileSecretSource(environment),
       logger: logger,
     );
@@ -2139,7 +2139,7 @@ void main() {
         return attempts == 1 ? FakeAcpTransport() : _FailingStartTransport();
       },
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
     // Проект выбран явно: неявной папки нет (require-project-folder D1).
@@ -2183,7 +2183,7 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
     );
     // Проект выбран явно: неявной папки нет (require-project-folder D1).
     await shellCubit.selectProject('/workspace');
@@ -2266,7 +2266,7 @@ void main() {
         },
         webSocketTransportFactory: (_) => FakeAcpTransport(),
         projectFolderPicker: _FakeProjectFolderPicker(),
-        recentProjectsStore: _FakeRecentProjectsStore(),
+        recentProjectsStore: FakeRecentProjectsStore(),
         logger: logger,
       );
       // Проект выбран явно: неявной папки нет (require-project-folder D1).
@@ -2304,7 +2304,7 @@ void main() {
       stdioTransportFactory: (_) => agentTransport,
       webSocketTransportFactory: (_) => FakeAcpTransport(),
       projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: _FakeRecentProjectsStore(),
+      recentProjectsStore: FakeRecentProjectsStore(),
       logger: logger,
     );
     // Проект выбран явно: неявной папки нет (require-project-folder D1).
@@ -3575,7 +3575,7 @@ void main() {
         stdioTransportFactory: (_) => agentTransport,
         webSocketTransportFactory: (_) => FakeAcpTransport(),
         projectFolderPicker: _FakeProjectFolderPicker(),
-        recentProjectsStore: _FakeRecentProjectsStore(),
+        recentProjectsStore: FakeRecentProjectsStore(),
       );
       // Проект выбран явно: неявной папки нет (require-project-folder D1).
       // Выбор проекта стартует агента (D13), поэтому и он идёт в зоне
@@ -4208,7 +4208,7 @@ void main() {
         stdioTransportFactory: (_) => agentTransport,
         webSocketTransportFactory: (_) => FakeAcpTransport(),
         projectFolderPicker: _FakeProjectFolderPicker(),
-        recentProjectsStore: _FakeRecentProjectsStore(),
+        recentProjectsStore: FakeRecentProjectsStore(),
         logger: logger,
       );
       // Проект выбран явно: неявной папки нет (require-project-folder D1).
@@ -4763,7 +4763,7 @@ void main() {
         stdioTransportFactory: (_) => agentTransport,
         webSocketTransportFactory: (_) => FakeAcpTransport(),
         projectFolderPicker: _FakeProjectFolderPicker(),
-        recentProjectsStore: _FakeRecentProjectsStore(),
+        recentProjectsStore: FakeRecentProjectsStore(),
       );
       // Проект выбран явно: неявной папки нет (require-project-folder D1).
       await shellCubit.selectProject('/workspace');
@@ -5125,22 +5125,6 @@ final class _FakeProjectFolderPicker implements ProjectFolderPicker {
 
   @override
   Future<String?> pickFolder({String? initialDirectory}) async => nextResult;
-}
-
-/// In-memory stand-in for [RecentProjectsStore] — avoids touching the real
-/// `shared_preferences` plugin (unavailable without platform-channel mocking)
-/// in plain `test()`/`testWidgets()` runs.
-final class _FakeRecentProjectsStore implements RecentProjectsStore {
-  final List<RecentProject> _entries = [];
-
-  @override
-  Future<List<RecentProject>> load() async => List.unmodifiable(_entries);
-
-  @override
-  Future<void> record(String path) async {
-    _entries.removeWhere((entry) => entry.path == path);
-    _entries.insert(0, RecentProject(path: path, lastOpenedAt: DateTime.now()));
-  }
 }
 
 /// In-memory [Logger] used by the `plan progress checklist` group's

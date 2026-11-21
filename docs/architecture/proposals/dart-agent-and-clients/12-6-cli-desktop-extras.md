@@ -33,7 +33,7 @@ ACP меняет только D-17 — и то необязательным ра
 Общие правила для всех строк:
 
 * Клиентские строки не добавляют ключей в `config.yaml` агента: настройки CLI — в `cli.yaml`
-  (§12.2.10), настройки app — в `shared_preferences` (как `codelab.recent_projects`), состояние,
+  (§12.2.10), настройки app — в `shared_preferences` (как `codelab.dock.*`), состояние,
   которое CLI пишет сам, — в отдельных файлах `~/.codelab/` (`update_state.json`,
   `cli_state.json`). Исключение — D-17: ключи `sessions.search.*` агента (agent-core-architecture
   §17.6.12) входят в реестр `SettingsRegistry` (§17.5.8, CFG-19) тем же OpenSpec change, что и
@@ -842,7 +842,7 @@ final class ProjectTreeState {
     среди вложений; дальше — обычный путь D-12 (`PromptContentBuilder.build`, предупреждение
     `maybeSecret`). Папка вставляется только текстом `@<path>/` без вложения.
 
-**Настройки app** (`shared_preferences`, как `codelab.recent_projects`):
+**Настройки app** (`shared_preferences`, как `codelab.dock.*`):
 `codelab.file_browser.show_ignored` (`false`, с итерацией `.gitignore`). Набор открытых панелей
 дока, включая Files, хранит `LayoutCubit` под `codelab.dock.*`; отдельного ключа вкладки
 сайдбара нет — сайдбар остаётся списком сессий.

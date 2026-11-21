@@ -92,7 +92,9 @@ app» для контракта e2e этапа 4 (D6, задача 4.9): пар�
    `IoWorkingDirectoryProvider` из `apps/codelab_desktop/lib/core/platform/`; новые
    `JsonFileProfileStore` (`~/.codelab/profiles.json`) и `JsonFileRecentProjectsStore` (для CLI).
    `SharedPreferencesRecentProjectsStore` и `FileSelectorProjectFolderPicker` остаются в app
-   (Flutter-плагины).
+   (Flutter-плагины). Позже change `share-recent-projects-store` (D1, D9) перевёл app на
+   `JsonFileRecentProjectsStore` в общем с CLI `$CODELAB_HOME/recent_projects.json` и удалил
+   `SharedPreferencesRecentProjectsStore`.
 9. **5.9. Разделение Cubit-ов** app (после 5.1–5.8): Cubit-ы получают `ClientWorkspace` и
    отображают `WorkspaceState`/`SessionView` в модели `codelab_ui`; маппинг в UI-модели — в
    `apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart`. Разделение готовит

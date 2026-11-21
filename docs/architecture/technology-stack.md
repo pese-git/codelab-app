@@ -406,22 +406,32 @@ domain НЕ ДОЛЖНЫ импортировать `file_selector` напрям
 
 Использовать:
 
-* для небольших, некритичных для целостности данных (например, recents,
-  UI preferences) — не для session/domain state, не для secrets/tokens.
+* для небольших, некритичных для целостности настроек самого app (например,
+  раскладка дока, язык, оформление, снимок рабочего места) — не для
+  session/domain state, не для secrets/tokens.
 
 НЕ использовать:
 
 * как замену structured storage (SQL/NoSQL) для больших/реляционных данных
   — если возникает такая потребность, требуется отдельное ADR (см. §26);
 * для secrets/tokens (см. `AGENTS.md` §10 — "Secrets и tokens НЕ ДОЛЖНЫ
-  хардкодиться или попадать в logs").
+  хардкодиться или попадать в logs");
+* для данных, общих с `codelab` (CLI): они лежат JSON-файлами в
+  `$CODELAB_HOME` через хранилища `codelab_client_io` (§17б) — профили
+  подключения `profiles.json` (change `add-app-settings-shell`, D7) и
+  недавние проекты `recent_projects.json` (change
+  `share-recent-projects-store`, D1). Домен `shared_preferences` привязан к
+  идентификатору бандла app, и CLI его не видит.
 
-Изолируется за application-level port (например, `RecentProjectsStore`) в
-`apps/codelab_desktop/lib/core/platform/` — по тому же паттерну, что
-`WorkingDirectoryProvider`.
+Изолируется за application-level port (например, `StartupPreferences`,
+`DockLayoutStore`) в `apps/codelab_desktop/lib/core/platform/` — по тому же
+паттерну, что `WorkingDirectoryProvider`.
 
-Добавление второй persistence-технологии (SQL, NoSQL, файловый store и
-т.п.) для той же категории задач требует ADR (см. §26).
+Добавление второй persistence-технологии (SQL, NoSQL, новый файловый store и
+т.п.) для той же категории задач требует ADR (см. §26). JSON-файлы
+`$CODELAB_HOME` второй технологией не считаются: это уже принятый способ
+хранения общих с CLI данных (§17б), а не замена `shared_preferences` для
+настроек app.
 
 ### 12.3. `path_provider`
 
@@ -624,7 +634,7 @@ Package: `packages/dart/codelab_client_core`. Тип: **pure Dart**, web-без�
 
 Package: `packages/dart/codelab_client_io`. Тип: **pure Dart** с `dart:io`, без Flutter.
 
-`dart:io`-адаптеры портов клиента для хостов на Dart VM и desktop: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, `ioTransportResolver` с настоящими stdio- и WebSocket-транспортами, `JsonFileProfileStore`, `JsonFileRecentProjectsStore`. Flutter-плагины (`file_selector`, `shared_preferences`) остаются в `codelab_desktop`. Правила — во вложенном `AGENTS.md` пакета.
+`dart:io`-адаптеры портов клиента для хостов на Dart VM и desktop: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, `ioTransportResolver` с настоящими stdio- и WebSocket-транспортами, `JsonFileProfileStore` и `JsonFileRecentProjectsStore` — общие файлы `$CODELAB_HOME/profiles.json` и `$CODELAB_HOME/recent_projects.json`, которые пишут и app, и CLI (changes `add-app-settings-shell`, D7; `share-recent-projects-store`, D1). Flutter-плагины (`file_selector`, `shared_preferences`) остаются в `codelab_desktop`. Правила — во вложенном `AGENTS.md` пакета.
 
 ---
 

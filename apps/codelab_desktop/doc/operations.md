@@ -17,9 +17,9 @@ flowchart LR
     child["Агент-процесс, профиль stdio"]
     shell["Оболочка, процесс PTY"]
     mcpproc["MCP-серверы stdio"]
-    home[("CODELAB_HOME: config.yaml, profiles.json, secrets.yaml, sessions/")]
+    home[("CODELAB_HOME: config.yaml, profiles.json, recent_projects.json, secrets.yaml, sessions/")]
     support[("Application Support: logs/")]
-    prefs[("NSUserDefaults: недавние проекты, раскладка")]
+    prefs[("NSUserDefaults: снимок рабочего места, раскладка")]
   end
   ui -->|"ACP в памяти"| embedded
   ui -->|"stdin/stdout"| child
@@ -91,18 +91,20 @@ CODELAB_HOME="$HOME/.codelab-test" \
 
 | Где | Что |
 |---|---|
-| `~/Library/Preferences/com.example.codelabApp.plist` | настройки окна через `shared_preferences` (ключи с префиксом `flutter.`): недавние проекты `codelab.recent_projects`, снимок рабочего места `codelab.workspace.snapshot` (проект и активная сессия), профиль по умолчанию `codelab.connection.default_profile`, раскладка панелей `codelab.dock.*`, последняя страница настроек `codelab.settings.last_page`, язык интерфейса `codelab.app.language` (`en` или `ru`; для «System» ключа нет), оформление `codelab.app.appearance` (JSON: `version`, `mode` — `light`, `dark` или `system`, `light_theme`, `dark_theme`, `system_accent`; ключа нет, пока оформление не меняли), флаг «приветственные шаги пройдены» `codelab.app.onboarding_done` (только `true`; ключа нет, пока шаги не пройдены) |
+| `~/Library/Preferences/com.example.codelabApp.plist` | настройки окна через `shared_preferences` (ключи с префиксом `flutter.`): снимок рабочего места `codelab.workspace.snapshot` (проект и активная сессия), профиль по умолчанию `codelab.connection.default_profile`, раскладка панелей `codelab.dock.*`, последняя страница настроек `codelab.settings.last_page`, язык интерфейса `codelab.app.language` (`en` или `ru`; для «System» ключа нет), оформление `codelab.app.appearance` (JSON: `version`, `mode` — `light`, `dark` или `system`, `light_theme`, `dark_theme`, `system_accent`; ключа нет, пока оформление не меняли), флаг «приветственные шаги пройдены» `codelab.app.onboarding_done` (только `true`; ключа нет, пока шаги не пройдены) |
 | `~/Library/Application Support/com.example.codelabApp/logs/` | логи приложения — [ниже](#логи-и-диагностика) |
 
 Имя файла настроек и каталога берётся из идентификатора бандла: другая сборка с другим идентификатором получит отдельные настройки.
 
-Сбросить недавние проекты и раскладку можно, удалив домен настроек при закрытом приложении:
+Недавние проекты в этом домене больше не хранятся: список лежит в `$CODELAB_HOME/recent_projects.json` и общий с `codelab` ([общие файлы](../../../docs/ops/codelab-home.md#общие-файлы)). В предвыпускных сборках при первом обращении к списку app один раз переносит в файл прежний ключ `codelab.recent_projects` и удаляет его из домена. В журнал пишутся события `recent_projects.migrated`, `recent_projects.legacy_unreadable` (значение ключа не разобрано, ключ удалён) и `recent_projects.migration_failed` (например, файл нечитаем: ключ остаётся); пути в них не попадают. Нечитаемый `recent_projects.json` app не перезаписывает: список пуст, пока вы не удалите файл. Если `CODELAB_HOME` задан неверно, список недоступен, причина видна в диагностике, а ключ в домене остаётся нетронутым. Перенос есть только в предвыпускных сборках: при обновлении с предвыпускной сборки сразу на 1.0 недавние проекты и настройки окна начинаются заново (идентификатор бандла меняется); проекты, открытые в `codelab`, остаются в списке — они в `CODELAB_HOME`.
+
+Сбросить все настройки окна (раскладку, снимок рабочего места, профиль по умолчанию, последнюю страницу настроек, язык, оформление, флаги «открывать последний проект» и «приветственные шаги пройдены») можно, удалив домен настроек при закрытом приложении:
 
 ```bash
 defaults delete com.example.codelabApp
 ```
 
-Сессии, профили и конфигурация агента при этом не затрагиваются: они в `CODELAB_HOME`.
+Сессии, профили, недавние проекты и конфигурация агента при этом не затрагиваются: они в `CODELAB_HOME`. Чтобы сбросить недавние проекты, закройте приложение и `codelab` и удалите `$CODELAB_HOME/recent_projects.json`.
 
 ## Переменные окружения
 

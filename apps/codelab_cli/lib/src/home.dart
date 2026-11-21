@@ -13,8 +13,9 @@ import 'input/history.dart';
 /// соглашения о путях нет — хранилища получают путь явно (design.md change
 /// `add-codelab-cli`, D4).
 ///
-/// Для чего: единственное место путей CLI — `profiles.json` и
-/// `cli_history`.
+/// Для чего: единственное место путей CLI — `profiles.json`, `cli_history`
+/// и `recent_projects.json` (общий с app список недавних проектов; design.md
+/// change `share-recent-projects-store`, D1).
 ///
 /// Как использовать: `CodelabHome.resolve(environment)`; перед записью —
 /// [ensureExists]. Нет ни `CODELAB_HOME`, ни домашней папки — [UsageError].
@@ -42,6 +43,9 @@ final class CodelabHome {
   String get profilesFile => p.join(path, 'profiles.json');
 
   String get historyFile => p.join(path, 'cli_history');
+
+  /// Общий с app список недавних проектов (`JsonFileRecentProjectsStore`).
+  String get recentProjectsFile => p.join(path, 'recent_projects.json');
 
   /// Создаёт каталог с правами `0700`: в нём история промптов пользователя
   /// (design.md, D4). В `dart:io` нет API прав доступа, поэтому — `chmod`

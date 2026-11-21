@@ -39,7 +39,7 @@ const _kActivePaneKey = 'codelab.dock.active_pane';
 const _kWidthKey = 'codelab.dock.width';
 
 /// [DockLayoutStore] в `shared_preferences` под ключами `codelab.dock.*`, по
-/// образцу `SharedPreferencesRecentProjectsStore`.
+/// образцу `SharedPreferencesWorkspaceSnapshotStore`.
 final class SharedPreferencesDockLayoutStore implements DockLayoutStore {
   const SharedPreferencesDockLayoutStore();
 

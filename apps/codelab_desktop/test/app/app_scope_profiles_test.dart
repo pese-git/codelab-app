@@ -36,6 +36,7 @@ import 'package:codelab_desktop/app/connection_environment.dart';
 import 'package:codelab_desktop/app/embedded_logger.dart';
 import 'package:codelab_desktop/app/reopenable_profile_secrets.dart';
 import '../support/fake_profile_secrets.dart';
+import '../support/fake_recent_projects_store.dart';
 import '../support/test_app_scope.dart';
 import '../support/start_agent.dart';
 
@@ -74,6 +75,11 @@ void main() {
       settingsPages: const SettingsPages(available: {SettingsPage.connection}),
       profileSecrets: profileSecrets,
       profileSecretsOpener: profileSecretsOpener,
+      // `selectProject` ниже асинхронно пишет недавние проекты: настоящий файл
+      // в `home` гонялся бы с удалением каталога в `tearDown` («Directory not
+      // empty»). Тест не про недавние проекты (change
+      // `share-recent-projects-store`, D7).
+      recentProjectsStore: FakeRecentProjectsStore(),
     );
     addTearDown(closeCodeLabRootScopeInTest);
     // Подключение требует проекта (require-project-folder D1): выбор

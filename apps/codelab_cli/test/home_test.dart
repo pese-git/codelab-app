@@ -18,6 +18,15 @@ void main() {
     expect(home.historyFile, '/data/codelab/cli_history');
   });
 
+  // Общий список недавних проектов app и CLI (change
+  // `share-recent-projects-store`, D1, задача 3.1): файл лежит прямо в
+  // домашнем каталоге, рядом с `profiles.json`.
+  test('recentProjectsFile is <home>/recent_projects.json', () {
+    final home = CodelabHome.resolve({'CODELAB_HOME': '/data/codelab'});
+
+    expect(home.recentProjectsFile, '/data/codelab/recent_projects.json');
+  });
+
   test('without CODELAB_HOME the home is ~/.codelab', () {
     expect(
       CodelabHome.resolve({'HOME': '/Users/me'}).path,
