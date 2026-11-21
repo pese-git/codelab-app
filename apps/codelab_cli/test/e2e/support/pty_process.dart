@@ -61,6 +61,12 @@ final class PtyProcess {
   /// Запускает [executable] с [args] в терминале [columns]×[rows].
   /// [environment] добавляется к `PATH`, `HOME` и `TERM=xterm-256color`;
   /// остальное окружение родителя не наследуется.
+  ///
+  /// Если в [environment] нет `CODELAB_HOME`, задаётся свой временный каталог
+  /// (удаляется в `addTearDown`): REPL и TUI пишут `cli_history` и
+  /// `recent_projects.json` в домашний каталог, и без этого тест писал бы в
+  /// настоящий `~/.codelab` (change `share-recent-projects-store`, D7).
+  /// Явный `CODELAB_HOME` теста не перезаписывается.
   static Future<PtyProcess> start(
     String executable,
     List<String> args, {
@@ -93,6 +99,12 @@ final class PtyProcess {
         '/dev/null',
       ],
     };
+    final env = {...environment};
+    if (!env.containsKey('CODELAB_HOME')) {
+      final home = Directory.systemTemp.createTempSync('codelab_pty_home_');
+      addTearDown(() => home.deleteSync(recursive: true));
+      env['CODELAB_HOME'] = home.path;
+    }
     final process = await Process.start(
       'script',
       scriptArgs,
@@ -101,7 +113,7 @@ final class PtyProcess {
         'PATH': Platform.environment['PATH'] ?? '',
         'HOME': Platform.environment['HOME'] ?? '/tmp',
         'TERM': 'xterm-256color',
-        ...environment,
+        ...env,
       },
       includeParentEnvironment: false,
     );

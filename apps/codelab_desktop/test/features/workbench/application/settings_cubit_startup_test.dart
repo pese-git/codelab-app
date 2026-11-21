@@ -18,7 +18,6 @@ import 'dart:convert';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
-import 'package:codelab_desktop/core/platform/recent_projects_store.dart';
 import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snapshot_store.dart';
 import 'package:codelab_desktop/core/platform/startup_preferences.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
@@ -41,12 +40,6 @@ String _snapshot(String project, {String? session}) => jsonEncode({
     },
   },
 });
-
-/// Недавние проекты прошлого запуска (ключ хранилища недавних проектов).
-String _recents(List<String> paths) => jsonEncode([
-  for (final path in paths)
-    RecentProject(path: path, lastOpenedAt: DateTime(2026, 1, 1)).toJson(),
-]);
 
 const _loadSession = AgentCapabilities(loadSession: true);
 
@@ -162,8 +155,8 @@ void main() {
             session: 'sess_42',
           ),
           kReopenLastProjectKey: false,
-          'codelab.recent_projects': _recents(['/work/app']),
         },
+        recentProjects: ['/work/app'],
       );
       final cubit = binding.scope.resolve<CodeLabShellCubit>();
       await restored(binding);

@@ -637,6 +637,7 @@ Future<int> _runRepl(
       case final code?) {
     return code;
   }
+  await _recordRecentProject(home, cwd, io, verbose: options.verbose);
   final profileSecrets = await _openProfileSecrets(
     environment,
     io,
@@ -744,6 +745,7 @@ Future<int> _runTui(
       case final code?) {
     return code;
   }
+  await _recordRecentProject(home, cwd, io, verbose: options.verbose);
   final profileSecrets = await _openProfileSecrets(
     environment,
     io,
@@ -1135,6 +1137,34 @@ Future<int?> _firstRun(
         .flow,
   );
   return result == FirstRunResult.cancelled ? sigintExit : null;
+}
+
+/// Записывает папку сессии в общий список недавних проектов (D6).
+///
+/// Почему: app и CLI делят `$CODELAB_HOME/recent_projects.json`; человек,
+/// открывший папку в REPL или TUI, ждёт её в списке app. Вызывается только из
+/// интерактивных режимов, после мастера первого запуска и до подключения к
+/// агенту (как app пишет проект при выборе, до запуска агента).
+///
+/// Как работает: ожидание без fire-and-forget (§12). Сбой — нечитаемый файл
+/// (`FormatException`, он не перезаписывается, D2) или ошибка ФС — не меняет
+/// поведения и кода выхода; с `--verbose` в stderr одна строка с типом
+/// ошибки без текста (текст `FormatException` содержит путь).
+Future<void> _recordRecentProject(
+  CodelabHome home,
+  String cwd,
+  CliIo io, {
+  required bool verbose,
+}) async {
+  try {
+    await JsonFileRecentProjectsStore(home.recentProjectsFile).record(cwd);
+  } on Object catch (error) {
+    if (verbose) {
+      io.stderr.writeln(
+        'codelab: cannot record a recent project: ${error.runtimeType}',
+      );
+    }
+  }
 }
 
 /// Порты настройки агента, собранные из `codelab_setup/io.dart`: хранилище
