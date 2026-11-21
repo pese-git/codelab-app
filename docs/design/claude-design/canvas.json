@@ -2209,6 +2209,38 @@
    "page": "dark",
    "x": 3040,
    "y": 1320
+  },
+  "PhoneDiff.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P7a Diff — applied edits of the session (D-07)",
+   "w": 390,
+   "x": 1880,
+   "y": 1264
+  },
+  "PhoneDiff-dark.dc.html": {
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P7a Diff — applied edits of the session (D-07) — dark",
+   "w": 390,
+   "x": 1880,
+   "y": 1264
+  },
+  "TabletDiff.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T4a Tablet — Diff pane in the slide-over dock (D-07)",
+   "w": 1180,
+   "x": 6300,
+   "y": 1600
+  },
+  "TabletDiff-dark.dc.html": {
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T4a Tablet — Diff pane in the slide-over dock (D-07) — dark",
+   "w": 1180,
+   "x": 6300,
+   "y": 1600
   }
  },
  "createdOnFiles": {
@@ -3320,7 +3352,11 @@
   "InspectorLog.dc.html",
   "InspectorLog-dark.dc.html",
   "Diff.dc.html",
-  "Diff-dark.dc.html"
+  "Diff-dark.dc.html",
+  "PhoneDiff.dc.html",
+  "PhoneDiff-dark.dc.html",
+  "TabletDiff.dc.html",
+  "TabletDiff-dark.dc.html"
  ],
  "pages": [
   {

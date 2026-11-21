@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Diff</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}
+.bar{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.row{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:4px;text-decoration:none;color:var(--text)}
+.row.on{background:var(--sel)}
+.tbtn{min-height:44px;min-width:44px}
+.chg{width:16px;text-align:center;font:600 11px/16px 'Cascadia Code','JetBrains Mono',Consolas,monospace;flex:none}
+.chg.m{color:var(--warn)}.chg.a{color:var(--ok)}.chg.d{color:var(--bad)}
+.cnt{font:12px/16px 'Cascadia Code','JetBrains Mono',Consolas,monospace;white-space:nowrap}
+.cnt .p{color:var(--ok)}.cnt .q{color:var(--bad)}
+.frow{display:flex;align-items:center;gap:8px;min-height:44px;padding:0 10px;border-radius:4px;text-decoration:none;color:var(--text);font-size:13px;position:relative}
+.fx a.frow{color:var(--text)}
+.frow.on{background:var(--sel)}
+.frow.on::before{content:'';position:absolute;left:0;top:50%;width:3px;height:16px;margin-top:-8px;border-radius:2px;background:var(--accent)}
+.fnm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:12px/16px 'Cascadia Code','JetBrains Mono',Consolas,monospace}
+.dv{margin:0;padding:4px 0;font:12px/1.6 'Cascadia Code','JetBrains Mono',Consolas,monospace;color:var(--code-fg);overflow:hidden;flex:1;min-height:0;background:var(--code-bg)}
+.xl{display:grid;grid-template-columns:28px 28px 14px 1fr;white-space:pre}
+.xl .o,.xl .nn{text-align:right;padding-right:6px;color:var(--code-muted)}
+.xl .g{color:var(--code-muted)}
+.xl.add{background:var(--add-bg)}.xl.add .g{color:var(--ok)}
+.xl.del{background:var(--del-bg)}.xl.del .g{color:var(--bad)}
+.hunk{padding:4px 10px;color:var(--code-muted);background:var(--mica);border-top:1px solid var(--stroke);border-bottom:1px solid var(--stroke);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg{display:inline-flex;border:1px solid var(--cstroke);border-radius:4px;overflow:hidden}
+.seg button{border:0;background:var(--control);color:var(--text2);font-size:12px;min-height:36px;padding:0 10px;cursor:pointer}
+.seg button.on{background:var(--accent-weak);color:var(--accent-text);font-weight:600}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <a href="PhoneChat.dc.html" class="f-btn subtle icon tbtn" aria-label="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+    <h1 class="t-strong" style="margin: 0; flex: 1; font-size: 16px">Diff</h1>
+    <a href="PhoneFiles.dc.html" class="f-btn subtle tbtn" style="text-decoration: none">Open in Files</a>
+  </header>
+  <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px">
+    <div class="t-cap">3 files changed in this session · <span class="cnt"><span class="p">+14</span> <span class="q">−9</span></span></div>
+    <div class="f-card" style="padding: 4px" role="listbox" aria-label="Changed files" data-fluent="ListView (single selection)"><a href="PhoneDiff.dc.html" role="option" aria-selected="true" class="frow on"><span class="chg m" title="modified">M</span><span class="fnm">lib/note_tile.dart</span><span class="cnt"><span class="p">+2</span> <span class="q">−1</span></span></a><a href="PhoneDiff.dc.html" role="option" aria-selected="false" class="frow"><span class="chg a" title="created">A</span><span class="fnm">lib/edited_format.dart</span><span class="cnt"><span class="p">+12</span></span></a><a href="PhoneDiff.dc.html" role="option" aria-selected="false" class="frow"><span class="chg d" title="deleted">D</span><span class="fnm">lib/old_sort.dart</span><span class="cnt"><span class="q">−8</span></span></a></div>
+    <section class="f-card" aria-label="Diff of lib/note_tile.dart" data-acp="AcpDiffView · unified (always on a phone)" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--stroke)"><span class="mono t-cap" style="flex: 1">lib/note_tile.dart</span><span class="cnt"><span class="p">+2</span> <span class="q">−1</span></span></div>
+      <div class="dv" role="table" aria-label="Unified diff"><div class="hunk">@@ -1,9 +1,10 @@ lib/note_tile.dart</div><div class="xl"><span class="o">1</span><span class="nn">1</span><span class="g"> </span><span><span style="color: var(--syn-k)">import</span> 'package:flutter/material.dart';</span></div><div class="xl add"><span class="o"></span><span class="nn">2</span><span class="g">+</span><span><span style="color: var(--syn-k)">import</span> 'edited_format.dart';</span></div><div class="xl"><span class="o">2</span><span class="nn">3</span><span class="g"> </span><span></span></div><div class="xl"><span class="o">3</span><span class="nn">4</span><span class="g"> </span><span><span style="color: var(--syn-k)">class</span> <span style="color: var(--syn-t)">NoteTile</span> <span style="color: var(--syn-k)">extends</span> <span style="color: var(--syn-t)">StatelessWidget</span> {</span></div><div class="xl"><span class="o">4</span><span class="nn">5</span><span class="g"> </span><span>  final Note note;</span></div><div class="xl"><span class="o">5</span><span class="nn">6</span><span class="g"> </span><span>  Widget build(BuildContext context) =&gt; ListTile(</span></div><div class="xl"><span class="o">6</span><span class="nn">7</span><span class="g"> </span><span>        title: Text(note.title),</span></div><div class="xl add"><span class="o"></span><span class="nn">8</span><span class="g">+</span><span>        subtitle: Text(formatEdited(note.edited)),</span></div><div class="xl del"><span class="o">7</span><span class="nn"></span><span class="g">-</span><span>        trailing: const Icon(Icons.chevron_right),</span></div><div class="xl"><span class="o">8</span><span class="nn">9</span><span class="g"> </span><span>        onTap: () =&gt; open(note),</span></div><div class="xl"><span class="o">9</span><span class="nn">10</span><span class="g"> </span><span>      );</span></div></div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px 12px; border-top: 1px solid var(--stroke)"><button class="f-btn accent tbtn">Show full</button><button class="f-btn tbtn">Share</button></div>
+    </section>
+    <p class="t-cap t2" style="margin: 0">Applied edits only; unified, since a phone is narrower than 960 px. Binary and too-large files show counts without lines.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>
