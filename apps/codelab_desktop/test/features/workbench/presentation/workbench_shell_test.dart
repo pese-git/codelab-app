@@ -8,6 +8,7 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
+import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_desktop/features/workbench/presentation/workbench_shell.dart';
 import 'package:codelab_ui/codelab_ui.dart';
@@ -17,8 +18,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
 
+import '../../../support/press_shortcut.dart';
 import '../../../support/test_app_scope.dart';
 import '../../../support/start_agent.dart';
+
+/// Системный выбор папки: считает вызовы и отвечает [answer].
+final class _CountingPicker implements ProjectFolderPicker {
+  _CountingPicker([this.answer]);
+
+  final String? answer;
+  var picks = 0;
+
+  @override
+  Future<String?> pickFolder({String? initialDirectory}) async {
+    picks++;
+    return answer;
+  }
+}
 
 void main() {
   void setWindow(WidgetTester tester, Size size) {
@@ -1068,5 +1084,184 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       await tearDownApp(tester);
     });
+  });
+
+  // Рабочее место без проекта (задача 4.3 change `add-empty-project-screen`;
+  // spec agent-workbench-ui «App bar with palette search and connection
+  // badge», «Sessions sidebar grouped by project», «Cmd/Ctrl+O открывает выбор
+  // папки»; design.md D7, D8, D9).
+  //
+  // Красный до задачи 4.4: бейдж и сайдбар ещё не знают про `connectionLabel`
+  // и `openFolderShortcut`, а `onOpenFolder` не передан в оболочку.
+  group('no project selected (frame 11a)', () {
+    const badgeText = 'No project · agent not started';
+    const badgeTooltip = 'No project is selected, so no agent is running';
+
+    Future<void> settle(WidgetTester tester) async {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+    }
+
+    Finder tooltipWith(String text) => find.byWidgetPredicate(
+      (w) => w is Tooltip && (w.message?.contains(text) ?? false),
+    );
+
+    testWidgets('Badge before the agent starts: the label, the tooltip and no '
+        'Connect', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(tester, CodeLabTestBinding());
+
+      expect(
+        find.descendant(
+          of: find.byKey(CodeLabAppBar.connectionBadgeKey),
+          matching: find.text(badgeText),
+        ),
+        findsOneWidget,
+      );
+      expect(tooltipWith(badgeTooltip), findsOneWidget);
+      expect(find.byKey(CodeLabAppBar.connectionConnectKey), findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Badge after a folder is chosen: the label is gone and the '
+        'connection status shows', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      final agent = FakeAcpTransport()..autoRespondToInitialize = false;
+      final binding = CodeLabTestBinding(
+        projectFolderPicker: _CountingPicker('/work/app'),
+        stdioTransportFactory: (_) => agent,
+      );
+      final cubit = await pumpApp(tester, binding);
+
+      await tester.tap(find.byKey(const ValueKey('start-open-project')));
+      await settle(tester);
+      await tester.pump();
+
+      expect(cubit.state.selectedProjectPath, '/work/app');
+      expect(cubit.state.connectionStatus, CodeLabConnectionStatus.connecting);
+      expect(find.text(badgeText), findsNothing);
+      expect(tooltipWith(badgeTooltip), findsNothing);
+      await tester.pump(const Duration(seconds: 10));
+      await tearDownApp(tester);
+    });
+
+    testWidgets('No projects yet: the sidebar shows the caption and Open '
+        'folder… with the Ctrl+O hint', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      await pumpApp(tester, CodeLabTestBinding());
+
+      expect(find.text('No recent projects yet.'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(CodeLabSessionSidebar.openFolderKey),
+          matching: find.text('Ctrl+O'),
+        ),
+        findsOneWidget,
+      );
+      await tearDownApp(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+    testWidgets('Ctrl+O without a project opens the folder picker; after the '
+        'choice the agent starts in the folder and no session is created', (
+      tester,
+    ) async {
+      setWindow(tester, const Size(1440, 900));
+      final picker = _CountingPicker('/work/app');
+      final agent = FakeAcpTransport();
+      final started = <String?>[];
+      final binding = CodeLabTestBinding(
+        projectFolderPicker: picker,
+        stdioTransportFactory: (config) {
+          started.add(config.cwd);
+          return agent;
+        },
+      );
+      final cubit = await pumpApp(tester, binding);
+
+      await pressShortcut(tester, CodeLabShortcut.openFolder);
+      await settle(tester);
+      await tester.pump();
+
+      expect(picker.picks, 1);
+      expect(cubit.state.selectedProjectPath, '/work/app');
+      expect(started, ['/work/app']);
+      expect(
+        agent.sentMessages.whereType<JsonRpcRequest>().map((r) => r.method),
+        isNot(contains(sessionNewMethod)),
+      );
+      await tester.pump(const Duration(seconds: 10));
+      await tearDownApp(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+    testWidgets('Cmd+O during a turn in another project selects the new '
+        'project without restarting the agent or stopping the turn', (
+      tester,
+    ) async {
+      setWindow(tester, const Size(1440, 900));
+      final picker = _CountingPicker('/work/b');
+      final agent = FakeAcpTransport();
+      var agentStarts = 0;
+      final binding = CodeLabTestBinding(
+        project: '/work/a',
+        projectFolderPicker: picker,
+        stdioTransportFactory: (_) {
+          agentStarts++;
+          return agent;
+        },
+      );
+      final cubit = await pumpApp(tester, binding);
+      await tester.runAsync(() => cubit.startOnLaunch());
+      await tester.pump();
+      agent.drainSentMessages();
+      unawaited(cubit.createSession());
+      await settle(tester);
+      final request = agent.sentMessages
+          .whereType<JsonRpcRequest>()
+          .singleWhere((r) => r.method == sessionNewMethod);
+      agent.emitInbound(
+        JsonRpcMessage.response(id: request.id, result: {'sessionId': 's1'}),
+      );
+      await settle(tester);
+      unawaited(cubit.submitPrompt('work'));
+      await settle(tester);
+      expect(cubit.state.turnState, CodeLabTurnState.running);
+
+      await pressShortcut(tester, CodeLabShortcut.openFolder, useMeta: true);
+      await settle(tester);
+      await tester.pump();
+
+      expect(picker.picks, 1);
+      expect(cubit.state.selectedProjectPath, '/work/b');
+      expect(agentStarts, 1, reason: 'агент не перезапущен');
+      expect(cubit.state.turnState, CodeLabTurnState.running);
+      await tester.pump(const Duration(seconds: 10));
+      await tearDownApp(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets('Ctrl+O on the settings screen opens no picker and changes no '
+        'project', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      final picker = _CountingPicker('/work/app');
+      final binding = CodeLabTestBinding(
+        projectFolderPicker: picker,
+        settingsPages: const SettingsPages(
+          available: {SettingsPage.connection},
+        ),
+      );
+      final cubit = await pumpApp(tester, binding);
+      await pressShortcut(tester, CodeLabShortcut.openSettings);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('settings-nav-connection')),
+        findsOneWidget,
+      );
+
+      await pressShortcut(tester, CodeLabShortcut.openFolder);
+      await settle(tester);
+
+      expect(picker.picks, 0);
+      expect(cubit.state.selectedProjectPath, isNull);
+      await tearDownApp(tester);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
   });
 }
