@@ -53,7 +53,7 @@
 - нет файла — пустой список;
 - не JSON, не объект, `version != 1`, нет списка `projects`, элемент не объект, `path` не непустая строка, `lastOpenedAt` не строка ISO-8601 — `FormatException` с путём файла. Это касается и случаев, где сейчас вылетает `TypeError`: хост ловит предсказуемый тип (`error-handling.md`; так же `JsonFileProfileStore` после ревью change `add-app-settings-shell`).
 
-`record` и `merge` начинают с `load`. Если `load` бросил, запись не выполняется и ошибка уходит вызывающему. Нечитаемый файл остаётся на диске байт в байт.
+`record` и `merge` начинают с `load`. Если `load` бросил, запись не выполняется и ошибка уходит вызывающему. Нечитаемый файл остаётся на диске байт в байт. Инварианты записи совпадают с инвариантами чтения: `record` и `merge` с пустым `path` завершаются `ArgumentError` до чтения и записи, файл не меняется. Иначе хранилище записало бы файл, который само же отвергло бы при следующем `load`.
 
 Почему не перезаписывать: файл незнакомой версии мог записать более новый клиент, и старый клиент затёр бы его. Битый файл мог поправить руками пользователь. Так же устроены `profiles.json` (D4 change `add-app-settings-shell`) и снимок рабочего места (`fix-restorer-read-race`: битый снимок не перезаписывается). Восстановление ручное: удалить файл. Путь называет текст `FormatException` в диагностике app и предупреждение CLI с `--verbose`. Ещё это описывает `docs/ops/codelab-home.md`.
 
@@ -87,12 +87,24 @@
 Алгоритм:
 1. Первый вызов `load` или `record` запускает перенос и запоминает его `Future` (`_migration ??= _migrate()`). Все вызовы, в том числе параллельные, сначала ждут его. Пока перенос не закончен, в файл ничего не пишется. Это тот же приём, что в `fix-restorer-read-race`: запись только после чтения.
 2. Ключа `codelab.recent_projects` нет или он пуст — переноса нет (повторный запуск — тоже сюда).
-3. Значение ключа не разбирается: не JSON, не массив, элемент неверного вида. Ключ удаляется, событие `recent_projects.legacy_unreadable` уровня `warning` без значения и путей. Разобрать значение не сможет и следующий запуск. Если ключ оставить, предупреждение повторялось бы при каждом запуске, а данных он уже не даст.
+3. Значение ключа не разбирается: не JSON, не массив, элемент неверного вида. Ключ удаляется, событие `recent_projects.legacy_unreadable` уровня `warning` без значения и путей. Разобрать значение не сможет и следующий запуск. Если ключ оставить, предупреждение повторялось бы при каждом запуске, а данных он уже не даст. Запись с пустым `path` тоже делает значение ключа неразборчивым целиком: событие `recent_projects.legacy_unreadable`, ключ удаляется, остальные записи этого значения не переносятся. Это сознательное решение: перенос живёт только до первого `stable` (D9), и частичный перенос с пропуском отдельных записей не оправдывает дополнительной логики.
 4. Значение разобрано — `target.merge(legacy)` (D5): слияние с тем, что уже лежит в файле (его мог создать новый `codelab` раньше первого запуска нового app), запись файла, затем удаление ключа. Событие `recent_projects.migrated` с числом перенесённых записей, без путей.
 5. `merge` бросил: файл нечитаем (D2) или ошибка ФС. Ключ **не** удаляется, событие `recent_projects.migration_failed` с классом ошибки. Обёртка продолжает работу на `target`: `load` и `record` дальше ведут себя по D2, и ошибку увидит `SettingsCubit`. При следующем запуске перенос повторится.
 6. Сбой самого `shared_preferences` (чтение или удаление ключа) — событие `recent_projects.migration_failed`. Перенос считается законченным для этого запуска, ошибка наружу не идёт. Если ключ не удалился после успешной записи, следующий запуск повторит слияние и получит тот же результат (п. 7).
 
 Идемпотентность: условие переноса — наличие ключа, а не отсутствие файла. Слияние по пути с более поздним временем (D5) — идемпотентная операция. Сбой между записью файла и удалением ключа даёт при повторе тот же файл.
+
+Конструктор и шов тестов:
+
+```dart
+MigratingRecentProjectsStore({
+  required JsonFileRecentProjectsStore target,
+  required Logger logger,
+  Future<void> Function(String key)? legacyKeyRemover,
+})
+```
+
+`legacyKeyRemover` — шов только для сценария «сбой удаления ключа» (п. 6). По умолчанию ключ удаляет `SharedPreferences`. Чтение ключа шва не имеет: тесты задают значение через `SharedPreferences.setMockInitialValues`. Для сбоя удаления без шва пришлось бы подменять платформенную реализацию из `shared_preferences_platform_interface`, а этот пакет не прямая зависимость app. Шов — одна функция, а не порт: перенос удаляется до первого `stable` (D9), и порт ради одного теста был бы лишней абстракцией (§13).
 
 Записи не фильтруются, перенос переносит список как есть: временные папки smoke-прогонов, несуществующие папки — всё (решение пользователя Q1 (а), 2026-11-22).
 
@@ -145,9 +157,11 @@ List<RecentProject> mergeRecentProjects(
 ### D7. Изоляция тестов
 
 - **CLI e2e.** `PtyProcess.start` (`test/e2e/support/pty_process.dart`) при отсутствии `CODELAB_HOME` в переданном окружении задаёт свой временный каталог (удаляется в `addTearDown`). REPL- и TUI-тесты без явного дома уже писали бы настоящий `~/.codelab/cli_history`, а теперь писали бы и `recent_projects.json`. Помощник закрывает оба. Аудит остальных точек запуска CLI в `test/` — задача 3.5: процессные запуски через `dual_binary.dart` и `e2e_agent.dart` и вызовы `runCodelab` в модульных тестах REPL и TUI.
+- **App, тесты со scope без шва.** Тест app, который собирает scope через `createCodeLabRootScope` без `recentProjectsStore:` (и без `CodeLabTestBinding`), обязан передать `environment:` с временным `CODELAB_HOME`. Иначе привязка D8 открывает настоящий `~/.codelab/recent_projects.json` разработчика. Ревью итерации 4 нашло такой случай: `test/app/app_scope_embedded_test.dart` писал в настоящий файл Исправление: `app_scope_embedded_test.dart` получил шов `recentProjectsStore:` (двойник `FakeRecentProjectsStore`), а `apps/codelab_desktop/test/flutter_test_config.dart` стал стражем: он сверяет настоящий `$CODELAB_HOME/recent_projects.json` до и после каждого тестового файла и падает с подсказкой задать шов или временный `CODELAB_HOME`. Возможны ложные срабатывания, если во время прогона файл меняет другой процесс: параллельно запущенные `codelab` или app, а также параллельный прогон тестов `-j`, если какой-то тест всё-таки пишет в настоящий файл.
 - **App, виджет-тесты.** `CodeLabTestBinding` (`test/support/test_app_scope.dart`) передаёт `recentProjectsStore:` — хранилище в памяти `FakeRecentProjectsStore` в `test/support/`, по образцу `InMemoryProfileStore`. Тесты, которые сейчас подкладывают `codelab.recent_projects` в `preferences` (`settings_cubit_startup_test.dart`), переходят на это хранилище с начальным списком.
 - **App, интеграционные тесты** уже идут с временным `CODELAB_HOME`, и файл попадает туда. Комментарий `flutter_test_config.dart`, где подмена `SharedPreferences` объясняется недавними проектами, обновляется: ключа больше нет, причина подмены — снимок и прочие настройки.
-- **Перенос** проверяется в обычном `test()` (не `testWidgets`): настоящий файл во временной папке и `SharedPreferences.setMockInitialValues`.
+- **Перенос** проверяется в обычном `test()` (не `testWidgets`): настоящий файл во временной папке и `SharedPreferences.setMockInitialValues`; сбой удаления ключа — через шов `legacyKeyRemover` (D4).
+- **CLI, модульные тесты.** `runCodelab` не получает шва терминала, этот change его не вводит. Поэтому модульные тесты записи (`test/run_recent_projects_test.dart`) запускают REPL с `--resume <несуществующая сессия>` и с `--continue`: запуск интерактивный, папка записывается до подключения (D6), а REPL завершается без ввода с терминала. Обычный REPL без `--resume`, мастер первого запуска и `--ui tui` покрывает PTY-e2e `test/e2e/recent_projects_test.dart` (задача 3.6).
 
 ### D8. Привязка в app и шов тестов
 
@@ -170,13 +184,13 @@ bind<RecentProjectsStore>().toInstance(
 
 Привязка остаётся в модуле платформы, рядом с прежней, потому что потребители (`CodeLabShellParts`, `CodeLabShellCubit`) её уже там берут. В `CodeLabConnectionModule` не переносится: тот модуль — профили и токены. Путь к файлу строится в `app_scope.dart`. Поле `recentProjectsPath` в `ConnectionEnvironment` не добавляется: класс назван и описан как окружение подключения, а дом (`codelabHome`) в нём уже есть.
 
-`UnavailableRecentProjectsStore` (`apps/codelab_desktop/lib/core/platform/recent_projects_migration.dart`, рядом с обёрткой): `load` и `record` завершаются ошибкой `RecentProjectsUnavailableException(reason)`, как `UnavailableProfileStore`. `SettingsCubit` выводит её в диагностику, список пуст. Ключ `shared_preferences` не трогается.
+`UnavailableRecentProjectsStore` и исключение `RecentProjectsUnavailableException` лежат в том же файле, что обёртка переноса, — `apps/codelab_desktop/lib/core/platform/recent_projects_migration.dart`. Отдельного файла нет: оба — малые части одной привязки недавних проектов D8. `UnavailableRecentProjectsStore`: `load` и `record` завершаются ошибкой `RecentProjectsUnavailableException(reason)`, как `UnavailableProfileStore`. `SettingsCubit` выводит её в диагностику, список пуст. Ключ `shared_preferences` не трогается.
 
 ### D9. Судьба `SharedPreferencesRecentProjectsStore`
 
 Класс удаляется вместе с тестом `shared_preferences_recent_projects_store_test.dart` и псевдонимом `kRecentProjectsLimit`. Из него остаются два метода чтения и удаления ключа `codelab.recent_projects`. Это закрытая часть `recent_projects_migration.dart` с doc-комментарием «удалить вместе с переносом». Отдельный порт для них не нужен: тест переноса работает с `SharedPreferences.setMockInitialValues`, так же как тест прежнего хранилища.
 
-Реэкспорт `core/platform/recent_projects_store.dart` (`RecentProject`, `RecentProjectsStore`) остаётся, пока по нему импортируют `widget_test.dart` и тесты (его doc-комментарий это описывает). Этот change его не трогает (§19).
+Реэкспорт `core/platform/recent_projects_store.dart` (`RecentProject`, `RecentProjectsStore`) остаётся, пока по нему импортирует тест `test/features/workbench/application/open_external_link_test.dart` (проверено 2026-11-22; `lib/` и остальные тесты импортируют `codelab_client_core`). Этот change реэкспорт не трогает (§19).
 
 Перенос живёт только в предвыпускных сборках (решение пользователя Q2 (б), 2026-11-22). `MigratingRecentProjectsStore`, чтение и удаление ключа `codelab.recent_projects`, события `recent_projects.migrated`, `recent_projects.legacy_unreadable` и `recent_projects.migration_failed`, а также требование о переносе в spec `agent-workbench-ui` удаляет отдельный change `remove-recent-projects-migration` до первого `stable` 1.0. Условие записано в критериях выхода вехи M4 (`delivery-roadmap.md` §4.5) и в backlog §10.4. После удаления в `CodeLabPlatformModule` привязан сам `JsonFileRecentProjectsStore`.
 
@@ -218,7 +232,7 @@ Spec `acp-client-kit` («IO-адаптеры клиента») перестаё�
 - [Нечитаемый файл блокирует пополнение списка до ручного удаления] → ошибка видна в диагностике app и с `--verbose` в CLI, путь назван, `docs/ops/codelab-home.md` описывает сброс. Альтернатива самовосстановления отклонена ради файлов будущих версий (D2).
 - [Пользователь предвыпускной сборки обновился сразу на 1.0, не запустив сборку с переносом] → его прежний список не переносится и пропадает: в 1.0 переноса нет (D9), а прежний домен настроек 1.0 и так не читает. Оценка: приемлемо. До 1.0 app ставят только разработчики и тестировщики из исходников или предвыпускных сборок. Список недавних — подсказка из не более 10 путей, она восстанавливается при открытии проектов. Вместе с ним по той же причине (смена идентификатора бандла) пропадают и остальные настройки app в `shared_preferences`, поэтому отдельный механизм только для недавних непропорционален. Что сказать в документации: `apps/codelab_desktop/doc/operations.md` и раздел выпуска 1.0 в `CHANGELOG.md` — «при обновлении с предвыпускной сборки до 1.0 недавние проекты и настройки окна начинаются заново; проекты, открытые в `codelab`, остаются в списке — они в `CODELAB_HOME`» (задача 5.3; `CHANGELOG.md` — при подготовке `release/1.0`).
 - [Откат app на прежнюю сборку после переноса] → список в прежней сборке пуст: ключ удалён. Файл и профили целы. При повторном обновлении перенос сольёт то, что прежняя сборка успела записать.
-- [Конфликт дельты `acp-client-kit` «IO-адаптеры клиента» с активным change `add-file-preview-and-tree`] → оба change меняют одно требование: там добавлен `IoProjectFiles`, здесь изменены строка `JsonFileRecentProjectsStore` и фраза о Flutter-плагинах. Дельта этого change построена от текущей `openspec/specs`. Тот, кто архивирует change вторым, переносит в свою дельту правку первого (задача 5.4).
+- [Конфликт дельты `acp-client-kit` «IO-адаптеры клиента» с активным change `add-file-preview-and-tree`] → оба change меняют одно требование: там добавлен `IoProjectFiles`, здесь изменены строка `JsonFileRecentProjectsStore` и фраза о Flutter-плагинах. Дельта этого change построена от текущей `openspec/specs`. Тот, кто архивирует change вторым, переносит в свою дельту правку первого. Сверка 2026-11-22 (задача 5.4): правки не пересекаются. Если `add-file-preview-and-tree` архивируется первым, в дельту этого change перед архивированием добавляются пункт `IoProjectFiles` и девять его сценариев.
 - [Список виден другим локальным пользователям] → пути проектов — умеренно чувствительные данные. CLI создаёт `CODELAB_HOME` с правами `0700`. App создаёт каталог через `writeBytesAtomically` с правами по umask, так же как `profiles.json` сейчас. Этот change права не меняет. Если app создаёт дом первым, он может оказаться `0755`. Это уже известная особенность `profiles.json`.
 - [Значения из файла показываются в сайдбаре] → файл в доме пользователя, доверие то же, что у `profiles.json` (где хранятся даже команды запуска агента). Новых путей выполнения нет: выбор недавнего проекта идёт тем же `SettingsCubit.selectProject`, что и выбор в системном диалоге, а агент работает в папке под прежними правилами containment (`AGENTS.md` §10).
 - [Пути не нормализуются] → `/tmp/x` из CLI и `/private/tmp/x` из диалога macOS — две записи. Это не новое поведение (сейчас так же внутри app). Нормализация — вне change.

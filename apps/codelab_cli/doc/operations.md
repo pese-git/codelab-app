@@ -15,7 +15,7 @@ flowchart LR
     end
     child["Агент-процесс, профиль stdio"]
     mcpproc["MCP-серверы stdio"]
-    files[("CODELAB_HOME: config.yaml, profiles.json, cli_history, sessions/")]
+    files[("CODELAB_HOME: config.yaml, profiles.json, recent_projects.json, cli_history, sessions/")]
     project[("Папка проекта: .codelab/config.yaml, .codelab/config.local.yaml")]
   end
   client -->|"ACP в памяти"| embedded
@@ -90,7 +90,10 @@ Config: invalid (issues: 1)
 |---|---|---|
 | `<проект>/.codelab/config.yaml`, `<проект>/.codelab/config.local.yaml` | слои проекта | `config set --project` и `--local`; вы |
 | `$CODELAB_HOME/cli_history` | история ввода диалога; создаётся с правами `0600` | диалог и полноэкранный режим |
+| `$CODELAB_HOME/recent_projects.json` ([общий файл](../../../docs/ops/codelab-home.md#общие-файлы)) | список недавних проектов, общий с CodeLab app | диалог и полноэкранный режим, в том числе с `--resume` и `--continue`; headless `-p`, `test-scenario` и подкоманды файл не трогают |
 | `$CODELAB_HOME/secrets.yaml` ([общий файл](../../../docs/ops/codelab-home.md#общие-файлы)) | какие команды `codelab` его пишут при `secrets.backend: file` | `codelab secret set` и `secret migrate`, `provider add --api-key-stdin`, `mcp add --header-stdin` и `--env-stdin`, мастер провайдера |
+
+Папку сессии (`-C` или текущую) `codelab` записывает в `recent_projects.json` после мастера первого запуска и до подключения к агенту. Если записать не удалось, работа и код выхода не меняются; с `--verbose` в stderr выводится строка `codelab: cannot record a recent project: <тип ошибки>`. Нечитаемый файл `codelab` не перезаписывает; чтобы сбросить список, удалите файл.
 
 Диалог, полноэкранный режим и `codelab profiles` создают `CODELAB_HOME` с правами `0700`, если каталога нет. Headless `-p` этого не делает: если первым запустить его, встроенный агент создаст `CODELAB_HOME` и `sessions/` с правами по umask. В CI заранее создайте каталог с правами `0700`. Подкоманды `config`, `provider`, `mcp` и `secret` не создают `sessions/`, `profiles.json` и `cli_history`.
 

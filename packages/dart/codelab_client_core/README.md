@@ -40,7 +40,7 @@ flowchart LR
 | Диагностика | `WorkspaceDiagnostic`, `describeFailure` | события, которыми владеет пакет, без секретов |
 | Файлы проекта | `ProjectFiles`, `ProjectEntry`, `DirectoryListing`, `FilePreview`, `normalizeRelativePath`, `classifyPreview`, `isMaybeSecretFileName`, `sortProjectEntries` | порт чтения папки проекта и чистые правила превью |
 | Восстановление | `WorkspaceSnapshot`, `WorkspaceSnapshotStore`, `InMemoryWorkspaceSnapshotStore` | снимок «проект, активная сессия, открытые сессии» после перезапуска хоста |
-| Хранилища | `ProfileStore`, `RecentProjectsStore`, `RecentProject` | порты постоянных данных клиента |
+| Хранилища | `ProfileStore`, `RecentProjectsStore`, `RecentProject`, `mergeRecentProjects` | порты постоянных данных клиента и правило слияния недавних проектов |
 
 `TranscriptProjector` и `WorkspaceRestorer` — внутренние: барель их не экспортирует.
 
@@ -83,7 +83,7 @@ await workspace.dispose(); // бэкенд закрывает его владе�
 |---|---|
 | `TransportResolver` | `ConfigTransportResolver` (в пакете, принимает фабрики транспортов); `ioTransportResolver` в `codelab_client_io` собирает его с настоящими stdio и WebSocket; `EmbeddedTransportResolver` в composition root app и CLI открывает встроенного агента |
 | `ProfileStore` | `JsonFileProfileStore` (`codelab_client_io`, файл `profiles.json` в `CODELAB_HOME`); в app при недоступном файле — `UnavailableProfileStore` |
-| `RecentProjectsStore` | `JsonFileRecentProjectsStore` (`codelab_client_io`); в app — `SharedPreferencesRecentProjectsStore` |
+| `RecentProjectsStore` | `JsonFileRecentProjectsStore` (`codelab_client_io`); в app — `MigratingRecentProjectsStore` над ним (одноразовый перенос ключа `shared_preferences`, живёт до первого `stable`), при недопустимом `CODELAB_HOME` — `UnavailableRecentProjectsStore` |
 | `WorkspaceSnapshotStore` | `SharedPreferencesWorkspaceSnapshotStore` в app; `InMemoryWorkspaceSnapshotStore` в пакете — для тестов |
 | `ProjectFiles` | `IoProjectFiles` (`codelab_client_io`) |
 | `ProfileSecrets` | реализации composition root app и CLI поверх хранилища секретов |
