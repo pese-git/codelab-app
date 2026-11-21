@@ -2120,6 +2120,70 @@
    "y": 1600,
    "page": "tablet-dark",
    "title": "T15a Tablet — Protocol pane, Frames tab — dark"
+  },
+  "PhoneProtocol.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P21 Protocol — Frames",
+   "w": 390,
+   "x": 3290,
+   "y": 1264
+  },
+  "PhoneProtocol-dark.dc.html": {
+   "h": 844,
+   "w": 390,
+   "x": 3290,
+   "y": 1264,
+   "page": "phone-dark",
+   "title": "P21 Protocol — Frames — dark"
+  },
+  "PhoneProtocolFrame.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P21a Protocol — frame details",
+   "w": 390,
+   "x": 3760,
+   "y": 1264
+  },
+  "PhoneProtocolFrame-dark.dc.html": {
+   "h": 844,
+   "w": 390,
+   "x": 3760,
+   "y": 1264,
+   "page": "phone-dark",
+   "title": "P21a Protocol — frame details — dark"
+  },
+  "PhoneProtocolLog.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P21b Protocol — Log",
+   "w": 390,
+   "x": 4230,
+   "y": 1264
+  },
+  "PhoneProtocolLog-dark.dc.html": {
+   "h": 844,
+   "w": 390,
+   "x": 4230,
+   "y": 1264,
+   "page": "phone-dark",
+   "title": "P21b Protocol — Log — dark"
+  },
+  "PhoneProtocolRecord.dc.html": {
+   "h": 844,
+   "page": "phone",
+   "title": "P21c Protocol — log record",
+   "w": 390,
+   "x": 4700,
+   "y": 1264
+  },
+  "PhoneProtocolRecord-dark.dc.html": {
+   "h": 844,
+   "w": 390,
+   "x": 4700,
+   "y": 1264,
+   "page": "phone-dark",
+   "title": "P21c Protocol — log record — dark"
   }
  },
  "createdOnFiles": {
@@ -2173,6 +2237,7 @@
   "theme",
   "p-row1",
   "p-row2",
+  "p-row2s",
   "p-note",
   "t-row1",
   "t-row2",
@@ -2467,9 +2532,9 @@
   },
   "p-row2": {
    "kind": "title1",
-   "maxW": 2740,
+   "maxW": 5630,
    "page": "phone",
-   "text": "Смартфон: файлы, настройки, состояния",
+   "text": "Смартфон: файлы, настройки, состояния, протокол",
    "w": 240,
    "x": 0,
    "y": 964
@@ -2944,6 +3009,15 @@
    "fill": "teal",
    "page": "tablet",
    "text": "T15 и T15a — панель Protocol на планшете, вкладки Log и Frames: та же панель, что 18a и 18 на десктопе, в выдвижном доке поверх ленты (§12.8.5). Открывается из палитры или Cmd+Shift+I, в шапке своего переключателя нет. Log: колонка Category ушла в фильтр, имя компонента — в начале события. Frames: выделен ответ с ошибкой −32603 на запрос id 5 — сюда ведёт «Show frame in Frames» из T15, обратно — «Show record in Log». Строки и кнопки ≥ 44 px. Export… отдаёт файл системному меню «Поделиться»."
+  },
+  "p-row2s": {
+   "x": 5170,
+   "y": 1264,
+   "w": 460,
+   "size": "m",
+   "fill": "teal",
+   "page": "phone",
+   "text": "P21–P21c — панель Protocol на смартфоне (§12.8.4): дока нет, панель — свой экран из P6 › Panes › Protocol, Back — к сессии P2. Вкладки Frames и Log — SelectorBar, Pause, Clear и Export… — в меню «…». Таблиц нет: строки в две линии, детали кадра (P21a) и записи (P21c) — отдельным экраном. Выделен ответ с ошибкой −32603 на запрос id 5: «Show frame in Frames» и «Show record in Log» переводят между P21a и P21c. Фильтры прокручиваются по горизонтали, касания ≥ 44 px."
   }
  },
  "order": [
@@ -3052,6 +3126,10 @@
   "AddProfile.dc.html",
   "AddProfile-dark.dc.html",
   "PhoneAddProfile.dc.html",
+  "PhoneProtocol.dc.html",
+  "PhoneProtocolFrame.dc.html",
+  "PhoneProtocolLog.dc.html",
+  "PhoneProtocolRecord.dc.html",
   "TranscriptRows.dc.html",
   "Subagents.dc.html",
   "TaskList.dc.html",
@@ -3081,6 +3159,10 @@
   "TabletNotices.dc.html",
   "NavTablet.dc.html",
   "PhoneAddProfile-dark.dc.html",
+  "PhoneProtocol-dark.dc.html",
+  "PhoneProtocolFrame-dark.dc.html",
+  "PhoneProtocolLog-dark.dc.html",
+  "PhoneProtocolRecord-dark.dc.html",
   "PhoneApproval-dark.dc.html",
   "PhoneAsk-dark.dc.html",
   "PhoneChat-dark.dc.html",
