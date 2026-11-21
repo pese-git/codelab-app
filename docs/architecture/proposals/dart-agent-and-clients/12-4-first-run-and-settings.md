@@ -1370,7 +1370,8 @@ sequenceDiagram
 [`add-app-onboarding`](../../../../openspec/changes/archive/2026-11-21-add-app-onboarding/design.md), spec `app-onboarding`.
 При первом запуске app показывает экран onboarding (`OnboardingDestination`) вместо рабочего места.
 Первый запуск — нет ключа `codelab.app.onboarding_done` в `shared_preferences`; ключ хранит только
-`true` и пишется при «Start using CodeLab» (D2). Ключ читается до `runApp`, как язык и оформление
+`true` и пишется в конце последнего шага «Open a project» (change `add-onboarding-project-step`, D2;
+до него — при «Start using CodeLab», D2 `add-app-onboarding`). Ключ читается до `runApp`, как язык и оформление
 (D3). Другое значение или сбой чтения дают рабочее место без onboarding, ключ не перезаписывается.
 Обновившие app видят onboarding один раз (решение Q2). Шаги:
 
@@ -1389,10 +1390,21 @@ sequenceDiagram
    сборке нет). Ссылки «Read the privacy policy» и «Terms of use» открывают документы страницы «Legal»
    (§12.7.7, §12.7.7а; change `add-app-legal-page`) внутри экрана onboarding, без перехода в
    настройки: «Back to setup» и Esc возвращают на шаг с прежним состоянием (D10, редакция 2026-11-21).
+5. «Open a project» (рабочее название кадра 07d; change
+   [`add-onboarding-project-step`](../../../../openspec/changes/add-onboarding-project-step/design.md),
+   решения пользователя 2026-11-22): тело экрана без проекта 11a (`CodeLabOpenProjectBody`) — «Open
+   folder…» с ⌘O/Ctrl+O, перетаскивание папки, до пяти недавних проектов без проверки папки, строка
+   `Last project` с именем и путём восстановленного проекта. Onboarding завершается выбором папки,
+   `Continue in <folder>` (проект восстановлен) или `Skip for now` (проекта нет; рабочее место
+   покажет 11a). Порядок: выбор → флаг → навигация → старт агента (D2). Выбор под onboarding
+   агента не стартует: `SettingsCubit` держит триггер выбора, удержание снимает
+   `CodeLabShellCubit.startOnLaunch` после перехода (D5). На «Privacy» вместо «Start using
+   CodeLab» — «Next».
 
 Пока показан onboarding, рабочее место не строится и агент окна не стартует: восстановленный
-проект становится триггером старта только после «Start using CodeLab» (D5; spec agent-workbench-ui
-«Агент стартует сам»). Выход до последнего шага покажет onboarding снова. Onboarding не входит в
+проект и папка, выбранная на шаге «Open a project», становятся триггером старта только после
+перехода в рабочее место (D5 `add-app-onboarding`, D5 `add-onboarding-project-step`; spec
+agent-workbench-ui «Агент стартует сам»). Выход до последнего шага покажет onboarding снова. Onboarding не входит в
 шаги сторожа; когда сторож появится, он показывается после `BootReady`.
 
 Решение пользователя 2026-11-05 (Q3 change `add-provider-setup-ui`): onboarding app в этот change не
