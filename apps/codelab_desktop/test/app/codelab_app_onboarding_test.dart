@@ -17,11 +17,17 @@
 // (`onboarding.shown`, `.flag_invalid`, `.flag_unreadable`) пишет модуль после
 // настройки журнала, как `app.locale_resolved`.
 
+import 'dart:async';
+
 import 'package:codelab_desktop/app/navigation/app_destination.dart';
 import 'package:codelab_desktop/app/navigation/navigation_cubit.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/onboarding/onboarding_start.dart';
+import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
+import 'package:codelab_desktop/core/platform/local_path_kind.dart';
 import 'package:codelab_desktop/core/platform/onboarding_preferences.dart';
+import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
+import 'package:codelab_desktop/core/platform/os_drop_region.dart';
 import 'package:codelab_desktop/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:codelab_desktop/features/workbench/presentation/workbench_shell.dart';
 import 'package:codelab_setup/codelab_setup.dart' show NoProviderConfigured;
@@ -57,20 +63,29 @@ void main() {
     addTearDown(view.resetDevicePixelRatio);
   });
 
-  CodeLabTestBinding binding({OnboardingStart? onboarding, String? project}) =>
-      CodeLabTestBinding(
-        onboarding: onboarding,
-        onboardingProbe: probe,
-        onboardingPreferences: preferences,
-        project: project,
-        stdioDefault: false,
-        // Открыватель считает вызовы и падает: агент в тесте не нужен, важно
-        // только когда и с какой папкой его пытаются открыть.
-        embeddedOpener: ({required cwd, required hostProfile}) async {
-          embeddedCalls.add(cwd);
-          throw StateError('the embedded agent is not part of this test');
-        },
-      );
+  CodeLabTestBinding binding({
+    OnboardingStart? onboarding,
+    String? project,
+    OnboardingPreferences? flag,
+    ProjectFolderPicker? picker,
+    DirectoryExists? directoryExists,
+    LocalPathKindOf? localPathKind,
+  }) => CodeLabTestBinding(
+    onboarding: onboarding,
+    onboardingProbe: probe,
+    onboardingPreferences: flag ?? preferences,
+    project: project,
+    projectFolderPicker: picker,
+    directoryExists: directoryExists,
+    localPathKind: localPathKind,
+    stdioDefault: false,
+    // Открыватель считает вызовы и падает: агент в тесте не нужен, важно
+    // только когда и с какой папкой его пытаются открыть.
+    embeddedOpener: ({required cwd, required hostProfile}) async {
+      embeddedCalls.add(cwd);
+      throw StateError('the embedded agent is not part of this test');
+    },
+  );
 
   Future<void> pumpApp(WidgetTester tester, CodeLabTestBinding b) async {
     await tester.pumpWidget(
@@ -219,9 +234,11 @@ void main() {
       await settleFrames(tester);
       await tester.tap(_key('onboarding-model-later'));
       await settleFrames(tester);
+      await tester.tap(_key('onboarding-next'));
+      await settleFrames(tester);
     }
 
-    testWidgets('проект восстановлен: агент ждёт «Start using CodeLab», затем '
+    testWidgets('проект восстановлен: агент ждёт конца onboarding, затем '
         'стартует один раз с папкой проекта', (tester) async {
       final b = binding(
         onboarding: const OnboardingStart(show: true),
@@ -242,13 +259,17 @@ void main() {
         reason: 'конец onboarding ещё не наступил',
       );
 
-      await tester.tap(_key('onboarding-finish'));
+      await tester.tap(_key('onboarding-project-continue'));
       await settleFrames(tester);
 
       expect(preferences.marked, 1);
       expect(find.byType(CodeLabShell), findsOneWidget);
       expect(find.byType(OnboardingScreen), findsNothing);
       expect(embeddedCalls, ['/work/app']);
+      final completed = b.scope.resolve<LogBuffer>().entries.value.singleWhere(
+        (e) => e['event'] == 'onboarding.completed',
+      );
+      expect(completed['project'], 'restored');
 
       // Ровно один раз за жизнь app: дальнейшие кадры старт не повторяют.
       await settleFrames(tester);
@@ -265,7 +286,7 @@ void main() {
       await pumpApp(tester, b);
       await walkToFinish(tester);
 
-      final finish = tester.getCenter(_key('onboarding-finish'));
+      final finish = tester.getCenter(_key('onboarding-project-continue'));
       await tester.tapAt(finish);
       await tester.tapAt(finish);
       await settleFrames(tester);
@@ -289,7 +310,7 @@ void main() {
       await pumpApp(tester, b);
       await walkToFinish(tester);
 
-      await tester.tap(_key('onboarding-finish'));
+      await tester.tap(_key('onboarding-project-continue'));
       await settleFrames(tester);
 
       expect(find.byType(CodeLabShell), findsOneWidget);
@@ -301,4 +322,268 @@ void main() {
       expect('$failed', isNot(contains('/Users/x')));
     });
   });
+
+  group('шаг «Open a project»: выбор, флаг, старт (D2, D5)', () {
+    Future<void> toProjectStep(WidgetTester tester) async {
+      for (var i = 0; i < 2; i++) {
+        await tester.tap(_key('onboarding-next'));
+        await settleFrames(tester);
+      }
+      await tester.tap(_key('onboarding-model-later'));
+      await settleFrames(tester);
+      await tester.tap(_key('onboarding-next'));
+      await settleFrames(tester);
+      expect(_key('onboarding-step-project'), findsOneWidget);
+    }
+
+    testWidgets('папка с шага: до перехода агента нет, после — один старт с '
+        'этой папкой', (tester) async {
+      final flag = _GatedPreferences();
+      final b = binding(
+        onboarding: const OnboardingStart(show: true),
+        flag: flag,
+        picker: _PickerOf('/work/app'),
+      );
+      await pumpApp(tester, b);
+      await toProjectStep(tester);
+
+      await tester.tap(_key('start-open-project'));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await settleFrames(tester);
+
+      // Выбор принят, флаг ещё пишется: onboarding на месте, агент не
+      // стартовал, а удержание триггера записано в журнал.
+      expect(flag.pending, isNotNull);
+      expect(find.byType(OnboardingScreen), findsOneWidget);
+      expect(
+        b.scope.resolve<NavigationCubit>().state,
+        const OnboardingDestination(),
+      );
+      expect(embeddedCalls, isEmpty);
+      final events = b.scope.resolve<LogBuffer>().entries.value;
+      expect(
+        events.where((e) => e['event'] == 'project.start_held'),
+        hasLength(1),
+      );
+
+      flag.pending!.complete();
+      await settleFrames(tester);
+
+      expect(find.byType(CodeLabShell), findsOneWidget);
+      expect(
+        b.scope.resolve<NavigationCubit>().state,
+        const WorkbenchDestination(),
+      );
+      expect(embeddedCalls, ['/work/app']);
+      await settleFrames(tester);
+      expect(embeddedCalls, hasLength(1));
+    });
+
+    testWidgets('выбор не принят (отмена диалога): флаг не пишется', (
+      tester,
+    ) async {
+      final b = binding(
+        onboarding: const OnboardingStart(show: true),
+        picker: _PickerOf(null),
+      );
+      await pumpApp(tester, b);
+      await toProjectStep(tester);
+
+      await tester.tap(_key('start-open-project'));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await settleFrames(tester);
+
+      expect(preferences.marked, 0);
+      expect(find.byType(OnboardingScreen), findsOneWidget);
+      expect(embeddedCalls, isEmpty);
+    });
+
+    testWidgets('другая папка при восстановленном проекте: старт один раз в '
+        'выбранной папке, восстановленная не открывается (spec «Другая '
+        'папка при восстановленном проекте»)', (tester) async {
+      final b = binding(
+        onboarding: const OnboardingStart(show: true),
+        project: '/work/app',
+        picker: _PickerOf('/work/other'),
+      );
+      await pumpApp(tester, b);
+      await toProjectStep(tester);
+      expect(_key('onboarding-project-continue'), findsOneWidget);
+
+      await tester.tap(_key('start-open-project'));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await settleFrames(tester);
+      await settleFrames(tester);
+
+      expect(embeddedCalls, ['/work/other']);
+      expect(preferences.marked, 1);
+      expect(find.byType(CodeLabShell), findsOneWidget);
+      final completed = b.scope.resolve<LogBuffer>().entries.value.singleWhere(
+        (e) => e['event'] == 'onboarding.completed',
+      );
+      expect(completed['project'], 'picker');
+    });
+
+    testWidgets('сбой системного выбора папки: флаг не пишется, шаг на месте, '
+        'журнал без текста ошибки, диагностика по spec', (tester) async {
+      final b = binding(
+        onboarding: const OnboardingStart(show: true),
+        picker: _PickerOf(null, error: StateError('boom: /secret/location')),
+      );
+      await pumpApp(tester, b);
+      await toProjectStep(tester);
+
+      await tester.tap(_key('start-open-project'));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await settleFrames(tester);
+
+      expect(preferences.marked, 0);
+      expect(find.byType(OnboardingScreen), findsOneWidget);
+      expect(_key('onboarding-step-project'), findsOneWidget);
+      expect(embeddedCalls, isEmpty);
+      final entries = b.scope.resolve<LogBuffer>().entries.value;
+      final failed = entries.singleWhere(
+        (e) => e['event'] == 'project.picker_failed',
+      );
+      expect(failed['error_class'], 'StateError');
+      expect(
+        entries.where((e) => e['event'] == 'Failed to open the folder picker.'),
+        hasLength(1),
+      );
+      expect('$entries', isNot(contains('boom')));
+      expect('$entries', isNot(contains('/secret')));
+      expect(
+        entries.where((e) => e['event'] == 'onboarding.completed'),
+        isEmpty,
+      );
+    });
+
+    testWidgets('закрытие во время записи флага: без перехода, старта и '
+        'события completed', (tester) async {
+      final flag = _GatedPreferences();
+      final b = binding(
+        onboarding: const OnboardingStart(show: true),
+        flag: flag,
+        picker: _PickerOf('/work/app'),
+      );
+      await pumpApp(tester, b);
+      await toProjectStep(tester);
+      await tester.tap(_key('start-open-project'));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await settleFrames(tester);
+      expect(flag.pending, isNotNull);
+
+      // Выход из app: экран onboarding закрывается, пока флаг ещё пишется.
+      await tester.pumpWidget(const SizedBox.shrink());
+      flag.pending!.complete();
+      await settleFrames(tester);
+
+      expect(embeddedCalls, isEmpty);
+      expect(
+        b.scope.resolve<NavigationCubit>().state,
+        const OnboardingDestination(),
+      );
+      final events = b.scope.resolve<LogBuffer>().entries.value;
+      expect(
+        events.where((e) => e['event'] == 'onboarding.completed'),
+        isEmpty,
+      );
+    });
+
+    testWidgets('«Skip for now» при незавершённом восстановлении: рабочее '
+        'место, затем один старт в восстановленной папке', (tester) async {
+      final restore = Completer<bool>();
+      final b = binding(
+        onboarding: const OnboardingStart(show: true),
+        project: '/work/app',
+        directoryExists: (_) => restore.future,
+      );
+      await pumpApp(tester, b);
+      await toProjectStep(tester);
+      // Чтение снимка ещё идёт: проекта нет, на шаге «Skip for now».
+      expect(_key('onboarding-project-continue'), findsNothing);
+
+      await tester.tap(_key('onboarding-project-skip'));
+      await settleFrames(tester);
+      expect(preferences.marked, 1);
+      expect(find.byType(CodeLabShell), findsOneWidget);
+      expect(embeddedCalls, isEmpty);
+
+      restore.complete(true);
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await settleFrames(tester);
+
+      expect(embeddedCalls, ['/work/app']);
+    });
+
+    testWidgets('в журнале нет путей: бросок папки /tmp/codelab-project-marker '
+        '(D8)', (tester) async {
+      const marker = '/tmp/codelab-project-marker';
+      final b = binding(
+        onboarding: const OnboardingStart(show: true),
+        localPathKind: (_) async => LocalPathKind.directory,
+      );
+      await pumpApp(tester, b);
+      await toProjectStep(tester);
+
+      tester.widget<OsDropRegion>(find.byType(OsDropRegion)).onDropped([
+        marker,
+      ]);
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await settleFrames(tester);
+
+      final events = b.scope.resolve<LogBuffer>().entries.value.where((e) {
+        final name = '${e['event']}';
+        return name.startsWith('onboarding.') || name.startsWith('project.');
+      });
+      expect(events.map((e) => e['event']), contains('onboarding.shown'));
+      final completed = events.singleWhere(
+        (e) => e['event'] == 'onboarding.completed',
+      );
+      expect(completed['project'], 'drop');
+      // Шаг модели отложен («Set up later»), поэтому `later`. Ключ провайдера
+      // и `CODELAB_HOME` в события не попадают: это проверяют
+      // `onboarding_cubit_test.dart` (события завершения и шага модели) и
+      // `integration_test/onboarding_flow_test.dart` (полный проход с
+      // реальным домом).
+      expect(completed['model_step'], 'later');
+      expect(events.map((e) => e['event']), contains('project.drop'));
+      for (final event in events) {
+        expect('$event', isNot(contains('codelab-project-marker')));
+      }
+    });
+  });
+}
+
+/// Выбор папки с готовым ответом.
+final class _PickerOf implements ProjectFolderPicker {
+  _PickerOf(this.result, {this.error});
+
+  final String? result;
+
+  /// Если задана — плагин выбора папки бросает её (сбой платформы).
+  final Object? error;
+
+  @override
+  Future<String?> pickFolder({String? initialDirectory}) async {
+    if (error != null) {
+      throw error!;
+    }
+    return result;
+  }
+}
+
+/// Флаг onboarding, запись которого держит тест: [pending] — незавершённая
+/// запись; пока её не завершили, onboarding не может перейти на рабочее место.
+final class _GatedPreferences implements OnboardingPreferences {
+  Completer<void>? pending;
+
+  @override
+  Future<OnboardingLoad> load() async => const OnboardingLoad(false);
+
+  @override
+  Future<void> markDone() {
+    final gate = pending = Completer<void>();
+    return gate.future;
+  }
 }

@@ -35,7 +35,7 @@ void main() {
       expect(load.done, isFalse);
       expect(load.storedValueInvalid, isFalse);
       expect(load.readFailure, isNull);
-      // Чтение ключ не создаёт: он пишется только в «Start using CodeLab».
+      // Чтение ключ не создаёт: он пишется только при завершении шага «Open a project».
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.containsKey(kOnboardingDoneKey), isFalse);
     },

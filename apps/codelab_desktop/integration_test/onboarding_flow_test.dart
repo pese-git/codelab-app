@@ -7,9 +7,12 @@
 // Сценарий: пустой временный `CODELAB_HOME` с бэкендом секретов `file` →
 // onboarding на первом шаге, рабочего места нет → «Next», «Next» → пресет
 // «Custom OpenAI-compatible» → мастер на тестовом сервере `/models`, ключ в
-// хранилище → «Next» → «Start using CodeLab» → рабочее место; выбор проекта
-// запускает встроенного агента без баннера «Add provider»; журнал onboarding
-// не содержит ключа и пути дома.
+// хранилище → «Next» → «Privacy» → «Next» → шаг «Open a project»: выбор папки
+// тестовым портом выбора папки (системный диалог из теста не закрыть) →
+// рабочее место; встроенный агент стартует один раз в выбранной папке уже
+// после перехода, без баннера «Add provider»; журнал onboarding не содержит
+// ключа и путей (change `add-onboarding-project-step`, D1, D2, D5, задача
+// 4.1).
 //
 // В `feature/*` файл только компилируется (`fvm flutter analyze`); на
 // устройстве или симуляторе его запускает `release/<version>` скриптом
@@ -26,6 +29,7 @@ import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/embedded_logger.dart';
 import 'package:codelab_desktop/app/onboarding/onboarding_start.dart';
 import 'package:codelab_desktop/core/platform/onboarding_preferences.dart';
+import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:codelab_desktop/features/workbench/presentation/workbench_shell.dart';
 import 'package:codelab_setup/io.dart' show ClientSecretAccess;
@@ -64,13 +68,23 @@ Future<void> _tapKey(WidgetTester tester, String key) async {
   await tester.pump(const Duration(milliseconds: 300));
 }
 
+/// Системный выбор папки, который сразу возвращает [path].
+final class _FixedFolderPicker implements ProjectFolderPicker {
+  _FixedFolderPicker(this.path);
+
+  final String path;
+
+  @override
+  Future<String?> pickFolder({String? initialDirectory}) async => path;
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'first run: wizard saves the provider, Start using CodeLab opens the '
-    'workbench, the agent starts without the Add provider banner, the log has '
-    'no key and no home path',
+    'first run: wizard saves the provider, the Open a project step opens the '
+    'workbench, the agent starts once in the chosen folder without the Add '
+    'provider banner, the log has no key and no paths',
     (tester) async {
       // Пустые `shared_preferences`: флага нет, onboarding должен показаться.
       SharedPreferences.setMockInitialValues({});
@@ -87,6 +101,11 @@ void main() {
       });
       addTearDown(() => server.close(force: true));
 
+      final project = await Directory.systemTemp.createTemp(
+        'codelab_onboarding_project_',
+      );
+      addTearDown(() => project.delete(recursive: true));
+
       final secrets = await E2eAgent.current.openFileSecrets();
       final home = File(E2eAgent.current.profilesPath).parent.path;
 
@@ -94,6 +113,7 @@ void main() {
         E2eAgent.current.bootstrap(
           profileSecrets: secrets,
           onboarding: OnboardingStart.fromLoad(load),
+          projectFolderPicker: _FixedFolderPicker(project.path),
         ),
       );
       await tester.pumpAndSettle();
@@ -155,7 +175,20 @@ void main() {
       await _tapKey(tester, 'onboarding-document-back');
       await _pumpUntil(tester, _key('onboarding-step-privacy'));
       expect(_key('onboarding-document'), findsNothing);
-      await _tapKey(tester, 'onboarding-finish');
+
+      // «Next» ведёт на шаг «Open a project» (D1); «Start using CodeLab» нет.
+      expect(_key('onboarding-finish'), findsNothing);
+      await _tapKey(tester, 'onboarding-next');
+      await _pumpUntil(tester, _key('onboarding-step-project'));
+      expect(shellCubit.state.selectedProjectPath, isNull);
+      expect(
+        (await SharedPreferences.getInstance()).getBool(kOnboardingDoneKey),
+        isNot(isTrue),
+      );
+
+      // Выбор папки: флаг пишется после принятого выбора, агент ждёт перехода
+      // на рабочее место (D2, D5).
+      await _tapKey(tester, 'start-open-project');
       await _pumpUntil(tester, find.byType(CodeLabShell));
       expect(find.byType(OnboardingScreen), findsNothing);
       expect(
@@ -163,8 +196,9 @@ void main() {
         isTrue,
       );
 
-      // Агент стартует при выборе проекта и находит провайдера: баннера нет.
-      await ensureProject(tester, shellCubit);
+      // Агент стартует один раз в выбранной папке и находит провайдера:
+      // баннера нет.
+      expect(shellCubit.state.selectedProjectPath, project.path);
       for (
         var i = 0;
         i < 200 &&
@@ -197,7 +231,9 @@ void main() {
       );
       expect(completed['model_step'], 'saved');
       expect('$entries', isNot(contains(_marker)));
+      expect(completed['project'], 'picker');
       expect('$entries', isNot(contains(home)));
+      expect('$entries', isNot(contains(project.path)));
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
