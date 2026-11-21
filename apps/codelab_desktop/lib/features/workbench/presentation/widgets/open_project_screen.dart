@@ -4,14 +4,12 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 
-import '../../../../app/app_scope.dart';
 import '../../../../app/navigation/navigation_cubit.dart';
-import '../../../../app/navigation/settings_page.dart';
 import '../../../../core/platform/os_drop_region.dart';
-import '../../../../l10n/app_localizations.dart';
 import '../../../../l10n/l10n.dart';
 import '../../application/project_drop.dart';
 import '../../application/shell_cubit.dart';
+import '../workbench_shell.dart' show openConnectionSettings;
 
 /// Текст отказа брошенной папки на языке [l10n] (spec agent-workbench-ui
 /// «Открытие папки перетаскиванием»; design.md change
@@ -132,11 +130,9 @@ class _WorkbenchOpenProjectScreenState
             ? l10n.workbenchOpenProjectAgentNoteConnects
             : l10n.workbenchOpenProjectAgentNoteStarts,
         settingsLinkLabel: l10n.workbenchOpenProjectSettingsLink,
-        onOpenSettings: () => unawaited(
-          codeLabDependenciesOf(context).navigationCubit.openSettings(
-            page: SettingsPage.connection,
-            source: SettingsOpenSource.startScreen,
-          ),
+        onOpenSettings: () => openConnectionSettings(
+          context,
+          source: SettingsOpenSource.startScreen,
         ),
         infoTitle: l10n.workbenchOpenProjectInfoTitle,
         infoBody: l10n.workbenchOpenProjectInfoBody(

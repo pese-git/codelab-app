@@ -1,3 +1,5 @@
+import 'dart:ui' show PathMetric;
+
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
@@ -49,6 +51,7 @@ class CodeLabOpenProjectScreen extends StatelessWidget {
   static const agentKey = ValueKey('open-project-agent');
   static const agentSettingsKey = ValueKey('open-project-agent-settings');
   static const infoKey = ValueKey('open-project-info');
+  static const heroKey = ValueKey('open-project-hero');
 
   final String title;
   final String description;
@@ -84,15 +87,36 @@ class CodeLabOpenProjectScreen extends StatelessWidget {
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
+          // Ширина колонки кадра 11a (`.col{max-width:620px}`, D10).
+          constraints: const BoxConstraints(maxWidth: 620),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(
-                FluentIcons.open_folder_horizontal,
-                size: 40,
-                color: CodeLabPalette.of(theme).accent,
+              // Герой кадра: плитка 56×56 со слабым фоном акцента и значком
+              // 28 px (`.hero`, D10); «слабый» — тот же акцент с малой
+              // непрозрачностью, отдельного токена в палитре нет.
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: DecoratedBox(
+                  key: heroKey,
+                  decoration: BoxDecoration(
+                    color: CodeLabPalette.of(
+                      theme,
+                    ).accent.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: SizedBox.square(
+                    dimension: 56,
+                    child: Center(
+                      child: Icon(
+                        FluentIcons.open_folder_horizontal,
+                        size: 28,
+                        color: CodeLabPalette.of(theme).accent,
+                      ),
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               CodeLabText(title, role: CodeLabTextRole.title),
@@ -164,48 +188,101 @@ class _DropZone extends StatelessWidget {
     final palette = CodeLabPalette.of(theme);
     final borderColor = active
         ? palette.accent
-        : theme.resources.controlStrokeColorDefault;
+        : theme.resources.controlStrongStrokeColorDefault;
     final text = message;
-    return DecoratedBox(
-      key: CodeLabOpenProjectScreen.dropZoneKey,
-      decoration: BoxDecoration(
-        color: active
-            ? palette.accent.withValues(alpha: 0.08)
-            : theme.resources.cardBackgroundFillColorDefault,
-        border: Border.all(color: borderColor, width: active ? 2 : 1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Center(
-          child: text != null
-              ? Row(
-                  key: CodeLabOpenProjectScreen.dropMessageKey,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(FluentIcons.warning, size: 14, color: palette.warning),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: CodeLabText(
-                        text,
-                        role: CodeLabTextRole.body,
-                        color: palette.warning,
-                      ),
+    final content = Padding(
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: text != null
+            ? Row(
+                key: CodeLabOpenProjectScreen.dropMessageKey,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(FluentIcons.warning, size: 14, color: palette.warning),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: CodeLabText(
+                      text,
+                      role: CodeLabTextRole.body,
+                      color: palette.warning,
                     ),
-                  ],
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CodeLabText(label, role: CodeLabTextRole.strong),
-                    const SizedBox(height: 4),
-                    CodeLabText(hint, role: CodeLabTextRole.caption),
-                  ],
-                ),
-        ),
+                  ),
+                ],
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CodeLabText(label, role: CodeLabTextRole.strong),
+                  const SizedBox(height: 4),
+                  CodeLabText(hint, role: CodeLabTextRole.caption),
+                ],
+              ),
       ),
     );
+    if (active) {
+      // Выделенная зона: сплошная рамка акцента (D10).
+      return DecoratedBox(
+        key: CodeLabOpenProjectScreen.dropZoneKey,
+        decoration: BoxDecoration(
+          color: palette.accent.withValues(alpha: 0.08),
+          border: Border.all(color: borderColor, width: 2),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: content,
+      );
+    }
+    // В покое — пунктир штрихом `strong` (`.drop{border:1px dashed}`): у
+    // Fluent и Flutter пунктирной рамки нет, поэтому рисуется здесь.
+    return CustomPaint(
+      key: CodeLabOpenProjectScreen.dropZoneKey,
+      painter: _DashedBorderPainter(
+        color: borderColor,
+        background: theme.resources.cardBackgroundFillColorDefault,
+        radius: 6,
+      ),
+      child: content,
+    );
   }
+}
+
+/// Пунктирная рамка со скруглёнными углами и фоном внутри.
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({
+    required this.color,
+    required this.background,
+    required this.radius,
+  });
+
+  final Color color;
+  final Color background;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = RRect.fromRectAndRadius(
+      (Offset.zero & size).deflate(0.5),
+      Radius.circular(radius),
+    );
+    canvas.drawRRect(rect, Paint()..color = background);
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final path = Path()..addRRect(rect);
+    for (final PathMetric metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        canvas.drawPath(metric.extractPath(distance, distance + 4), stroke);
+        distance += 8;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) =>
+      old.color != color ||
+      old.background != background ||
+      old.radius != radius;
 }
 
 /// Карточка агента окна: имя, транспорт, пояснение и ссылка в настройки.

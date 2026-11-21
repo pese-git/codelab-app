@@ -97,7 +97,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 - [x] 4.4 `[desktop]` Реализация 4.3: `connectionLabel`, `openFolderShortcut`, `onOpenFolder: cubit.browseForProject` в `workbench_shell.dart`; ARB `workbenchBadgeNoProject*`. 4.3 зелёный.
 - [x] 4.5 `[desktop]` Красный: `test/features/settings/presentation/keyboard_page_test.dart` и `keyboard_page_l10n_test.dart` — spec app-settings «Страница «Keyboard»: строки таблицы»: 21 строка на Linux, «Строка «Open folder»», «Поиск строки «Open folder»», «Сочетаний без поведения нет» без `O`; `keyboard_bindings_test.dart` — нажатие Ctrl+O и ⌘O на рабочем месте вызывает выбор папки (spec «Сочетания app и страница «Keyboard» не расходятся»).
 - [x] 4.6 `[desktop]` Реализация 4.5: ветки `openFolder` в `keyboardShortcutActionOf`, `keyboardShortcutWhereOf`, `keyboardShortcutGroupOf` (`presentation/keyboard_page.dart`), ARB `settingsKeyboardActionOpenFolder` (`en`/`ru`). 4.5 зелёный. Проверить, что `macos/Runner/Base.lproj/MainMenu.xib` не содержит пункта с ⌘O (design.md D7).
-- [ ] 4.7 `[desktop]` Удаление `workbenchOpenProjectHint` (design.md D11; spec agent-workbench-ui «Empty session after connecting», сценарий «Start screen without a project»). Сначала красный тест:
+- [x] 4.7 `[desktop]` Удаление `workbenchOpenProjectHint` (design.md D11; spec agent-workbench-ui «Empty session after connecting», сценарий «Start screen without a project»). Сначала красный тест:
   - `test/features/workbench/application/cubits_app_strings_test.dart`, тест «текст «нет активной сессии» пересобирается при смене языка»: `currentSessionDetail` — `''` до и после смены языка;
   - `agent_start_screens_test.dart`: текста `Open a project to start a session.` нет во всём окне (`find.text(...)` → `findsNothing`), комментарий о подписи в шапке убрать.
 
@@ -113,8 +113,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 - [x] 5.2 `[desktop]` Реализация 5.1: `PackageRule` в `test/support/rules.dart` с комментарием по-русски (почему, ссылка на D3). 5.1 зелёный, `melos run guard` зелёный.
 - [x] 5.3 `[desktop]` Красный: `apps/codelab_desktop/test/core/platform/os_drop_region_test.dart` — события плагина (вход, выход, бросок с путями, элемент с пустым путём) переводятся в `onEntered`, `onExited`, `onDropped([..., null])`. События подаются через канал плагина в `TestDefaultBinaryMessenger` или публичные типы событий, если пакет их даёт (design.md D3).
 - [x] 5.4 `[desktop]` Реализация 5.3: зависимость `desktop_drop` с точным пином из 1.1 в `apps/codelab_desktop/pubspec.yaml` (комментарий со ссылкой на D3 и §20и), `melos bootstrap`, `lib/core/platform/os_drop_region.dart`; `WorkbenchOpenProjectScreen` оборачивает организм в `OsDropRegion`. 5.3 и 4.1 зелёные; `fvm flutter analyze` и `guard` зелёные; сборка `fvm flutter build macos --debug` локально, Linux и Windows — CI.
-- [ ] 5.5 `[desktop]` Ручная проверка запущенного app на macOS разработчиком (не прогон `test:e2e:app:*` и не условие merge в `develop`): Finder → папка открывается и агент стартует; файл, две папки и `.app` дают ожидаемый исход; тёмная тема сверена с `ProjectsEmpty-dark`. Windows и Linux — ручная проверка в `release/<version>` (корневой `AGENTS.md` §21). Итог записать в описание PR.
-
+- [ ] 5.5 `[desktop]` Ручная проверка запущенного app на macOS разработчиком (не прогон `test:e2e:app:*` и не условие merge в `develop`): Finder → папка открывается и агент стартует; файл, две папки и `.app` дают ожидаемый исход; тёмная тема сверена с `ProjectsEmpty-dark`. Windows и Linux — ручная проверка в `release/<version>` (корневой `AGENTS.md` §21). Итог записать в описание PR. Во время этой проверки снять снимки экрана без проекта (светлая тема) и сайдбара с «Open folder…» под прежними именами `apps/codelab_desktop/doc/images/first-launch-no-project.png` и `sidebar-projects.png` — для 6.2.
 ## 6. Документация
 
 - [x] 6.1 `codelab-architect`: `apps/codelab_desktop/AGENTS.md` — раздел «Экран без проекта»: организм и ключи, `OsDropRegion` — единственный импорт `desktop_drop`, `LocalPathKindOf`, правило «вид пути решает `SettingsCubit`», `ProjectDropRejection`, поздний результат, `project.drop` без путей, Cmd/Ctrl+O, `SettingsOpenSource.startScreen`; ссылка на D1–D12.
@@ -123,6 +122,6 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - раздел о проектах в сайдбаре — «Open folder…» в конце списка «Projects», `No recent projects yet.`, Ctrl+O;
   - список сочетаний, если он есть в руководстве.
 
-  Снимок `doc/images/first-launch-no-project.png` и `sidebar-projects.png` переснять или убрать ссылку, если снимок сделать нельзя. Стандарт — `.claude/skills/codelab-docs/SKILL.md`.
+  Снимки `doc/images/first-launch-no-project.png` и `sidebar-projects.png` сейчас показывают старый вид: заменить снимками из 5.5 под теми же именами. Если снимков нет, удалить оба файла и ссылки на них из README и руководства — устаревший снимок не оставлять. Стандарт — `.claude/skills/codelab-docs/SKILL.md`.
 - [ ] 6.3 Вычитка `ru` новых строк ARB app и кита пользователем по `l10n-glossary.md` (отказы перетаскивания и текст о границе папки — метка `security` в `@description`).
 - [ ] 6.4 `openspec validate add-empty-project-screen --strict` зелёный; проверки затронутого по §21 перечислены в описании PR, полный `melos run check` не запускался (если пользователь не попросил).

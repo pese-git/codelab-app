@@ -292,12 +292,17 @@ void _openSettings(BuildContext context, SettingsOpenSource source) {
 
 /// «Configure connection» экрана подключения и баннера соединения: открывает
 /// страницу «Connection» (design.md change `add-app-settings-shell`, D6;
-/// вместо прежнего диалога подключения).
-void openConnectionSettings(BuildContext context) {
+/// вместо прежнего диалога подключения). [source] различает вход в журнале:
+/// баннер (по умолчанию) или экран без проекта (`add-empty-project-screen`,
+/// D5).
+void openConnectionSettings(
+  BuildContext context, {
+  SettingsOpenSource source = SettingsOpenSource.banner,
+}) {
   unawaited(
     codeLabDependenciesOf(context).navigationCubit.openSettings(
       page: SettingsPage.connection,
-      source: SettingsOpenSource.banner,
+      source: source,
     ),
   );
 }

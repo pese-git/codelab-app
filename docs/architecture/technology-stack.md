@@ -984,7 +984,7 @@ Architectural dependency rules важнее технической доступ�
 
 ## 20и. `codelab_desktop`: приём перетаскивания из ОС — `desktop_drop`
 
-**Статус: утверждено** решением пользователя 2026-11-22 по итогам проверки — задачи 1.1 change [`add-empty-project-screen`](../../openspec/changes/add-empty-project-screen/design.md) (D3). Первый потребитель — экран без проекта (кадр 11a); вложения композера D-12 переиспользуют тот же адаптер (`proposals/dart-agent-and-clients/12-3-desktop-display.md` §12.3.6). Пакет добавляется в `pubspec.yaml` app задачей 5.4 change.
+**Статус: утверждено** решением пользователя 2026-11-22 по итогам проверки — задачи 1.1 change [`add-empty-project-screen`](../../openspec/changes/add-empty-project-screen/design.md) (D3). Первый потребитель — экран без проекта (кадр 11a); вложения композера D-12 переиспользуют тот же адаптер (`proposals/dart-agent-and-clients/12-3-desktop-display.md` §12.3.6). Пакет добавлен в `pubspec.yaml` app задачей 5.4 change.
 
 Технология: [`desktop_drop`](https://pub.dev/packages/desktop_drop) **0.8.4** (опубликован 2026-09-01; Apache-2.0; publisher `mixin.dev`). Требует Dart `^3.5.0` и Flutter `>=3.0.0`; проект на Flutter 3.47.0 / Dart 3.13.0 (`.fvmrc`) — совместимо. Пин — точная версия `0.8.4`, как у `url_launcher` и `system_theme` (§20е, §20з).
 
