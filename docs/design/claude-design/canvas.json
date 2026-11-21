@@ -2309,6 +2309,14 @@
    "x": 4560,
    "y": 20540,
    "page": "dark"
+  },
+  "NavPhoneOnboarding.dc.html": {
+   "h": 1300,
+   "page": "phone",
+   "title": "Navigation graph — phone first run and provider wizard",
+   "w": 2960,
+   "x": 0,
+   "y": 7660
   }
  },
  "createdOnFiles": {
@@ -2396,7 +2404,8 @@
   "t-row6",
   "row12",
   "row12s",
-  "d-row12"
+  "d-row12",
+  "p-row6"
  ],
  "notes": {
   "c-row1": {
@@ -3075,7 +3084,7 @@
    "w": 460,
    "x": 4700,
    "y": 5432,
-   "text": "Онбординг на смартфоне (D-11, §12.4.9, §12.8.4): P17 → P18 → P19 → мастер P11a → P11b → P11 → P11c → P11d → P19a → P20 → P1.\nПрофиль mobile (§12.8.2): в P18 «Run commands» — «Not here», shell нет; рабочая папка — каталог Documents приложения.\nМастер — отдельные экраны во всю ширину, 7 шагов как у P11; ключ — Keychain (Keystore на Android) или «No key», переменной окружения нет (§12.8.4, шаг 9). Close возвращает на P19.\nP19 пропускается при ProviderReady. P20 ведёт в P13 и P15; Back возвращает на P20. Граф переходов — тот же, что NavOnboarding."
+   "text": "Онбординг на смартфоне (D-11, §12.4.9, §12.8.4): P17 → P18 → P19 → мастер P11a → P11b → P11 → P11c → P11d → P19a → P20 → P1.\nПрофиль mobile (§12.8.2): в P18 «Run commands» — «Not here», shell нет; рабочая папка — каталог Documents приложения.\nМастер — отдельные экраны во всю ширину, 7 шагов как у P11; ключ — Keychain (Keystore на Android) или «No key», переменной окружения нет (§12.8.4, шаг 9). Close возвращает на P19.\nP19 пропускается при ProviderReady. P20 ведёт в P13 и P15; Back возвращает на P20. Граф переходов — NavPhoneOnboarding (ряд ниже)."
   },
   "t-row5s": {
    "fill": "purple",
@@ -3093,7 +3102,7 @@
    "w": 460,
    "x": 5170,
    "y": 6416,
-   "text": "Отказ проверки (§12.4.4, шаги 4–5), под P11 Check.\nP11e — 401/403: ключ не принят; Back → P11b (ключ), Retry повторяет проверку.\nP11f — нет ответа или таймаут 10 с: Retry, Back → P11a (Base URL) и «Save without check…».\nP11g — подтверждение; после него P11h: модель и окно контекста вручную; P11i — Review с предупреждением «Not verified: timeout», Save → P19b: шаг 3 с «Not verified» и жёлтой плашкой, Next → P20.\nВ сообщении только код и вид отказа, тело ответа не показывается; редиректы не выполняются (SETUP-23). 404 на OpenAI-совместимом адресе — как 06 десктопа."
+   "text": "Отказ проверки (§12.4.4, шаги 4–5), под P11 Check.\nP11e — 401/403: ключ не принят; Back → P11b (ключ), Retry повторяет проверку.\nP11f — нет ответа или таймаут 10 с: Retry, Back → P11a (Base URL) и «Save without check…».\nP11g — подтверждение; после него P11h: модель и окно контекста вручную; P11i — Review с предупреждением «Not verified: timeout», Save → P19b: шаг 3 с «Not verified» и жёлтой плашкой, Next → P20.\nВ сообщении только код и вид отказа, тело ответа не показывается; редиректы не выполняются (SETUP-23). 404 на OpenAI-совместимом адресе — как 06 десктопа.\nВсе переходы — граф NavPhoneOnboarding."
   },
   "t-row5f": {
    "fill": "orange",
@@ -3181,6 +3190,14 @@
    "x": 0,
    "y": 20280,
    "text": "Открытие проекта — тёмная тема"
+  },
+  "p-row6": {
+   "kind": "title1",
+   "page": "phone",
+   "w": 240,
+   "x": 0,
+   "y": 7400,
+   "text": "Смартфон: граф первого запуска"
   }
  },
  "order": [
@@ -3460,7 +3477,8 @@
   "ProjectReady.dc.html",
   "ProjectReady-dark.dc.html",
   "ProjectNotFound.dc.html",
-  "ProjectNotFound-dark.dc.html"
+  "ProjectNotFound-dark.dc.html",
+  "NavPhoneOnboarding.dc.html"
  ],
  "pages": [
   {
