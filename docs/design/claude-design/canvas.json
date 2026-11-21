@@ -2541,6 +2541,22 @@
    "w": 2160,
    "x": 0,
    "y": 4700
+  },
+  "NavPhoneProject.dc.html": {
+   "h": 900,
+   "page": "phone",
+   "title": "Navigation graph — phone, opening a project",
+   "w": 2160,
+   "x": 0,
+   "y": 10844
+  },
+  "NavTabletProject.dc.html": {
+   "h": 900,
+   "page": "tablet",
+   "title": "Navigation graph — tablet, opening a project",
+   "w": 2160,
+   "x": 0,
+   "y": 10960
   }
  },
  "createdOnFiles": {
@@ -2635,7 +2651,9 @@
   "t-row7",
   "t-row7s",
   "dp-row7",
-  "dt-row7"
+  "dt-row7",
+  "p-row8",
+  "t-row8"
  ],
  "notes": {
   "c-row1": {
@@ -3482,6 +3500,24 @@
    "x": 0,
    "y": 9360,
    "text": "Тёмная тема — планшет: открытие проекта"
+  },
+  "p-row8": {
+   "kind": "title1",
+   "maxW": 2160,
+   "page": "phone",
+   "w": 240,
+   "x": 0,
+   "y": 10584,
+   "text": "Смартфон: граф открытия проекта"
+  },
+  "t-row8": {
+   "kind": "title1",
+   "maxW": 2160,
+   "page": "tablet",
+   "w": 240,
+   "x": 0,
+   "y": 10700,
+   "text": "Планшет: граф открытия проекта"
   }
  },
  "order": [
@@ -3787,7 +3823,9 @@
   "TabletProjectReady-dark.dc.html",
   "TabletProjectNotFound.dc.html",
   "TabletProjectNotFound-dark.dc.html",
-  "NavProject.dc.html"
+  "NavProject.dc.html",
+  "NavPhoneProject.dc.html",
+  "NavTabletProject.dc.html"
  ],
  "pages": [
   {
