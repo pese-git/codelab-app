@@ -22,7 +22,7 @@ CodeLab app — окно для работы с AI-агентом над пап�
    - кнопка «Open folder…» с подсказкой сочетания: ⌘O на macOS, Ctrl+O на Windows и Linux;
    - зона «Drop a folder here to open it» с подсказкой «Files are not accepted — only a folder»;
    - карточка агента этого окна: имя профиля и подпись способа подключения — «in-process · profile of this window» для встроенного агента, «stdio · … · profile of this window» или «WebSocket · … · profile of this window» для внешнего. Под ней: «Starts when you open a folder. Nothing runs before that.» (для агента по WebSocket — «Connects when you open a folder. Nothing connects before that.») и ссылка «Change in Settings › Connection», которая открывает страницу подключения;
-   - плашка «New session needs a folder»: «New session» без проекта открывает тот же выбор папки.
+   - плашка «New session needs a folder»: «New session», ⌘N (Ctrl+N на Windows и Linux) и команда `/new` в палитре без проекта открывают тот же выбор папки.
 
    Статус в правом верхнем углу — «No project · agent not started». Подсказка к нему: «No project is selected, so no agent is running». Пока папки нет, агент не запущен и ничего не подключается.
 

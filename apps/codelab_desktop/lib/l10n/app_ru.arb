@@ -949,7 +949,6 @@
   "settingsKeyboardActionRejectOnce": "Отклонить только сейчас",
   "settingsKeyboardActionRejectAlways": "Всегда отклонять",
   "settingsKeyboardWhereWorkbench": "Рабочее место",
-  "settingsKeyboardWhereWorkbenchProject": "Рабочее место, когда выбран проект",
   "settingsKeyboardWhereOverlay": "Палитра команд, диалог или выдвижная панель",
   "settingsKeyboardWhereSettings": "Настройки",
   "settingsKeyboardWhereWorkbenchFiles": "Рабочее место, когда доступна панель файлов",

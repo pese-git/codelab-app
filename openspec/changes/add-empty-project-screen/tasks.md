@@ -106,6 +106,22 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - удалить `workbenchOpenProjectHint` и `@workbenchOpenProjectHint` из `lib/l10n/app_en.arb` и `app_ru.arb`, `fvm flutter gen-l10n`.
 
   Тесты зелёные; `l10n:check` и `ui_literals_test` зелёные.
+- [x] 4.8 `[desktop]` Cmd/Ctrl+N без проекта (design.md D7а; spec agent-workbench-ui «Агент стартует сам», пункт «Сочетания», сценарии «⌘N без проекта открывает выбор папки», «Отмена выбора папки после Ctrl+N», «Повторный Ctrl+N при открытом диалоге», «Пункт палитры «New session» без проекта»; spec app-settings «Страница «Keyboard»: строки таблицы», строка `new-session`). Сначала красные тесты:
+  - `test/features/workbench/presentation/workbench_shell_test.dart`:
+    - без проекта ⌘N (macOS) и Ctrl+N (Linux) вызывают порт выбора папки один раз; открыватель агента не вызван, `session/new` не отправлен;
+    - отмена диалога ничего не меняет;
+    - повторный Ctrl+N при незавершённом `pickFolder` порт второй раз не вызывает;
+    - пункт палитры `new` без проекта открывает выбор папки;
+  - `test/features/settings/presentation/keyboard_page_test.dart` и `test/support/keyboard_rows.dart`: у `new-session` «Where» — `Workbench`;
+  - `keyboard_bindings_test.dart`: Ctrl+N и ⌘N на рабочем месте без проекта вызывают выбор папки;
+  - пересмотреть `test/features/workbench/application/review_fixes_test.dart` («when a project is selected»): тест, закрепляющий отсутствие привязки без проекта, переписать под новое правило.
+
+  Затем код:
+  - `lib/features/workbench/presentation/workbench_shell.dart`: `onNewSession: () => unawaited(cubit.createSession())` без условия по проекту, комментарий со ссылкой на D7а;
+  - `lib/features/settings/presentation/keyboard_page.dart`: `CodeLabShortcut.newSession => l10n.settingsKeyboardWhereWorkbench`;
+  - удалить `settingsKeyboardWhereWorkbenchProject` из `app_en.arb`/`app_ru.arb`, затем `fvm flutter gen-l10n`.
+
+  Тесты зелёные, `l10n:check` зелёный.
 
 ## 5. Адаптер, плагин, сторож
 

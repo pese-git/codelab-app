@@ -5821,12 +5821,6 @@ abstract class AppLocalizations {
   /// **'Workbench'**
   String get settingsKeyboardWhereWorkbench;
 
-  /// Колонка «Где»: рабочее место при выбранном проекте.
-  ///
-  /// In en, this message translates to:
-  /// **'Workbench, when a project is selected'**
-  String get settingsKeyboardWhereWorkbenchProject;
-
   /// Колонка «Где»: поверхности, которые закрывает Esc.
   ///
   /// In en, this message translates to:

@@ -69,10 +69,10 @@ String keyboardShortcutWhereOf(
   CodeLabShortcut shortcut,
 ) => switch (shortcut) {
   CodeLabShortcut.commandPalette ||
+  CodeLabShortcut.newSession ||
   CodeLabShortcut.openFolder ||
   CodeLabShortcut.openSettings ||
   CodeLabShortcut.toggleSidebar => l10n.settingsKeyboardWhereWorkbench,
-  CodeLabShortcut.newSession => l10n.settingsKeyboardWhereWorkbenchProject,
   CodeLabShortcut.closeOverlay => l10n.settingsKeyboardWhereOverlay,
   CodeLabShortcut.leaveSettings => l10n.settingsKeyboardWhereSettings,
   CodeLabShortcut.toggleFiles => l10n.settingsKeyboardWhereWorkbenchFiles,

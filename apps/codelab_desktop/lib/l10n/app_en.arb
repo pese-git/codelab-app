@@ -5080,10 +5080,6 @@
   "@settingsKeyboardWhereWorkbench": {
     "description": "Колонка «Где»: рабочее место."
   },
-  "settingsKeyboardWhereWorkbenchProject": "Workbench, when a project is selected",
-  "@settingsKeyboardWhereWorkbenchProject": {
-    "description": "Колонка «Где»: рабочее место при выбранном проекте."
-  },
   "settingsKeyboardWhereOverlay": "Command palette, dialog or sliding panel",
   "@settingsKeyboardWhereOverlay": {
     "description": "Колонка «Где»: поверхности, которые закрывает Esc."

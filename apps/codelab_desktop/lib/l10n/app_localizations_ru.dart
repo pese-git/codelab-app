@@ -3731,10 +3731,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsKeyboardWhereWorkbench => 'Рабочее место';
 
   @override
-  String get settingsKeyboardWhereWorkbenchProject =>
-      'Рабочее место, когда выбран проект';
-
-  @override
   String get settingsKeyboardWhereOverlay =>
       'Палитра команд, диалог или выдвижная панель';
 

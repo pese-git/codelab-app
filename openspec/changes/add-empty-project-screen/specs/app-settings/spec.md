@@ -15,7 +15,7 @@
 | Группа | id | Action | macOS | Windows, Linux | Where |
 |---|---|---|---|---|---|
 | Global | `command-palette` | Open the command palette | ⌘ K | Ctrl K | Workbench |
-| Global | `new-session` | New session | ⌘ N | Ctrl N | Workbench, when a project is selected |
+| Global | `new-session` | New session | ⌘ N | Ctrl N | Workbench |
 | Global | `open-folder` | Open a folder as the project | ⌘ O | Ctrl O | Workbench |
 | Global | `open-settings` | Open settings | ⌘ , | Ctrl , | Workbench |
 | Global | `close-overlay` | Close the command palette, a dialog or a sliding panel | Esc | Esc | Command palette, dialog or sliding panel |

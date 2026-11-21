@@ -94,11 +94,12 @@ class CodeLabShell extends StatelessWidget {
               : state.isCommandPaletteOpen
               ? cubit.closeCommandPalette
               : (state.canCancel ? cubit.cancelTurn : null),
-          // Агент стартует сам (D13): «New session» доступна при выбранном
-          // проекте и без соединения.
-          onNewSession: state.selectedProjectPath != null
-              ? () => unawaited(cubit.createSession())
-              : null,
+          // Привязано всегда: без проекта сочетание делает то же, что кнопка
+          // «New session» сайдбара, — открывает выбор папки (правило
+          // `require-project-folder`, D5; InfoBar экрана без проекта обещает
+          // именно это, change `add-empty-project-screen`, D7а).
+          // С проектом и без соединения оно стартует агента (D13).
+          onNewSession: () => unawaited(cubit.createSession()),
           // Передаётся всегда: наличие цели проверяется при нажатии, иначе
           // привязка появлялась бы и пропадала с каждым снимком
           // (`fix-approval-focus`, D4, п. 1).

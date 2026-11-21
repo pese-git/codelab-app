@@ -3672,10 +3672,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsKeyboardWhereWorkbench => 'Workbench';
 
   @override
-  String get settingsKeyboardWhereWorkbenchProject =>
-      'Workbench, when a project is selected';
-
-  @override
   String get settingsKeyboardWhereOverlay =>
       'Command palette, dialog or sliding panel';
 
