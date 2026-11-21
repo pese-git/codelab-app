@@ -46,6 +46,7 @@
 | Подсветка кода (`codelab_ui`, только `lib/src/rendering/`) | `val_highlight` (change `add-desktop-markdown`, D4) |
 | Открытие внешних ссылок (`codelab_desktop`, только `lib/core/platform/`) | `url_launcher` (change `add-desktop-markdown`, D5) |
 | Системный цвет акцента (`codelab_desktop`, только `lib/core/platform/`) | `system_theme` (change [`add-app-appearance-page`](../../openspec/changes/archive/2026-11-20-add-app-appearance-page/design.md), D7; §20з) |
+| Приём перетаскивания файлов и папок из ОС (`codelab_desktop`, только `lib/core/platform/os_drop_region.dart`) | `desktop_drop` (change [`add-empty-project-screen`](../../openspec/changes/add-empty-project-screen/design.md), D3; §20и) |
 | Локализация интерфейса (`codelab_desktop`, `codelab_ui`) | `flutter_localizations`, `gen-l10n` (ARB), `intl` для сгенерированного кода (change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md), D1; §20ж) |
 | Сайт-визитка (`site/`, вне pub workspace и Melos) | Astro на Node, пакетный менеджер npm (ADR-0003, §28) |
 
@@ -978,6 +979,37 @@ Architectural dependency rules важнее технической доступ�
 7. **Безопасность.** Плагин не принимает данных от пользователя и агента; цвет из системы используется только как роль `accent`.
 8. **Лицензии.** BSD-3-Clause совместима с MIT; зависимости pub.dev в `THIRD_PARTY_NOTICES.md` не вносятся (его вводная часть), шрифтов и ресурсов пакет в сборку не кладёт.
 9. **Заменяет ли существующую технологию.** Нет. **ADR** — нет: узкая платформенная зависимость за портом, архитектуру не меняет (прецедент §20е).
+
+---
+
+## 20и. `codelab_desktop`: приём перетаскивания из ОС — `desktop_drop`
+
+**Статус: утверждено** решением пользователя 2026-11-22 по итогам проверки — задачи 1.1 change [`add-empty-project-screen`](../../openspec/changes/add-empty-project-screen/design.md) (D3). Первый потребитель — экран без проекта (кадр 11a); вложения композера D-12 переиспользуют тот же адаптер (`proposals/dart-agent-and-clients/12-3-desktop-display.md` §12.3.6). Пакет добавляется в `pubspec.yaml` app задачей 5.4 change.
+
+Технология: [`desktop_drop`](https://pub.dev/packages/desktop_drop) **0.8.4** (опубликован 2026-09-01; Apache-2.0; publisher `mixin.dev`). Требует Dart `^3.5.0` и Flutter `>=3.0.0`; проект на Flutter 3.47.0 / Dart 3.13.0 (`.fvmrc`) — совместимо. Пин — точная версия `0.8.4`, как у `url_launcher` и `system_theme` (§20е, §20з).
+
+Проверка по §24–§25:
+
+1. **Почему не SDK.** В Flutter 3.47.0 API приёма внешнего перетаскивания на десктопе нет: `DragTarget` и `Draggable` работают только внутри дерева виджетов (проверено поиском по исходникам framework). `file_selector` (§12.1) покрывает только диалоги. Своего решения в проекте нет. Альтернативы — `super_drag_and_drop` (нативное расширение на Rust) и свой канал на трёх ОС — отклонены (D3).
+2. **Версия.** 0.9.0–0.9.2 требуют Flutter `>=3.47.7`, поэтому пин — 0.8.4 до обновления Flutter. При переходе на 0.9.x: `dbus` уходит из замыкания, добавляются `cross_file ^0.4.0`, `cross_file_platform_interface`, `cross_file_web`, `mime` — их лицензии проверяются при обновлении (сейчас не проверены).
+3. **Платформы и нативная часть.** `pluginClass DesktopDropPlugin` для macOS, Windows и Linux; регистрацию делает генератор плагинов Flutter (registrant-файлы), ручной настройки раннера нет. macOS — Swift Package Manager / podspec без сторонних зависимостей; новых entitlements не нужно, потому что песочница выключена. Windows — OLE drop target окна. Linux — GTK (`text/uri-list`). Сборка `fvm flutter build macos --debug` с пакетом проходит локально; Linux и Windows проверяет CI-сборка ветки после задачи 5.4. Настоящий бросок проверяется вручную (задача 5.5).
+4. **Транзитивные пакеты.** Новые в `pubspec.lock`:
+
+   | Пакет | Версия | Лицензия | Тянет | Примечание |
+   |---|---|---|---|---|
+   | `desktop_drop` | 0.8.4 | Apache-2.0 | прямая | |
+   | `dbus` | 0.7.15 | MPL-2.0 | `desktop_drop` | нужен только на Linux; допущен явным решением пользователя 2026-11-22 (п. 5) |
+   | `universal_platform` | 1.1.0 | MIT | `desktop_drop` | |
+
+   `cross_file`, `web` и `flutter_web_plugins` уже были в lock (через `file_selector` и SDK).
+5. **Лицензии.** Apache-2.0 и MIT совместимы с MIT. `dbus` — MPL-2.0, слабый copyleft на уровне файла: изменённые файлы самого пакета пришлось бы раскрывать под MPL-2.0, а код CodeLab, который его использует, лицензию не меняет. Проект `dbus` не правит и не копирует, пакет приходит из pub.dev как есть. Пользователь допустил его явным решением 2026-11-22 как исключение для этой зависимости. Любой другой пакет под MPL или более строгой лицензией требует нового решения. Зависимости pub.dev в `THIRD_PARTY_NOTICES.md` не вносятся (вводная часть файла, §20з п. 8).
+6. **Где.** Только адаптер `OsDropRegion` в `apps/codelab_desktop/lib/core/platform/os_drop_region.dart`; импорт `package:desktop_drop/` в остальном `lib` app запрещён сторожем (по образцу `system_theme`). Типы плагина за адаптер не выходят; вид пути проверяет порт `LocalPathKindOf`, решение принимает `SettingsCubit` (`platform-integration.md` §37а). `codelab_ui` от плагина не зависит.
+7. **Lifecycle и threading.** Плагин только доставляет события входа, выхода и броска в UI isolate; файлов не читает и в фоне не работает. Подписка живёт, пока виджет-адаптер в дереве.
+8. **Безопасность.** Пакет отдаёт только пути, которые пользователь сам бросил в окно. Путь — недоверенный вход: вид проверяет application, containment — агент и клиентская проверка `fs/*`/`terminal/*` (`permissions.md`).
+9. **Тестирование.** Экран и Cubit тестируются без плагина (колбэки `OsDropRegion`, фейковый `LocalPathKindOf`); адаптер — событиями канала плагина в `TestDefaultBinaryMessenger`.
+10. **Сопровождение.** Последний выпуск — 2026-09-01, пакет активно выпускается (линия 0.9.x). Открытые issues по трём ОС не просмотрены: GitHub API был недоступен при проверке. Это остаточный пункт проверки, его закрывает ручная проверка 5.5 и CI-сборка трёх ОС.
+11. **Риски.** UIPI на Windows: в app, запущенный с повышенными правами, перетаскивание из Проводника не доходит — документируется, не обходится. Песочница macOS (P-13): с ней брошенный URL доступен только процессу app, решение пересматривается вместе с `file_selector` (задача 9.11 дорожной карты). Обновление на 0.9.x при переходе Flutter меняет транзитивное замыкание (п. 2).
+12. **Заменяет ли существующую технологию.** Нет. **ADR** — нет: узкая платформенная зависимость за адаптером, архитектуру не меняет (прецедент §20е, §20з).
 
 ---
 

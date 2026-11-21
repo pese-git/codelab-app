@@ -646,6 +646,26 @@ Drag-and-drop является presentation/platform interaction.
 
 Dropped files следует преобразовывать в normalized application model/path before дальнейшей обработки.
 
+### 37а. Перетаскивание из ОС в app: `OsDropRegion` и `LocalPathKindOf`
+
+Источник — change [`add-empty-project-screen`](../../openspec/changes/add-empty-project-screen/design.md), D3, D4; spec `agent-workbench-ui` «Открытие папки перетаскиванием», spec `workspace-architecture` «Плагин перетаскивания из ОС только в адаптере платформы».
+
+Flutter не отдаёт на десктопе события перетаскивания внешних файлов: `DragTarget` и `Draggable` работают только внутри дерева виджетов. Приём из Finder, Проводника и файлового менеджера Linux идёт через плагин `desktop_drop` по схеме §8:
+
+* **адаптер** — `apps/codelab_desktop/lib/core/platform/os_drop_region.dart`, виджет `OsDropRegion({child, onEntered, onExited, onDropped})`. Это единственный файл app, где разрешён `package:desktop_drop/` (правило сторожа в `codelab_architecture_tests/test/support/rules.dart`). Типы плагина за адаптер не выходят. `onDropped` получает `List<String?>`: путь элемента или `null`, если у элемента нет локального пути. Других решений в адаптере нет;
+* **порт вида пути** — `apps/codelab_desktop/lib/core/platform/local_path_kind.dart`: `LocalPathKind { directory, file, missing, other }`, `typedef LocalPathKindOf`, реализация `ioLocalPathKind` (`FileSystemEntity.type`, по ссылкам). Ошибку проверки порт возвращает как `other`, а не бросает. Порт живёт в app, а не в `codelab_client_io`: второго потребителя нет (§13 корневого `AGENTS.md`);
+* **решение** «можно ли открыть брошенное» принимает application — `SettingsCubit.openDroppedPaths`, а не виджет и не адаптер. Путь — недоверенный вход. Отказ хранится типом (`ProjectDropRejection`), текст строит presentation. Поздний результат асинхронной проверки отбрасывается, если пользователь успел выбрать проект иначе или Cubit закрыт (`concurrency.md`);
+* `codelab_ui` от плагина не зависит: организм только рисует состояние зоны;
+* путь не канонизируется, как и путь из `file_selector` (§38). Containment обеспечивают агент (`BoundedEnv`, realpath) и клиентская проверка `fs/*`/`terminal/*` (`permissions.md`).
+
+Ограничения платформ, которые документируются, а не обходятся:
+
+* **macOS** — app собран без песочницы (`com.apple.security.app-sandbox` = `false`), поэтому брошенный путь доступен и процессу агента. С песочницей (P-13) брошенный URL дал бы только временный security-scoped доступ процессу app, а не дочернему процессу агента; включение песочницы пересматривает это решение вместе с `file_selector` (§44);
+* **Windows** — UIPI: в app, запущенный с повышенными правами, перетаскивание из Проводника не доходит. Кнопка «Open folder…» и Cmd/Ctrl+O остаются (§45);
+* **Linux** — приём идёт через GTK (`text/uri-list`), X11 и Wayland — средствами GTK; поведение файловых менеджеров различается (§46).
+
+Следующий потребитель — вложения композера (D-12, `proposals/dart-agent-and-clients/12-3-desktop-display.md` §12.3.6) — переиспользует тот же адаптер, а не добавляет второй.
+
 ---
 
 ## 38. Native dialogs

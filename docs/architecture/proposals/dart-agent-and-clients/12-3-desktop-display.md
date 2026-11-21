@@ -1298,7 +1298,7 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
 |---|---|---|---|
 | `gpt_markdown` (≥ 1.4.1 < 1.5.0) | `codelab_ui` (`lib/src/rendering/`) | разбор и отрисовка markdown ответа со стримингом (кеш сегментов), таблицы, задачи, формулы; решение пользователя 2026-11-11, change `add-desktop-markdown` | своего разбора в проекте нет; свой разбор и отрисовка (прежняя редакция) отклонены после прототипа; `flutter_markdown` прекращён |
 | `val_highlight` | `codelab_ui` (`lib/src/rendering/`) | токенизация кода, чистый Dart, работает в фоновый isolate (`Isolate.spawn` с `kill` по таймауту 5 с) | приходит с `gpt_markdown`; `re_highlight` (прежний выбор) стал бы вторым движком |
-| `desktop_drop` | app (presentation) | приём файлов, перетаскиваемых из ОС, на macOS, Windows, Linux | Flutter не даёт drop внешних файлов на десктопе; `file_selector` покрывает только диалог |
+| `desktop_drop` | app (`core/platform`, адаптер `OsDropRegion`) | приём файлов, перетаскиваемых из ОС, на macOS, Windows, Linux; решение принято change `add-empty-project-screen` (D3) для экрана без проекта, D-12 переиспользует адаптер для вложений композера | Flutter не даёт drop внешних файлов на десктопе; `file_selector` покрывает только диалог |
 | `pasteboard` | app (`core/platform`) | изображения и файлы из системного буфера | `Clipboard` Flutter читает только текст |
 | `url_launcher` | app (`core/platform`) | открытие http/https/mailto по клику; принят change `add-desktop-markdown` | вызов `open`/`xdg-open` через процесс разносит проверки платформ по коду (AGENTS.md §11) |
 
@@ -1306,7 +1306,11 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
 сопровождения, поддержку целевых платформ и отсутствие нативной сборки, ломающей текущий CI
 macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка — задача 1.1 change
 `add-desktop-markdown` (лицензии транзитивных пакетов, шрифты JetBrains Mono и Latin Modern в
-`THIRD_PARTY_NOTICES.md`); `desktop_drop` и `pasteboard` остаются до D-12.
+`THIRD_PARTY_NOTICES.md`). Для `desktop_drop` решение принял change
+[`add-empty-project-screen`](../../../../openspec/changes/add-empty-project-screen/design.md) (D3):
+импорт только в адаптере `OsDropRegion` (`apps/codelab_desktop/lib/core/platform/`), проверка —
+его задача 1.1, итог — §20и `technology-stack.md`; D-12 переиспользует этот адаптер, а не
+добавляет второй (`platform-integration.md` §37а). `pasteboard` остаётся до D-12.
 
 ## 12.3.7. Как проверить
 

@@ -283,8 +283,11 @@ macOS и Linux, ручная проверка Windows откладывается
 * песочница ОС (P-13): граница папки и одобрения, песочница только на macOS или на трёх ОС —
   задача 9.11 по модели угроз (§6.3), итог — ADR;
 * пути Windows: достаточно ли приведения `C:\proj` к `/c/proj` — до выпуска Windows-целей;
-* новые зависимости десктопа (`desktop_drop`, `pasteboard`) — архитектурное решение и проверка
-  лицензии до D-12; для D-06 решено 2026-11-11 (change
+* новые зависимости десктопа: `desktop_drop` решён change
+  [`add-empty-project-screen`](../../../openspec/changes/add-empty-project-screen/design.md) (D3;
+  после проверки его задачи 1.1 — §20и `technology-stack.md`), D-12 переиспользует адаптер
+  `OsDropRegion`; `pasteboard` — архитектурное решение и проверка лицензии до D-12; для D-06
+  решено 2026-11-11 (change
   [`add-desktop-markdown`](../../../openspec/changes/archive/2026-11-11-add-desktop-markdown/design.md): `gpt_markdown`,
   `val_highlight`, `url_launcher`); пороги отображения diff — при D-07.
 
