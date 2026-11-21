@@ -24,6 +24,7 @@ class CodeLabWorkbenchShortcuts extends StatefulWidget {
     this.onOpenCommandPalette,
     this.onCancel,
     this.onNewSession,
+    this.onOpenFolder,
     this.onToggleSidebar,
     this.onOpenSettings,
     this.onToggleFiles,
@@ -45,6 +46,11 @@ class CodeLabWorkbenchShortcuts extends StatefulWidget {
   /// Cmd/Ctrl+N — новая сессия (A13, шаг 3; change
   /// `redesign-workbench-shell`).
   final VoidCallback? onNewSession;
+
+  /// Cmd/Ctrl+O — выбор папки проекта (change `add-empty-project-screen`,
+  /// D7). Какой диалог открыть и что делать при отмене, решает хост;
+  /// без колбэка сочетание не привязано.
+  final VoidCallback? onOpenFolder;
 
   /// Cmd/Ctrl+B — свернуть или развернуть сайдбар; что именно, решает хост
   /// по классу раскладки.
@@ -139,6 +145,7 @@ class _CodeLabWorkbenchShortcutsState extends State<CodeLabWorkbenchShortcuts> {
     final onOpenCommandPalette = widget.onOpenCommandPalette;
     final onCancel = widget.onCancel;
     final onNewSession = widget.onNewSession;
+    final onOpenFolder = widget.onOpenFolder;
     final onToggleSidebar = widget.onToggleSidebar;
     final onOpenSettings = widget.onOpenSettings;
     final onToggleFiles = widget.onToggleFiles;
@@ -154,6 +161,8 @@ class _CodeLabWorkbenchShortcutsState extends State<CodeLabWorkbenchShortcuts> {
       if (onCancel != null) ...CodeLabShortcut.cancelTurn.bind(onCancel),
       if (onNewSession != null)
         ...CodeLabShortcut.newSession.bind(onNewSession),
+      if (onOpenFolder != null)
+        ...CodeLabShortcut.openFolder.bind(onOpenFolder),
       if (onToggleSidebar != null)
         ...CodeLabShortcut.toggleSidebar.bind(onToggleSidebar),
       if (onOpenSettings != null)

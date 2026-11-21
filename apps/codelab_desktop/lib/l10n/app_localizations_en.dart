@@ -3534,6 +3534,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsKeyboardActionCommandPalette => 'Open the command palette';
 
   @override
+  String get settingsKeyboardActionOpenFolder => 'Open a folder as the project';
+
+  @override
   String get settingsKeyboardActionOpenSettings => 'Open settings';
 
   @override

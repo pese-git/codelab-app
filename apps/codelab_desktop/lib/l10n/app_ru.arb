@@ -911,6 +911,7 @@
   "settingsKeyboardFooter": "У команд агента нет сочетаний — открывайте их из палитры команд.",
   "settingsKeyboardEmpty": "Нет сочетаний по запросу «{query}»",
   "settingsKeyboardActionCommandPalette": "Открыть палитру команд",
+  "settingsKeyboardActionOpenFolder": "Открыть папку как проект",
   "settingsKeyboardActionOpenSettings": "Открыть настройки",
   "settingsKeyboardActionCloseOverlay": "Закрыть палитру команд, диалог или выдвижную панель",
   "settingsKeyboardActionLeaveSettings": "Вернуться на рабочее место",

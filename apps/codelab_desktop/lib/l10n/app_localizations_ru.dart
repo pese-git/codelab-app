@@ -3588,6 +3588,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsKeyboardActionCommandPalette => 'Открыть палитру команд';
 
   @override
+  String get settingsKeyboardActionOpenFolder => 'Открыть папку как проект';
+
+  @override
   String get settingsKeyboardActionOpenSettings => 'Открыть настройки';
 
   @override

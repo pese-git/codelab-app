@@ -70,7 +70,11 @@ Widget _host(
 Set<Color> _borderColors(WidgetTester tester, Finder of) {
   final colors = <Color>{};
   for (final box in tester.widgetList<DecoratedBox>(
-    find.descendant(of: of, matching: find.byType(DecoratedBox)),
+    find.descendant(
+      of: of,
+      matching: find.byType(DecoratedBox),
+      matchRoot: true,
+    ),
   )) {
     final decoration = box.decoration;
     if (decoration is BoxDecoration) {

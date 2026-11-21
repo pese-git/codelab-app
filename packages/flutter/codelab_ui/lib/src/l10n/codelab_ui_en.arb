@@ -386,6 +386,10 @@
   "@codeLabSidebarOpenFolder": {
     "description": "Кнопка выбора папки проекта в боковой панели и её подсказка в свёрнутом режиме."
   },
+  "codeLabSidebarNoRecentProjects": "No recent projects yet.",
+  "@codeLabSidebarNoRecentProjects": {
+    "description": "Подпись пустого списка проектов в боковой панели: недавних проектов ещё нет."
+  },
   "codeLabSidebarSettings": "Settings",
   "@codeLabSidebarSettings": {
     "description": "Кнопка перехода в настройки в боковой панели и её подсказка."

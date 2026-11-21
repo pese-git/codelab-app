@@ -13,6 +13,7 @@ import 'codelab_command_palette_surface.dart';
 import 'codelab_connection_screen.dart';
 import 'codelab_file_preview.dart';
 import 'codelab_file_tree.dart';
+import 'codelab_open_project_screen.dart';
 import 'codelab_progress_checklist.dart';
 import 'codelab_session_pane_header.dart';
 import 'codelab_session_sidebar.dart';
@@ -662,6 +663,96 @@ Widget codelabStartScreenPreview() {
         message: 'Start a new session in app.',
         actionLabel: 'New session',
         onAction: codelabPreviewConnect,
+      ),
+    ),
+  );
+}
+
+/// Экран «проект не выбран» (кадр 11a, change `add-empty-project-screen`,
+/// D1): герой, пояснение, кнопка с подсказкой, зона, карточка агента и
+/// InfoBar. Тёмная тема, язык `en`.
+@Preview(
+  name: 'Open project screen (dark)',
+  group: codelabOrganismPreviewGroup,
+  size: Size(620, 640),
+)
+Widget codelabOpenProjectScreenPreview() => _openProjectPreview(
+  const Locale('en'),
+  title: 'Open a project',
+  description:
+      'Choose the folder you want to work in. The agent starts in it, and '
+      "sessions get it as their working directory. The agent can't read or "
+      'write outside it.',
+  openLabel: 'Open folder…',
+  dropLabel: 'Drop a folder here to open it',
+  dropHint: 'Files are not accepted — only a folder',
+  agentName: 'Embedded agent',
+  agentNote: 'Starts when you open a folder. Nothing runs before that.',
+  settingsLinkLabel: 'Change in Settings › Connection',
+  infoTitle: 'New session needs a folder',
+  infoBody:
+      'Ctrl+N without a project opens the same folder picker. Opened folders '
+      'appear in the sidebar as recent projects.',
+);
+
+/// То же на языке `ru` (проверка длинных русских подписей).
+@Preview(
+  name: 'Open project screen (dark, ru)',
+  group: codelabOrganismPreviewGroup,
+  size: Size(620, 640),
+)
+Widget codelabOpenProjectScreenRuPreview() => _openProjectPreview(
+  const Locale('ru'),
+  title: 'Откройте проект',
+  description:
+      'Выберите папку, в которой хотите работать. Агент запускается в ней, '
+      'а сессии получают её рабочей папкой. Агент не читает и не пишет вне неё.',
+  openLabel: 'Открыть папку…',
+  dropLabel: 'Бросьте папку сюда, чтобы открыть её',
+  dropHint: 'Файлы не принимаются — только папка',
+  agentName: 'Встроенный агент',
+  agentNote: 'Запускается, когда вы откроете папку. До этого ничего не идёт.',
+  settingsLinkLabel: 'Изменить в Настройки › Подключение',
+  infoTitle: 'Для новой сессии нужна папка',
+  infoBody:
+      'Ctrl+N без проекта открывает тот же выбор папки. Открытые папки '
+      'попадают в сайдбар как недавние проекты.',
+);
+
+Widget _openProjectPreview(
+  Locale locale, {
+  required String title,
+  required String description,
+  required String openLabel,
+  required String dropLabel,
+  required String dropHint,
+  required String agentName,
+  required String agentNote,
+  required String settingsLinkLabel,
+  required String infoTitle,
+  required String infoBody,
+}) {
+  return _AcpOrganismPreviewSurface(
+    brightness: Brightness.dark,
+    locale: locale,
+    child: SizedBox(
+      width: 620,
+      height: 640,
+      child: CodeLabOpenProjectScreen(
+        title: title,
+        description: description,
+        openLabel: openLabel,
+        openShortcut: 'Ctrl+O',
+        onOpen: codelabPreviewConnect,
+        dropLabel: dropLabel,
+        dropHint: dropHint,
+        agentName: agentName,
+        agentDetail: 'in-process · profile of this window',
+        agentNote: agentNote,
+        settingsLinkLabel: settingsLinkLabel,
+        onOpenSettings: codelabPreviewConnect,
+        infoTitle: infoTitle,
+        infoBody: infoBody,
       ),
     ),
   );

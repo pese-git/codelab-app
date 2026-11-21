@@ -5593,6 +5593,12 @@ abstract class AppLocalizations {
   /// **'Open the command palette'**
   String get settingsKeyboardActionCommandPalette;
 
+  /// Действие сочетания Cmd/Ctrl+O в таблице страницы «Keyboard»: выбор папки проекта (change add-empty-project-screen, D7).
+  ///
+  /// In en, this message translates to:
+  /// **'Open a folder as the project'**
+  String get settingsKeyboardActionOpenFolder;
+
   /// Действие сочетания Cmd/Ctrl+, в таблице страницы «Keyboard».
   ///
   /// In en, this message translates to:

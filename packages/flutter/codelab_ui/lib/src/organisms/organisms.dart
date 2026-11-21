@@ -10,6 +10,7 @@ export 'codelab_shortcut_table.dart';
 export 'codelab_start_screen.dart';
 export 'codelab_file_preview.dart';
 export 'codelab_file_tree.dart';
+export 'codelab_open_project_screen.dart';
 export 'codelab_progress_checklist.dart';
 export 'codelab_prompt_queue_panel.dart';
 export 'codelab_session_pane_header.dart';

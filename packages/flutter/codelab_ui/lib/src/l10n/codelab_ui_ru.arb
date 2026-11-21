@@ -89,6 +89,7 @@
   "codeLabSidebarSearchSessions": "Поиск сессий",
   "codeLabSidebarProjects": "Проекты",
   "codeLabSidebarOpenFolder": "Открыть папку…",
+  "codeLabSidebarNoRecentProjects": "Недавних проектов пока нет.",
   "codeLabSidebarSettings": "Настройки",
   "codeLabSidebarNoSessions": "Сессий пока нет",
   "codeLabSidebarNoMatchingSessions": "Нет подходящих сессий",

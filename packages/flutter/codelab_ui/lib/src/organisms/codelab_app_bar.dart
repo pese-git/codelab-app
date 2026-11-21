@@ -29,6 +29,7 @@ class CodeLabAppBar extends StatelessWidget {
     this.paneToggles = const [],
     this.onPaneToggled,
     this.connectionTooltip,
+    this.connectionLabel,
     this.onRetry,
     this.onConnect,
     this.onMenu,
@@ -54,6 +55,12 @@ class CodeLabAppBar extends StatelessWidget {
 
   /// Профиль и транспорт — в подсказке бейджа, а не в шапке.
   final String? connectionTooltip;
+
+  /// Подпись бейджа вместо подписи по статусу (`No project · agent not
+  /// started`); `null` — подписи по [connectionStatus]. Пока она задана,
+  /// «Connect» не показывается: агент до выбора проекта не стартует и
+  /// подключать нечего (D8 change `add-empty-project-screen`; решает хост).
+  final String? connectionLabel;
   final VoidCallback? onRetry;
   final VoidCallback? onConnect;
   final VoidCallback? onMenu;
@@ -136,6 +143,7 @@ class CodeLabAppBar extends StatelessWidget {
                       _ConnectionBadge(
                         status: connectionStatus,
                         tooltip: connectionTooltip,
+                        labelOverride: connectionLabel,
                         onRetry: onRetry,
                         onConnect: onConnect,
                         dotOnly: minimal,
@@ -238,8 +246,11 @@ class _ConnectionBadge extends StatelessWidget {
     required this.onRetry,
     required this.onConnect,
     required this.background,
+    this.labelOverride,
     this.dotOnly = false,
   });
+
+  final String? labelOverride;
 
   final CodeLabConnectionStatus status;
   final String? tooltip;
@@ -253,7 +264,7 @@ class _ConnectionBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = codeLabStringsOf(context);
-    final (label, tone) = switch (status) {
+    final (statusLabel, tone) = switch (status) {
       CodeLabConnectionStatus.connected => (
         strings.codeLabConnectionConnected,
         CodeLabStatusTone.active,
@@ -279,6 +290,7 @@ class _ConnectionBadge extends StatelessWidget {
         CodeLabStatusTone.idle,
       ),
     };
+    final label = labelOverride ?? statusLabel;
     final busy =
         status == CodeLabConnectionStatus.connecting ||
         status == CodeLabConnectionStatus.reconnecting;
@@ -286,8 +298,9 @@ class _ConnectionBadge extends StatelessWidget {
         status == CodeLabConnectionStatus.lost ||
         status == CodeLabConnectionStatus.failed;
     final canConnect =
-        status == CodeLabConnectionStatus.disconnected ||
-        status == CodeLabConnectionStatus.idle;
+        labelOverride == null &&
+        (status == CodeLabConnectionStatus.disconnected ||
+            status == CodeLabConnectionStatus.idle);
 
     final badge = DecoratedBox(
       key: CodeLabAppBar.connectionBadgeKey,

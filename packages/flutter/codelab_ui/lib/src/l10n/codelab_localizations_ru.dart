@@ -305,6 +305,9 @@ class CodeLabLocalizationsRu extends CodeLabLocalizations {
   String get codeLabSidebarOpenFolder => 'Открыть папку…';
 
   @override
+  String get codeLabSidebarNoRecentProjects => 'Недавних проектов пока нет.';
+
+  @override
   String get codeLabSidebarSettings => 'Настройки';
 
   @override

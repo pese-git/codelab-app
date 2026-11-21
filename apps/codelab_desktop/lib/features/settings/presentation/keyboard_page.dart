@@ -40,6 +40,7 @@ String keyboardShortcutActionOf(
 ) => switch (shortcut) {
   CodeLabShortcut.commandPalette => l10n.settingsKeyboardActionCommandPalette,
   CodeLabShortcut.newSession => l10n.commonNewSession,
+  CodeLabShortcut.openFolder => l10n.settingsKeyboardActionOpenFolder,
   CodeLabShortcut.openSettings => l10n.settingsKeyboardActionOpenSettings,
   CodeLabShortcut.closeOverlay => l10n.settingsKeyboardActionCloseOverlay,
   CodeLabShortcut.leaveSettings => l10n.settingsKeyboardActionLeaveSettings,
@@ -68,6 +69,7 @@ String keyboardShortcutWhereOf(
   CodeLabShortcut shortcut,
 ) => switch (shortcut) {
   CodeLabShortcut.commandPalette ||
+  CodeLabShortcut.openFolder ||
   CodeLabShortcut.openSettings ||
   CodeLabShortcut.toggleSidebar => l10n.settingsKeyboardWhereWorkbench,
   CodeLabShortcut.newSession => l10n.settingsKeyboardWhereWorkbenchProject,

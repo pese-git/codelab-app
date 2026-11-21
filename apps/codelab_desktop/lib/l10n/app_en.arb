@@ -4908,6 +4908,10 @@
   "@settingsKeyboardActionCommandPalette": {
     "description": "Действие сочетания Cmd/Ctrl+K в таблице страницы «Keyboard»."
   },
+  "settingsKeyboardActionOpenFolder": "Open a folder as the project",
+  "@settingsKeyboardActionOpenFolder": {
+    "description": "Действие сочетания Cmd/Ctrl+O в таблице страницы «Keyboard»: выбор папки проекта (change add-empty-project-screen, D7)."
+  },
   "settingsKeyboardActionOpenSettings": "Open settings",
   "@settingsKeyboardActionOpenSettings": {
     "description": "Действие сочетания Cmd/Ctrl+, в таблице страницы «Keyboard»."
