@@ -61,7 +61,7 @@ Onboarding SHALL состоять из четырёх шагов в порядк
 Шаг SHALL показывать заголовок `The agent asks before it changes anything`, текст об одобрениях в разговоре и таблицу режима `standard` по артборду 07: «Read files in the project» — `No prompt`; «Edit and create files» — `Asks each time`; «Run commands» — `Asks each time`; «Anything outside the project folder» — `Blocked`. InfoBar под таблицей SHALL зависеть от действующего режима новой сессии (`sessionDefaultsOf` моста, правило страницы «Agents & modes»; design.md change `add-app-onboarding`, D7):
 - факты ещё читаются — InfoBar режима НЕ SHALL показываться; на его месте — индикатор и `Reading the agent settings…`;
 - факты недоступны (сбой или таймаут чтения) — `Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes.`; шаг НЕ SHALL утверждать режим `standard`;
-- режим `standard` — `New sessions start in standard mode` и текст артборда со ссылкой на «Settings › Agents & modes»;
+- режим `standard` — `New sessions start in standard mode` и текст `Reads run freely; edits and commands ask.` со ссылкой на «Settings › Agents & modes» (без `web access` артборда: web-инструментов в сборке нет, design.md D9);
 - настраиваемый агент с другим режимом — `New sessions start in <mode> mode` с пометкой `Your config sets this; the table above describes standard mode.`;
 - профиль по умолчанию — внешний агент — `Your default connection is an external agent. It applies its own rules; approvals still appear in the conversation.`
 
@@ -162,13 +162,15 @@ InfoBar о мастере SHALL называть хранилище по фак�
 ### Requirement: Шаг «Privacy»
 Шаг SHALL показывать заголовок `What leaves this computer`, текст `Only what the agent needs for the work you ask for, and only to services you set up. CodeLab itself collects nothing.` и строки по артборду 07a:
 - «Your model provider» — `Every turn`;
-- «MCP servers and web tools» — `When used`, с пометкой, что web-доступ спрашивается;
+- «MCP servers» — `When used`, текст `Tool arguments and the headers from your configuration`; строк и пометок о web-инструментах НЕ SHALL быть, пока их нет в сборке (`PRIVACY.md` §2; design.md change `add-app-onboarding`, D9);
 - «Telemetry, crash reports, usage analytics» — `Never`;
 - «Stays here» — `Local`.
 
 Текст строки «Stays here» SHALL строиться по фактам сборки, а не по артборду (design.md change `add-app-onboarding`, D9): каталог конфига и сессий (`CODELAB_HOME` с `~` вместо домашнего каталога), каталог логов app (известен без чтения фактов и SHALL показываться всегда, в том числе при недоступных фактах) и способ хранения ключей по `id` бэкенда секретов. Шаг НЕ SHALL называть системную связку ключей, если бэкенд — не хранилище ОС.
 
-Шаг НЕ SHALL просить принять условия и НЕ SHALL записывать согласие ни в `shared_preferences`, ни в файлы (D-29, §12.7.7а); InfoBar — `Nothing to agree to`. Ссылки на «Privacy policy» и «Terms of use» НЕ SHALL показываться, пока в сборке нет страницы «Settings › Legal» (SETUP-17; design.md change `add-app-onboarding`, D10).
+Шаг НЕ SHALL просить принять условия и НЕ SHALL записывать согласие ни в `shared_preferences`, ни в файлы (D-29, §12.7.7а). InfoBar — `Nothing to agree to` с текстом `These links open the documents inside the app and work offline; Back returns to this step. You can find them later in Settings › Legal.`
+
+Шаг SHALL показывать ссылки «Read the privacy policy» (`onboarding-privacy-policy`) и «Terms of use» (`onboarding-terms-of-use`) (design.md change `add-app-onboarding`, D10). Ссылка SHALL открывать поверх шага, внутри экрана onboarding, просмотр документа: кнопку «Back to setup» (`onboarding-document-back`) и содержимое страницы «Legal» (spec app-settings «Страница «Legal»: видимость и вкладки») на вкладке «Privacy policy» или «Terms of use» соответственно — те же ресурсы `assets/legal/`, язык документа по языку интерфейса, без сети. Навигация app НЕ SHALL уходить с `OnboardingDestination`, настройки НЕ SHALL открываться. «Back to setup», Esc и системный «назад» SHALL закрывать просмотр и возвращать шаг «Privacy» с прежним состоянием onboarding (шаг модели, сводка провайдера, факты); фокус SHALL возвращаться на ссылку, открывшую просмотр, а при открытии — на «Back to setup». Пока просмотр открыт, кнопки шага НЕ SHALL действовать. Журнал SHALL содержать `onboarding.document_opened {tab}` и `onboarding.document_closed {tab}` без путей и текстов.
 
 #### Scenario: Ключи из переменных окружения
 - **WHEN** бэкенд секретов — `env`, `CODELAB_HOME` — `~/.codelab`
@@ -184,7 +186,23 @@ InfoBar о мастере SHALL называть хранилище по фак�
 
 #### Scenario: Нечего принимать
 - **WHEN** пользователь проходит шаг «Privacy» и нажимает «Start using CodeLab»
-- **THEN** на шаге нет флажка или кнопки согласия и ссылок на документы; после завершения в `shared_preferences` новых ключей, кроме `codelab.app.onboarding_done`, нет
+- **THEN** на шаге нет флажка или кнопки согласия; после завершения в `shared_preferences` новых ключей, кроме `codelab.app.onboarding_done`, нет
+
+#### Scenario: Политика внутри onboarding и возврат
+- **WHEN** пользователь сохранил провайдера на шаге «Choose a model», перешёл на «Privacy» и нажимает «Read the privacy policy», затем «Back to setup»
+- **THEN** сначала показан текст `assets/legal/PRIVACY.md` с выбранной вкладкой «Privacy policy», назначение навигации — `OnboardingDestination`; после «Back to setup» показан шаг «Privacy», после «Back» на нём — шаг «Choose a model» со сводкой сохранённого провайдера; фокус после закрытия — на `onboarding-privacy-policy`
+
+#### Scenario: Условия на русском и Esc
+- **WHEN** язык интерфейса — `ru`, пользователь нажимает «Terms of use», затем Esc
+- **THEN** показан текст `assets/legal/TERMS.ru.md` на вкладке «Terms of use», а Esc вернул шаг «Privacy»; журнал содержит `onboarding.document_opened` с `tab: terms_of_use` и `onboarding.document_closed`, без путей ресурсов
+
+#### Scenario: Кнопки шага под документом
+- **WHEN** просмотр документа открыт, и пользователь нажимает Enter или Cmd/Ctrl+,
+- **THEN** «Start using CodeLab» не сработала, флаг не записан, настройки не открыты
+
+#### Scenario: Нет строки о web-инструментах
+- **WHEN** показан шаг «Privacy»
+- **THEN** строка «MCP servers» не содержит `web`, `URL` и `search query`
 
 ### Requirement: Завершение onboarding и старт рабочего места
 Пока показан onboarding, app НЕ SHALL строить рабочее место и НЕ SHALL запускать агента окна, в том числе для проекта, восстановленного из снимка прошлого запуска. «Start using CodeLab» SHALL записывать `codelab.app.onboarding_done: true`, переводить навигацию на рабочее место и запускать триггер старта при запуске (spec agent-workbench-ui «Агент стартует сам», триггер 1) ровно один раз (design.md change `add-app-onboarding`, D5). Повторное нажатие во время записи НЕ SHALL давать второй записи и второго перехода. Если onboarding закрыт, пока флаг пишется, перехода и событий после закрытия НЕ SHALL быть. Сбой записи флага SHALL давать событие `onboarding.save_failed` с именем типа ошибки и НЕ SHALL мешать переходу на рабочее место.

@@ -15,7 +15,7 @@ Onboarding app (D-11) описан в §12.4.9 [`12-4-first-run-and-settings.md`
 - агент стартует сам по триггерам рабочего места (change `require-project-folder`, D11–D19). При запуске триггер — `CodeLabShellCubit.startOnLaunch()`, который `_CodeLabHome` вызывает после первого кадра;
 - мастер провайдера: автомат `ProviderSetupFlow` моста `codelab_setup`, `ProviderWizardCubit`, `ProviderWizardDialog`. Для баннера «Add provider» есть `EmbeddedWizardOpener` (`forceDefault: true`, цель `user`). Готовность — `checkProviderReadiness` моста; по снимку проверяет `provider_setup_probe.dart` в `lib/app/`;
 - хранилище секретов в 1.0: `env` (только чтение, по умолчанию) или `file` (`$CODELAB_HOME/secrets.yaml`, только явным `secrets.backend: file`). Хранилища ОС — черновик после 1.0 (`add-agent-os-secret-backends`);
-- `PRIVACY.md`, `TERMS.md` и страницы «Legal» нет (change `add-privacy-policy` не создан). В `assets/legal/` лежат только `LICENSE` и `THIRD_PARTY_NOTICES.md`;
+- `PRIVACY.md`, `TERMS.md` и страница «Settings › Legal» появились в develop 2026-11-21 вместе с change `add-app-legal-page` (архив `2026-11-20-add-app-legal-page`): ассеты `assets/legal/PRIVACY*.md`, `TERMS*.md`, `LegalPageCubit`, `LegalPageHost`, `LegalTab`, язык документа по интерфейсу (`legalAssetOf`). На момент первой редакции этого design их не было, отсюда D10 в редакции 2026-11-20;
 - первый запуск CLI (U-17, §12.4.3) реализован change `add-provider-setup-ui` (итерация 4a). App на нём не строится: у CLI нет шагов 1, 2, 4, а мастер общий через мост.
 
 ## Goals / Non-Goals
@@ -23,13 +23,13 @@ Onboarding app (D-11) описан в §12.4.9 [`12-4-first-run-and-settings.md`
 **Goals:**
 - показать четыре шага при первом запуске до рабочего места, не ломая порядок старта, язык и оформление первого кадра;
 - настроить провайдера тем же мастером и с теми же гарантиями записи (SETUP-1…SETUP-6, SETUP-8, SETUP-24);
-- не допускать в текстах шагов обещаний, которых нет в сборке (связка ключей ОС, ссылки на документы);
+- не допускать в текстах шагов обещаний, которых нет в сборке (связка ключей ОС, web-инструменты);
 - не запускать агента до конца onboarding.
 
 **Non-Goals:**
 - смартфон, планшет и узкая раскладка этапа 10;
 - сторож запуска;
-- страница «Legal»;
+- изменения страницы «Legal», кроме параметра начальной вкладки хозяина (D10);
 - повторный показ onboarding;
 - изменения ACP;
 - изменения автомата мастера, кроме значения `entry`.
@@ -214,25 +214,34 @@ Esc и закрытие окна onboarding не завершают. Закры�
   - факты недоступны → `App logs in <logs>; the agent's config and keys stay on this computer`.
 
   Каталог логов app (`<logs>`) не зависит от IO-зонда: его подпись composition root передаёт экрану отдельно (зависимость `onboardingAppLogsLabel` в `CodeLabDependencies`, вычисляется из `logDirectoryPath` `main` и `homePathLabel`), поэтому он есть во всех трёх вариантах строки, в том числе при недоступных фактах (ревью 2026-11-21, п. 4).
-- **07a, строки сети** — по артборду и §12.7.7, п. 2:
-  - провайдер модели — каждый ход;
-  - MCP-серверы и web-инструменты — при вызове; web-доступ спрашивается в любом режиме, кроме флага `autopilot` (`permissions.md`);
-  - телеметрия, отчёты о сбоях, аналитика — никогда (E-21).
+- **07a, строки сети** — по `PRIVACY.md` §2 сборки, а не по артборду (редакция 2026-11-21: в сборке нет web-инструментов, `PRIVACY.md` §2 — «no update check and no web tools»):
+  - «Your model provider» — каждый ход: промпт, история сессии, файлы и вывод команд, которые прочитал агент; тег `Every turn`;
+  - «MCP servers» — `Tool arguments and the headers from your configuration` с тегом `When used` (вместо артбордных «MCP servers and web tools» и «a URL or a search query — web access asks you first»);
+  - телеметрия, отчёты о сбоях, аналитика — никогда (E-21, `PRIVACY.md` §1).
 
-  Проверка обновлений в строки не входит: app обновления не проверяет (§12.7.7, п. 2).
+  Полный перечень (проверка `/models`, «Show image», внешний ACP-агент) — в политике, на которую ведёт ссылка D10; шаг его не повторяет. Текст шага 2 `Reads run freely; edits, commands and web access ask.` теряет `web access` по той же причине: `Reads run freely; edits and commands ask.`
 - **07c, InfoBar «Opens the provider wizard»** — `The key is stored in <backend.id> or read from an environment variable.` По `writable` бэкенда; при `writable == false` — `The key is read from an environment variable.`
 
 Почему: приватность и безопасность выше соответствия макету (AGENTS.md §2). Неверное обещание о хранении ключа — дефект безопасности, а не текста. Канвас — референс; при расхождении источник истины — §12.x и `openspec/` (README канваса).
 
-### D10. Ссылки на документы на шаге 4 — после `add-privacy-policy`
+### D10. Ссылки на документы на шаге 4 — просмотр внутри onboarding
 
-В сборке нет `PRIVACY.md`, `TERMS.md` и страницы «Settings › Legal». Ссылки «Read the privacy policy» и «Terms of use» и фраза InfoBar `You can find them later in Settings › Legal` скрыты (SETUP-17: элемент появляется вместе со своим поведением). Это тот же приём, что D11 и D17 change `add-app-general-page` для «About». InfoBar шага 4 — `Nothing to agree to` с текстом `CodeLab asks you to accept nothing and keeps no record of consent.`
+**Редакция 2026-11-21.** Первая редакция (2026-11-20) скрывала ссылки до страницы «Legal» и отдавала их включение тому change, который вливается вторым. `add-app-legal-page` влит раньше, поэтому ссылки включает этот change, до PR (решение пользователя 2026-11-21).
 
-Ссылки включает тот из двух changes (`add-app-onboarding`, `add-privacy-policy`), который вливается вторым; оба — M4 (D17). Ссылки открывают страницу «Legal» внутри окна, и «Back» возвращает на шаг 4 (граф `NavOnboarding`). Для этого нужен переход «onboarding → Legal → onboarding» в `NavigationCubit`; его проектирует change, который включает ссылки, своим решением в `design.md`. Если к итерации 3 этого change страница «Legal» уже влита, задача 3.9 переводит этот change в OpenSpec-правку до кода. Строка §12.4.9 и строка 07 дорожной карты содержат эту зависимость.
+**Что на шаге 4.** Под строками — ссылки «Read the privacy policy» (`onboarding-privacy-policy`) и «Terms of use» (`onboarding-terms-of-use`), тексты артборда 07a. InfoBar — текст артборда: заголовок `Nothing to agree to`, тело `These links open the documents inside the app and work offline; Back returns to this step. You can find them later in Settings › Legal.` Это согласуется с `TERMS.md` («There is nothing to sign, no checkbox and no step that asks for your consent») и с D-29: шаг по-прежнему ничего не просит принять и согласия не пишет.
+
+**Переход — просмотр документа внутри экрана onboarding** (вариант (а)):
+- `OnboardingState` получает поле `document: LegalTab?` и переходы `openDocument(LegalTab)` / `closeDocument()`. Открыть документ можно только на шаге «Privacy», без активного мастера; на другом шаге вызов ничего не делает. Пока документ открыт, Back/Next/«Start using CodeLab» шага игнорируются.
+- Экран onboarding при `document != null` показывает поверх шага полноэкранную панель «документа» в пределах окна: шапка с кнопкой «Back» (`onboarding-document-back`, подпись `Back to setup`) и тело — `LegalPage` того же change `add-app-legal-page` под своим хозяином. `LegalPageHost` получает необязательный параметр начальной вкладки (`initialTab`), который при наличии перекрывает `SettingsDestination.legalTab`; это единственная правка Legal-кода. Поэтому текст документа, четыре вкладки, язык по интерфейсу, политика ссылок D8 и офлайн-чтение — те же, что на странице настроек, а второго рендера правовых текстов нет (§12.7.7а: «один текст не живёт в двух местах»).
+- `LegalPageCubit` создаётся при открытии панели и закрывается при её закрытии (D7 `add-app-legal-page`); вкладка и запрос поиска не переживают панель.
+- «Back», Esc и системный «назад» закрывают панель (`closeDocument`) и возвращают шаг «Privacy» в прежнем виде; фокус возвращается на ссылку, которой панель открыли. При открытии фокус — на кнопке «Back» панели. Состояние `OnboardingCubit` (шаг модели, сводка, факты) не меняется: `_OnboardingHost` не перестраивается, назначение навигации остаётся `OnboardingDestination`.
+- Журнал: `onboarding.document_opened {tab}` и `onboarding.document_closed {tab}` (debug для закрытия) логгера `codelab_desktop.onboarding`; события `legal.*` пишет `LegalPageCubit`, как на странице (D11 `add-app-legal-page`). Путей, текстов и запросов поиска в событиях нет.
+
+**Почему не переход в настройки (вариант (б)).** Пришлось бы открыть настройки из onboarding вопреки D1, научить `SettingsDestination` возвращать на `OnboardingDestination` и не закрывать `_OnboardingHost` со всем состоянием шагов (D5), а пользователь первого запуска оказался бы в навигации настроек с поиском и одиннадцатью страницами. Граф `NavOnboarding` требует только «Legal pages open inside the window; Back returns to 07a» — вариант (а) это и делает.
 
 Альтернативы:
-- *ждать `add-privacy-policy`* — отклонено (решение пользователя 2026-11-20, Q4 (а)): onboarding полезен и без ссылок, а changes независимы. Оба входят в M4 (D17): если `add-privacy-policy` влит раньше, этот change включает ссылки сам; если позже — их включает он. Выпуск 1.0 этим порядком не блокируется;
-- *открывать документы в браузере по адресу сайта* — отклонено: адреса `<сайт>/privacy` и `<сайт>/terms` не определены (§11), это сетевой запрос не из перечня §12.7.7, а документы должны читаться офлайн.
+- *открывать документы в браузере по адресу сайта* — отклонено: адреса `<сайт>/privacy` и `<сайт>/terms` не определены (§11), это сетевой запрос не из перечня `PRIVACY.md` §2, а документы должны читаться офлайн;
+- *отдельный простой просмотр одного документа (`CodeLabMarkdown` без вкладок)* — отклонено: ссылки внутри `TERMS.md` ведут на `LICENSE` и `PRIVACY.md` (D8 `add-app-legal-page`), и без вкладок их пришлось бы гасить или повторять политику ссылок.
 
 ### D11. `ProviderWizardEntry.onboarding`
 
@@ -263,6 +272,8 @@ Esc и закрытие окна onboarding не завершают. Закры�
 | `onboarding.model_saved` | info | — (id провайдера пишет `provider_wizard.saved` моста) |
 | `onboarding.completed` | info | `model_step`: `skipped` (шаг 3 пропущен), `saved` (выход из `Saved`), `later` (любой выход на шаг 4 из `Choose(…)`); пишется и при сбое записи флага |
 | `onboarding.save_failed` | warning | `error_type` |
+| `onboarding.document_opened` | info | `tab` (`privacy_policy`, `terms_of_use`) |
+| `onboarding.document_closed` | debug | `tab` — вкладка в момент закрытия |
 
 В событиях нет путей, имён секретов и переменных, адресов, id моделей и текстов исключений (только `runtimeType`), как в событиях настроек (D17 `add-app-settings-shell`). События мастера пишет мост (`provider_wizard.*`, D18 `add-provider-setup-ui`); onboarding их не дублирует.
 
@@ -312,7 +323,7 @@ Presentation не обращается к файлам, связке ключе�
 
 Влияние:
 - **критерий выхода M4** не меняется по форме: строка 07 §10.1 получает D-11 в колонке M4, а приёмка — сценарии spec `app-onboarding` и прогон `integration_test/onboarding_flow_test.dart` на устройстве в `release/*` (§21);
-- **зависимость от `add-privacy-policy`** (тоже M4, задача 9.4) — только по ссылкам шага 4 (D10), и она не блокирующая: к первому `stable` оба changes влиты, и ссылки включены. Если `add-privacy-policy` влит позже, задачу включения ссылок он берёт себе;
+- **зависимость от страницы «Legal»** (`add-app-legal-page`, влит 2026-11-21) — снята: ссылки шага 4 включает этот change (D10, редакция 2026-11-21);
 - **`add-app-navigation-shell`** не нужен для 1.0: ветку Onboarding вводит этот change (D1). Boot (D-15, M2) и ProjectPicker остаются своим changes;
 - **этап 10** (смартфон, планшет) по-прежнему M5: onboarding P17–P20 и T11–T14 в 1.0 не входит.
 
@@ -322,9 +333,9 @@ Presentation не обращается к файлам, связке ключе�
 - **[Поздний итог фактов]** Медленное хранилище ответит после таймаута. → Номер попытки и `isClosed`: поздний итог только пишется в журнал на уровне debug (`onboarding.facts_late`) и состояние не меняет (CON-002).
 - **[Мастер и закрытие onboarding]** Диалог модальный, поэтому «Start using CodeLab» при открытом мастере недостижима. Cubit мастера закрывается после диалога, и закрытие отменяет проверку и сбрасывает ключ (свойство мастера).
 - **[Существующие пользователи]** После обновления onboarding покажется всем один раз (флага нет; решение пользователя Q2 (а)). Если провайдер готов, шаг 3 пропускается, так что это три экрана.
-- **[Порядок с `add-privacy-policy` в M4]** Если к выпуску 1.0 ссылки шага 4 не включены, onboarding говорит правду («Nothing to agree to»), но без пути к документам. → Критерий выхода M4 (D17): ссылки включены к первому `stable`.
+- **[Документ поверх шага]** Панель документа живёт внутри экрана onboarding; если её владелец перестроится, `LegalPageCubit` закроется вместе с хозяином, а `OnboardingCubit` не пострадает. → Тесты раздела 6: возврат на шаг 4 с прежним состоянием, `close` Cubit-а документа.
 - **[Тексты про хранилище]** После `add-agent-os-secret-backends` id бэкенда станет `keychain-macos` и т. п., и подпись D9 уже это учитывает. Добавить новый id без строки D9 — значит получить общую подпись, не ложную.
-- **[Телеметрия]** Строка «Never» опирается на E-21. Сторож SDK аналитики (`pubspec_allowlist_test.dart`) вводит change `add-privacy-policy`. До него утверждение держится на ревью зависимостей; новых зависимостей change не добавляет.
+- **[Телеметрия]** Строка «Never» опирается на E-21. Сторож SDK аналитики (`pubspec_allowlist_test.dart`) в сборке пока не введён (задача 9.4). До него утверждение держится на ревью зависимостей; новых зависимостей change не добавляет.
 - **[Сеть]** Onboarding открывает сеть только через проверку мастера: на введённый `base_url`, без редиректов (SETUP-10, SETUP-23).
 
 ## Migration Plan
@@ -338,7 +349,7 @@ Presentation не обращается к файлам, связке ключе�
 | Q1. Порядок с `add-app-navigation-shell` | (а) этот change вводит только ветку `OnboardingDestination`; остальные ветки — их changes | D1; §10.3 дорожной карты; §12.3 A13; §12.4.9 |
 | Q2. Onboarding для обновивших app | (а) показывать один раз по отсутствию флага | D2; Risks |
 | Q3. «Set up later» на шаге 3 | (а) добавить (отступление от артборда) | D8; spec app-onboarding |
-| Q4. Ссылки на документы на шаге 4 | (а) скрыты до `add-privacy-policy` | D10, D17 |
+| Q4. Ссылки на документы на шаге 4 | (а) скрыты до страницы «Legal»; после её влития (2026-11-21) пользователь решил включить ссылки в этом change | D10 (редакция 2026-11-21), D17 |
 | Q5. Тексты о хранении ключей | (а) по фактическому бэкенду секретов | D9 |
 | Q6. Режим не `standard` на шаге 2 | (а) InfoBar называет действующий режим | D7 |
 | Q7. Веха | (б) M4 (1.0), против рекомендации (а) | D17; §4.5, §6.1, §10.1, §10.3 дорожной карты; строка D-11 матрицы |

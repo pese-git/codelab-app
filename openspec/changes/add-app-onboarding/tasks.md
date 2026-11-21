@@ -27,7 +27,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 - [x] 0.2 `codelab-architect`: `delivery-roadmap.md` — таблицы определений продукта и вех (Could D-11 в M4), схема вех, §4.5 (объём и критерий выхода), §6.1 (абзац «Could в 1.0 — onboarding app»), §10.1 строка 07 (колонка M4), §10.3 (строки `add-app-navigation-shell` без Onboarding и `add-app-onboarding` — создан, M4).
 - [x] 0.3 `codelab-architect`: `state-management.md` §63в «Onboarding app»; `concurrency.md` §47в «Onboarding app: факты, запись флага, отложенный старт агента».
 - [x] 0.4 `codelab-architect`: `l10n-glossary.md`, раздел «Onboarding» (предложение; вычитка — задача 3.4).
-- [x] 0.5 `codelab-architect`: `agent-parity-goals.md` — строка D-11 (change, spec, веха M4, приоритет Could сохранён); строка D-18 — ссылки шага «Privacy» включает второй из changes `add-app-onboarding` и `add-privacy-policy`.
+- [x] 0.5 `codelab-architect`: `agent-parity-goals.md` — строка D-11 (change, spec, веха M4, приоритет Could сохранён); строка D-18 — ссылки шага «Privacy» включает второй из changes `add-app-onboarding` и `add-app-legal-page` (2026-11-21: это `add-app-onboarding`, раздел 6).
 
 ## 1. Итерация 1 — флаг, навигация, значение `entry`
 
@@ -80,7 +80,7 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - spec agent-workbench-ui «Агент стартует сам» — «Восстановленный проект при первом показе onboarding»;
   - без шва `onboarding:` прежние тесты рабочего места зелёные.
 - [x] 3.8 `[desktop]` Реализация 3.7: чтение флага в `main.dart` до `runApp`, шов `createCodeLabRootScope(onboarding:)` и `CodeLabTestBinding(onboarding:)`, модуль с событиями чтения, ветка `OnboardingDestination` в `_CodeLabHome`, `startOnLaunch` при первом `WorkbenchDestination` (D3, D5). 3.7 зелёный.
-- [x] 3.9 (не требуется: страницы «Settings › Legal» в сборке нет, `add-privacy-policy` не создан) `codelab-architect` (условная): если к началу итерации 3 change `add-privacy-policy` уже влит и страница «Settings › Legal» есть в сборке, до кода дополнить design.md решением о переходе «onboarding → Legal → onboarding» в `NavigationCubit` и спецификацию шага «Privacy» сценариями ссылок (D10, D17); иначе ссылки включает `add-privacy-policy`, и задача закрывается без правок.
+- [x] 3.9 `codelab-architect` (условная): если страница «Settings › Legal» есть в сборке, до кода дополнить design.md решением о переходе к документам и спецификацию шага «Privacy» сценариями ссылок (D10, D17). Снимок на итерации 3 (2026-11-20): страницы не было, задача закрыта без правок. Снимок 2026-11-21: `add-app-legal-page` влит в develop (merge ba0e942a), решение принято — D10 в редакции 2026-11-21, работа — раздел 6.
 
 ## 4. Итерация 4 — интеграция, документация, проверки
 
@@ -113,3 +113,18 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 - [x] 5.14 `[desktop]` Реализация 5.13: поле `reason` в событии. 5.13 зелёный.
 - [x] 5.15 `docs-writer`: `apps/codelab_desktop/AGENTS.md`, раздел «Onboarding» — один доступ для зонда и мастера, только user-слой в снимке зонда, фаза мастера и блокировка навигации, закрытие во время записи, подпись логов из composition root, тексты шага 2 без фактов; `apps/codelab_desktop/doc/user-guide.md` — шаг «Permissions» при непрочитанных настройках и мастер для stdio-профиля `codelab-agent`, если раздел «Первый запуск» это описывает.
 - [x] 5.16 `check-runner`: проверки затронутого после 5.1–5.15 (format, analyze, тесты `codelab_desktop`, `l10n:check`, `guard`, `openspec validate add-app-onboarding --strict`); затем повторное ревью п. 4.7 по исправлениям.
+
+## 6. Ссылки на документы на шаге «Privacy» (после влития `add-app-legal-page`, 2026-11-21)
+
+Решение — design.md, D10 в редакции 2026-11-21 (просмотр документа внутри экрана onboarding, вариант (а)) и D9 (строки сети по `PRIVACY.md` сборки). Каждая пара — красный тест отдельной задачей до кода.
+
+- [x] 6.0 `codelab-architect`: design.md (Context, D9, D10, D13, D17, Risks, Q4), proposal.md, spec `app-onboarding` («Шаг «Permissions»», «Шаг «Privacy»» — ссылки, просмотр, возврат, Esc, язык, фокус, журнал, строка MCP без web-инструментов); `docs/architecture` синхронизирован с влитым `add-app-legal-page`.
+- [ ] 6.1 `[desktop]` Красный: `test/features/onboarding/application/onboarding_cubit_test.dart` — `openDocument`/`closeDocument`: только на шаге «Privacy» и без активного мастера; Back/Next/`finish` при открытом документе игнорируются; состояние шага модели и сводка не меняются; события `onboarding.document_opened {tab}` и `onboarding.document_closed {tab}` без путей (D10, D13).
+- [ ] 6.2 `[desktop]` Реализация 6.1: поле `document: LegalTab?` в `OnboardingState`, переходы и события в `OnboardingCubit`. 6.1 зелёный.
+- [ ] 6.3 `[desktop]` Красный: `test/features/settings/presentation/legal_page_test.dart` — `LegalPageHost(initialTab: LegalTab.termsOfUse)` вне `SettingsDestination` открывает «Terms of use»; без параметра поведение страницы настроек прежнее (spec app-settings «Страница «Legal»: видимость и вкладки» — сценарии зелёные).
+- [ ] 6.4 `[desktop]` Реализация 6.3: необязательный `initialTab` у `LegalPageHost`, приоритет над `SettingsDestination.legalTab`; комментарий хозяина — оба входа. 6.3 зелёный.
+- [ ] 6.5 `[desktop]` Красный: `test/features/onboarding/presentation/onboarding_screen_test.dart` — spec «Шаг «Privacy»»: ссылки `onboarding-privacy-policy`, `onboarding-terms-of-use`, InfoBar артборда; сценарии «Политика внутри onboarding и возврат» (назначение не меняется, сводка цела, фокус на ссылке после закрытия, на `onboarding-document-back` при открытии), «Условия на русском и Esc» (`TERMS.ru.md`), «Кнопки шага под документом», «Нет строки о web-инструментах»; «Шаг «Permissions»» — текст `standard` без `web access`.
+- [ ] 6.6 `[desktop]` Реализация 6.5: панель документа в `features/onboarding/presentation/` поверх шага (`LegalPageHost(initialTab:)`, кнопка «Back to setup», Esc через `CallbackShortcuts`, возврат фокуса), ссылки и InfoBar шага 4, строка «MCP servers», текст шага 2; ARB `en`/`ru` (`onboardingPrivacyToolsLabel`/`Body`, `onboardingNothingToAgreeBody`, новые `onboardingPrivacyPolicyLink`, `onboardingTermsLink`, `onboardingDocumentBack`, `onboardingModeStandardBody`), `l10n-glossary.md` — термины «Back to setup», «Read the privacy policy». 6.5 зелёный, `l10n:check` зелёный.
+- [ ] 6.7 `[desktop]` Красный → реализация: `integration_test/onboarding_flow_test.dart` — открыть «Read the privacy policy» на шаге 4 и вернуться перед «Start using CodeLab»; в `feature/*` только компилируется.
+- [ ] 6.8 `docs-writer`: `apps/codelab_desktop/doc/user-guide.md`, «Первый запуск» — шаг «Privacy» со ссылками на политику и условия, просмотр внутри onboarding, «Back to setup»; ссылка на раздел о странице «Legal»; снимок шага 4 обновить. `apps/codelab_desktop/AGENTS.md`, раздел «Onboarding» — панель документа, `LegalPageHost(initialTab:)`, события `onboarding.document_*`, строки сети по `PRIVACY.md`.
+- [ ] 6.9 `check-runner`: проверки затронутого (format, analyze, тесты `codelab_desktop`, `l10n:check`, `guard`, `openspec validate add-app-onboarding --strict`); затем повторное ревью по разделу 6.
