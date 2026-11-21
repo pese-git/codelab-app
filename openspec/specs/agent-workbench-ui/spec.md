@@ -1186,7 +1186,7 @@ Without a session in focus, the session pane SHALL show a start screen instead o
 
 ### Requirement: Агент стартует сам
 Отдельного шага подключения в рабочем месте НЕ SHALL быть. Агент профиля окна SHALL стартовать, если он не работает (в том числе после сбоя старта), на одном из триггеров (design.md change `require-project-folder`, D11–D17):
-1. выбор проекта — «Open folder…», недавний проект, проект, восстановленный при запуске;
+1. выбор проекта — «Open folder…», недавний проект, проект, восстановленный при запуске; если при запуске показан onboarding (spec app-onboarding «Показ onboarding при первом запуске»), восстановленный проект становится триггером только после «Start using CodeLab», а до этого агент окна НЕ SHALL стартовать (design.md change `add-app-onboarding`, D5);
 2. «New session» в выбранном проекте;
 3. фокус на сессии `notLoaded` или `detached`;
 4. «Retry» экрана или баннера сбоя.
@@ -1232,6 +1232,10 @@ Without a session in focus, the session pane SHALL show a start screen instead o
 #### Scenario: Одинаковый сбой не плодит записи
 - **WHEN** старт три раза подряд падает с одной и той же ошибкой при том же профиле и корне
 - **THEN** в диагностике одна запись уровня `error`, экран сбоя показывает `Failed again (2)`; после исправления и успешного старта следующий сбой — снова новая запись
+
+#### Scenario: Восстановленный проект при первом показе onboarding
+- **WHEN** снимок прошлого запуска содержит проект `/work/app`, флага `codelab.app.onboarding_done` нет, и app запускается
+- **THEN** пока показан onboarding, открыватель встроенного агента не вызывается; после «Start using CodeLab» он вызван ровно один раз с папкой `/work/app`
 
 ### Requirement: Подтверждение открытия сессии в корне диска
 Фокус на сессии `notLoaded` или `detached`, чей `cwd` после нормализации (`p.normalize`) — корень файловой системы (`/`, `C:\` и т. п.), SHALL сначала показывать диалог `This session runs in the disk root (<cwd>). The agent gets access to the whole disk. Open anyway?` с кнопками `Open` и `Cancel` (design.md change `require-project-folder`, D24).

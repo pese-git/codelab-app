@@ -1,6 +1,6 @@
 ## Context
 
-Onboarding app (D-11) описан в §12.4.9 [`12-4-first-run-and-settings.md`](../../../docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md):
+Onboarding app (D-11) описан в §12.4.9 [`12-4-first-run-and-settings.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md):
 - флаг `onboarding_done` в `shared_preferences`;
 - шаги «What CodeLab does» → «Permissions» → «Choose a model» (тот же `ProviderSetupFlow` в `ProviderWizardDialog`; шаг пропускается при `ProviderReady`) → «Privacy»;
 - onboarding показывается после `BootReady` и не входит в шаги сторожа;

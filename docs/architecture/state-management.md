@@ -1094,7 +1094,7 @@ Settings чаще всего принадлежат отдельной feature.
 
 ### 63в. Onboarding app
 
-Источник — change [`add-app-onboarding`](../../openspec/changes/add-app-onboarding/design.md), D1–D6, D8; spec `app-onboarding`. Onboarding — не настройка, но устроен так же: сохранённое значение и экранное состояние различаются (§63), у каждого свой владелец.
+Источник — change [`add-app-onboarding`](../../openspec/changes/archive/2026-11-21-add-app-onboarding/design.md), D1–D6, D8; spec `app-onboarding`. Onboarding — не настройка, но устроен так же: сохранённое значение и экранное состояние различаются (§63), у каждого свой владелец.
 
 * **Saved — флаг `codelab.app.onboarding_done`** (`shared_preferences`, порт `OnboardingPreferences` в `lib/core/platform/`). Хранит только `true`. `load()` не бросает и возвращает `OnboardingLoad(done, storedValueInvalid, readFailure)`: незнакомое значение и сбой хранилища читаются как «пройден», ключ не перезаписывается (целостность данных, AGENTS.md §2). Флаг читается в `main` до `runApp` и приходит швом `createCodeLabRootScope(onboarding:)` (D3).
 * **Навигация — `NavigationCubit`**: начальное назначение `OnboardingDestination` задаёт шов, `finishOnboarding()` переводит его в `WorkbenchDestination`. Шага в назначении нет (D1).

@@ -981,7 +981,7 @@ select(en)  → emit en → запись en в очереди
 
 ### 47в. Onboarding app: факты, запись флага, отложенный старт агента
 
-Источник — change [`add-app-onboarding`](../../openspec/changes/add-app-onboarding/design.md), D2, D4–D6; владелец экранного состояния — `OnboardingCubit` (`state-management.md` §63в).
+Источник — change [`add-app-onboarding`](../../openspec/changes/archive/2026-11-21-add-app-onboarding/design.md), D2, D4–D6; владелец экранного состояния — `OnboardingCubit` (`state-management.md` §63в).
 
 * **Чтение фактов (§10, §12).** `OnboardingCubit` один раз, в конструкторе, вызывает `OnboardingProbe.read()` (снимок конфига, `checkProviderReadiness`, бэкенд секретов, действующий режим) под таймаутом 5 с. Чтение одно, номера попытки нет: итог принимается один раз — признак `_factsResolved` ставит первый из исходов (факты, ошибка, таймаут). Поздний итог после него не меняет состояние и пишется только событием `onboarding.facts_late` уровня debug; после `close()` итог отбрасывается по `isClosed` (CON-002). Снимок зонда — с `cwd` = `CODELAB_HOME` доступа, как у мастера, без проектного слоя папки процесса. Таймаут и исключение дают `Unavailable` и шаг «Choose a model» с пояснением. Повторного чтения нет.
 * **Ожидание на «Next» шага 2.** Пока шаг модели `Pending`, переход ждёт итога чтения, но не дольше его таймаута; повторное нажатие во время ожидания игнорируется.

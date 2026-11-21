@@ -66,7 +66,7 @@
    ошибки (U-17, D-05; §12.4.3–§12.4.5). Выполняет change [`add-provider-setup-ui`](../../../../openspec/changes/archive/2026-11-09-add-provider-setup-ui/design.md): мастер первого
    запуска CLI только на TTY, без TTY и в `-p` — прежний код `64` (D16, решение Q4); страница
    Providers и мастер в app (D10, D7). Onboarding app (D-11) — отдельный change
-   [`add-app-onboarding`](../../../../openspec/changes/add-app-onboarding/design.md) (решение Q3); ветку
+   [`add-app-onboarding`](../../../../openspec/changes/archive/2026-11-21-add-app-onboarding/design.md) (решение Q3); ветку
    `OnboardingDestination` он вводит сам, веха M4 (решения пользователя 2026-11-20, Q1 и Q7 того change).
 7. **9.7. Документация** по чек-листу `docs/architecture/adr/README.md`: `AGENTS.md`
    дописывается окончательно, а не создаётся — правила агентских пакетов и TDD внесены на
