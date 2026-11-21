@@ -63,6 +63,7 @@ final class _InApp extends _Check {
 _Check _checkOf(CodeLabShortcut shortcut) => switch (shortcut) {
   CodeLabShortcut.commandPalette => const _InKit(_workbenchShortcut),
   CodeLabShortcut.newSession => const _InKit(_workbenchShortcut),
+  CodeLabShortcut.openFolder => const _InKit(_workbenchShortcut),
   CodeLabShortcut.openSettings => const _InKit(_workbenchShortcut),
   CodeLabShortcut.closeOverlay => const _InKit(_overlayPanelEscape),
   CodeLabShortcut.leaveSettings => const _InApp(),
@@ -84,8 +85,8 @@ _Check _checkOf(CodeLabShortcut shortcut) => switch (shortcut) {
 };
 
 void main() {
-  test('в каталоге 20 записей, а запись без сценария не компилируется', () {
-    expect(CodeLabShortcut.values, hasLength(20));
+  test('в каталоге 21 запись, а запись без сценария не компилируется', () {
+    expect(CodeLabShortcut.values, hasLength(21));
     for (final shortcut in CodeLabShortcut.values) {
       expect(_checkOf(shortcut), isA<_Check>(), reason: shortcut.name);
     }
@@ -167,6 +168,7 @@ Future<void> _workbenchShortcut(
             ? hit
             : null,
         onNewSession: shortcut == CodeLabShortcut.newSession ? hit : null,
+        onOpenFolder: shortcut == CodeLabShortcut.openFolder ? hit : null,
         onOpenSettings: shortcut == CodeLabShortcut.openSettings ? hit : null,
         onToggleSidebar: shortcut == CodeLabShortcut.toggleSidebar ? hit : null,
         onToggleFiles: shortcut == CodeLabShortcut.toggleFiles ? hit : null,

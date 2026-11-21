@@ -640,6 +640,32 @@ void main() {
       });
     });
 
+    // Change `add-empty-project-screen` (D9, D11, задача 2.3): подпись пустого
+    // списка проектов — строка каталога кита `codeLabSidebarNoRecentProjects`.
+    testWidgets('сайдбар без проектов: ru — перевод, en — «No recent projects '
+        'yet.»', (tester) async {
+      Widget sidebar() => SizedBox(
+        width: 320,
+        height: 500,
+        child: CodeLabSessionSidebar(
+          projects: const [],
+          onSessionSelected: (_) {},
+        ),
+      );
+      await tester.pumpWidget(_enHost(sidebar()));
+      expect(find.text('No recent projects yet.'), findsOneWidget);
+
+      await tester.pumpWidget(_ruHost(sidebar()));
+      expect(find.text('No recent projects yet.'), findsNothing);
+      expect(
+        _textsIn(
+          tester,
+          find.byType(CodeLabSessionSidebar),
+        ).where(_cyrillic.hasMatch),
+        isNotEmpty,
+      );
+    });
+
     group('emptyLabel', () {
       Widget transcript({String? emptyLabel}) => SizedBox(
         width: 600,

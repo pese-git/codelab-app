@@ -54,6 +54,13 @@ final _table = <(CodeLabShortcut, String, CodeLabShortcutGroup, List<_Combo>)>[
     CodeLabShortcutGroup.global,
     [_c(LogicalKeyboardKey.keyN, primary: true)],
   ),
+  // Change `add-empty-project-screen` (D7): Cmd/Ctrl+O — выбор папки проекта.
+  (
+    CodeLabShortcut.openFolder,
+    'open-folder',
+    CodeLabShortcutGroup.global,
+    [_c(LogicalKeyboardKey.keyO, primary: true)],
+  ),
   (
     CodeLabShortcut.openSettings,
     'open-settings',
@@ -224,7 +231,7 @@ void main() {
   tearDown(() => debugDefaultTargetPlatformOverride = null);
 
   group('записи по таблице D1', () {
-    test('20 записей по порядку и группам', () {
+    test('21 запись по порядку и группам', () {
       expect(CodeLabShortcut.values, [
         for (final row in _table) row.$1,
         for (final row in _answers) row.$1,
@@ -520,6 +527,25 @@ void main() {
     });
   });
 
+  group('openFolder (change `add-empty-project-screen`, D7)', () {
+    test('группа global сразу после newSession', () {
+      final values = CodeLabShortcut.values;
+      expect(
+        values[values.indexOf(CodeLabShortcut.newSession) + 1],
+        CodeLabShortcut.openFolder,
+      );
+      expect(CodeLabShortcut.openFolder.group, CodeLabShortcutGroup.global);
+    });
+
+    test('capsFor: ⌘ O на macOS и Ctrl O на остальных', () {
+      final combo = _combo(CodeLabShortcut.openFolder);
+      expect(combo.capsFor(_macOS), ['⌘', 'O']);
+      for (final platform in _others) {
+        expect(combo.capsFor(platform), ['Ctrl', 'O']);
+      }
+    });
+  });
+
   group('compactFor', () {
     // Подсказки кнопок: на Windows и Linux остаются `⏎` и `⌫` (D4), порядок
     // модификаторов общий — `Ctrl+Alt+⏎` вместо прежнего `Alt+Ctrl+⏎` (Q4).
@@ -531,6 +557,7 @@ void main() {
         'Ctrl+K',
       ),
       ('newSession', _combo(CodeLabShortcut.newSession), '⌘N', 'Ctrl+N'),
+      ('openFolder', _combo(CodeLabShortcut.openFolder), '⌘O', 'Ctrl+O'),
       ('send', _combo(CodeLabShortcut.send), '⌘⏎', 'Ctrl+⏎'),
       ('primary+Alt+Enter', _primaryAltEnter, '⌥⌘⏎', 'Ctrl+Alt+⏎'),
       ('primary+Backspace', _primaryBackspace, '⌘⌫', 'Ctrl+⌫'),
