@@ -1366,7 +1366,7 @@ sequenceDiagram
 (SETUP-2 касается конфига агента, а не профилей клиента).
 
 **Onboarding app (D-11, Could; веха M4 — решение пользователя 2026-11-20)** — OpenSpec change
-[`add-app-onboarding`](../../../../openspec/changes/add-app-onboarding/design.md), spec `app-onboarding`.
+[`add-app-onboarding`](../../../../openspec/changes/archive/2026-11-21-add-app-onboarding/design.md), spec `app-onboarding`.
 При первом запуске app показывает экран onboarding (`OnboardingDestination`) вместо рабочего места.
 Первый запуск — нет ключа `codelab.app.onboarding_done` в `shared_preferences`; ключ хранит только
 `true` и пишется при «Start using CodeLab» (D2). Ключ читается до `runApp`, как язык и оформление

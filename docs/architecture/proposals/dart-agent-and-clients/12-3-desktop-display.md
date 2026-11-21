@@ -759,7 +759,7 @@ final class SettingsDestination extends AppDestination { final SettingsPage page
 `back({toSession})`; последняя страница хранится slug-ом в `codelab.settings.last_page`
 (`apps/codelab_desktop/lib/app/navigation/`).
 Ветку `OnboardingDestination` (без полей: шаг — состояние `OnboardingCubit`) вводит change
-[`add-app-onboarding`](../../../../openspec/changes/add-app-onboarding/design.md) (D1; решение пользователя
+[`add-app-onboarding`](../../../../openspec/changes/archive/2026-11-21-add-app-onboarding/design.md) (D1; решение пользователя
 2026-11-20, Q1). `add-app-navigation-shell` добавляет остальные ветки (`Boot`, `ProjectPicker`, оверлеи
 workbench) и сочетания шага 3 вместе с их экранами. Пустых веток «на вырост» нет (AGENTS.md §13).
 
