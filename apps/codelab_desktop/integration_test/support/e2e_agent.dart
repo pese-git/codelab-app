@@ -187,6 +187,12 @@ void main() {
   /// «Add connection profile» проверяют, что записал app (общий файл с CLI).
   String get profilesPath => '${_homeDirectory.path}/profiles.json';
 
+  /// Путь к `recent_projects.json` временного `CODELAB_HOME`: недавние проекты
+  /// app общие с CLI и лежат здесь, а не в `shared_preferences` (change
+  /// `share-recent-projects-store`, D1).
+  String get recentProjectsPath =>
+      '${_homeDirectory.path}/recent_projects.json';
+
   /// Сохраняет [profile] в `profiles.json` временного `CODELAB_HOME`.
   Future<void> saveProfile(ConnectionProfile profile) => JsonFileProfileStore(
     '${_homeDirectory.path}/profiles.json',

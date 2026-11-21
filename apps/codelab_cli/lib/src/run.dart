@@ -659,6 +659,8 @@ Future<int> _runRepl(
   );
   final repl = Repl(
     setup: _setupCommands(options, environment, io, home),
+    onConnected: () =>
+        _recordRecentProject(home, cwd, io, verbose: options.verbose),
     tokenSource: ProfileSecretSource(environment, stored: profileSecrets),
     workspace: runtime.workspace,
     terminal: terminal,
@@ -769,6 +771,8 @@ Future<int> _runTui(
     // Порт пробрасывается в контекст; команд `/provider` и `/settings` в
     // TUI 4a нет, оверлеи — 4b (D17).
     setup: _setupCommands(options, environment, io, home),
+    onConnected: () =>
+        _recordRecentProject(home, cwd, io, verbose: options.verbose),
     tokenSource: ProfileSecretSource(environment, stored: profileSecrets),
     workspace: runtime.workspace,
     profile: profile,
@@ -1135,6 +1139,40 @@ Future<int?> _firstRun(
         .flow,
   );
   return result == FirstRunResult.cancelled ? sigintExit : null;
+}
+
+/// Записывает папку сессии в общий список недавних проектов (D6).
+///
+/// Почему: app и CLI делят `$CODELAB_HOME/recent_projects.json`; человек,
+/// открывший папку в REPL или TUI, ждёт её в списке app. Вызывается только из
+/// интерактивных режимов как `onConnected` у `Repl` и `TuiRunner`: после
+/// успешного `ClientWorkspace.connect` и до открытия или загрузки сессии.
+/// Запуск, не подключившийся к агенту (нет модели — `64`, сбой запуска — `1`,
+/// мастер завершил процесс), папку не записывает; `--resume` и `--continue`
+/// записывают, потому что загрузка сессии идёт после записи (D6, Q3).
+///
+/// Не бросает: исключение в обратном вызове стало бы «cannot start the
+/// agent».
+///
+/// Как работает: ожидание без fire-and-forget (§12). Сбой — нечитаемый файл
+/// (`FormatException`, он не перезаписывается, D2) или ошибка ФС — не меняет
+/// поведения и кода выхода; с `--verbose` в stderr одна строка с типом
+/// ошибки без текста (текст `FormatException` содержит путь).
+Future<void> _recordRecentProject(
+  CodelabHome home,
+  String cwd,
+  CliIo io, {
+  required bool verbose,
+}) async {
+  try {
+    await JsonFileRecentProjectsStore(home.recentProjectsFile).record(cwd);
+  } on Object catch (error) {
+    if (verbose) {
+      io.stderr.writeln(
+        'codelab: cannot record a recent project: ${error.runtimeType}',
+      );
+    }
+  }
 }
 
 /// Порты настройки агента, собранные из `codelab_setup/io.dart`: хранилище

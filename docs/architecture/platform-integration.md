@@ -531,9 +531,26 @@ abstract interface class RecentProjectsStore {
 * Failures на чтении/записи (например, corrupt/unavailable store) должны
   деградировать некритично — например, "recents недоступны в этой сессии",
   а не блокировать application flow.
+* Где лежат данные, решает то, кто ими пользуется. Настройки только app
+  (раскладка, язык, оформление, снимок рабочего места) — `shared_preferences`
+  в `apps/codelab_desktop/lib/core/platform/`. Данные, общие с `codelab`
+  (CLI), — JSON-файлы в `$CODELAB_HOME` через хранилища `codelab_client_io`:
+  домен `shared_preferences` привязан к идентификатору бандла app, CLI его не
+  видит, а при смене идентификатора (задача 9.4 дорожной карты) данные
+  пропали бы. Так хранятся профили подключения (`profiles.json`) и недавние
+  проекты (`recent_projects.json`).
+* Общий файл пишут несколько процессов. Запись — через временный файл и
+  атомарное переименование (файл не портится), нечитаемый или незнакомой
+  версии файл не перезаписывается. Порт не обещает межпроцессной
+  сериализации «прочитать — изменить — записать»; если потеря одной записи
+  при одновременной записи недопустима для concern, это решается отдельно.
 
-См. `openspec/changes/add-open-project-picker/design.md`, Decision 4, для
-первого конкретного применения этого паттерна.
+Порт `RecentProjectsStore` появился в `openspec/changes/archive/2026-09-04-add-open-project-picker/design.md`
+(Decision 4) с реализацией на `shared_preferences`. Change
+`share-recent-projects-store` (design.md, D1–D4) перенёс недавние проекты в
+общий с CLI файл `$CODELAB_HOME/recent_projects.json`
+(`JsonFileRecentProjectsStore`). Перенос прежнего ключа есть только в
+предвыпускных сборках app и удаляется до первого `stable` (D9).
 
 ---
 

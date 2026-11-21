@@ -37,7 +37,12 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart'
     show codelabAgentStdioProfile;
 import 'package:codelab_client_core/codelab_client_core.dart'
-    show ProfileSecrets, ProfileStore, ProjectFiles, ThemeLibrary;
+    show
+        ProfileSecrets,
+        ProfileStore,
+        ProjectFiles,
+        RecentProjectsStore,
+        ThemeLibrary;
 import 'package:codelab_desktop/features/settings/application/provider_settings_session.dart'
     show ProviderSettingsOpener;
 import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
@@ -50,6 +55,7 @@ import 'package:flutter_test/flutter_test.dart'
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fake_onboarding.dart';
+import 'fake_recent_projects_store.dart';
 import 'in_memory_profile_store.dart';
 
 /// stdio-профиль, который тестовая сборка делает профилем по умолчанию.
@@ -117,6 +123,10 @@ final class CodeLabTestBinding {
     Map<String, String>? environment,
     SettingsPages? settingsPages,
     ProfileStore? profileStore,
+    // Недавние проекты прошлого запуска (D7 `share-recent-projects-store`):
+    // начальный список хранилища в памяти; [recentProjectsStore] — свой двойник.
+    List<String> recentProjects = const [],
+    RecentProjectsStore? recentProjectsStore,
     ProfileSecrets? profileSecrets,
     ProviderSettingsOpener? providerSettingsOpener,
     Future<bool> Function(String cwd)? providerSetupProbe,
@@ -167,14 +177,11 @@ final class CodeLabTestBinding {
     // явно, а не ждёт реальное время (`testing.md` §20).
     DateTime Function()? clock,
   }) : transport = transport ?? FakeAcpTransport() {
-    // Корневой scope собирает настоящий `SharedPreferencesRecentProjectsStore`,
-    // а у плагина в тестах нет реализации канала: без моков каждая загрузка
-    // недавних проектов падает `MissingPluginException`. Cubit её
-    // перехватывает, но статический completer плагина может отдать ошибку в
-    // зону уже завершившегося теста, и раннер засчитает её как сбой («failed
-    // after test completion»). Пустое хранилище убирает обращение к каналу.
-    // [preferences] — сохранённое прошлым запуском (недавние проекты,
-    // снимок рабочего пространства).
+    // `shared_preferences` в тестах нужен остальным настройкам (снимок
+    // рабочего пространства, профиль по умолчанию): у плагина нет реализации
+    // канала, и без мока его чтение падало бы `MissingPluginException`.
+    // Недавние проекты в нём больше не живут (D7): они в хранилище памяти.
+    // [preferences] — сохранённое прошлым запуском.
     SharedPreferences.setMockInitialValues({
       if (stdioDefault)
         'codelab.connection.default_profile': testStdioProfile.id,
@@ -229,6 +236,11 @@ final class CodeLabTestBinding {
       profileStore:
           profileStore ??
           InMemoryProfileStore([if (stdioDefault) testStdioProfile]),
+      // Настоящий файл читал бы `$CODELAB_HOME` разработчика и зависал бы в
+      // fake-async зоне: по умолчанию — хранилище в памяти (D7).
+      recentProjectsStore:
+          recentProjectsStore ??
+          FakeRecentProjectsStore.ofPaths(recentProjects),
       // Настоящее хранилище читало бы `$CODELAB_HOME` разработчика: тесты
       // передают двойник (`FakeProfileSecrets`) либо остаются с хранилищем
       // «не открыто».

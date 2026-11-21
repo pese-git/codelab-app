@@ -102,7 +102,7 @@ defaults delete com.example.codelabApp flutter.codelab.app.onboarding_done
 
 <!-- screenshot: apps/codelab_desktop/doc/images/sidebar-projects.png — боковая панель: «Projects» с недавним проектом demo, «Open folder…» с подсказкой сочетания в конце списка проектов, «Settings» внизу -->
 
-В группе «Projects» — недавние проекты. Пока их нет, там написано «No recent projects yet.» Пункт «Open folder…» с подсказкой сочетания стоит в конце списка проектов, «Settings» — внизу панели.
+В группе «Projects» — недавние проекты (не больше 10); список общий с `codelab`: папка, открытая в построчном или полноэкранном режиме `codelab`, появляется и здесь. Пока недавних проектов нет, там написано «No recent projects yet.» Пункт «Open folder…» с подсказкой сочетания стоит в конце списка проектов, «Settings» — внизу панели.
 
 1. Чтобы открыть новый проект, нажмите «Open folder…» в конце списка «Projects» или сочетание ⌘O (Ctrl+O на Windows и Linux).
 2. Чтобы вернуться к недавнему проекту, нажмите его имя в списке «Projects».

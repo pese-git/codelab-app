@@ -9,6 +9,7 @@ import 'package:codelab_client_io/codelab_client_io.dart'
     show
         DirectoryExists,
         JsonFileProfileStore,
+        JsonFileRecentProjectsStore,
         IoTerminalProcessRunner,
         IoProjectFiles,
         IoTextFileIo,
@@ -68,7 +69,7 @@ import '../core/platform/limited_network_image.dart';
 import '../core/platform/local_path_kind.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/usage_csv_saver.dart';
-import '../core/platform/shared_preferences_recent_projects_store.dart';
+import '../core/platform/recent_projects_migration.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
 import '../core/platform/startup_preferences.dart';
 import '../core/platform/user_shell_launcher.dart';
@@ -183,6 +184,9 @@ Scope createCodeLabRootScope({
   Map<String, String>? environment,
   SettingsPages? settingsPages,
   ProfileStore? profileStore,
+  // Шов недавних проектов (`share-recent-projects-store`, D8): в `testWidgets`
+  // настоящий файл зависал бы; без шва — файл в `$CODELAB_HOME`.
+  RecentProjectsStore? recentProjectsStore,
   ProfileSecrets? profileSecrets,
   Future<ProfileSecrets> Function()? profileSecretsOpener,
   ProviderSettingsOpener? providerSettingsOpener,
@@ -250,6 +254,8 @@ Scope createCodeLabRootScope({
         usageCsvSaver: usageCsvSaver,
         themeFilePicker: themeFilePicker,
         startupPreferences: startupPreferences,
+        recentProjectsStore: recentProjectsStore,
+        environment: connectionEnvironment,
       ),
       CodeLabConnectionModule(
         environment: connectionEnvironment,
@@ -752,11 +758,24 @@ final class CodeLabPlatformModule extends Module {
     this.usageCsvSaver,
     ThemeFilePicker? themeFilePicker,
     StartupPreferences? startupPreferences,
-  }) : _themeFilePicker = themeFilePicker,
+    RecentProjectsStore? recentProjectsStore,
+    required ConnectionEnvironment environment,
+  }) : _recentProjectsStore = recentProjectsStore,
+       _environment = environment,
+       _themeFilePicker = themeFilePicker,
        _startupPreferences = startupPreferences,
        _userShellLauncher = userShellLauncher,
        _externalLinkOpener = externalLinkOpener,
        _localFolderOpener = localFolderOpener;
+
+  /// Хранилище недавних проектов; шов тестов
+  /// (`createCodeLabRootScope(recentProjectsStore:)`, change
+  /// `share-recent-projects-store`, D8): без него — файл
+  /// `$CODELAB_HOME/recent_projects.json`, общий с CLI.
+  final RecentProjectsStore? _recentProjectsStore;
+
+  /// Окружение composition root: дом CodeLab для файла недавних проектов.
+  final ConnectionEnvironment _environment;
 
   /// Порт запуска shell пользователя; шов тестов
   /// (`createCodeLabRootScope(userShellLauncher:)`, `add-integrated-terminal`,
@@ -836,8 +855,23 @@ final class CodeLabPlatformModule extends Module {
     bind<ThemeFilePicker>().toInstance(
       _themeFilePicker ?? const FileSelectorThemeFilePicker(),
     );
+    // Недавние проекты — файл в `$CODELAB_HOME`, общий с CLI (D1, D8);
+    // недопустимый дом — заглушка с причиной, ключ `shared_preferences` и
+    // файлы не трогаются (D4: ключ сохраняется до исправления окружения).
+    // Обёртка переноса живёт до первого `stable` (D9, Q2 (б)).
     bind<RecentProjectsStore>().toInstance(
-      const SharedPreferencesRecentProjectsStore(),
+      _recentProjectsStore ??
+          switch (_environment.codelabHome) {
+            final home? => MigratingRecentProjectsStore(
+              target: JsonFileRecentProjectsStore(
+                p.join(home, 'recent_projects.json'),
+              ),
+              logger: _recentProjectsLogger(),
+            ),
+            null => UnavailableRecentProjectsStore(
+              _environment.homeProblem ?? 'the home folder is not available',
+            ),
+          },
     );
     // Раскладка дока панелей между запусками (change
     // `redesign-workbench-shell`, D5).
@@ -1482,6 +1516,13 @@ Logger _workbenchLogger() => StructuredLogLogger(
 Logger codeLabAppLogger() => StructuredLogLogger(
   'codelab_desktop.app',
 ).bind({logCategoryKey: applicationLogCategory, logComponentKey: 'app'});
+
+/// Логгер переноса недавних проектов (D11): компонент `recent_projects`.
+Logger _recentProjectsLogger() =>
+    StructuredLogLogger('codelab_desktop.recent_projects').bind({
+      logCategoryKey: applicationLogCategory,
+      logComponentKey: 'recent_projects',
+    });
 
 Logger _settingsLogger() => StructuredLogLogger(
   'codelab_desktop.settings',

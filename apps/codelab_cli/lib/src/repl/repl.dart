@@ -54,6 +54,7 @@ typedef ProfileResolver = Future<ConnectionProfile> Function(String id);
 ///
 /// Как использовать: `await Repl(...).run()` — код выхода: `0`, `1` (не
 /// удалось подключиться или открыть сессию) или код сигнала из [interrupt].
+/// [onConnected] — обратный вызов после успешного подключения (см. поле).
 /// [resolveProfile] — профили `/profile <id>`; без него команда отвечает
 /// отказом. Закрывает рабочее пространство вызывающий.
 final class Repl implements ReplContext {
@@ -79,6 +80,7 @@ final class Repl implements ReplContext {
     DateTime Function()? clock,
     SecretSource? tokenSource,
     SetupCommands? setup,
+    Future<void> Function()? onConnected,
   }) : _workspace = workspace,
        _terminal = terminal,
        _profile = profile,
@@ -99,10 +101,18 @@ final class Repl implements ReplContext {
        _cancelGrace = cancelGrace,
        _tokenSource = tokenSource,
        _setup = setup,
+       _onConnected = onConnected,
        _clock = clock ?? DateTime.now;
 
   final ClientWorkspace _workspace;
   final Terminal _terminal;
+
+  /// Вызывается один раз после успешного `connect` и до `openCliSession`
+  /// (change `share-recent-projects-store`, D6): запуск действительно начался,
+  /// а загрузка сессии (`--resume`, `--continue`) ещё не делалась, поэтому
+  /// запись папки не зависит от её исхода. Не должен бросать: исключение
+  /// стало бы «cannot start the agent» (хост гасит сбой внутри).
+  final Future<void> Function()? _onConnected;
   final SetupCommands? _setup;
 
   /// Мастер `/provider add`, пока он открыт: клавиши идут ему, как блоку
@@ -402,6 +412,7 @@ final class Repl implements ReplContext {
     final SessionHandle handle;
     try {
       await _workspace.connect(_profile, projectDirectory: _cwd);
+      await _onConnected?.call();
       handle = await openCliSession(
         _workspace,
         _cwd,
