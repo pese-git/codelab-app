@@ -921,9 +921,11 @@ void main() {
               isAgentConnected: () => false,
             );
       wizard.dispatch(const PresetChosen('anthropic'));
-      // Шпион не закрывается по-настоящему: закрытие настоящего мастера ждёт
-      // реальные Future и в fake-async зоне виджет-теста не завершается.
-      if (!spy) {
+      // Закрытие настоящего мастера ждёт реальные Future и в fake-async зоне
+      // виджет-теста не завершается: шпион закрывает автомат через `runAsync`.
+      if (wizard is _SpyWizard) {
+        addTearDown(() => tester.runAsync(wizard.realClose));
+      } else {
         addTearDown(wizard.close);
       }
       return (wizard, store);
@@ -1039,6 +1041,9 @@ final class _SpyWizard extends ProviderWizardCubit {
   static bool _never() => false;
 
   var closeCalls = 0;
+
+  /// Настоящее закрытие автомата: `close()` шпиона только считает вызовы.
+  Future<void> realClose() => super.close();
 
   @override
   // ignore: must_call_super, шпион намеренно не закрывает настоящий мастер

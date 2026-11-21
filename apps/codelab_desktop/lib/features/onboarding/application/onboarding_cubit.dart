@@ -268,6 +268,11 @@ class OnboardingCubit extends Cubit<OnboardingState> {
   /// Игнорируется при `configBroken` и `unavailable`: мастер там не
   /// открывается. Значения ключа в сводку не попадает (SETUP-1).
   void providerSaved(Done done) {
+    // Итог диалога может прийти после закрытия Cubit-а (выход из app с
+    // открытым мастером): `emit` в закрытый Cubit бросил бы `StateError`.
+    if (isClosed) {
+      return;
+    }
     final model = state.model;
     final loaded = state.facts;
     final allowed =

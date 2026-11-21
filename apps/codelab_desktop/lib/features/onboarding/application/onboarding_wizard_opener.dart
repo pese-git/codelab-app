@@ -19,8 +19,9 @@ import '../../settings/application/provider_wizard_cubit.dart'
 /// недоступны (нет `CODELAB_HOME`, конфиг не читается).
 ///
 /// Как использовать: экран вызывает `await open(presetId: id, access: …)`
-/// между `OnboardingCubit.wizardStarted` и `wizardEnded`, показывает диалог, передаёт итог `Done` в `OnboardingCubit.providerSaved` и закрывает
-/// Cubit мастера (как `addProviderFromBanner`).
+/// между `OnboardingCubit.wizardStarted` и `wizardEnded`, показывает диалог,
+/// передаёт итог `Done` в `OnboardingCubit.providerSaved` и закрывает Cubit
+/// мастера (как `addProviderFromBanner`).
 typedef OnboardingWizardOpener =
     Future<ProviderWizardCubit?> Function({
       required String presetId,

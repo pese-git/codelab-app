@@ -89,8 +89,8 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 - [x] 4.3 `docs-writer` (снимки экрана шагов — перенос: в `user-guide.md` оставлен маркер `<!-- screenshot … -->`, снимки делаются запуском app отдельно; текст раздела готов): `apps/codelab_desktop/doc/user-guide.md`, раздел «Первый запуск» — четыре шага, «Set up later», шаг пропускается при готовом провайдере, повторно onboarding не показывается; снимки экрана шагов (светлая тема) в `doc/images/`; ссылка из раздела «Подключить провайдера модели». `apps/codelab_desktop/README.md` — строка возможностей.
 - [x] 4.4 `docs-writer`: `apps/codelab_desktop/AGENTS.md` — раздел «Onboarding» (флаг, `OnboardingCubit`, порт и адаптер, отложенный старт, правило сторожа, ключи тестов, события; ссылки на D1–D15).
 - [x] 4.5 `docs-writer`: раздел выпуска `CHANGELOG.md` (Unreleased) по proposal.md, «Для раздела выпуска». Перенесено в подготовку выпуска: раздел `CHANGELOG.md` пишется в `release/*` (`AGENTS.md` §22; в файле разделов выпусков и Unreleased нет); нужный пункт собран в `proposal.md`, подраздел «Для раздела выпуска `CHANGELOG.md`».
-- [ ] 4.6 `check-runner`: проверки затронутого — format, analyze и тесты `codelab_setup`, `codelab_ui`, `codelab_desktop`; `guard`; `web-compile`; `l10n:check`; `openspec validate add-app-onboarding --strict`. Полный `melos run check` — только по просьбе пользователя.
-- [ ] 4.7 `architecture-reviewer` и `acp-safety-reviewer`: двойное ревью (`/codelab-review add-app-onboarding`); особое внимание — D5 (гонка старта), D8 (ключ только в мастере), D9 (тексты о хранении ключей).
+- [x] 4.6 `check-runner`: проверки затронутого — format, analyze и тесты `codelab_setup`, `codelab_ui`, `codelab_desktop`; `guard`; `web-compile`; `l10n:check`; `openspec validate add-app-onboarding --strict`. Полный `melos run check` — только по просьбе пользователя.
+- [x] 4.7 `architecture-reviewer` и `acp-safety-reviewer`: двойное ревью (`/codelab-review add-app-onboarding`); особое внимание — D5 (гонка старта), D8 (ключ только в мастере), D9 (тексты о хранении ключей).
 
 ## 5. Исправления по ревью (2026-11-21)
 
@@ -112,4 +112,4 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 - [x] 5.13 `[desktop]` Красный: `test/app/navigation/navigation_cubit_test.dart` — `openSettings` на onboarding пишет `settings.open_skipped` с `reason: onboarding` (п. 5, D1).
 - [x] 5.14 `[desktop]` Реализация 5.13: поле `reason` в событии. 5.13 зелёный.
 - [x] 5.15 `docs-writer`: `apps/codelab_desktop/AGENTS.md`, раздел «Onboarding» — один доступ для зонда и мастера, только user-слой в снимке зонда, фаза мастера и блокировка навигации, закрытие во время записи, подпись логов из composition root, тексты шага 2 без фактов; `apps/codelab_desktop/doc/user-guide.md` — шаг «Permissions» при непрочитанных настройках и мастер для stdio-профиля `codelab-agent`, если раздел «Первый запуск» это описывает.
-- [ ] 5.16 `check-runner`: проверки затронутого после 5.1–5.15 (format, analyze, тесты `codelab_desktop`, `l10n:check`, `guard`, `openspec validate add-app-onboarding --strict`); затем повторное ревью п. 4.7 по исправлениям.
+- [x] 5.16 `check-runner`: проверки затронутого после 5.1–5.15 (format, analyze, тесты `codelab_desktop`, `l10n:check`, `guard`, `openspec validate add-app-onboarding --strict`); затем повторное ревью п. 4.7 по исправлениям.

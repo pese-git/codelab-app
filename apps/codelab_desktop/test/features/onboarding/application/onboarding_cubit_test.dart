@@ -641,6 +641,26 @@ void main() {
       expect(cubit.state.step, OnboardingStep.privacy);
     });
 
+    // Ревью 2026-11-21 (повторное): выход из app с открытым мастером закрывает
+    // Cubit, а итог диалога приходит позже; `emit` в закрытый Cubit бросил бы
+    // `StateError` в unawaited-цепочке экрана.
+    test(
+      'providerSaved после close(): без исключения, состояния и событий',
+      () async {
+        final cubit = await atModel();
+        cubit.wizardStarted();
+        await cubit.close();
+
+        expect(
+          () => cubit.providerSaved(_done(secret: 'codelab/llm')),
+          returnsNormally,
+        );
+
+        expect(cubit.state.model, isNot(isA<ModelSaved>()));
+        expect(events('onboarding.model_saved'), isEmpty);
+      },
+    );
+
     test('«Set up again…»: wizardStarted из Saved разрешён', () async {
       final cubit = await atModel();
       cubit.providerSaved(_done(secret: 'codelab/llm'));

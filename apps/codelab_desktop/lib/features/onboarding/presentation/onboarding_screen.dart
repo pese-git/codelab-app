@@ -107,6 +107,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       onboarding.wizardEnded();
       await wizard.close();
     } finally {
+      // Снимает блокировку на путях выхода без диалога (мастер не открылся,
+      // открывание отброшено, ошибка); повторный вызов безопасен: без активной
+      // фазы и после `close()` `wizardEnded` ничего не делает.
       onboarding.wizardEnded();
     }
   }
