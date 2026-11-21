@@ -14,6 +14,9 @@ import '../../settings/application/provider_wizard_view.dart'
     show wizardPresetLabel;
 import '../application/onboarding_probe.dart';
 import '../application/onboarding_state.dart';
+import '../../workbench/application/shell_cubit.dart' show CodeLabShellState;
+import 'onboarding_project_step.dart';
+import '../../workbench/application/ui_mappers.dart' show projectNameOf;
 
 /// Текущий шаг onboarding по состоянию Cubit-а (design.md change
 /// `add-app-onboarding`, D4, D7–D10).
@@ -39,11 +42,28 @@ class OnboardingStepBody extends StatelessWidget {
     required this.onOpenDocument,
     required this.policyLinkFocus,
     required this.termsLinkFocus,
+    this.shell,
+    this.dropActive = false,
+    this.onOpenFolder,
+    this.onOpenRecent,
     super.key,
-  });
+  }) : assert(
+         shell == null || (onOpenFolder != null && onOpenRecent != null),
+         'шаг проекта (shell) требует onOpenFolder и onOpenRecent',
+       );
 
   final OnboardingState state;
   final FocusNode titleFocus;
+
+  /// Состояние рабочего места для шага «Open a project» (профиль окна,
+  /// недавние, отказ броска; design.md change `add-onboarding-project-step`,
+  /// D5); у остальных шагов не нужно.
+  final CodeLabShellState? shell;
+
+  /// Элементы из ОС над экраном: рамка зоны шага проекта в цвете акцента.
+  final bool dropActive;
+  final VoidCallback? onOpenFolder;
+  final ValueChanged<String>? onOpenRecent;
 
   /// Открывает правовой документ внутри onboarding (D10).
   final ValueChanged<LegalTab> onOpenDocument;
@@ -92,6 +112,19 @@ class OnboardingStepBody extends StatelessWidget {
           termsLinkFocus: termsLinkFocus,
         ),
       ),
+      OnboardingStep.project => (
+        l10n.onboardingProjectTitle,
+        switch (shell) {
+          final shell? => OnboardingProjectBody(
+            shell: shell,
+            busy: state.project == ProjectStepPhase.choosing || state.finishing,
+            dropActive: dropActive,
+            onOpenFolder: onOpenFolder!,
+            onOpenRecent: onOpenRecent!,
+          ),
+          null => const SizedBox.shrink(),
+        },
+      ),
     };
     return Column(
       key: ValueKey('onboarding-step-${state.step.name}'),
@@ -112,16 +145,18 @@ class OnboardingStepBody extends StatelessWidget {
 }
 
 /// Кнопки под шагом: «Back», «Next», «Set up…», «Set up later»,
-/// «Start using CodeLab» (D4, D8).
+/// «Skip for now» (D4, D8; `add-onboarding-project-step`, D1, D2).
 class OnboardingNavigation extends StatelessWidget {
   const OnboardingNavigation({
     required this.state,
     required this.selectedPreset,
     required this.onBack,
     required this.onNext,
-    required this.onFinish,
+    required this.onSkip,
     required this.onLater,
     required this.onSetUp,
+    this.restoredProject,
+    this.onContinue,
     super.key,
   });
 
@@ -129,7 +164,12 @@ class OnboardingNavigation extends StatelessWidget {
   final String? selectedPreset;
   final VoidCallback onBack;
   final VoidCallback onNext;
-  final VoidCallback onFinish;
+  final VoidCallback onSkip;
+  final VoidCallback? onContinue;
+
+  /// Путь восстановленного проекта: на шаге «Open a project» вместо
+  /// «Skip for now» стоит `Continue in <folder>` (D3); `null` — проекта нет.
+  final String? restoredProject;
   final VoidCallback onLater;
   final ValueChanged<String> onSetUp;
 
@@ -139,10 +179,16 @@ class OnboardingNavigation extends StatelessWidget {
     final model = state.model;
     // Пока мастер открывается или открыт, навигация шага неактивна (D8, ревью
     // 2026-11-21, п. 6): Cubit игнорирует нажатия, кнопки это показывают.
-    final busy = _wizardActive(model) || state.document != null;
+    final busy =
+        _wizardActive(model) ||
+        state.document != null ||
+        state.project == ProjectStepPhase.choosing ||
+        state.finishing;
     final actions = <Widget>[];
     switch (state.step) {
-      case OnboardingStep.welcome || OnboardingStep.permissions:
+      case OnboardingStep.welcome ||
+          OnboardingStep.permissions ||
+          OnboardingStep.privacy:
         actions.add(
           FilledButton(
             key: const ValueKey('onboarding-next'),
@@ -197,13 +243,26 @@ class OnboardingNavigation extends StatelessWidget {
             ),
           );
         }
-      case OnboardingStep.privacy:
+      case OnboardingStep.project:
+        // «Open folder…» — основная кнопка тела шага; здесь выход без
+        // выбора: `Continue in …` при восстановленном проекте, иначе
+        // «Skip for now». Пока выбор или запись флага идут, кнопки неактивны
+        // (D6).
+        final restored = restoredProject;
         actions.add(
-          FilledButton(
-            key: const ValueKey('onboarding-finish'),
-            onPressed: onFinish,
-            child: Text(l10n.onboardingFinish),
-          ),
+          restored != null
+              ? FilledButton(
+                  key: const ValueKey('onboarding-project-continue'),
+                  onPressed: busy ? null : onContinue,
+                  child: Text(
+                    l10n.onboardingProjectContinue(projectNameOf(restored)),
+                  ),
+                )
+              : Button(
+                  key: const ValueKey('onboarding-project-skip'),
+                  onPressed: busy ? null : onSkip,
+                  child: Text(l10n.onboardingProjectSkip),
+                ),
         );
     }
     return Row(

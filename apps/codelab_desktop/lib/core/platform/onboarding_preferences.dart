@@ -33,8 +33,8 @@ final class OnboardingLoad {
 /// (D2); образец — `AppLanguagePreferences`.
 ///
 /// Как использовать: `load` НЕ бросает и вызывается до `runApp`; `markDone`
-/// вызывается один раз при «Start using CodeLab» и бросает при сбое записи —
-/// решение о повторе принимает вызывающий.
+/// вызывается один раз при завершении шага «Open a project» и бросает при
+/// сбое записи — решение о повторе принимает вызывающий.
 abstract interface class OnboardingPreferences {
   Future<OnboardingLoad> load();
 

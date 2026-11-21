@@ -758,6 +758,40 @@ Widget _openProjectPreview(
   );
 }
 
+/// Тело экрана «проект не выбран» без ссылки в настройки и без InfoBar
+/// (шаг «Open a project» onboarding, change `add-onboarding-project-step`,
+/// D4). Тёмная тема, язык `en`; прокрутку и заголовок даёт хост.
+@Preview(
+  name: 'Open project body (dark)',
+  group: codelabOrganismPreviewGroup,
+  size: Size(620, 480),
+)
+Widget codelabOpenProjectBodyPreview() => _AcpOrganismPreviewSurface(
+  brightness: Brightness.dark,
+  locale: const Locale('en'),
+  child: SizedBox(
+    width: 620,
+    height: 480,
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: CodeLabOpenProjectBody(
+        description:
+            'Choose the folder you want to work in. The agent starts in it, '
+            "and sessions get it as their working directory. The agent can't "
+            'read or write outside it.',
+        openLabel: 'Open folder…',
+        openShortcut: 'Ctrl+O',
+        onOpen: codelabPreviewConnect,
+        dropLabel: 'Drop a folder here to open it',
+        dropHint: 'Files are not accepted — only a folder',
+        agentName: 'Embedded agent',
+        agentDetail: 'in-process · profile of this window',
+        agentNote: 'Starts when you open a folder. Nothing runs before that.',
+      ),
+    ),
+  ),
+);
+
 /// Дерево файлов (артборд `Files`): раскрытая папка, ссылка наружу и строка
 /// «… N more». Пути вымышленные, без данных пользователя.
 @Preview(

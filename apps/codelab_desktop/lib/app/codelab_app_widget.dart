@@ -369,8 +369,9 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
           final settings = destination is SettingsDestination
               ? destination
               : null;
-          // Onboarding вместо рабочего места: оно не строится, пока пользователь
-          // не нажал «Start using CodeLab» (D5). Корневые Cubit-ы живут, как
+          // Onboarding вместо рабочего места: оно не строится, пока
+          // пользователь не завершил шаг «Open a project» (D5,
+          // `add-onboarding-project-step` D2). Корневые Cubit-ы живут, как
           // раньше.
           if (destination is OnboardingDestination) {
             return _OnboardingHost(

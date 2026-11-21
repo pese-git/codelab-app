@@ -3888,7 +3888,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingNext => 'Next';
 
   @override
-  String get onboardingFinish => 'Start using CodeLab';
+  String get onboardingProjectTitle => 'Open a project';
+
+  @override
+  String get onboardingProjectSkip => 'Skip for now';
+
+  @override
+  String onboardingProjectLast(String folder) {
+    return 'Last project: $folder';
+  }
+
+  @override
+  String onboardingProjectContinue(String folder) {
+    return 'Continue in $folder';
+  }
+
+  @override
+  String get onboardingProjectRecents => 'Recent projects';
 
   @override
   String get onboardingWelcomeTitle =>
@@ -3931,7 +3947,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingWelcomeFootnote =>
-      'Setup takes four short steps. You can change every choice later in Settings.';
+      'Setup takes five short steps. You can change every choice later in Settings.';
 
   @override
   String get onboardingPermissionsTitle =>

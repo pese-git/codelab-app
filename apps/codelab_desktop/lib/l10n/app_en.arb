@@ -5348,9 +5348,35 @@
   "@onboardingNext": {
     "description": "Кнопка перехода на следующий шаг onboarding."
   },
-  "onboardingFinish": "Start using CodeLab",
-  "@onboardingFinish": {
-    "description": "Последняя кнопка onboarding: записывает флаг и открывает рабочее место. CodeLab — название продукта."
+  "onboardingProjectTitle": "Open a project",
+  "@onboardingProjectTitle": {
+    "description": "Заголовок шага 5 onboarding «Open a project» (change add-onboarding-project-step, D1); совпадает с заголовком экрана без проекта."
+  },
+  "onboardingProjectSkip": "Skip for now",
+  "@onboardingProjectSkip": {
+    "description": "Кнопка шага 5 onboarding без проекта: записывает флаг и открывает рабочее место без папки (change add-onboarding-project-step, D2)."
+  },
+  "onboardingProjectLast": "Last project: {folder}",
+  "@onboardingProjectLast": {
+    "description": "Строка шага 5 onboarding над «Open folder…», когда проект прошлого запуска восстановлен (change add-onboarding-project-step, D3, Q5). Плейсхолдер folder — имя папки, не переводить; полный путь показывается второй строкой.",
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingProjectContinue": "Continue in {folder}",
+  "@onboardingProjectContinue": {
+    "description": "Основная кнопка шага 5 onboarding при восстановленном проекте: завершает onboarding с этим проектом (change add-onboarding-project-step, D2, D3). Плейсхолдер folder — имя папки, не переводить.",
+    "placeholders": {
+      "folder": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingProjectRecents": "Recent projects",
+  "@onboardingProjectRecents": {
+    "description": "Заголовок блока недавних проектов на шаге 5 onboarding, до пяти записей (change add-onboarding-project-step, D3, Q2)."
   },
   "onboardingWelcomeTitle": "An AI coding agent that works in your project",
   "@onboardingWelcomeTitle": {
@@ -5396,7 +5422,7 @@
   "@onboardingBuiltInTag": {
     "description": "Тег карточки встроенного агента."
   },
-  "onboardingWelcomeFootnote": "Setup takes four short steps. You can change every choice later in Settings.",
+  "onboardingWelcomeFootnote": "Setup takes five short steps. You can change every choice later in Settings.",
   "@onboardingWelcomeFootnote": {
     "description": "Подсказка под карточками шага 1."
   },

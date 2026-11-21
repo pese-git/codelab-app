@@ -2,8 +2,48 @@ import '../../settings/application/legal_documents.dart' show LegalTab;
 import 'onboarding_probe.dart';
 
 /// Шаг onboarding в порядке показа (design.md change `add-app-onboarding`,
-/// D4).
-enum OnboardingStep { welcome, permissions, model, privacy }
+/// D4; `project` — пятый, последний шаг, `add-onboarding-project-step`, D1).
+enum OnboardingStep { welcome, permissions, model, privacy, project }
+
+/// Фаза шага «Open a project» (design.md change
+/// `add-onboarding-project-step`, D6).
+///
+/// Почему поле шага, а не флаг: по образцу [ModelWizard]. `choosing` — порт
+/// выбора ещё не ответил (диалог открыт, проверяется брошенный путь,
+/// выбирается недавний): «Back», «Skip for now», `Continue…`, недавние и
+/// повторный выбор не действуют. С `finishing` фаза не пересекается: `finish`
+/// вызывается после выхода из `choosing`.
+enum ProjectStepPhase { idle, choosing }
+
+/// Откуда пришла принятая папка (design.md change
+/// `add-onboarding-project-step`, D2, D8): значение поля `project` события
+/// `onboarding.completed`.
+enum ProjectSource { picker, drop, recent }
+
+/// Исход шага «Open a project», завершающий onboarding (D2).
+///
+/// Почему закрытая иерархия: набор исходов фиксирован, а журнал и политика
+/// завершения различают их по типу (`switch` без `default`).
+sealed class OnboardingProjectExit {
+  const OnboardingProjectExit();
+}
+
+/// Папка принята: диалог, бросок или недавний проект.
+final class ProjectChosen extends OnboardingProjectExit {
+  const ProjectChosen(this.source);
+
+  final ProjectSource source;
+}
+
+/// `Continue in <name>`: проект восстановлен из снимка и подтверждён.
+final class ProjectRestored extends OnboardingProjectExit {
+  const ProjectRestored();
+}
+
+/// «Skip for now»: проекта нет, выбор откладывается.
+final class ProjectSkipped extends OnboardingProjectExit {
+  const ProjectSkipped();
+}
 
 /// Состояние чтения фактов (D6): закрытая иерархия вместо набора флагов
 /// (AGENTS.md §8).
@@ -168,8 +208,9 @@ final class ModelSaved extends OnboardingModelStep {
 /// Состояние onboarding (D4).
 ///
 /// Как использовать: читает `OnboardingScreen`; меняет только
-/// `OnboardingCubit`. [finishing] — запись флага идёт, повторное нажатие
-/// «Start using CodeLab» игнорируется (D5).
+/// `OnboardingCubit`. [finishing] — выбор принят, запись флага идёт,
+/// повторные действия шага «Open a project» игнорируются (D5, D2
+/// `add-onboarding-project-step`).
 final class OnboardingState {
   const OnboardingState({
     this.step = OnboardingStep.welcome,
@@ -177,12 +218,16 @@ final class OnboardingState {
     this.model = const ModelPending(),
     this.finishing = false,
     this.document,
+    this.project = ProjectStepPhase.idle,
   });
 
   final OnboardingStep step;
   final OnboardingFactsState facts;
   final OnboardingModelStep model;
   final bool finishing;
+
+  /// Фаза шага «Open a project»; у остальных шагов — `idle` (D6).
+  final ProjectStepPhase project;
 
   /// Открытый правовой документ шага «Privacy» (design.md change
   /// `add-app-onboarding`, D10 в редакции 2026-11-21); `null` — просмотра нет.
@@ -197,16 +242,18 @@ final class OnboardingState {
     bool? finishing,
     LegalTab? document,
     bool clearDocument = false,
+    ProjectStepPhase? project,
   }) => OnboardingState(
     step: step ?? this.step,
     facts: facts ?? this.facts,
     model: model ?? this.model,
     finishing: finishing ?? this.finishing,
     document: clearDocument ? null : (document ?? this.document),
+    project: project ?? this.project,
   );
 
   @override
   String toString() =>
       'OnboardingState(${step.name}, ${facts.runtimeType}, '
-      '${model.runtimeType}, finishing: $finishing)';
+      '${model.runtimeType}, finishing: $finishing, project: ${project.name})';
 }

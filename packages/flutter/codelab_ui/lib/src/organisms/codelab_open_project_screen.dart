@@ -16,7 +16,10 @@ import '../atomics/atomics.dart';
 /// Для чего: организм без логики (`codelab_ui/AGENTS.md` §2). Он не знает
 /// профилей, не решает, какой текст показать, не принимает перетаскивание из
 /// ОС — это делает app (D3) и передаёт сюда только состояние [dropActive] и
-/// [dropMessage]. Зона и карточка — приватные части организма.
+/// [dropMessage]. Зона и карточка — приватные части организма; блоки от
+/// пояснения до карточки рисует [CodeLabOpenProjectBody], тот же, что в шаге
+/// onboarding (D4 `add-onboarding-project-step`): экран добавляет героя,
+/// заголовок, прокрутку и InfoBar.
 ///
 /// Как использовать: хост передаёт готовые строки и колбэки. [dropMessage]
 /// — текст отказа; он показывается вместо [dropLabel] и [dropHint] с тоном
@@ -121,36 +124,19 @@ class CodeLabOpenProjectScreen extends StatelessWidget {
               const SizedBox(height: 12),
               CodeLabText(title, role: CodeLabTextRole.title),
               const SizedBox(height: 8),
-              CodeLabText(description, role: CodeLabTextRole.body),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  CodeLabButton(
-                    key: openKey,
-                    label: openLabel,
-                    icon: FluentIcons.open_folder_horizontal,
-                    emphasis: CodeLabButtonEmphasis.primary,
-                    onPressed: onOpen,
-                  ),
-                  if (openShortcut case final shortcut?) ...[
-                    const SizedBox(width: 12),
-                    CodeLabText(shortcut, role: CodeLabTextRole.caption),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 16),
-              _DropZone(
-                label: dropLabel,
-                hint: dropHint,
-                active: dropActive,
-                message: dropMessage,
-              ),
-              const SizedBox(height: 16),
-              _AgentCard(
-                name: agentName,
-                detail: agentDetail,
-                note: agentNote,
-                linkLabel: settingsLinkLabel,
+              CodeLabOpenProjectBody(
+                description: description,
+                openLabel: openLabel,
+                openShortcut: openShortcut,
+                onOpen: onOpen,
+                dropLabel: dropLabel,
+                dropHint: dropHint,
+                dropActive: dropActive,
+                dropMessage: dropMessage,
+                agentName: agentName,
+                agentDetail: agentDetail,
+                agentNote: agentNote,
+                settingsLinkLabel: settingsLinkLabel,
                 onOpenSettings: onOpenSettings,
               ),
               const SizedBox(height: 16),
@@ -164,6 +150,123 @@ class CodeLabOpenProjectScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Тело экрана «проект не выбран»: пояснение, «Open folder…», зона и карточка.
+///
+/// Почему: шаг «Open a project» onboarding (change
+/// `add-onboarding-project-step`, D4) переиспользует блоки кадра 11a, но не
+/// может встроить [CodeLabOpenProjectScreen] целиком: у экрана своя прокрутка
+/// (вложенная вертикальная прокрутка без ограничения высоты падает при
+/// раскладке), герой и заголовок, а заголовок onboarding — узел фокуса экрана
+/// app; InfoBar про Cmd/Ctrl+N на onboarding неверен.
+///
+/// Для чего: единственная раскладка этих четырёх блоков, чтобы тексты, цвета
+/// и ключи не расходились между экраном 11a и шагом. Организм без логики
+/// (`codelab_ui/AGENTS.md` §2): строки и колбэки приходят готовыми, приём
+/// перетаскивания из ОС — в app.
+///
+/// Как использовать: кладётся в колонку, которую прокручивает и центрирует
+/// хост; сам тело не прокручивается и не центрируется. Ссылка «в настройки» в
+/// карточке необязательна: [settingsLinkLabel] и [onOpenSettings] задаются
+/// только вместе (`assert`), без них ссылки нет — на onboarding настройки
+/// недоступны. Ключи — константы [CodeLabOpenProjectScreen].
+class CodeLabOpenProjectBody extends StatelessWidget {
+  const CodeLabOpenProjectBody({
+    required this.description,
+    required this.openLabel,
+    required this.onOpen,
+    required this.dropLabel,
+    required this.dropHint,
+    required this.agentName,
+    required this.agentDetail,
+    required this.agentNote,
+    this.settingsLinkLabel,
+    this.onOpenSettings,
+    this.beforeOpen,
+    this.openShortcut,
+    this.dropActive = false,
+    this.dropMessage,
+    super.key,
+  }) : assert(
+         (settingsLinkLabel == null) == (onOpenSettings == null),
+         'settingsLinkLabel и onOpenSettings задаются только вместе',
+       );
+
+  final String description;
+  final String openLabel;
+
+  /// Подсказка сочетания рядом с кнопкой (`Ctrl+O`, `⌘O`); `null` — без неё.
+  final String? openShortcut;
+
+  /// Действие «Open folder…»; `null` — кнопка неактивна (выбор уже идёт: шаг
+  /// «Open a project» onboarding не даёт открыть второй диалог, D6).
+  final VoidCallback? onOpen;
+
+  final String dropLabel;
+  final String dropHint;
+
+  /// Элементы из ОС сейчас над телом: рамка зоны — в цвете акцента.
+  final bool dropActive;
+
+  /// Текст отказа последнего броска; `null` — отказа нет.
+  final String? dropMessage;
+
+  final String agentName;
+  final String agentDetail;
+  final String agentNote;
+
+  /// Подпись ссылки карточки; `null` вместе с [onOpenSettings] — без ссылки.
+  final String? settingsLinkLabel;
+  final VoidCallback? onOpenSettings;
+
+  /// Блок между пояснением и «Open folder…» (строка «Last project» шага
+  /// onboarding, design.md change `add-onboarding-project-step`, D3); `null` —
+  /// без него. Содержимое и тексты принадлежат хосту: организм логики не знает.
+  final Widget? beforeOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CodeLabText(description, role: CodeLabTextRole.body),
+        const SizedBox(height: 16),
+        if (beforeOpen case final lead?) ...[lead, const SizedBox(height: 16)],
+        Row(
+          children: [
+            CodeLabButton(
+              key: CodeLabOpenProjectScreen.openKey,
+              label: openLabel,
+              icon: FluentIcons.open_folder_horizontal,
+              emphasis: CodeLabButtonEmphasis.primary,
+              onPressed: onOpen,
+            ),
+            if (openShortcut case final shortcut?) ...[
+              const SizedBox(width: 12),
+              CodeLabText(shortcut, role: CodeLabTextRole.caption),
+            ],
+          ],
+        ),
+        const SizedBox(height: 16),
+        _DropZone(
+          label: dropLabel,
+          hint: dropHint,
+          active: dropActive,
+          message: dropMessage,
+        ),
+        const SizedBox(height: 16),
+        _AgentCard(
+          name: agentName,
+          detail: agentDetail,
+          note: agentNote,
+          linkLabel: settingsLinkLabel,
+          onOpenSettings: onOpenSettings,
+        ),
+      ],
     );
   }
 }
@@ -285,7 +388,8 @@ class _DashedBorderPainter extends CustomPainter {
       old.radius != radius;
 }
 
-/// Карточка агента окна: имя, транспорт, пояснение и ссылка в настройки.
+/// Карточка агента окна: имя, транспорт, пояснение и (необязательно) ссылка
+/// в настройки.
 class _AgentCard extends StatelessWidget {
   const _AgentCard({
     required this.name,
@@ -298,12 +402,16 @@ class _AgentCard extends StatelessWidget {
   final String name;
   final String detail;
   final String note;
-  final String linkLabel;
-  final VoidCallback onOpenSettings;
+  final String? linkLabel;
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    // Ссылка есть только при обеих частях (в теле это гарантирует assert).
+    final label = linkLabel;
+    final onTap = onOpenSettings;
+    final link = label != null && onTap != null ? (label, onTap) : null;
     return DecoratedBox(
       key: CodeLabOpenProjectScreen.agentKey,
       decoration: BoxDecoration(
@@ -320,22 +428,21 @@ class _AgentCard extends StatelessWidget {
             CodeLabText(detail, role: CodeLabTextRole.caption),
             const SizedBox(height: 6),
             CodeLabText(note, role: CodeLabTextRole.body),
-            const SizedBox(height: 4),
-            // Один узел «ссылка»: кнопка Fluent сама ссылкой не объявляется,
-            // поэтому подпись, роль и нажатие задаются здесь, а внутренняя
-            // семантика исключается, чтобы не было двух узлов.
-            Semantics(
-              key: CodeLabOpenProjectScreen.agentSettingsKey,
-              link: true,
-              button: true,
-              label: linkLabel,
-              onTap: onOpenSettings,
-              excludeSemantics: true,
-              child: HyperlinkButton(
-                onPressed: onOpenSettings,
-                child: Text(linkLabel),
+            if (link case (final label, final onTap)) ...[
+              const SizedBox(height: 4),
+              // Один узел «ссылка»: кнопка Fluent сама ссылкой не объявляется,
+              // поэтому подпись, роль и нажатие задаются здесь, а внутренняя
+              // семантика исключается, чтобы не было двух узлов.
+              Semantics(
+                key: CodeLabOpenProjectScreen.agentSettingsKey,
+                link: true,
+                button: true,
+                label: label,
+                onTap: onTap,
+                excludeSemantics: true,
+                child: HyperlinkButton(onPressed: onTap, child: Text(label)),
               ),
-            ),
+            ],
           ],
         ),
       ),

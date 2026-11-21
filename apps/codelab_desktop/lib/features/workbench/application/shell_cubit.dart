@@ -136,6 +136,7 @@ final class CodeLabShellParts {
     StartupPreferences? startupPreferences,
     Logger? appLogger,
     DateTime Function()? clock,
+    bool projectStartHeld = false,
   }) {
     final now = clock ?? createMonotonicClock();
     final changes = ShellChanges();
@@ -150,6 +151,7 @@ final class CodeLabShellParts {
       localPathKind: localPathKind ?? ioLocalPathKind,
       startupPreferences: startupPreferences,
       appLogger: appLogger,
+      projectStartHeld: projectStartHeld,
     );
     final activeSession = ActiveSessionCubit(
       changes: changes,
@@ -406,13 +408,14 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   SettingsCubit get _settings => _parts.settings;
   LayoutCubit get _layout => _parts.layout;
 
-  Future<void> selectProject(String path) => _settings.selectProject(path);
+  Future<String?> selectProject(String path) => _settings.selectProject(path);
 
-  Future<void> browseForProject() => _settings.browseForProject();
+  /// Системный выбор папки; возвращает принятую папку или `null`.
+  Future<String?> browseForProject() => _settings.browseForProject();
 
   /// Брошенные в окно пути (перетаскивание из ОС): решение принимает
   /// `SettingsCubit` (design.md change `add-empty-project-screen`, D4).
-  Future<void> openDroppedPaths(List<String?> paths) =>
+  Future<String?> openDroppedPaths(List<String?> paths) =>
       _settings.openDroppedPaths(paths);
 
   /// Снимает сообщение об отказе брошенной папки.
@@ -445,7 +448,15 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       _connection.connectAfterProviderSetup(notice);
 
   /// Триггер запуска (D19): app зовёт его после первого кадра.
-  Future<void> startOnLaunch() => _connection.startOnLaunch();
+  ///
+  /// Первым шагом снимает удержание триггера выбора проекта (D5 change
+  /// `add-onboarding-project-step`): папка, выбранная на шаге onboarding, не
+  /// стартовала агента под onboarding, и единственный старт делает
+  /// [ConnectionCubit.startOnLaunch] ниже. Без удержания вызов — no-op.
+  Future<void> startOnLaunch() {
+    _settings.releaseProjectStart();
+    return _connection.startOnLaunch();
+  }
 
   void resizeSessionsPane(double width) => _layout.resizeSessionsPane(width);
 
