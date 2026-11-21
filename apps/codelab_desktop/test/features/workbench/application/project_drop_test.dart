@@ -395,6 +395,14 @@ void main() {
       expect(failures, hasLength(1));
       expect('${scene.diagnostics.entries}', isNot(contains('boom')));
       expect('${scene.diagnostics.entries}', isNot(contains('/secret')));
+      // Событие журнала app: класс ошибки без текста и пути (D7).
+      final event = scene.events.entries.singleWhere(
+        (e) => e['event'] == 'project.picker_failed',
+      );
+      expect(event['level'], 'warning');
+      expect(event['error_class'], 'StateError');
+      expect('${scene.events.entries}', isNot(contains('boom')));
+      expect('${scene.events.entries}', isNot(contains('/secret')));
 
       scene.picker.error = null;
       final again = scene.settings.browseForProject();
