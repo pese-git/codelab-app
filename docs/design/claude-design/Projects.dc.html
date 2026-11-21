@@ -28,12 +28,12 @@ body{margin:0}
 <header class="f-appbar" data-fluent="NavigationAppBar">
   <span class="f-logo">CL</span><span class="t-cap">CodeLab</span>
   <span style="flex: 1"></span>
-  <span class="tag ok"><span class="f-dot"></span>Embedded agent ready</span>
+  <span class="tag" title="The agent of this window starts in the folder you open"><span class="f-dot"></span>Embedded agent · starts with the project</span>
 </header>
 <div class="wrap" data-fluent="ScaffoldPage">
   <div class="col">
     <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap" data-fluent="PageHeader">
-      <div style="flex: 1; min-width: 260px"><h1 class="t-title" style="margin: 0">Open a project</h1><p class="t2" style="margin: 4px 0 0">The folder becomes the session's working directory (cwd). The agent can't read or write outside it.</p></div>
+      <div style="flex: 1; min-width: 260px"><h1 class="t-title" style="margin: 0">Open a project</h1><p class="t2" style="margin: 4px 0 0">The agent starts in the folder you open, and new sessions get it as their working directory (cwd). The agent can't read or write outside it.</p></div>
       <div class="f-cb" data-fluent="CommandBar">
         <button class="f-btn accent"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Open folder…</button>
       </div>
@@ -65,28 +65,26 @@ body{margin:0}
           <span style="min-width: 0"><span>notes</span><span class="t-cap t2 mono" style="display: block">~/notes</span></span>
           <span style="display: flex; gap: 6px; align-items: center"><span class="tag">not a git repo</span><span class="tag">1 session</span><span class="t-cap t2">Oct 2</span></span>
         </a>
-        <div class="prow" style="opacity: .9" data-fluent="ListTile (missing)">
+        <a href="ProjectNotFound.dc.html" class="prow f-li" style="opacity: .9" data-fluent="ListTile (folder not found → 11d)">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--warn)"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg>
-          <span style="min-width: 0"><span class="t2">legacy-python-agent</span><span class="t-cap mono" style="display: block; color: var(--warn)">/Volumes/Work/legacy-python-agent — The session folder is not on this computer.</span></span>
-          <span style="display: flex; gap: 4px"><button class="f-btn">Locate…</button><button class="f-btn subtle">Remove from list</button></span>
-        </div>
+          <span style="min-width: 0"><span class="t2">legacy-python-agent</span><span class="t-cap mono" style="display: block; color: var(--warn)">/Volumes/Work/legacy-python-agent — folder not found</span></span>
+          <span style="display: flex; gap: 4px"><button class="f-btn subtle">Remove from list</button></span>
+        </a>
       </section>
 
       <div class="side">
-        <section class="f-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px" aria-label="Agent connection">
-          <h2 class="t-strong" style="font-size: 14px; margin: 0">Agent connection</h2>
-          <p class="t-cap t2" style="margin: 0">Profile for new sessions in this project (U-06). Edit profiles in Settings › Connection.</p>
-          <label class="f-rb"><input type="radio" name="prof" checked>Embedded agent <span class="t-cap t2">in-process</span></label>
-          <label class="f-rb"><input type="radio" name="prof">py-stdio <span class="t-cap t2 mono">codelab-agent --stdio</span></label>
-          <label class="f-rb"><input type="radio" name="prof">ws-local <span class="t-cap t2 mono">ws://127.0.0.1:7777</span></label>
-          <a href="Connection.dc.html" class="f-hl">Manage profiles</a>
+        <section class="f-card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px" aria-label="Agent for this window">
+          <h2 class="t-strong" style="font-size: 14px; margin: 0">Agent for this window</h2>
+          <span><span class="t-strong">Embedded agent</span> <span class="t-cap t2">in-process · default</span></span>
+          <p class="t-cap t2" style="margin: 0">One agent serves every project of this window (U-06). Opening another project doesn't restart it or stop turns in other folders.</p>
+          <a href="Connection.dc.html" class="f-hl">Change in Settings › Connection</a>
         </section>
         <div class="drop" data-fluent="DropTarget">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="width: 24px; height: 24px; color: var(--text2)"><path d="M12 15V4M7 9l5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>
           <span>Drop a folder here to open it</span>
           <span class="t-cap t2">or press Ctrl+O from the workbench</span>
         </div>
-        <div class="f-ib" data-fluent="InfoBar"><span class="f-ibi">i</span><div><span class="ttl">Sessions follow the folder</span>Sessions are listed per working directory. Open another project to see its sessions.</div></div>
+        <div class="f-ib" data-fluent="InfoBar"><span class="f-ibi">i</span><div><span class="ttl">Sessions follow the folder</span>Opening a project lists its sessions and doesn't create one. Press New session (Ctrl+N) to start.</div></div>
       </div>
     </div>
   </div>
