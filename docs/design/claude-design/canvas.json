@@ -2192,6 +2192,23 @@
    "w": 1000,
    "x": 2160,
    "y": 6840
+  },
+  "Diff.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "03a Diff pane — edits of the focused session in the dock (D-07)",
+   "w": 1440,
+   "x": 3040,
+   "y": 1320
+  },
+  "Diff-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "03a Diff pane — dark",
+   "w": 1440,
+   "page": "dark",
+   "x": 3040,
+   "y": 1320
   }
  },
  "createdOnFiles": {
@@ -2434,7 +2451,7 @@
   },
   "d-row2": {
    "kind": "title1",
-   "maxW": 2960,
+   "maxW": 4480,
    "page": "dark",
    "text": "Тёмная тема — проект и сессии",
    "w": 240,
@@ -2598,7 +2615,7 @@
   },
   "row2": {
    "kind": "title1",
-   "maxW": 2960,
+   "maxW": 4480,
    "text": "Проект и сессии",
    "w": 240,
    "x": 0,
@@ -2607,9 +2624,9 @@
   "row2s": {
    "fill": "teal",
    "size": 24,
-   "text": "03 — панель Files в доке: дерево и предпросмотр (D-13, change add-file-preview-and-tree)\n04 — поиск сессий в сайдбаре (D-17), сессия только для чтения (D-10, S-09)",
+   "text": "03 — панель Files в доке: дерево и предпросмотр (D-13, change add-file-preview-and-tree)\n04 — поиск сессий в сайдбаре (D-17), сессия только для чтения (D-10, S-09)\n03a — панель Diff (D-07): изменённые файлы сессии в фокусе (M, A, D, +N −M), снизу — AcpDiffView выбранного файла; «Auto» берёт unified при ширине < 960 px (§12.3, A5). Только просмотр; «Open in Files», «Show full» — AcpDiffViewerDialog. Состояния: created, deleted, binary, too large, упрощённый diff, пусто. Как правки нескольких вызовов одного файла сводятся в один diff, документы не задают.",
    "w": 440,
-   "x": 3040,
+   "x": 4560,
    "y": 1320
   },
   "row3": {
@@ -3301,7 +3318,9 @@
   "CliSetupNoTty.dc.html",
   "NavTabletOnboarding.dc.html",
   "InspectorLog.dc.html",
-  "InspectorLog-dark.dc.html"
+  "InspectorLog-dark.dc.html",
+  "Diff.dc.html",
+  "Diff-dark.dc.html"
  ],
  "pages": [
   {
