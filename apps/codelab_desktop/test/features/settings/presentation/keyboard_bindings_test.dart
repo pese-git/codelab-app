@@ -388,6 +388,37 @@ void main() {
   // «Сочетания app и страница «Keyboard» не расходятся»): Ctrl+O и ⌘O на
   // рабочем месте открывают выбор папки.
 
+  // new-session (change `add-empty-project-screen`, задача 4.8, D7а): без
+  // проекта Ctrl+N и ⌘N делают то же, что кнопка «New session», — открывают
+  // выбор папки.
+  group('new-session без проекта', () {
+    for (final useMeta in [false, true]) {
+      testWidgets('${useMeta ? '⌘N' : 'Ctrl+N'} открывает выбор папки', (
+        tester,
+      ) async {
+        final picker = _CountingPicker();
+        final binding = CodeLabTestBinding(projectFolderPicker: picker);
+        await tester.pumpWidget(
+          binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+        );
+        await tester.pump();
+
+        await pressShortcut(
+          tester,
+          CodeLabShortcut.newSession,
+          useMeta: useMeta,
+        );
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pump();
+
+        expect(picker.picks, 1);
+        await tester.pump(const Duration(seconds: 10));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await closeCodeLabRootScopeInTest();
+      });
+    }
+  });
+
   group('open-folder', () {
     for (final useMeta in [false, true]) {
       testWidgets('${useMeta ? '⌘O' : 'Ctrl+O'} на рабочем месте без проекта '

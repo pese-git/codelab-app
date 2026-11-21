@@ -36,6 +36,20 @@ final class _CountingPicker implements ProjectFolderPicker {
   }
 }
 
+/// Системный выбор папки, пока не вызван [complete], «открыт».
+final class _GatedPicker implements ProjectFolderPicker {
+  var picks = 0;
+  Completer<String?>? _open;
+
+  @override
+  Future<String?> pickFolder({String? initialDirectory}) {
+    picks++;
+    return (_open = Completer<String?>()).future;
+  }
+
+  void complete(String? path) => _open!.complete(path);
+}
+
 void main() {
   void setWindow(WidgetTester tester, Size size) {
     tester.view.physicalSize = size;
@@ -1237,6 +1251,81 @@ void main() {
       await tester.pump(const Duration(seconds: 10));
       await tearDownApp(tester);
     }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    // Задача 4.8 (ручной смоук macOS): Cmd/Ctrl+N без проекта — то же
+    // действие, что кнопка «New session» сайдбара: выбор папки по правилу
+    // `require-project-folder`; InfoBar экрана 11a обещает именно это.
+    for (final (name, useMeta, platform) in [
+      ('Ctrl+N', false, TargetPlatform.linux),
+      ('⌘N', true, TargetPlatform.macOS),
+    ]) {
+      testWidgets('$name without a project opens the folder picker once, '
+          'starts no agent and creates no session; cancel keeps no project; '
+          'a repeated press while the dialog is open opens no second one', (
+        tester,
+      ) async {
+        setWindow(tester, const Size(1440, 900));
+        final picker = _GatedPicker();
+        var embeddedOpened = 0;
+        final started = <String?>[];
+        final binding = CodeLabTestBinding(
+          projectFolderPicker: picker,
+          stdioTransportFactory: (config) {
+            started.add(config.cwd);
+            return FakeAcpTransport();
+          },
+          embeddedOpener: ({required cwd, required hostProfile}) async {
+            embeddedOpened++;
+            throw StateError('the embedded agent must not be opened');
+          },
+        );
+        final cubit = await pumpApp(tester, binding);
+
+        await pressShortcut(
+          tester,
+          CodeLabShortcut.newSession,
+          useMeta: useMeta,
+        );
+        await settle(tester);
+        expect(picker.picks, 1);
+
+        await pressShortcut(
+          tester,
+          CodeLabShortcut.newSession,
+          useMeta: useMeta,
+        );
+        await settle(tester);
+        expect(picker.picks, 1, reason: 'второй диалог не открывается');
+
+        picker.complete(null);
+        await settle(tester);
+
+        expect(cubit.state.selectedProjectPath, isNull);
+        expect(cubit.state.sessions, isEmpty);
+        expect(started, isEmpty);
+        expect(embeddedOpened, 0);
+        await tearDownApp(tester);
+      }, variant: TargetPlatformVariant.only(platform));
+    }
+
+    testWidgets('the palette item «New session» without a project behaves '
+        'like the button: it opens the folder picker', (tester) async {
+      setWindow(tester, const Size(1440, 900));
+      final picker = _CountingPicker();
+      final cubit = await pumpApp(
+        tester,
+        CodeLabTestBinding(projectFolderPicker: picker),
+      );
+
+      final item = cubit.state.paletteActions.firstWhere((a) => a.id == 'new');
+      expect(item.isAvailable, isTrue);
+      cubit.selectCommand(item);
+      await settle(tester);
+
+      expect(picker.picks, 1);
+      expect(cubit.state.selectedProjectPath, isNull);
+      await tearDownApp(tester);
+    });
 
     testWidgets('Ctrl+O on the settings screen opens no picker and changes no '
         'project', (tester) async {

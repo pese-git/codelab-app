@@ -63,7 +63,7 @@ final keyboardRows = <KeyboardRow>[
     'New session',
     ['Ctrl', 'N'],
     ['⌘', 'N'],
-    'Workbench, when a project is selected',
+    'Workbench',
   ),
   _r(
     'open-folder',

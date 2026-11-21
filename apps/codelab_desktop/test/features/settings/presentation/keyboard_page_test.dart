@@ -628,7 +628,7 @@ void main() {
       final windowRight = tester.view.physicalSize.width;
       final where = find.descendant(
         of: _row('new-session'),
-        matching: find.text('Workbench, when a project is selected'),
+        matching: find.text('Workbench'),
       );
       expect(where, findsOneWidget);
       for (final finder in [find.text('Where'), where]) {
