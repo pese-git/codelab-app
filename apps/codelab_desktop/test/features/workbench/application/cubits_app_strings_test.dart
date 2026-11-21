@@ -270,17 +270,18 @@ void main() {
           scene.parts.sessions.state.currentSessionLabel,
           'No active session',
         );
+        // Подписи «Open a project…» под названием сессии нет (change
+        // `add-empty-project-screen`, задача 4.7, D11): пока сессии в фокусе
+        // нет, деталь — пустая строка на любом языке.
+        expect(scene.parts.sessions.state.currentSessionDetail, '');
 
         strings.emit(AppLocalizationsRu());
         await pumpEventQueue();
 
         final state = scene.parts.sessions.state;
-        // Обе строки — вне глоссария.
+        // Название — вне глоссария.
         expect(state.currentSessionLabel, 'Нет активной сессии');
-        expect(
-          state.currentSessionDetail,
-          'Откройте проект, чтобы начать сессию.',
-        );
+        expect(state.currentSessionDetail, '');
       },
     );
 
