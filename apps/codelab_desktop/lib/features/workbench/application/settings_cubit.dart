@@ -6,7 +6,6 @@ import 'package:codelab_client_io/codelab_client_io.dart' show DirectoryExists;
 import 'package:codelab_client_core/codelab_client_core.dart'
     show ClientWorkspace, RecentProjectsStore;
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabRecentProject;
-import 'package:path/path.dart' as p;
 
 import '../../../core/platform/local_path_kind.dart';
 import '../../../core/platform/project_folder_picker.dart';
@@ -274,7 +273,7 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
       path = await _projectFolderPicker.pickFolder(
         initialDirectory: state.selectedProjectPath,
       );
-    } on Object {
+    } on Object catch (error) {
       // Плагин выбора папки может бросить (сбой платформы). Вызывающие
       // запускают выбор через `unawaited` с нескольких триггеров, поэтому
       // ошибка не должна уходить в зону. Текст ошибки может нести путь и в
@@ -284,6 +283,12 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
           'Failed to open the folder picker.',
           severity: DiagnosticSeverity.warning,
           source: 'project',
+        );
+        // Событие журнала app: только класс ошибки, без текста и пути (D7;
+        // по образцу `app.reopen_last_project_unreadable`).
+        _appLogger?.warning(
+          'project.picker_failed',
+          context: {'error_class': error.runtimeType.toString()},
         );
       }
       return;
@@ -313,7 +318,7 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
       return;
     }
     final path = paths.single?.trim();
-    if (path == null || path.isEmpty || !_isLocalAbsolutePath(path)) {
+    if (path == null || path.isEmpty || !isLocalAbsolutePath(path)) {
       // Не локальный абсолютный путь: отказ БЕЗ пути (он может нести
       // userinfo URL), вид не запрашивается.
       _reject(const DropUnsupported(null));
@@ -345,24 +350,6 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
         _reject(DropUnsupported(path));
     }
   }
-
-  /// Брошенная строка — абсолютный локальный путь текущей ОС.
-  ///
-  /// Почему проверка здесь, а не только в адаптере: `desktop_drop` на Linux
-  /// отдаёт не-файловые URI как есть (`https://user:token@host/…`,
-  /// `smb://…`), а относительный путь разрешался бы от папки процесса app.
-  /// Решение «что можно открыть» принадлежит application (D4); такая строка
-  /// не должна попасть ни в состояние, ни в журналы (корневой `AGENTS.md`
-  /// §10, §16).
-  ///
-  /// Правила: строка со схемой URI из двух и более символов (`scheme://`)
-  /// путём не считается — одна буква перед `:` это диск Windows (`C:\`).
-  /// Абсолютность — `p.isAbsolute` стиля хоста: `/…` на macOS и Linux,
-  /// `C:\…` и UNC `\\server\share` на Windows.
-  static bool _isLocalAbsolutePath(String path) =>
-      !_uriScheme.hasMatch(path) && p.isAbsolute(path);
-
-  static final _uriScheme = RegExp(r'^[A-Za-z][A-Za-z0-9+.\-]+://');
 
   /// Снимает отказ последнего броска: перетаскивание вошло на экран (D4).
   void clearDropRejection() {
