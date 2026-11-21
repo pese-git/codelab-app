@@ -343,7 +343,22 @@ enum ProviderWizardEntry {
   firstRun('first_run'),
 
   /// Флаги `codelab provider add`.
-  flags('flags');
+  flags('flags'),
+
+  /// Шаг «Model» onboarding первого запуска app.
+  ///
+  /// Почему: события `provider_wizard.started` группируются по `entry`
+  /// (`observability.md`); без отдельного значения мастер onboarding нельзя
+  /// отличить от страницы (`app`), баннера (`banner`) и первого запуска CLI
+  /// (`firstRun`). Переиспользовать `firstRun` отклонено: журнал не различил
+  /// бы CLI и app (design `add-app-onboarding`, D11).
+  ///
+  /// Для чего: только метка журнала. Поведение автомата от `entry` не зависит
+  /// (SETUP-8).
+  ///
+  /// Как использовать: composition root app передаёт его в `entry:` при
+  /// открытии мастера из `OnboardingScreen`.
+  onboarding('onboarding');
 
   const ProviderWizardEntry(this.wire);
 

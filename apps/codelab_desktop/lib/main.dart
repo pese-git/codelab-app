@@ -13,6 +13,8 @@ import 'app/language/app_language_start.dart';
 import 'core/platform/app_appearance_preferences.dart';
 import 'core/platform/system_accent_source.dart';
 import 'core/platform/app_language_preferences.dart';
+import 'core/platform/onboarding_preferences.dart';
+import 'app/onboarding/onboarding_start.dart';
 import 'app/client_profile_secrets.dart';
 import 'app/codelab_app_widget.dart';
 import 'app/connection_environment.dart';
@@ -41,6 +43,14 @@ Future<void> main() async {
     WidgetsBinding.instance.platformDispatcher.locales,
   );
 
+  // Флаг onboarding читается до `runApp` (add-app-onboarding, D2, D3): первый
+  // кадр сразу показывает нужный экран, без мигания рабочего места и без
+  // раннего старта агента. `load` не бросает; события пишет
+  // `CodeLabOnboardingModule` после настройки журнала.
+  final onboarding = OnboardingStart.fromLoad(
+    await const SharedPreferencesOnboardingPreferences().load(),
+  );
+
   // Оформление читается до `runApp`, как язык: первый кадр сразу в итоговой
   // теме, без мигания (`add-app-appearance-page`, D13). Документ, файлы тем двух
   // режимов (по 1 с на файл) и первое чтение системного акцента (1 с) идут здесь;
@@ -64,6 +74,7 @@ Future<void> main() async {
       profileSecrets: profileSecrets,
       profileSecretsOpener: openSecrets,
       language: language,
+      onboarding: onboarding,
       appearance: appearance,
       systemAccentSource: accentSource,
       themeLibrary: themeLibrary,

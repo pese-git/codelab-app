@@ -71,7 +71,9 @@ void main() {
   NavigationCubit build({
     SettingsPages? withPages,
     SettingsPageStore? withStore,
+    AppDestination? initial,
   }) => NavigationCubit(
+    initial: initial ?? const WorkbenchDestination(),
     store: withStore ?? store,
     pages: withPages ?? pages,
     activeSessionId: () => activeSession,
@@ -574,6 +576,121 @@ void main() {
         cubit.state,
         const SettingsDestination(SettingsPage.legal, returnTo: 'B'),
       );
+      await cubit.close();
+    });
+  });
+
+  // Onboarding первого запуска (change `add-app-onboarding`, задача 1.5;
+  // design.md D1; spec app-onboarding «Шаги onboarding и переходы»,
+  // сценарий «Esc и настройки на onboarding»). Красный до задачи 1.6:
+  // нет `OnboardingDestination`, параметра `initial` и `finishOnboarding`.
+  group('onboarding', () {
+    test('стартует с переданного назначения OnboardingDestination', () async {
+      final cubit = build(initial: const OnboardingDestination());
+
+      expect(cubit.state, const OnboardingDestination());
+      expect(
+        const OnboardingDestination(),
+        isNot(const WorkbenchDestination()),
+      );
+      await cubit.close();
+    });
+
+    test('openSettings на onboarding ничего не меняет и пишет '
+        'settings.open_skipped', () async {
+      final cubit = build(initial: const OnboardingDestination());
+      final states = <AppDestination>[];
+      final sub = cubit.stream.listen(states.add);
+
+      await open(cubit, SettingsPage.general);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(cubit.state, const OnboardingDestination());
+      expect(states, isEmpty);
+      expect(
+        logger.entries.where((e) => e['event'] == 'settings.open_skipped'),
+        hasLength(1),
+      );
+      expect(
+        logger.entries.where((e) => e['event'] == 'settings.opened'),
+        isEmpty,
+      );
+      // Страница не запоминается: настройки не открывались.
+      expect(store.saved, isNull);
+      await sub.cancel();
+      await cubit.close();
+    });
+
+    test('finishOnboarding ведёт на рабочее место', () async {
+      final cubit = build(initial: const OnboardingDestination());
+
+      cubit.finishOnboarding();
+
+      expect(cubit.state, const WorkbenchDestination());
+      await cubit.close();
+    });
+
+    // Раздел 5 change (ревью 2026-11-21, п. 5, D1): событию нужна причина.
+    test(
+      'settings.open_skipped на onboarding несёт reason: onboarding',
+      () async {
+        final cubit = build(initial: const OnboardingDestination());
+
+        await open(cubit, SettingsPage.general);
+
+        final skipped = logger.entries.singleWhere(
+          (e) => e['event'] == 'settings.open_skipped',
+        );
+        expect(skipped['level'], 'debug');
+        expect(skipped['reason'], 'onboarding');
+        await cubit.close();
+      },
+    );
+
+    // Раздел 5 change (п. 7, D5): колбэк `onFinished` может пережить Cubit при
+    // закрытии root scope; `emit` на закрытом Cubit бросил бы `StateError`.
+    test('finishOnboarding на закрытом Cubit — no-op без исключения', () async {
+      final cubit = build(initial: const OnboardingDestination());
+      await cubit.close();
+
+      expect(cubit.finishOnboarding, returnsNormally);
+      expect(cubit.state, const OnboardingDestination());
+    });
+
+    test('finishOnboarding вне onboarding ничего не меняет', () async {
+      final cubit = build();
+      final states = <AppDestination>[];
+      final sub = cubit.stream.listen(states.add);
+
+      cubit.finishOnboarding();
+      await open(cubit, SettingsPage.general);
+      final settings = cubit.state;
+      cubit.finishOnboarding();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(cubit.state, settings);
+      expect(cubit.state, isA<SettingsDestination>());
+      expect(states, [settings]);
+      await sub.cancel();
+      await cubit.close();
+    });
+
+    test('back на onboarding ничего не меняет', () async {
+      final cubit = build(initial: const OnboardingDestination());
+
+      cubit.back();
+
+      expect(cubit.state, const OnboardingDestination());
+      await cubit.close();
+    });
+
+    test('после finishOnboarding настройки открываются как обычно', () async {
+      final cubit = build(initial: const OnboardingDestination());
+
+      cubit.finishOnboarding();
+      await open(cubit, SettingsPage.general);
+
+      expect((cubit.state as SettingsDestination).page, SettingsPage.general);
       await cubit.close();
     });
   });

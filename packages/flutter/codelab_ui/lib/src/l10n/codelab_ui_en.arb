@@ -678,5 +678,17 @@
         "type": "String"
       }
     }
+  },
+  "codeLabSetupStepPosition": "Step {index} of {total}",
+  "@codeLabSetupStepPosition": {
+    "description": "Подсказка экранному диктору у шага строки шагов `CodeLabSetupSteps`: позиция шага. Плейсхолдеры index и total — числа.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
   }
 }

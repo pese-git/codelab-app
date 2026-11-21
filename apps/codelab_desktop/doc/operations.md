@@ -91,7 +91,7 @@ CODELAB_HOME="$HOME/.codelab-test" \
 
 | Где | Что |
 |---|---|
-| `~/Library/Preferences/com.example.codelabApp.plist` | настройки окна через `shared_preferences` (ключи с префиксом `flutter.`): недавние проекты `codelab.recent_projects`, снимок рабочего места `codelab.workspace.snapshot` (проект и активная сессия), профиль по умолчанию `codelab.connection.default_profile`, раскладка панелей `codelab.dock.*`, последняя страница настроек `codelab.settings.last_page`, язык интерфейса `codelab.app.language` (`en` или `ru`; для «System» ключа нет), оформление `codelab.app.appearance` (JSON: `version`, `mode` — `light`, `dark` или `system`, `light_theme`, `dark_theme`, `system_accent`; ключа нет, пока оформление не меняли) |
+| `~/Library/Preferences/com.example.codelabApp.plist` | настройки окна через `shared_preferences` (ключи с префиксом `flutter.`): недавние проекты `codelab.recent_projects`, снимок рабочего места `codelab.workspace.snapshot` (проект и активная сессия), профиль по умолчанию `codelab.connection.default_profile`, раскладка панелей `codelab.dock.*`, последняя страница настроек `codelab.settings.last_page`, язык интерфейса `codelab.app.language` (`en` или `ru`; для «System» ключа нет), оформление `codelab.app.appearance` (JSON: `version`, `mode` — `light`, `dark` или `system`, `light_theme`, `dark_theme`, `system_accent`; ключа нет, пока оформление не меняли), флаг «приветственные шаги пройдены» `codelab.app.onboarding_done` (только `true`; ключа нет, пока шаги не пройдены) |
 | `~/Library/Application Support/com.example.codelabApp/logs/` | логи приложения — [ниже](#логи-и-диагностика) |
 
 Имя файла настроек и каталога берётся из идентификатора бандла: другая сборка с другим идентификатором получит отдельные настройки.

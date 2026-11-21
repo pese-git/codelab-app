@@ -750,7 +750,7 @@ final class ToolDockState {
 final class SettingsDestination extends AppDestination { final SettingsPage page; }  // §12.4.9
 ```
 
-Иерархия вводится двумя OpenSpec changes. `add-app-settings-shell` вводит `NavigationCubit`,
+Иерархия вводится по экранам, каждая ветка — вместе со своим экраном. `add-app-settings-shell` вводит `NavigationCubit`,
 `WorkbenchDestination`, `SettingsDestination` (с `returnTo` — сессией, к которой ведут Esc и «Back»),
 сочетание Cmd/Ctrl+, и кнопку «Settings» сайдбара (design.md этого change, D1, D2). В этом change
 `WorkbenchDestination` без полей — поля из листинга выше появляются вместе со своими экранами, —
@@ -758,7 +758,9 @@ final class SettingsDestination extends AppDestination { final SettingsPage page
 Переходы — `NavigationCubit.openSettings({page, required source})`, `selectSettingsPage(page)` и
 `back({toSession})`; последняя страница хранится slug-ом в `codelab.settings.last_page`
 (`apps/codelab_desktop/lib/app/navigation/`).
-`add-app-navigation-shell` добавляет остальные ветки (`Boot`, `Onboarding`, `ProjectPicker`, оверлеи
+Ветку `OnboardingDestination` (без полей: шаг — состояние `OnboardingCubit`) вводит change
+[`add-app-onboarding`](../../../../openspec/changes/add-app-onboarding/design.md) (D1; решение пользователя
+2026-11-20, Q1). `add-app-navigation-shell` добавляет остальные ветки (`Boot`, `ProjectPicker`, оверлеи
 workbench) и сочетания шага 3 вместе с их экранами. Пустых веток «на вырост» нет (AGENTS.md §13).
 
 0. **Раскладка рабочего места** (идея — Claude desktop, собрано из виджетов `fluent_ui`):

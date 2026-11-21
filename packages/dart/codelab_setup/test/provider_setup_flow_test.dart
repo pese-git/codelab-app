@@ -1411,6 +1411,7 @@ void main() {
             ProviderWizardEntry.cli: 'cli',
             ProviderWizardEntry.firstRun: 'first_run',
             ProviderWizardEntry.flags: 'flags',
+            ProviderWizardEntry.onboarding: 'onboarding',
           },
         );
       });
@@ -1421,6 +1422,49 @@ void main() {
           logger.eventsOf('provider_wizard.started').last.fields['entry'],
           'first_run',
         );
+      });
+    });
+
+    // design.md change `add-app-onboarding`, D11: `entry` влияет только на
+    // журнал, поведение автомата от него не зависит (SETUP-8).
+    group('8а. entry: onboarding (D11)', () {
+      test('started пишет entry: onboarding', () {
+        flow = build(entry: ProviderWizardEntry.onboarding);
+        expect(
+          logger.eventsOf('provider_wizard.started').last.fields['entry'],
+          'onboarding',
+        );
+      });
+
+      test('переходы совпадают с entry: app на одном сценарии', () async {
+        // У состояний нет `==`, поэтому сравниваем тип и публичные поля
+        // черновика: пресет, id, вид, адрес, ошибку и её код.
+        String describe(ProviderSetupState s) => switch (s) {
+          ChoosingPreset(:final presets) =>
+            'ChoosingPreset ${presets.map((p) => p.id).toList()}',
+          EnteringBaseUrl(:final draft, :final error, :final errorCode) =>
+            'EnteringBaseUrl ${draft.preset?.id} ${draft.providerId} '
+                '${draft.kind} ${draft.baseUrl} $error $errorCode',
+          ChoosingKey(:final draft, :final error, :final errorCode) =>
+            'ChoosingKey ${draft.preset?.id} ${draft.providerId} '
+                '${draft.kind} ${draft.baseUrl} $error $errorCode',
+          _ => s.runtimeType.toString(),
+        };
+
+        Future<List<String>> run(ProviderWizardEntry entry) async {
+          seen.clear();
+          flow = build(entry: entry);
+          await send(const PresetChosen('anthropic'));
+          await send(const BaseUrlSubmitted('https://api.anthropic.com'));
+          await send(const Back());
+          return seen.map(describe).toList();
+        }
+
+        final app = await run(ProviderWizardEntry.app);
+        final onboarding = await run(ProviderWizardEntry.onboarding);
+
+        expect(app.length, greaterThan(2));
+        expect(onboarding, app);
       });
     });
 

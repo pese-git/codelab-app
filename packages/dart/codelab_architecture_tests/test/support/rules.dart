@@ -140,6 +140,12 @@ const rules = [
   // листинг передаёт хост (PKG-3).
   PackageRule('packages/dart/codelab_agent_acp', forbidden: webUnsafe),
   PackageRule('apps/codelab_desktop', forbidden: ['package:codelab_agent_']),
+  // Onboarding app — только application и presentation: файлы и хранилище он
+  // получает портами (change `add-app-onboarding`, D15; SETUP-9).
+  PackageRule(
+    'apps/codelab_desktop/lib/features/onboarding',
+    forbidden: ['dart:io'],
+  ),
   // Бинарь агента — чистый Dart и composition root: IO-транспорты ему
   // разрешены, Flutter и клиентские пакеты — нет (design.md change
   // `add-codelab-agent-binary`, D11). HOST-6 — host_assembly_guard_test.dart.

@@ -3854,4 +3854,350 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get settingsKeyboardWhereApprovalPending =>
       'Рабочее место, пока ждёт одобрение';
+
+  @override
+  String get onboardingHeader => 'Добро пожаловать в CodeLab';
+
+  @override
+  String get onboardingStepWelcome => 'Что делает CodeLab';
+
+  @override
+  String get onboardingStepPermissions => 'Разрешения';
+
+  @override
+  String get onboardingStepModel => 'Выбор модели';
+
+  @override
+  String get onboardingStepPrivacy => 'Приватность';
+
+  @override
+  String get onboardingBack => 'Назад';
+
+  @override
+  String get onboardingNext => 'Далее';
+
+  @override
+  String get onboardingFinish => 'Начать работу с CodeLab';
+
+  @override
+  String get onboardingWelcomeTitle =>
+      'ИИ-агент для кода, который работает в вашем проекте';
+
+  @override
+  String get onboardingWelcomeIntro =>
+      'Просите обычными словами. Агент читает код, предлагает правки и запускает команды в папке проекта и показывает каждый шаг в разговоре.';
+
+  @override
+  String get onboardingCardFolderTitle => 'Работает в одной папке проекта';
+
+  @override
+  String get onboardingCardFolderBody =>
+      'Откройте папку и начните сессию. Файлы, команды и поиск остаются внутри неё.';
+
+  @override
+  String get onboardingCardApproveTitle => 'Изменения одобряете вы';
+
+  @override
+  String get onboardingCardApproveBody =>
+      'Правки и команды ждут вашего решения: с диффом или точной командой.';
+
+  @override
+  String get onboardingCardKeyTitle => 'Ваша модель, ваш ключ';
+
+  @override
+  String get onboardingCardKeyBody =>
+      'Подключите облачного провайдера или локальную модель. Ключ остаётся на этом компьютере.';
+
+  @override
+  String get onboardingCardBuiltInTitle => 'Агент работает внутри приложения';
+
+  @override
+  String get onboardingCardBuiltInBody =>
+      'Ничего больше ставить не нужно. Внешнего агента по stdio или WebSocket можно добавить позже в «Настройки › Подключение».';
+
+  @override
+  String get onboardingBuiltInTag => 'Встроенный';
+
+  @override
+  String get onboardingWelcomeFootnote =>
+      'Настройка занимает четыре коротких шага. Любой выбор можно изменить позже в настройках.';
+
+  @override
+  String get onboardingPermissionsTitle =>
+      'Агент спрашивает, прежде чем что-то менять';
+
+  @override
+  String get onboardingPermissionsIntro =>
+      'Запросы одобрения появляются в разговоре рядом с действием, с точной командой или диффом. Решение действует только для этого одного вызова.';
+
+  @override
+  String get onboardingPermReadLabel => 'Чтение файлов проекта';
+
+  @override
+  String get onboardingPermReadHint =>
+      'Поиск и чтение всего внутри папки проекта';
+
+  @override
+  String get onboardingPermEditLabel => 'Правка и создание файлов';
+
+  @override
+  String get onboardingPermEditHint => 'Вы видите дифф до записи';
+
+  @override
+  String get onboardingPermRunLabel => 'Запуск команд';
+
+  @override
+  String get onboardingPermRunHint =>
+      'Вы видите полную команду и рабочую папку';
+
+  @override
+  String get onboardingPermOutsideLabel => 'Всё вне папки проекта';
+
+  @override
+  String get onboardingPermOutsideHint =>
+      'Пути ограничены рабочей папкой сессии';
+
+  @override
+  String get onboardingPermNoPrompt => 'Без вопроса';
+
+  @override
+  String get onboardingPermAsks => 'Спрашивает каждый раз';
+
+  @override
+  String get onboardingPermBlocked => 'Запрещено';
+
+  @override
+  String onboardingModeTitle(String mode) {
+    return 'Новые сессии стартуют в режиме $mode';
+  }
+
+  @override
+  String get onboardingModeStandardBody =>
+      'Чтение идёт свободно; правки и команды спрашивают. Режим по умолчанию меняется в «Настройки › Агенты и режимы» или для сессии в композере.';
+
+  @override
+  String get onboardingModeOtherBody =>
+      'Это задано вашим конфигом; таблица выше описывает режим standard. Изменить можно в «Настройки › Агенты и режимы».';
+
+  @override
+  String get onboardingModeExternal =>
+      'Подключение по умолчанию — внешний агент. Он применяет собственные правила; запросы одобрения всё равно появляются в разговоре.';
+
+  @override
+  String get onboardingModelTitle => 'Выберите, где работает модель';
+
+  @override
+  String get onboardingModelIntro =>
+      'Выберите провайдера. CodeLab проверит адрес и ключ, покажет модели и сохранит выбор как умолчание.';
+
+  @override
+  String get onboardingModelProviderLabel => 'Провайдер';
+
+  @override
+  String onboardingPresetHostKey(String host) {
+    return '$host · ключ';
+  }
+
+  @override
+  String onboardingPresetHostOptionalKey(String host) {
+    return '$host · ключ необязателен';
+  }
+
+  @override
+  String get onboardingPresetLocalNoKey => 'Локально, без ключа';
+
+  @override
+  String get onboardingPresetCustomUrl =>
+      'Адрес вашего сервера, ключ необязателен';
+
+  @override
+  String get onboardingSetUp => 'Настроить…';
+
+  @override
+  String onboardingSetUpPreset(String preset) {
+    return 'Настроить $preset…';
+  }
+
+  @override
+  String get onboardingSetUpAgain => 'Настроить заново…';
+
+  @override
+  String get onboardingSetUpLater => 'Настроить позже';
+
+  @override
+  String get onboardingModelWizardHintTitle => 'Откроется мастер провайдера';
+
+  @override
+  String get onboardingModelWizardHintBody =>
+      'Адрес, ключ, живая проверка и список моделей — те же шаги, что в «Настройки › Провайдеры › Добавить провайдера».';
+
+  @override
+  String onboardingModelWizardHintStored(String backend) {
+    return 'Ключ хранится в $backend или читается из переменной окружения.';
+  }
+
+  @override
+  String get onboardingModelWizardHintEnvOnly =>
+      'Ключ читается из переменной окружения.';
+
+  @override
+  String get onboardingModelSkippedNote =>
+      'Этот шаг пропускается, если провайдер уже настроен и его ключ найден.';
+
+  @override
+  String onboardingNoticeKeySecret(
+    String provider,
+    String name,
+    String backend,
+  ) {
+    return 'Провайдер «$provider» настроен, но его ключа «$name» нет в $backend. Добавьте его в «Настройки › Провайдеры › Изменить».';
+  }
+
+  @override
+  String onboardingNoticeKeyEnv(String provider, String variable) {
+    return 'Провайдер «$provider» читает ключ из $variable, но она не задана там, где запущен CodeLab.';
+  }
+
+  @override
+  String onboardingNoticeConfigBroken(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'В конфиге агента $count проблемы. Исправьте их в «Настройки › Провайдеры» или запустите codelab config check.',
+      many:
+          'В конфиге агента $count проблем. Исправьте их в «Настройки › Провайдеры» или запустите codelab config check.',
+      few:
+          'В конфиге агента $count проблемы. Исправьте их в «Настройки › Провайдеры» или запустите codelab config check.',
+      one:
+          'В конфиге агента $count проблема. Исправьте её в «Настройки › Провайдеры» или запустите codelab config check.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get onboardingNoticeUnavailable =>
+      'Не удалось прочитать настройки агента. Провайдера можно настроить позже в «Настройки › Провайдеры».';
+
+  @override
+  String onboardingConnectedTitle(String preset) {
+    return '$preset подключён';
+  }
+
+  @override
+  String onboardingConnectedSecret(String model, String backend, String name) {
+    return 'Модель по умолчанию $model. Ключ в $backend под именем $name. Изменить можно позже в «Настройки › Провайдеры».';
+  }
+
+  @override
+  String onboardingConnectedEnv(String model, String variable) {
+    return 'Модель по умолчанию $model. Ключ читается из $variable. Изменить можно позже в «Настройки › Провайдеры».';
+  }
+
+  @override
+  String onboardingConnectedNoKey(String model) {
+    return 'Модель по умолчанию $model. Ключ не нужен. Изменить можно позже в «Настройки › Провайдеры».';
+  }
+
+  @override
+  String get onboardingConnectedAgainNote =>
+      'Выбор другого провайдера снова открывает мастер; сохранённый остаётся в конфиге.';
+
+  @override
+  String get onboardingPrivacyTitle => 'Что уходит с компьютера';
+
+  @override
+  String get onboardingPrivacyIntro =>
+      'Только то, что агенту нужно для вашей работы, — настроенным вами сервисам или по адресам, которые вы сами открываете. CodeLab сам ничего не собирает. Все запросы перечислены в политике конфиденциальности.';
+
+  @override
+  String get onboardingPrivacyProviderLabel => 'Ваш провайдер модели';
+
+  @override
+  String get onboardingPrivacyProviderBody =>
+      'Каждый ход: ваш запрос, история сессии, файлы и вывод команд, которые прочитал агент';
+
+  @override
+  String get onboardingPrivacyProviderTag => 'Каждый ход';
+
+  @override
+  String get onboardingPrivacyToolsLabel => 'MCP-серверы';
+
+  @override
+  String get onboardingPrivacyToolsBody =>
+      'Сведения о клиенте, запрос списка инструментов и заголовки из вашей конфигурации, включая токены, — при каждом начале и переподключении сессии; аргументы каждого вызова инструмента';
+
+  @override
+  String get onboardingPrivacyToolsTag => 'Каждая сессия';
+
+  @override
+  String get onboardingPrivacyTelemetryLabel =>
+      'Телеметрия, отчёты о сбоях, аналитика использования';
+
+  @override
+  String get onboardingPrivacyTelemetryBody =>
+      'Не собираются приложением, CLI и встроенным агентом';
+
+  @override
+  String get onboardingPrivacyTelemetryTag => 'Никогда';
+
+  @override
+  String get onboardingPrivacyStaysLabel => 'Остаётся здесь';
+
+  @override
+  String get onboardingPrivacyStaysTag => 'Локально';
+
+  @override
+  String onboardingStaysEnv(String home, String logs) {
+    return 'Конфиг и сессии в $home; логи приложения в $logs; API-ключи читаются из переменных окружения, CodeLab их не хранит';
+  }
+
+  @override
+  String onboardingStaysFile(String home, String logs, String path) {
+    return 'Конфиг и сессии в $home; логи приложения в $logs; API-ключи в $path, незашифрованном файле';
+  }
+
+  @override
+  String onboardingStaysKeychain(String home, String logs, String backend) {
+    return 'Конфиг и сессии в $home; логи приложения в $logs; API-ключи в системной связке ключей ($backend)';
+  }
+
+  @override
+  String onboardingStaysOther(String home, String logs, String backend) {
+    return 'Конфиг и сессии в $home; логи приложения в $logs; API-ключи в хранилище секретов агента ($backend)';
+  }
+
+  @override
+  String onboardingStaysExternal(String logs) {
+    return 'Конфиг и сессии внешнего агента ведёт сам агент; логи приложения в $logs';
+  }
+
+  @override
+  String onboardingStaysUnavailable(String logs) {
+    return 'Логи приложения в $logs; конфиг и ключи агента остаются на этом компьютере';
+  }
+
+  @override
+  String get onboardingPermissionsLoading => 'Читаются настройки агента…';
+
+  @override
+  String get onboardingModeUnavailable =>
+      'Не удалось прочитать настройки агента. Режим новых сессий виден в «Настройки › Агенты и режимы».';
+
+  @override
+  String get onboardingNothingToAgreeTitle => 'Принимать нечего';
+
+  @override
+  String get onboardingNothingToAgreeBody =>
+      'Эти ссылки открывают документы внутри приложения и работают без сети; «Назад» вернёт на этот шаг. Позже их можно найти в «Настройки › Правовая информация».';
+
+  @override
+  String get onboardingPrivacyPolicyLink =>
+      'Прочитать политику конфиденциальности';
+
+  @override
+  String get onboardingTermsLink => 'Условия использования';
+
+  @override
+  String get onboardingDocumentBack => 'Назад к настройке';
 }

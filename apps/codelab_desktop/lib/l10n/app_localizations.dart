@@ -6000,6 +6000,538 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Workbench, while an approval is pending'**
   String get settingsKeyboardWhereApprovalPending;
+
+  /// Шапка экрана onboarding. CodeLab — название продукта.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to CodeLab'**
+  String get onboardingHeader;
+
+  /// Подпись шага 1 в строке шагов и заголовок шага. Термин глоссария.
+  ///
+  /// In en, this message translates to:
+  /// **'What CodeLab does'**
+  String get onboardingStepWelcome;
+
+  /// Подпись шага 2 в строке шагов. Не путать со страницей «Permissions & tools».
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions'**
+  String get onboardingStepPermissions;
+
+  /// Подпись шага 3 в строке шагов.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a model'**
+  String get onboardingStepModel;
+
+  /// Подпись шага 4 в строке шагов.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy'**
+  String get onboardingStepPrivacy;
+
+  /// Кнопка возврата на предыдущий шаг onboarding.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get onboardingBack;
+
+  /// Кнопка перехода на следующий шаг onboarding.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get onboardingNext;
+
+  /// Последняя кнопка onboarding: записывает флаг и открывает рабочее место. CodeLab — название продукта.
+  ///
+  /// In en, this message translates to:
+  /// **'Start using CodeLab'**
+  String get onboardingFinish;
+
+  /// Заголовок шага «What CodeLab does».
+  ///
+  /// In en, this message translates to:
+  /// **'An AI coding agent that works in your project'**
+  String get onboardingWelcomeTitle;
+
+  /// Вводный текст шага «What CodeLab does».
+  ///
+  /// In en, this message translates to:
+  /// **'Ask in plain words. The agent reads your code, proposes edits and runs commands in the project folder, and shows each step in the conversation.'**
+  String get onboardingWelcomeIntro;
+
+  /// Заголовок карточки шага 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Works in one project folder'**
+  String get onboardingCardFolderTitle;
+
+  /// Текст карточки «Works in one project folder».
+  ///
+  /// In en, this message translates to:
+  /// **'Open a folder, start a session. Files, commands and search stay inside it.'**
+  String get onboardingCardFolderBody;
+
+  /// Заголовок карточки шага 1.
+  ///
+  /// In en, this message translates to:
+  /// **'You approve the changes'**
+  String get onboardingCardApproveTitle;
+
+  /// Текст карточки «You approve the changes». Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Edits and commands wait for your decision, with the diff or the exact command.'**
+  String get onboardingCardApproveBody;
+
+  /// Заголовок карточки шага 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Your model, your key'**
+  String get onboardingCardKeyTitle;
+
+  /// Текст карточки «Your model, your key». Метка security: не называть системную связку ключей, пока в сборке нет хранилища ОС (D9).
+  ///
+  /// In en, this message translates to:
+  /// **'Connect a cloud provider or a local model. The key stays on this computer.'**
+  String get onboardingCardKeyBody;
+
+  /// Заголовок карточки шага 1.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent runs inside the app'**
+  String get onboardingCardBuiltInTitle;
+
+  /// Текст карточки «The agent runs inside the app». stdio и WebSocket не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing else to install. An external agent over stdio or WebSocket can be added later in Settings › Connection.'**
+  String get onboardingCardBuiltInBody;
+
+  /// Тег карточки встроенного агента.
+  ///
+  /// In en, this message translates to:
+  /// **'Built-in'**
+  String get onboardingBuiltInTag;
+
+  /// Подсказка под карточками шага 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Setup takes four short steps. You can change every choice later in Settings.'**
+  String get onboardingWelcomeFootnote;
+
+  /// Заголовок шага «Permissions». Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'The agent asks before it changes anything'**
+  String get onboardingPermissionsTitle;
+
+  /// Вводный текст шага «Permissions». Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Approvals appear in the conversation next to the action, with the exact command or diff. A decision applies to that one call only.'**
+  String get onboardingPermissionsIntro;
+
+  /// Строка таблицы режима standard.
+  ///
+  /// In en, this message translates to:
+  /// **'Read files in the project'**
+  String get onboardingPermReadLabel;
+
+  /// Пояснение строки таблицы режима standard.
+  ///
+  /// In en, this message translates to:
+  /// **'Search and read anything under the project folder'**
+  String get onboardingPermReadHint;
+
+  /// Строка таблицы режима standard.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit and create files'**
+  String get onboardingPermEditLabel;
+
+  /// Пояснение строки таблицы режима standard. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'You see the diff before it is written'**
+  String get onboardingPermEditHint;
+
+  /// Строка таблицы режима standard.
+  ///
+  /// In en, this message translates to:
+  /// **'Run commands'**
+  String get onboardingPermRunLabel;
+
+  /// Пояснение строки таблицы режима standard. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'You see the full command and working folder'**
+  String get onboardingPermRunHint;
+
+  /// Строка таблицы режима standard.
+  ///
+  /// In en, this message translates to:
+  /// **'Anything outside the project folder'**
+  String get onboardingPermOutsideLabel;
+
+  /// Пояснение строки таблицы режима standard. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Paths are confined to the session\'s working folder'**
+  String get onboardingPermOutsideHint;
+
+  /// Значение строки таблицы режима. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'No prompt'**
+  String get onboardingPermNoPrompt;
+
+  /// Значение строки таблицы режима. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Asks each time'**
+  String get onboardingPermAsks;
+
+  /// Значение строки таблицы режима. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get onboardingPermBlocked;
+
+  /// Заголовок InfoBar шага «Permissions». Плейсхолдер mode — имя режима (standard, bypass), не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'New sessions start in {mode} mode'**
+  String onboardingModeTitle(String mode);
+
+  /// Текст InfoBar при режиме standard или недоступных фактах. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Reads run freely; edits and commands ask. Change the default in Settings › Agents & modes, or per session from the composer.'**
+  String get onboardingModeStandardBody;
+
+  /// Текст InfoBar при режиме не standard (общий с CLI конфиг). Метка security: говорит правду о режиме (D7).
+  ///
+  /// In en, this message translates to:
+  /// **'Your config sets this; the table above describes standard mode. Change it in Settings › Agents & modes.'**
+  String get onboardingModeOtherBody;
+
+  /// InfoBar шага «Permissions» при внешнем профиле по умолчанию. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Your default connection is an external agent. It applies its own rules; approvals still appear in the conversation.'**
+  String get onboardingModeExternal;
+
+  /// Заголовок шага «Choose a model».
+  ///
+  /// In en, this message translates to:
+  /// **'Choose where the model runs'**
+  String get onboardingModelTitle;
+
+  /// Вводный текст шага «Choose a model».
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a provider. CodeLab checks the address and the key, lists the models and saves the choice as your default.'**
+  String get onboardingModelIntro;
+
+  /// Подпись списка карточек пресетов.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider'**
+  String get onboardingModelProviderLabel;
+
+  /// Подпись карточки пресета: хост и требование ключа. Плейсхолдер host — адрес хоста, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{host} · key'**
+  String onboardingPresetHostKey(String host);
+
+  /// Подпись карточки пресета с необязательным ключом.
+  ///
+  /// In en, this message translates to:
+  /// **'{host} · optional key'**
+  String onboardingPresetHostOptionalKey(String host);
+
+  /// Подпись карточки локального пресета без ключа.
+  ///
+  /// In en, this message translates to:
+  /// **'Local, no key'**
+  String get onboardingPresetLocalNoKey;
+
+  /// Подпись карточек пресетов Custom.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server URL, optional key'**
+  String get onboardingPresetCustomUrl;
+
+  /// Кнопка мастера, пока пресет не выбран.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up…'**
+  String get onboardingSetUp;
+
+  /// Кнопка открытия мастера для выбранного пресета. Плейсхолдер preset — имя пресета.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up {preset}…'**
+  String onboardingSetUpPreset(String preset);
+
+  /// Кнопка повторного открытия мастера после сохранения.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up again…'**
+  String get onboardingSetUpAgain;
+
+  /// Кнопка выхода с шага «Choose a model» без записи (Q3).
+  ///
+  /// In en, this message translates to:
+  /// **'Set up later'**
+  String get onboardingSetUpLater;
+
+  /// Заголовок InfoBar шага «Choose a model».
+  ///
+  /// In en, this message translates to:
+  /// **'Opens the provider wizard'**
+  String get onboardingModelWizardHintTitle;
+
+  /// Текст InfoBar шага «Choose a model».
+  ///
+  /// In en, this message translates to:
+  /// **'Base URL, key, a live check and the model list, the same steps as Settings › Providers › Add provider.'**
+  String get onboardingModelWizardHintBody;
+
+  /// InfoBar при записываемом бэкенде. Плейсхолдер backend — id бэкенда секретов, не переводить. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'The key is stored in {backend} or read from an environment variable.'**
+  String onboardingModelWizardHintStored(String backend);
+
+  /// InfoBar при бэкенде только для чтения (env). Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'The key is read from an environment variable.'**
+  String get onboardingModelWizardHintEnvOnly;
+
+  /// Пояснение под карточками шага «Choose a model».
+  ///
+  /// In en, this message translates to:
+  /// **'This step is skipped when a provider is already set up and its key is found.'**
+  String get onboardingModelSkippedNote;
+
+  /// InfoBar: ключ провайдера не найден в хранилище. Плейсхолдеры provider, name, backend не переводить. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider \"{provider}\" is set up, but its key \"{name}\" is not in {backend}. Add it in Settings › Providers › Edit.'**
+  String onboardingNoticeKeySecret(
+    String provider,
+    String name,
+    String backend,
+  );
+
+  /// InfoBar: переменная ключа провайдера не задана. Плейсхолдеры provider, variable не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider \"{provider}\" reads its key from {variable}, which is not set where CodeLab was started.'**
+  String onboardingNoticeKeyEnv(String provider, String variable);
+
+  /// InfoBar при битом конфиге. Команда codelab config check не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{The agent\'s config has {count} problem. Fix it in Settings › Providers or run codelab config check.} other{The agent\'s config has {count} problems. Fix them in Settings › Providers or run codelab config check.}}'**
+  String onboardingNoticeConfigBroken(int count);
+
+  /// InfoBar при сбое или таймауте чтения фактов.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent settings could not be read. You can set up a provider later in Settings › Providers.'**
+  String get onboardingNoticeUnavailable;
+
+  /// Заголовок сводки сохранённого провайдера. Плейсхолдер preset — id провайдера.
+  ///
+  /// In en, this message translates to:
+  /// **'{preset} is connected'**
+  String onboardingConnectedTitle(String preset);
+
+  /// Сводка: ключ в хранилище секретов. Плейсхолдеры model, backend, name не переводить. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Default model {model}. The key is in {backend} as {name}. Change it later in Settings › Providers.'**
+  String onboardingConnectedSecret(String model, String backend, String name);
+
+  /// Сводка: ключ из переменной окружения.
+  ///
+  /// In en, this message translates to:
+  /// **'Default model {model}. The key is read from {variable}. Change it later in Settings › Providers.'**
+  String onboardingConnectedEnv(String model, String variable);
+
+  /// Сводка: провайдер без ключа.
+  ///
+  /// In en, this message translates to:
+  /// **'Default model {model}. No key is needed. Change it later in Settings › Providers.'**
+  String onboardingConnectedNoKey(String model);
+
+  /// Пояснение под сводкой сохранённого провайдера.
+  ///
+  /// In en, this message translates to:
+  /// **'Picking another provider opens the wizard again; the saved one stays in the config.'**
+  String get onboardingConnectedAgainNote;
+
+  /// Заголовок шага «Privacy». Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'What leaves this computer'**
+  String get onboardingPrivacyTitle;
+
+  /// Вводный текст шага «Privacy». Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Only what the agent needs for the work you ask for, sent to services you set up or to addresses you choose to open. CodeLab itself collects nothing. The privacy policy lists every request.'**
+  String get onboardingPrivacyIntro;
+
+  /// Строка шага «Privacy».
+  ///
+  /// In en, this message translates to:
+  /// **'Your model provider'**
+  String get onboardingPrivacyProviderLabel;
+
+  /// Описание строки «Your model provider». Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Every turn: your prompt, the session history, files and command output the agent read'**
+  String get onboardingPrivacyProviderBody;
+
+  /// Тег строки. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Every turn'**
+  String get onboardingPrivacyProviderTag;
+
+  /// Строка шага «Privacy». MCP не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP servers'**
+  String get onboardingPrivacyToolsLabel;
+
+  /// Описание строки. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Client information, the tool list request and the headers from your configuration, including tokens, each time a session starts or reconnects; the arguments of every tool call'**
+  String get onboardingPrivacyToolsBody;
+
+  /// Тег строки. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Each session'**
+  String get onboardingPrivacyToolsTag;
+
+  /// Строка шага «Privacy». Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Telemetry, crash reports, usage analytics'**
+  String get onboardingPrivacyTelemetryLabel;
+
+  /// Описание строки. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Not collected by the app, the CLI or the embedded agent'**
+  String get onboardingPrivacyTelemetryBody;
+
+  /// Тег строки. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Never'**
+  String get onboardingPrivacyTelemetryTag;
+
+  /// Строка шага «Privacy». Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Stays here'**
+  String get onboardingPrivacyStaysLabel;
+
+  /// Тег строки. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Local'**
+  String get onboardingPrivacyStaysTag;
+
+  /// «Stays here» при бэкенде env. Плейсхолдеры home, logs — пути, не переводить. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Config and sessions in {home}; app logs in {logs}; API keys are read from environment variables, CodeLab does not store them'**
+  String onboardingStaysEnv(String home, String logs);
+
+  /// «Stays here» при бэкенде file. Плейсхолдеры — пути, имя файла secrets.yaml не переводить. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Config and sessions in {home}; app logs in {logs}; API keys in {path}, an unencrypted file'**
+  String onboardingStaysFile(String home, String logs, String path);
+
+  /// «Stays here» при бэкенде хранилища ОС. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Config and sessions in {home}; app logs in {logs}; API keys in the system keychain ({backend})'**
+  String onboardingStaysKeychain(String home, String logs, String backend);
+
+  /// «Stays here» при другом бэкенде. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Config and sessions in {home}; app logs in {logs}; API keys in the agent\'s secret store ({backend})'**
+  String onboardingStaysOther(String home, String logs, String backend);
+
+  /// «Stays here» при внешнем профиле. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Config and sessions of the external agent are managed by that agent; app logs in {logs}'**
+  String onboardingStaysExternal(String logs);
+
+  /// «Stays here» при недоступных фактах. Плейсхолдер logs — путь каталога логов app, не переводить. Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'App logs in {logs}; the agent\'s config and keys stay on this computer'**
+  String onboardingStaysUnavailable(String logs);
+
+  /// Строка с индикатором на шаге «Permissions», пока читаются настройки агента: режим новых сессий до чтения не называется (ревью 2026-11-21, п. 1). Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading the agent settings…'**
+  String get onboardingPermissionsLoading;
+
+  /// InfoBar шага «Permissions» при недоступных настройках: режим не утверждается (в общем конфиге может быть bypass). Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes.'**
+  String get onboardingModeUnavailable;
+
+  /// Заголовок InfoBar шага «Privacy» (D-29).
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to agree to'**
+  String get onboardingNothingToAgreeTitle;
+
+  /// Текст InfoBar шага «Privacy». Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'These links open the documents inside the app and work offline; Back returns to this step. You can find them later in Settings › Legal.'**
+  String get onboardingNothingToAgreeBody;
+
+  /// Ссылка шага «Privacy», открывает политику конфиденциальности внутри onboarding (D10).
+  ///
+  /// In en, this message translates to:
+  /// **'Read the privacy policy'**
+  String get onboardingPrivacyPolicyLink;
+
+  /// Ссылка шага «Privacy», открывает условия использования внутри onboarding (D10).
+  ///
+  /// In en, this message translates to:
+  /// **'Terms of use'**
+  String get onboardingTermsLink;
+
+  /// Кнопка панели документа: закрывает просмотр и возвращает на шаг «Privacy» (D10).
+  ///
+  /// In en, this message translates to:
+  /// **'Back to setup'**
+  String get onboardingDocumentBack;
 }
 
 class _AppLocalizationsDelegate

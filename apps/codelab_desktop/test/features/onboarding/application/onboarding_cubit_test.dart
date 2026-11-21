@@ -1,0 +1,1017 @@
+// Красные тесты `OnboardingCubit` (задача 2.1 change `add-app-onboarding`;
+// design.md D4–D8, D13; spec app-onboarding «Шаги onboarding и переходы»,
+// «Пропуск шага выбора модели», «Шаг «Choose a model» и мастер провайдера»,
+// «Завершение onboarding и старт рабочего места»).
+//
+// Красные по причине компиляции: `features/onboarding/application/` появляется
+// в задаче 2.2.
+//
+// Контракт сверх design.md (фиксируется этими тестами, принят при реализации
+// 2.2):
+// - `OnboardingCubit({probe, preferences, onFinished, factsTimeout, logger})`:
+//   конец onboarding (D5, п. 4) отдаётся колбэком `onFinished` — composition
+//   root передаёт `navigation.finishOnboarding`, поэтому application-слой не
+//   зависит от `app/navigation`;
+// - `factsTimeout` по умолчанию `kOnboardingFactsTimeout` (5 с, D6); тесты
+//   сокращают его до нуля: пакет `fake_async` в проект не добавляется;
+// - методы: `next()`, `back()`, `setUpLater()`, `providerSaved(Done)`,
+//   `finish()`;
+// - иерархии состояния — `Facts{Loading,Loaded,Unavailable}`,
+//   `Model{Pending,Skipped,Choose,Saved}`.
+
+import 'dart:async';
+
+import 'package:codelab_desktop/core/platform/onboarding_preferences.dart';
+import 'package:codelab_desktop/features/onboarding/application/onboarding_cubit.dart';
+import 'package:codelab_desktop/features/onboarding/application/onboarding_probe.dart';
+import 'package:codelab_desktop/features/onboarding/application/onboarding_state.dart';
+import 'package:codelab_desktop/features/settings/application/legal_documents.dart'
+    show LegalTab;
+import 'package:codelab_setup/codelab_setup.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../../support/recording_logger.dart';
+
+/// Маркер ключа: ни в состоянии, ни в журнале его быть не должно (SETUP-1).
+const _leak = 'sk-test-leak-0123456789';
+
+/// Двойник порта фактов: ответ готов сразу, по затвору или бросает.
+final class _FakeProbe implements OnboardingProbe {
+  _FakeProbe.value(OnboardingFacts facts) : _immediate = facts;
+  _FakeProbe.gated() : _immediate = null;
+  _FakeProbe.failing(Object error) : _immediate = null, _error = error;
+
+  final OnboardingFacts? _immediate;
+  Object? _error;
+  final gate = Completer<OnboardingFacts>();
+  var reads = 0;
+
+  @override
+  Future<OnboardingFacts> read() {
+    reads++;
+    if (_error != null) {
+      return Future<OnboardingFacts>.error(_error!);
+    }
+    return _immediate != null ? Future.value(_immediate) : gate.future;
+  }
+}
+
+/// Двойник порта флага: запись считается, может ждать затвор или падать.
+final class _FakePreferences implements OnboardingPreferences {
+  var marked = 0;
+  Completer<void>? gate;
+  Object? failure;
+
+  @override
+  Future<OnboardingLoad> load() async => const OnboardingLoad(false);
+
+  @override
+  Future<void> markDone() async {
+    marked++;
+    await gate?.future;
+    if (failure != null) {
+      throw failure!;
+    }
+  }
+}
+
+OnboardingFacts _facts(
+  ProviderReadiness readiness, {
+  String backend = 'env',
+  String mode = 'standard',
+}) => OnboardingFacts(
+  readiness: readiness,
+  access: const EditableSettings(ConfigPaths(codelabHome: '/home/u/.codelab')),
+  backendId: backend,
+  backendWritable: backend != 'env',
+  mode: mode,
+  homeLabel: '~/.codelab',
+);
+
+const _keyMissing = ProviderKeyMissing(
+  providerId: 'openai',
+  reference: 'secret codelab/openai',
+  backend: SecretBackendInfo(id: 'file', writable: true),
+);
+
+/// `Done` мастера: сохранён провайдер `llm` с моделью `m1`.
+Done _done({KeyChoice key = const KeepStoredSecret(), String? secret}) => Done(
+  ProviderSetupPlan(
+    providerId: 'llm',
+    kind: 'openai-compatible',
+    baseUrl: 'http://localhost:1234/v1',
+    key: key,
+    secretName: secret,
+    replaceSecret: false,
+    model: const PlannedModel(id: 'm1', contextWindow: 8000),
+    makeDefault: true,
+    target: const ConfigTarget.user(),
+  ),
+  const ProviderCommitted(
+    saved: ConfigSaved(fingerprint: 'f', warnings: [], restartRequiredKeys: []),
+    keyReplaced: false,
+  ),
+);
+
+void main() {
+  late RecordingLogger logger;
+  late _FakePreferences preferences;
+  late int finished;
+  final cubits = <OnboardingCubit>[];
+
+  setUp(() {
+    logger = RecordingLogger();
+    preferences = _FakePreferences();
+    finished = 0;
+  });
+
+  tearDown(() async {
+    for (final cubit in cubits) {
+      await cubit.close();
+    }
+    cubits.clear();
+  });
+
+  OnboardingCubit build(
+    _FakeProbe probe, {
+    Duration factsTimeout = kOnboardingFactsTimeout,
+  }) {
+    final cubit = OnboardingCubit(
+      probe: probe,
+      preferences: preferences,
+      onFinished: () => finished++,
+      factsTimeout: factsTimeout,
+      logger: logger,
+    );
+    cubits.add(cubit);
+    return cubit;
+  }
+
+  Iterable<Map<String, Object?>> events(String name) =>
+      logger.entries.where((e) => e['event'] == name);
+
+  Future<void> settle() => pumpEventQueue(times: 30);
+
+  /// Доводит onboarding до шага [target] кнопкой «Next».
+  Future<void> walkTo(OnboardingCubit cubit, OnboardingStep target) async {
+    while (cubit.state.step != target) {
+      final before = cubit.state.step;
+      await cubit.next();
+      if (cubit.state.step == before) {
+        fail('«Next» не сдвинул шаг $before');
+      }
+    }
+  }
+
+  test('таймаут фактов по умолчанию — 5 с (D6)', () {
+    expect(kOnboardingFactsTimeout, const Duration(seconds: 5));
+  });
+
+  group('начальное состояние и факты', () {
+    test('шаг welcome, факты читаются один раз при создании', () async {
+      final probe = _FakeProbe.gated();
+      final cubit = build(probe);
+
+      expect(cubit.state.step, OnboardingStep.welcome);
+      expect(cubit.state.facts, isA<FactsLoading>());
+      expect(cubit.state.model, isA<ModelPending>());
+      expect(cubit.state.finishing, isFalse);
+      expect(probe.reads, 1);
+
+      await cubit.next();
+      await settle();
+      expect(probe.reads, 1, reason: 'повторного чтения нет (D6)');
+    });
+
+    test('FactsLoaded несёт факты: режим и подписи путей (D7, D9)', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const NoProviderConfigured(), mode: 'bypass')),
+      );
+      await settle();
+
+      final facts = (cubit.state.facts as FactsLoaded).facts;
+      expect(facts.mode, 'bypass');
+      expect(facts.isExternal, isFalse);
+      expect(facts.homeLabel, '~/.codelab');
+    });
+
+    test(
+      'facts_loaded: access, readiness, backend, duration_ms без путей',
+      () async {
+        final cases = <ProviderReadiness, String>{
+          const ProviderReady('llm/m1'): 'ready',
+          const NoProviderConfigured(): 'no_provider',
+          _keyMissing: 'key_missing',
+          const ConfigBroken([]): 'config_broken',
+        };
+        for (final entry in cases.entries) {
+          logger.entries.clear();
+          build(_FakeProbe.value(_facts(entry.key, backend: 'file')));
+          await settle();
+
+          final loaded = events('onboarding.facts_loaded').single;
+          expect(loaded['level'], 'debug');
+          expect(loaded['access'], 'editable');
+          expect(loaded['readiness'], entry.value);
+          expect(loaded['backend'], 'file');
+          expect(loaded['duration_ms'], isA<int>());
+        }
+      },
+    );
+
+    test('внешний профиль: access external, шаг модели пропущен', () async {
+      final cubit = build(_FakeProbe.value(const OnboardingFacts.external()));
+      await settle();
+
+      expect((cubit.state.facts as FactsLoaded).facts.isExternal, isTrue);
+      expect(cubit.state.model, const ModelSkipped(ModelSkipReason.external));
+      final loaded = events('onboarding.facts_loaded').single;
+      expect(loaded['access'], 'external');
+      final skipped = events('onboarding.model_step_skipped').single;
+      expect(skipped['level'], 'info');
+      expect(skipped['reason'], 'external');
+    });
+  });
+
+  group('переходы по таблице D4', () {
+    test('проход без пропуска: welcome, permissions, model, privacy', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const NoProviderConfigured())),
+      );
+      await settle();
+
+      await cubit.next();
+      expect(cubit.state.step, OnboardingStep.permissions);
+      await cubit.next();
+      expect(cubit.state.step, OnboardingStep.model);
+      expect(cubit.state.model, const ModelChoose(ModelNotice.none));
+      cubit.setUpLater();
+      expect(cubit.state.step, OnboardingStep.privacy);
+
+      expect(events('onboarding.step_shown').map((e) => e['step']), [
+        'welcome',
+        'permissions',
+        'model',
+        'privacy',
+      ]);
+      expect(events('onboarding.step_shown').first['level'], 'debug');
+    });
+
+    test('Back идёт по таблице и на первом шаге ничего не делает', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const NoProviderConfigured())),
+      );
+      await settle();
+
+      cubit.back();
+      expect(cubit.state.step, OnboardingStep.welcome);
+
+      await walkTo(cubit, OnboardingStep.model);
+      cubit.setUpLater();
+      expect(cubit.state.step, OnboardingStep.privacy);
+
+      cubit.back();
+      expect(cubit.state.step, OnboardingStep.model);
+      cubit.back();
+      expect(cubit.state.step, OnboardingStep.permissions);
+      cubit.back();
+      expect(cubit.state.step, OnboardingStep.welcome);
+    });
+
+    test('ProviderReady: шаг model пропущен, Back с privacy ведёт на '
+        'permissions', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const ProviderReady('llm/m1'))),
+      );
+      await settle();
+
+      await cubit.next();
+      await cubit.next();
+
+      expect(cubit.state.step, OnboardingStep.privacy);
+      expect(cubit.state.model, const ModelSkipped(ModelSkipReason.ready));
+      final skipped = events('onboarding.model_step_skipped').single;
+      expect(skipped['reason'], 'ready');
+
+      cubit.back();
+      expect(cubit.state.step, OnboardingStep.permissions);
+    });
+
+    test('«Next» на шаге model без сохранённого провайдера и на privacy '
+        'ничего не делает', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const NoProviderConfigured())),
+      );
+      await settle();
+      await walkTo(cubit, OnboardingStep.model);
+
+      await cubit.next();
+      expect(cubit.state.step, OnboardingStep.model);
+
+      cubit.setUpLater();
+      await cubit.next();
+      expect(cubit.state.step, OnboardingStep.privacy);
+    });
+
+    test('setUpLater вне шага model ничего не меняет', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const NoProviderConfigured())),
+      );
+      await settle();
+
+      cubit.setUpLater();
+      expect(cubit.state.step, OnboardingStep.welcome);
+      await cubit.next();
+      cubit.setUpLater();
+      expect(cubit.state.step, OnboardingStep.permissions);
+    });
+  });
+
+  group('«Next» на шаге Permissions при ещё не известной готовности', () {
+    test('ждёт итога; повторное нажатие не даёт второго перехода', () async {
+      final probe = _FakeProbe.gated();
+      final cubit = build(probe);
+      final steps = <OnboardingStep>[];
+      final sub = cubit.stream.map((s) => s.step).distinct().listen(steps.add);
+      await cubit.next();
+      expect(cubit.state.step, OnboardingStep.permissions);
+
+      final first = cubit.next();
+      final second = cubit.next();
+      await settle();
+      expect(cubit.state.step, OnboardingStep.permissions);
+      expect(cubit.state.model, isA<ModelPending>());
+
+      probe.gate.complete(_facts(const ProviderReady('llm/m1')));
+      await Future.wait([first, second]);
+
+      await settle(); // события потока доставляются асинхронно
+      // Ровно один переход: permissions -> privacy (шаг model пропущен).
+      expect(cubit.state.step, OnboardingStep.privacy);
+      expect(steps, [OnboardingStep.permissions, OnboardingStep.privacy]);
+      await sub.cancel();
+    });
+  });
+
+  group('сбой и таймаут фактов (D6)', () {
+    test('таймаут: Choose(unavailable), facts_unavailable {timeout: true}, '
+        'поздний итог шаг не меняет', () async {
+      final probe = _FakeProbe.gated();
+      final cubit = build(probe, factsTimeout: Duration.zero);
+      await cubit.next();
+
+      await cubit.next();
+
+      expect(cubit.state.step, OnboardingStep.model);
+      expect(cubit.state.facts, isA<FactsUnavailable>());
+      expect(cubit.state.model, const ModelChoose(ModelNotice.unavailable));
+      final warning = events('onboarding.facts_unavailable').single;
+      expect(warning['level'], 'warning');
+      expect(warning['timeout'], isTrue);
+
+      final snapshot = cubit.state;
+      final emitted = <OnboardingState>[];
+      final sub = cubit.stream.listen(emitted.add);
+      probe.gate.complete(_facts(const ProviderReady('llm/m1')));
+      await settle();
+
+      expect(cubit.state, snapshot);
+      expect(emitted, isEmpty);
+      expect(events('onboarding.model_step_skipped'), isEmpty);
+      final late = events('onboarding.facts_late').single;
+      expect(late['level'], 'debug');
+      expect(late['duration_ms'], isA<int>());
+      await sub.cancel();
+    });
+
+    test(
+      'таймаут срабатывает и без «Next»: шаг ждёт уже готовый итог',
+      () async {
+        final cubit = build(_FakeProbe.gated(), factsTimeout: Duration.zero);
+        await settle();
+
+        expect(cubit.state.facts, isA<FactsUnavailable>());
+        expect(cubit.state.model, const ModelChoose(ModelNotice.unavailable));
+      },
+    );
+
+    test(
+      'исключение зонда: Choose(unavailable), error_type без текста',
+      () async {
+        final cubit = build(
+          _FakeProbe.failing(StateError('нет доступа к /Users/x/.codelab')),
+        );
+        await settle();
+
+        expect(cubit.state.facts, isA<FactsUnavailable>());
+        expect(cubit.state.model, const ModelChoose(ModelNotice.unavailable));
+        final warning = events('onboarding.facts_unavailable').single;
+        expect(warning['error_type'], 'StateError');
+        expect(warning.containsKey('timeout'), isFalse);
+        expect(logger.entries.toString(), isNot(contains('/Users/x')));
+      },
+    );
+
+    test('итог после close() не даёт emit и не бросает', () async {
+      final probe = _FakeProbe.gated();
+      final cubit = build(probe);
+
+      await cubit.close();
+      probe.gate.complete(_facts(const NoProviderConfigured()));
+      await settle();
+
+      expect(cubit.isClosed, isTrue);
+    });
+  });
+
+  group('шаг «Choose a model»: пояснения и мастер (D8)', () {
+    test('ProviderKeyMissing, ConfigBroken: Choose с соответствующим '
+        'пояснением', () async {
+      final missing = build(_FakeProbe.value(_facts(_keyMissing)));
+      await settle();
+      expect(missing.state.model, const ModelChoose(ModelNotice.keyMissing));
+
+      final broken = build(_FakeProbe.value(_facts(const ConfigBroken([]))));
+      await settle();
+      expect(broken.state.model, const ModelChoose(ModelNotice.configBroken));
+    });
+
+    test('«Set up later» доступна в любом Choose и ничего не пишет', () async {
+      for (final readiness in <ProviderReadiness>[
+        const NoProviderConfigured(),
+        _keyMissing,
+        const ConfigBroken([]),
+      ]) {
+        final cubit = build(_FakeProbe.value(_facts(readiness)));
+        await settle();
+        await walkTo(cubit, OnboardingStep.model);
+
+        cubit.setUpLater();
+
+        expect(cubit.state.step, OnboardingStep.privacy);
+        expect(preferences.marked, 0);
+      }
+    });
+
+    test(
+      'Done мастера: Saved(summary) без значения ключа, Next активна',
+      () async {
+        final cubit = build(
+          _FakeProbe.value(
+            _facts(const NoProviderConfigured(), backend: 'file'),
+          ),
+        );
+        await settle();
+        await walkTo(cubit, OnboardingStep.model);
+
+        cubit.providerSaved(
+          _done(key: StoreSecret(SecretValue(_leak)), secret: 'codelab/llm'),
+        );
+
+        final model = cubit.state.model as ModelSaved;
+        expect(model.summary.providerId, 'llm');
+        expect(model.summary.model, 'llm/m1');
+        expect(
+          model.summary.keyStorage,
+          const SecretKeyStorage(name: 'codelab/llm', backendId: 'file'),
+        );
+        expect(cubit.state.toString(), isNot(contains(_leak)));
+        expect(model.toString(), isNot(contains(_leak)));
+        final saved = events('onboarding.model_saved').single;
+        expect(saved['level'], 'info');
+        expect(logger.entries.toString(), isNot(contains(_leak)));
+        expect(logger.entries.toString(), isNot(contains('codelab/llm')));
+
+        await cubit.next();
+        expect(cubit.state.step, OnboardingStep.privacy);
+        cubit.back();
+        expect(cubit.state.step, OnboardingStep.model);
+        expect(cubit.state.model, isA<ModelSaved>());
+      },
+    );
+
+    test('способы хранения ключа в сводке: env и без ключа', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const NoProviderConfigured())),
+      );
+      await settle();
+      await walkTo(cubit, OnboardingStep.model);
+
+      cubit.providerSaved(_done(key: const UseEnvVar('LLM_KEY')));
+      expect(
+        (cubit.state.model as ModelSaved).summary.keyStorage,
+        const EnvKeyStorage('LLM_KEY'),
+      );
+
+      // «Set up again…»: повторное сохранение заменяет сводку.
+      cubit.providerSaved(_done(key: const NoKey()));
+      expect(
+        (cubit.state.model as ModelSaved).summary.keyStorage,
+        const NoKeyStorage(),
+      );
+    });
+
+    test('Done при ConfigBroken и недоступных фактах игнорируется (мастер '
+        'не пишет поверх битого файла)', () async {
+      final broken = build(_FakeProbe.value(_facts(const ConfigBroken([]))));
+      await settle();
+      await walkTo(broken, OnboardingStep.model);
+      broken.providerSaved(_done());
+      expect(broken.state.model, const ModelChoose(ModelNotice.configBroken));
+
+      final unavailable = build(_FakeProbe.failing(StateError('x')));
+      await settle();
+      await walkTo(unavailable, OnboardingStep.model);
+      unavailable.providerSaved(_done());
+      expect(
+        unavailable.state.model,
+        const ModelChoose(ModelNotice.unavailable),
+      );
+      // Итог отброшен целиком: события «сохранено» нет (ревью 2026-11-21).
+      expect(events('onboarding.model_saved'), isEmpty);
+    });
+  });
+
+  // Раздел 5 change (ревью 2026-11-21, п. 6; design.md D8): навигация шага
+  // блокируется, пока мастер открывается или открыт. Контракт: `wizardStarted()`
+  // возвращает `false`, если мастер открывать нельзя (шаг не «Choose a model»,
+  // мастер уже активен, `configBroken`/`unavailable`, Cubit закрыт);
+  // `wizardEnded()` снимает блокировку; фаза — поле `wizard` (`ModelWizard`) у
+  // `ModelChoose` и `ModelSaved`.
+  group('мастер и навигация шага (п. 6, D8)', () {
+    Future<OnboardingCubit> atModel({
+      ProviderReadiness readiness = const NoProviderConfigured(),
+    }) async {
+      final cubit = build(_FakeProbe.value(_facts(readiness)));
+      await settle();
+      await walkTo(cubit, OnboardingStep.model);
+      return cubit;
+    }
+
+    ModelWizard phase(OnboardingCubit cubit) => switch (cubit.state.model) {
+      ModelChoose(:final wizard) => wizard,
+      ModelSaved(:final wizard) => wizard,
+      final other => fail('нет фазы мастера у $other'),
+    };
+
+    test(
+      'wizardStarted включает фазу active, wizardEnded снимает её',
+      () async {
+        final cubit = await atModel();
+        expect(phase(cubit), ModelWizard.idle);
+
+        expect(cubit.wizardStarted(), isTrue);
+        expect(phase(cubit), ModelWizard.active);
+        expect(cubit.state.model, isA<ModelChoose>());
+        expect(cubit.state.step, OnboardingStep.model);
+
+        cubit.wizardEnded();
+        expect(phase(cubit), ModelWizard.idle);
+      },
+    );
+
+    test('Back, Next и «Set up later» при active игнорируются', () async {
+      final cubit = await atModel();
+      cubit.wizardStarted();
+      final before = cubit.state;
+
+      cubit.back();
+      await cubit.next();
+      cubit.setUpLater();
+
+      expect(cubit.state.step, OnboardingStep.model);
+      expect(cubit.state, same(before));
+    });
+
+    test(
+      'повторный wizardStarted при active даёт false и ничего не меняет',
+      () async {
+        final cubit = await atModel();
+        expect(cubit.wizardStarted(), isTrue);
+        final before = cubit.state;
+
+        expect(cubit.wizardStarted(), isFalse);
+
+        expect(cubit.state, same(before));
+      },
+    );
+
+    test('wizardStarted вне шага model, при configBroken и unavailable — '
+        'false', () async {
+      final welcome = build(
+        _FakeProbe.value(_facts(const NoProviderConfigured())),
+      );
+      await settle();
+      expect(welcome.wizardStarted(), isFalse);
+
+      final broken = await atModel(readiness: const ConfigBroken([]));
+      expect(broken.wizardStarted(), isFalse);
+      expect(phase(broken), ModelWizard.idle);
+
+      final unavailable = build(_FakeProbe.failing(StateError('x')));
+      await settle();
+      await walkTo(unavailable, OnboardingStep.model);
+      expect(unavailable.wizardStarted(), isFalse);
+    });
+
+    test('после wizardEnded навигация снова работает', () async {
+      final cubit = await atModel();
+      cubit.wizardStarted();
+      cubit.wizardEnded();
+
+      cubit.setUpLater();
+      expect(cubit.state.step, OnboardingStep.privacy);
+      cubit.back();
+      expect(cubit.state.step, OnboardingStep.model);
+    });
+
+    test('Done во время active даёт Saved с той же фазой; wizardEnded снимает '
+        'её, и Next работает', () async {
+      final cubit = await atModel();
+      cubit.wizardStarted();
+
+      cubit.providerSaved(_done(secret: 'codelab/llm'));
+
+      expect(cubit.state.model, isA<ModelSaved>());
+      expect(phase(cubit), ModelWizard.active);
+      await cubit.next();
+      expect(cubit.state.step, OnboardingStep.model, reason: 'мастер открыт');
+
+      cubit.wizardEnded();
+      expect(phase(cubit), ModelWizard.idle);
+      await cubit.next();
+      expect(cubit.state.step, OnboardingStep.privacy);
+    });
+
+    // Ревью 2026-11-21 (повторное): выход из app с открытым мастером закрывает
+    // Cubit, а итог диалога приходит позже; `emit` в закрытый Cubit бросил бы
+    // `StateError` в unawaited-цепочке экрана.
+    test(
+      'providerSaved после close(): без исключения, состояния и событий',
+      () async {
+        final cubit = await atModel();
+        cubit.wizardStarted();
+        await cubit.close();
+
+        expect(
+          () => cubit.providerSaved(_done(secret: 'codelab/llm')),
+          returnsNormally,
+        );
+
+        expect(cubit.state.model, isNot(isA<ModelSaved>()));
+        expect(events('onboarding.model_saved'), isEmpty);
+      },
+    );
+
+    test('«Set up again…»: wizardStarted из Saved разрешён', () async {
+      final cubit = await atModel();
+      cubit.providerSaved(_done(secret: 'codelab/llm'));
+
+      expect(cubit.wizardStarted(), isTrue);
+      expect(phase(cubit), ModelWizard.active);
+    });
+
+    test('wizardEnded без активного мастера ничего не меняет; после close() '
+        'wizardStarted — false', () async {
+      final cubit = await atModel();
+      final before = cubit.state;
+      cubit.wizardEnded();
+      expect(cubit.state, same(before));
+
+      await cubit.close();
+      expect(cubit.wizardStarted(), isFalse);
+    });
+  });
+
+  group('завершение (D5)', () {
+    Future<OnboardingCubit> atPrivacy() async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const ProviderReady('llm/m1'))),
+      );
+      await settle();
+      await walkTo(cubit, OnboardingStep.privacy);
+      return cubit;
+    }
+
+    test('finish: markDone, затем onFinished, события completed', () async {
+      final cubit = await atPrivacy();
+
+      await cubit.finish();
+
+      expect(preferences.marked, 1);
+      expect(finished, 1);
+      final completed = events('onboarding.completed').single;
+      expect(completed['level'], 'info');
+      expect(completed['model_step'], 'skipped');
+    });
+
+    test('двойное нажатие: одна запись и один переход', () async {
+      final cubit = await atPrivacy();
+      preferences.gate = Completer<void>();
+
+      final first = cubit.finish();
+      final second = cubit.finish();
+      await settle();
+      expect(cubit.state.finishing, isTrue);
+      expect(finished, 0, reason: 'переход только после записи флага');
+
+      preferences.gate!.complete();
+      await Future.wait([first, second]);
+
+      expect(preferences.marked, 1);
+      expect(finished, 1);
+      expect(events('onboarding.completed'), hasLength(1));
+    });
+
+    test('сбой записи флага не запирает: save_failed и переход', () async {
+      final cubit = await atPrivacy();
+      preferences.failure = StateError('нет места на /Users/x/disk');
+
+      await cubit.finish();
+
+      expect(finished, 1);
+      final warning = events('onboarding.save_failed').single;
+      expect(warning['level'], 'warning');
+      expect(warning['error_type'], 'StateError');
+      expect(logger.entries.toString(), isNot(contains('/Users/x')));
+    });
+
+    test('finish вне шага privacy игнорируется', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const NoProviderConfigured())),
+      );
+      await settle();
+
+      await cubit.finish();
+
+      expect(preferences.marked, 0);
+      expect(finished, 0);
+    });
+
+    test('completed.model_step: saved и later', () async {
+      final saved = build(
+        _FakeProbe.value(_facts(const NoProviderConfigured())),
+      );
+      await settle();
+      await walkTo(saved, OnboardingStep.model);
+      saved.providerSaved(_done(secret: 'codelab/llm'));
+      await saved.next();
+      await saved.finish();
+      expect(events('onboarding.completed').single['model_step'], 'saved');
+
+      logger.entries.clear();
+      final later = build(
+        _FakeProbe.value(_facts(const NoProviderConfigured())),
+      );
+      await settle();
+      await walkTo(later, OnboardingStep.model);
+      later.setUpLater();
+      await later.finish();
+      expect(events('onboarding.completed').single['model_step'], 'later');
+    });
+  });
+
+  // Раздел 5 change (ревью 2026-11-21, пп. 7, 8; design.md D5, D6;
+  // `concurrency.md` §47в): итог записи после `close()` не публикуется, а
+  // `close()` не оставляет `next()` ждать фактов.
+  group('закрытие Cubit-а (пп. 7, 8)', () {
+    test('закрытие во время записи флага: onFinished не вызван, событий '
+        'нет, исключений нет', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const ProviderReady('llm/m1'))),
+      );
+      await settle();
+      await walkTo(cubit, OnboardingStep.privacy);
+      preferences.gate = Completer<void>();
+      final finishing = cubit.finish();
+      await settle();
+      expect(preferences.marked, 1);
+
+      await cubit.close();
+      preferences.gate!.complete();
+      await finishing;
+
+      expect(finished, 0);
+      expect(events('onboarding.completed'), isEmpty);
+    });
+
+    test('закрытие во время записи, которая падает: save_failed не пишется, '
+        'onFinished не вызван', () async {
+      final cubit = build(
+        _FakeProbe.value(_facts(const ProviderReady('llm/m1'))),
+      );
+      await settle();
+      await walkTo(cubit, OnboardingStep.privacy);
+      preferences
+        ..gate = Completer<void>()
+        ..failure = StateError('disk is full');
+      final finishing = cubit.finish();
+      await settle();
+
+      await cubit.close();
+      preferences.gate!.complete();
+      await finishing;
+
+      expect(finished, 0);
+      expect(events('onboarding.save_failed'), isEmpty);
+      expect(events('onboarding.completed'), isEmpty);
+    });
+
+    test('close() при ожидании фактов в next(): next() завершается, шаг не '
+        'меняется', () async {
+      final cubit = build(_FakeProbe.gated());
+      await cubit.next();
+      expect(cubit.state.step, OnboardingStep.permissions);
+      final waiting = cubit.next();
+      await settle();
+
+      await cubit.close();
+
+      await waiting.timeout(
+        const Duration(seconds: 1),
+        onTimeout: () => fail('next() завис после close()'),
+      );
+      expect(cubit.state.step, OnboardingStep.permissions);
+    });
+  });
+
+  // Раздел 6 change (design.md D10 в редакции 2026-11-21): просмотр правового
+  // документа внутри onboarding. Контракт: `OnboardingState.document`
+  // (`LegalTab?`), `bool openDocument(LegalTab)` (`false`, если открыть
+  // нельзя) и `void closeDocument()`; события `onboarding.document_opened` и
+  // `onboarding.document_closed` с единственным полем `tab` (`LegalTab.logName`).
+  group('просмотр документа на шаге «Privacy» (D10)', () {
+    Future<OnboardingCubit> atPrivacy({
+      ProviderReadiness readiness = const ProviderReady('llm/m1'),
+    }) async {
+      final cubit = build(_FakeProbe.value(_facts(readiness)));
+      await settle();
+      await walkTo(cubit, OnboardingStep.privacy);
+      return cubit;
+    }
+
+    test('openDocument на «Privacy» ставит document и пишет событие без '
+        'путей', () async {
+      final cubit = await atPrivacy();
+      expect(cubit.state.document, isNull);
+
+      expect(cubit.openDocument(LegalTab.privacyPolicy), isTrue);
+
+      expect(cubit.state.document, LegalTab.privacyPolicy);
+      expect(cubit.state.step, OnboardingStep.privacy);
+      final opened = events('onboarding.document_opened').single;
+      expect(opened['tab'], 'privacy_policy');
+      expect(opened.keys, unorderedEquals(['event', 'level', 'tab']));
+    });
+
+    test('closeDocument возвращает шаг и пишет document_closed {tab} '
+        '(debug)', () async {
+      final cubit = await atPrivacy();
+      cubit.openDocument(LegalTab.termsOfUse);
+
+      cubit.closeDocument();
+
+      expect(cubit.state.document, isNull);
+      expect(cubit.state.step, OnboardingStep.privacy);
+      final closed = events('onboarding.document_closed').single;
+      expect(closed['level'], 'debug');
+      expect(closed['tab'], 'terms_of_use');
+      expect(closed.keys, unorderedEquals(['event', 'level', 'tab']));
+    });
+
+    test(
+      'вне шага «Privacy» openDocument — false и ничего не меняет',
+      () async {
+        final cubit = build(
+          _FakeProbe.value(_facts(const NoProviderConfigured())),
+        );
+        await settle();
+        for (final step in [
+          OnboardingStep.welcome,
+          OnboardingStep.permissions,
+          OnboardingStep.model,
+        ]) {
+          await walkTo(cubit, step);
+
+          expect(cubit.openDocument(LegalTab.privacyPolicy), isFalse);
+          expect(cubit.state.document, isNull, reason: step.name);
+        }
+        expect(events('onboarding.document_opened'), isEmpty);
+      },
+    );
+
+    test('повторный openDocument при открытом документе и closeDocument без '
+        'документа ничего не делают', () async {
+      final cubit = await atPrivacy();
+      cubit.closeDocument();
+      expect(events('onboarding.document_closed'), isEmpty);
+
+      cubit.openDocument(LegalTab.privacyPolicy);
+      expect(cubit.openDocument(LegalTab.termsOfUse), isFalse);
+
+      expect(cubit.state.document, LegalTab.privacyPolicy);
+      expect(events('onboarding.document_opened'), hasLength(1));
+    });
+
+    test('пока документ открыт: Back, Next, setUpLater, finish и '
+        'wizardStarted игнорируются', () async {
+      final cubit = await atPrivacy();
+      cubit.openDocument(LegalTab.privacyPolicy);
+      final before = cubit.state;
+
+      cubit.back();
+      await cubit.next();
+      cubit.setUpLater();
+      expect(cubit.wizardStarted(), isFalse);
+      await cubit.finish();
+
+      expect(cubit.state, same(before));
+      expect(cubit.state.finishing, isFalse);
+      expect(preferences.marked, 0);
+      expect(finished, 0);
+      expect(events('onboarding.completed'), isEmpty);
+    });
+
+    test('после closeDocument навигация и finish снова работают', () async {
+      final cubit = await atPrivacy();
+      cubit.openDocument(LegalTab.privacyPolicy);
+      cubit.closeDocument();
+
+      await cubit.finish();
+
+      expect(preferences.marked, 1);
+      expect(finished, 1);
+    });
+
+    test(
+      'открытие и закрытие не трогают шаг модели и сводку провайдера',
+      () async {
+        final cubit = build(
+          _FakeProbe.value(_facts(const NoProviderConfigured())),
+        );
+        await settle();
+        await walkTo(cubit, OnboardingStep.model);
+        cubit.providerSaved(_done(secret: 'codelab/llm'));
+        await cubit.next();
+        final modelBefore = cubit.state.model;
+        final factsBefore = cubit.state.facts;
+
+        cubit.openDocument(LegalTab.privacyPolicy);
+        cubit.closeDocument();
+
+        expect(cubit.state.model, modelBefore);
+        expect(cubit.state.facts, same(factsBefore));
+        cubit.back();
+        expect(cubit.state.step, OnboardingStep.model);
+        expect((cubit.state.model as ModelSaved).summary.providerId, 'llm');
+      },
+    );
+
+    test(
+      'после close() openDocument — false, без исключения и событий',
+      () async {
+        final cubit = await atPrivacy();
+        await cubit.close();
+
+        expect(cubit.openDocument(LegalTab.privacyPolicy), isFalse);
+        expect(cubit.closeDocument, returnsNormally);
+        expect(events('onboarding.document_opened'), isEmpty);
+      },
+    );
+  });
+
+  test('журнал полного прохода: только события D13, без путей, имён секретов, '
+      'адресов и ключей (D13)', () async {
+    final cubit = build(_FakeProbe.value(_facts(_keyMissing, backend: 'file')));
+    await settle();
+    await walkTo(cubit, OnboardingStep.model);
+    cubit.providerSaved(
+      _done(key: StoreSecret(SecretValue(_leak)), secret: 'codelab/llm'),
+    );
+    await cubit.next();
+    await cubit.finish();
+
+    const allowed = {
+      'onboarding.shown',
+      'onboarding.facts_loaded',
+      'onboarding.step_shown',
+      'onboarding.model_saved',
+      'onboarding.completed',
+    };
+    for (final entry in logger.entries) {
+      expect(allowed, contains(entry['event']));
+    }
+    final dump = logger.entries.toString();
+    for (final forbidden in [
+      _leak,
+      'codelab/openai',
+      'codelab/llm',
+      'localhost',
+      '~/.codelab',
+      'Application Support',
+      'llm/m1',
+    ]) {
+      expect(dump, isNot(contains(forbidden)), reason: forbidden);
+    }
+  });
+}

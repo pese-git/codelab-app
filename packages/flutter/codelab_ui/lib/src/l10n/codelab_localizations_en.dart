@@ -507,4 +507,9 @@ class CodeLabLocalizationsEn extends CodeLabLocalizations {
   String codeLabShortcutAlternatives(String first, String second) {
     return '$first or $second';
   }
+
+  @override
+  String codeLabSetupStepPosition(int index, int total) {
+    return 'Step $index of $total';
+  }
 }

@@ -5223,5 +5223,486 @@
   "settingsKeyboardWhereApprovalPending": "Workbench, while an approval is pending",
   "@settingsKeyboardWhereApprovalPending": {
     "description": "Колонка «Где» строки «Go to approval»: сочетание работает на рабочем месте, пока есть ожидающее одобрение (change fix-approval-focus, D7). Метка security (D14): перевод не смягчает смысл."
+  },
+  "onboardingHeader": "Welcome to CodeLab",
+  "@onboardingHeader": {
+    "description": "Шапка экрана onboarding. CodeLab — название продукта."
+  },
+  "onboardingStepWelcome": "What CodeLab does",
+  "@onboardingStepWelcome": {
+    "description": "Подпись шага 1 в строке шагов и заголовок шага. Термин глоссария."
+  },
+  "onboardingStepPermissions": "Permissions",
+  "@onboardingStepPermissions": {
+    "description": "Подпись шага 2 в строке шагов. Не путать со страницей «Permissions & tools»."
+  },
+  "onboardingStepModel": "Choose a model",
+  "@onboardingStepModel": {
+    "description": "Подпись шага 3 в строке шагов."
+  },
+  "onboardingStepPrivacy": "Privacy",
+  "@onboardingStepPrivacy": {
+    "description": "Подпись шага 4 в строке шагов."
+  },
+  "onboardingBack": "Back",
+  "@onboardingBack": {
+    "description": "Кнопка возврата на предыдущий шаг onboarding."
+  },
+  "onboardingNext": "Next",
+  "@onboardingNext": {
+    "description": "Кнопка перехода на следующий шаг onboarding."
+  },
+  "onboardingFinish": "Start using CodeLab",
+  "@onboardingFinish": {
+    "description": "Последняя кнопка onboarding: записывает флаг и открывает рабочее место. CodeLab — название продукта."
+  },
+  "onboardingWelcomeTitle": "An AI coding agent that works in your project",
+  "@onboardingWelcomeTitle": {
+    "description": "Заголовок шага «What CodeLab does»."
+  },
+  "onboardingWelcomeIntro": "Ask in plain words. The agent reads your code, proposes edits and runs commands in the project folder, and shows each step in the conversation.",
+  "@onboardingWelcomeIntro": {
+    "description": "Вводный текст шага «What CodeLab does»."
+  },
+  "onboardingCardFolderTitle": "Works in one project folder",
+  "@onboardingCardFolderTitle": {
+    "description": "Заголовок карточки шага 1."
+  },
+  "onboardingCardFolderBody": "Open a folder, start a session. Files, commands and search stay inside it.",
+  "@onboardingCardFolderBody": {
+    "description": "Текст карточки «Works in one project folder»."
+  },
+  "onboardingCardApproveTitle": "You approve the changes",
+  "@onboardingCardApproveTitle": {
+    "description": "Заголовок карточки шага 1."
+  },
+  "onboardingCardApproveBody": "Edits and commands wait for your decision, with the diff or the exact command.",
+  "@onboardingCardApproveBody": {
+    "description": "Текст карточки «You approve the changes». Метка security."
+  },
+  "onboardingCardKeyTitle": "Your model, your key",
+  "@onboardingCardKeyTitle": {
+    "description": "Заголовок карточки шага 1."
+  },
+  "onboardingCardKeyBody": "Connect a cloud provider or a local model. The key stays on this computer.",
+  "@onboardingCardKeyBody": {
+    "description": "Текст карточки «Your model, your key». Метка security: не называть системную связку ключей, пока в сборке нет хранилища ОС (D9)."
+  },
+  "onboardingCardBuiltInTitle": "The agent runs inside the app",
+  "@onboardingCardBuiltInTitle": {
+    "description": "Заголовок карточки шага 1."
+  },
+  "onboardingCardBuiltInBody": "Nothing else to install. An external agent over stdio or WebSocket can be added later in Settings › Connection.",
+  "@onboardingCardBuiltInBody": {
+    "description": "Текст карточки «The agent runs inside the app». stdio и WebSocket не переводить."
+  },
+  "onboardingBuiltInTag": "Built-in",
+  "@onboardingBuiltInTag": {
+    "description": "Тег карточки встроенного агента."
+  },
+  "onboardingWelcomeFootnote": "Setup takes four short steps. You can change every choice later in Settings.",
+  "@onboardingWelcomeFootnote": {
+    "description": "Подсказка под карточками шага 1."
+  },
+  "onboardingPermissionsTitle": "The agent asks before it changes anything",
+  "@onboardingPermissionsTitle": {
+    "description": "Заголовок шага «Permissions». Метка security."
+  },
+  "onboardingPermissionsIntro": "Approvals appear in the conversation next to the action, with the exact command or diff. A decision applies to that one call only.",
+  "@onboardingPermissionsIntro": {
+    "description": "Вводный текст шага «Permissions». Метка security."
+  },
+  "onboardingPermReadLabel": "Read files in the project",
+  "@onboardingPermReadLabel": {
+    "description": "Строка таблицы режима standard."
+  },
+  "onboardingPermReadHint": "Search and read anything under the project folder",
+  "@onboardingPermReadHint": {
+    "description": "Пояснение строки таблицы режима standard."
+  },
+  "onboardingPermEditLabel": "Edit and create files",
+  "@onboardingPermEditLabel": {
+    "description": "Строка таблицы режима standard."
+  },
+  "onboardingPermEditHint": "You see the diff before it is written",
+  "@onboardingPermEditHint": {
+    "description": "Пояснение строки таблицы режима standard. Метка security."
+  },
+  "onboardingPermRunLabel": "Run commands",
+  "@onboardingPermRunLabel": {
+    "description": "Строка таблицы режима standard."
+  },
+  "onboardingPermRunHint": "You see the full command and working folder",
+  "@onboardingPermRunHint": {
+    "description": "Пояснение строки таблицы режима standard. Метка security."
+  },
+  "onboardingPermOutsideLabel": "Anything outside the project folder",
+  "@onboardingPermOutsideLabel": {
+    "description": "Строка таблицы режима standard."
+  },
+  "onboardingPermOutsideHint": "Paths are confined to the session's working folder",
+  "@onboardingPermOutsideHint": {
+    "description": "Пояснение строки таблицы режима standard. Метка security."
+  },
+  "onboardingPermNoPrompt": "No prompt",
+  "@onboardingPermNoPrompt": {
+    "description": "Значение строки таблицы режима. Метка security."
+  },
+  "onboardingPermAsks": "Asks each time",
+  "@onboardingPermAsks": {
+    "description": "Значение строки таблицы режима. Метка security."
+  },
+  "onboardingPermBlocked": "Blocked",
+  "@onboardingPermBlocked": {
+    "description": "Значение строки таблицы режима. Метка security."
+  },
+  "onboardingModeTitle": "New sessions start in {mode} mode",
+  "@onboardingModeTitle": {
+    "description": "Заголовок InfoBar шага «Permissions». Плейсхолдер mode — имя режима (standard, bypass), не переводить.",
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingModeStandardBody": "Reads run freely; edits and commands ask. Change the default in Settings › Agents & modes, or per session from the composer.",
+  "@onboardingModeStandardBody": {
+    "description": "Текст InfoBar при режиме standard или недоступных фактах. Метка security."
+  },
+  "onboardingModeOtherBody": "Your config sets this; the table above describes standard mode. Change it in Settings › Agents & modes.",
+  "@onboardingModeOtherBody": {
+    "description": "Текст InfoBar при режиме не standard (общий с CLI конфиг). Метка security: говорит правду о режиме (D7)."
+  },
+  "onboardingModeExternal": "Your default connection is an external agent. It applies its own rules; approvals still appear in the conversation.",
+  "@onboardingModeExternal": {
+    "description": "InfoBar шага «Permissions» при внешнем профиле по умолчанию. Метка security."
+  },
+  "onboardingModelTitle": "Choose where the model runs",
+  "@onboardingModelTitle": {
+    "description": "Заголовок шага «Choose a model»."
+  },
+  "onboardingModelIntro": "Pick a provider. CodeLab checks the address and the key, lists the models and saves the choice as your default.",
+  "@onboardingModelIntro": {
+    "description": "Вводный текст шага «Choose a model»."
+  },
+  "onboardingModelProviderLabel": "Provider",
+  "@onboardingModelProviderLabel": {
+    "description": "Подпись списка карточек пресетов."
+  },
+  "onboardingPresetHostKey": "{host} · key",
+  "@onboardingPresetHostKey": {
+    "description": "Подпись карточки пресета: хост и требование ключа. Плейсхолдер host — адрес хоста, не переводить.",
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingPresetHostOptionalKey": "{host} · optional key",
+  "@onboardingPresetHostOptionalKey": {
+    "description": "Подпись карточки пресета с необязательным ключом.",
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingPresetLocalNoKey": "Local, no key",
+  "@onboardingPresetLocalNoKey": {
+    "description": "Подпись карточки локального пресета без ключа."
+  },
+  "onboardingPresetCustomUrl": "Your server URL, optional key",
+  "@onboardingPresetCustomUrl": {
+    "description": "Подпись карточек пресетов Custom."
+  },
+  "onboardingSetUp": "Set up…",
+  "@onboardingSetUp": {
+    "description": "Кнопка мастера, пока пресет не выбран."
+  },
+  "onboardingSetUpPreset": "Set up {preset}…",
+  "@onboardingSetUpPreset": {
+    "description": "Кнопка открытия мастера для выбранного пресета. Плейсхолдер preset — имя пресета.",
+    "placeholders": {
+      "preset": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingSetUpAgain": "Set up again…",
+  "@onboardingSetUpAgain": {
+    "description": "Кнопка повторного открытия мастера после сохранения."
+  },
+  "onboardingSetUpLater": "Set up later",
+  "@onboardingSetUpLater": {
+    "description": "Кнопка выхода с шага «Choose a model» без записи (Q3)."
+  },
+  "onboardingModelWizardHintTitle": "Opens the provider wizard",
+  "@onboardingModelWizardHintTitle": {
+    "description": "Заголовок InfoBar шага «Choose a model»."
+  },
+  "onboardingModelWizardHintBody": "Base URL, key, a live check and the model list, the same steps as Settings › Providers › Add provider.",
+  "@onboardingModelWizardHintBody": {
+    "description": "Текст InfoBar шага «Choose a model»."
+  },
+  "onboardingModelWizardHintStored": "The key is stored in {backend} or read from an environment variable.",
+  "@onboardingModelWizardHintStored": {
+    "description": "InfoBar при записываемом бэкенде. Плейсхолдер backend — id бэкенда секретов, не переводить. Метка security.",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingModelWizardHintEnvOnly": "The key is read from an environment variable.",
+  "@onboardingModelWizardHintEnvOnly": {
+    "description": "InfoBar при бэкенде только для чтения (env). Метка security."
+  },
+  "onboardingModelSkippedNote": "This step is skipped when a provider is already set up and its key is found.",
+  "@onboardingModelSkippedNote": {
+    "description": "Пояснение под карточками шага «Choose a model»."
+  },
+  "onboardingNoticeKeySecret": "Provider \"{provider}\" is set up, but its key \"{name}\" is not in {backend}. Add it in Settings › Providers › Edit.",
+  "@onboardingNoticeKeySecret": {
+    "description": "InfoBar: ключ провайдера не найден в хранилище. Плейсхолдеры provider, name, backend не переводить. Метка security.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      },
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingNoticeKeyEnv": "Provider \"{provider}\" reads its key from {variable}, which is not set where CodeLab was started.",
+  "@onboardingNoticeKeyEnv": {
+    "description": "InfoBar: переменная ключа провайдера не задана. Плейсхолдеры provider, variable не переводить.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "variable": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingNoticeConfigBroken": "{count, plural, one{The agent's config has {count} problem. Fix it in Settings › Providers or run codelab config check.} other{The agent's config has {count} problems. Fix them in Settings › Providers or run codelab config check.}}",
+  "@onboardingNoticeConfigBroken": {
+    "description": "InfoBar при битом конфиге. Команда codelab config check не переводится.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "onboardingNoticeUnavailable": "Agent settings could not be read. You can set up a provider later in Settings › Providers.",
+  "@onboardingNoticeUnavailable": {
+    "description": "InfoBar при сбое или таймауте чтения фактов."
+  },
+  "onboardingConnectedTitle": "{preset} is connected",
+  "@onboardingConnectedTitle": {
+    "description": "Заголовок сводки сохранённого провайдера. Плейсхолдер preset — id провайдера.",
+    "placeholders": {
+      "preset": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingConnectedSecret": "Default model {model}. The key is in {backend} as {name}. Change it later in Settings › Providers.",
+  "@onboardingConnectedSecret": {
+    "description": "Сводка: ключ в хранилище секретов. Плейсхолдеры model, backend, name не переводить. Метка security.",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      },
+      "backend": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingConnectedEnv": "Default model {model}. The key is read from {variable}. Change it later in Settings › Providers.",
+  "@onboardingConnectedEnv": {
+    "description": "Сводка: ключ из переменной окружения.",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      },
+      "variable": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingConnectedNoKey": "Default model {model}. No key is needed. Change it later in Settings › Providers.",
+  "@onboardingConnectedNoKey": {
+    "description": "Сводка: провайдер без ключа.",
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingConnectedAgainNote": "Picking another provider opens the wizard again; the saved one stays in the config.",
+  "@onboardingConnectedAgainNote": {
+    "description": "Пояснение под сводкой сохранённого провайдера."
+  },
+  "onboardingPrivacyTitle": "What leaves this computer",
+  "@onboardingPrivacyTitle": {
+    "description": "Заголовок шага «Privacy». Метка security."
+  },
+  "onboardingPrivacyIntro": "Only what the agent needs for the work you ask for, sent to services you set up or to addresses you choose to open. CodeLab itself collects nothing. The privacy policy lists every request.",
+  "@onboardingPrivacyIntro": {
+    "description": "Вводный текст шага «Privacy». Метка security."
+  },
+  "onboardingPrivacyProviderLabel": "Your model provider",
+  "@onboardingPrivacyProviderLabel": {
+    "description": "Строка шага «Privacy»."
+  },
+  "onboardingPrivacyProviderBody": "Every turn: your prompt, the session history, files and command output the agent read",
+  "@onboardingPrivacyProviderBody": {
+    "description": "Описание строки «Your model provider». Метка security."
+  },
+  "onboardingPrivacyProviderTag": "Every turn",
+  "@onboardingPrivacyProviderTag": {
+    "description": "Тег строки. Метка security."
+  },
+  "onboardingPrivacyToolsLabel": "MCP servers",
+  "@onboardingPrivacyToolsLabel": {
+    "description": "Строка шага «Privacy». MCP не переводить."
+  },
+  "onboardingPrivacyToolsBody": "Client information, the tool list request and the headers from your configuration, including tokens, each time a session starts or reconnects; the arguments of every tool call",
+  "@onboardingPrivacyToolsBody": {
+    "description": "Описание строки. Метка security."
+  },
+  "onboardingPrivacyToolsTag": "Each session",
+  "@onboardingPrivacyToolsTag": {
+    "description": "Тег строки. Метка security."
+  },
+  "onboardingPrivacyTelemetryLabel": "Telemetry, crash reports, usage analytics",
+  "@onboardingPrivacyTelemetryLabel": {
+    "description": "Строка шага «Privacy». Метка security."
+  },
+  "onboardingPrivacyTelemetryBody": "Not collected by the app, the CLI or the embedded agent",
+  "@onboardingPrivacyTelemetryBody": {
+    "description": "Описание строки. Метка security."
+  },
+  "onboardingPrivacyTelemetryTag": "Never",
+  "@onboardingPrivacyTelemetryTag": {
+    "description": "Тег строки. Метка security."
+  },
+  "onboardingPrivacyStaysLabel": "Stays here",
+  "@onboardingPrivacyStaysLabel": {
+    "description": "Строка шага «Privacy». Метка security."
+  },
+  "onboardingPrivacyStaysTag": "Local",
+  "@onboardingPrivacyStaysTag": {
+    "description": "Тег строки. Метка security."
+  },
+  "onboardingStaysEnv": "Config and sessions in {home}; app logs in {logs}; API keys are read from environment variables, CodeLab does not store them",
+  "@onboardingStaysEnv": {
+    "description": "«Stays here» при бэкенде env. Плейсхолдеры home, logs — пути, не переводить. Метка security.",
+    "placeholders": {
+      "home": {
+        "type": "String"
+      },
+      "logs": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingStaysFile": "Config and sessions in {home}; app logs in {logs}; API keys in {path}, an unencrypted file",
+  "@onboardingStaysFile": {
+    "description": "«Stays here» при бэкенде file. Плейсхолдеры — пути, имя файла secrets.yaml не переводить. Метка security.",
+    "placeholders": {
+      "home": {
+        "type": "String"
+      },
+      "logs": {
+        "type": "String"
+      },
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingStaysKeychain": "Config and sessions in {home}; app logs in {logs}; API keys in the system keychain ({backend})",
+  "@onboardingStaysKeychain": {
+    "description": "«Stays here» при бэкенде хранилища ОС. Метка security.",
+    "placeholders": {
+      "home": {
+        "type": "String"
+      },
+      "logs": {
+        "type": "String"
+      },
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingStaysOther": "Config and sessions in {home}; app logs in {logs}; API keys in the agent's secret store ({backend})",
+  "@onboardingStaysOther": {
+    "description": "«Stays here» при другом бэкенде. Метка security.",
+    "placeholders": {
+      "home": {
+        "type": "String"
+      },
+      "logs": {
+        "type": "String"
+      },
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingStaysExternal": "Config and sessions of the external agent are managed by that agent; app logs in {logs}",
+  "@onboardingStaysExternal": {
+    "description": "«Stays here» при внешнем профиле. Метка security.",
+    "placeholders": {
+      "logs": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingStaysUnavailable": "App logs in {logs}; the agent's config and keys stay on this computer",
+  "@onboardingStaysUnavailable": {
+    "description": "«Stays here» при недоступных фактах. Плейсхолдер logs — путь каталога логов app, не переводить. Метка security.",
+    "placeholders": {
+      "logs": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingPermissionsLoading": "Reading the agent settings…",
+  "@onboardingPermissionsLoading": {
+    "description": "Строка с индикатором на шаге «Permissions», пока читаются настройки агента: режим новых сессий до чтения не называется (ревью 2026-11-21, п. 1). Метка security."
+  },
+  "onboardingModeUnavailable": "Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes.",
+  "@onboardingModeUnavailable": {
+    "description": "InfoBar шага «Permissions» при недоступных настройках: режим не утверждается (в общем конфиге может быть bypass). Метка security."
+  },
+  "onboardingNothingToAgreeTitle": "Nothing to agree to",
+  "@onboardingNothingToAgreeTitle": {
+    "description": "Заголовок InfoBar шага «Privacy» (D-29)."
+  },
+  "onboardingNothingToAgreeBody": "These links open the documents inside the app and work offline; Back returns to this step. You can find them later in Settings › Legal.",
+  "@onboardingNothingToAgreeBody": {
+    "description": "Текст InfoBar шага «Privacy». Метка security."
+  },
+  "onboardingPrivacyPolicyLink": "Read the privacy policy",
+  "@onboardingPrivacyPolicyLink": {
+    "description": "Ссылка шага «Privacy», открывает политику конфиденциальности внутри onboarding (D10)."
+  },
+  "onboardingTermsLink": "Terms of use",
+  "@onboardingTermsLink": {
+    "description": "Ссылка шага «Privacy», открывает условия использования внутри onboarding (D10)."
+  },
+  "onboardingDocumentBack": "Back to setup",
+  "@onboardingDocumentBack": {
+    "description": "Кнопка панели документа: закрывает просмотр и возвращает на шаг «Privacy» (D10)."
   }
 }

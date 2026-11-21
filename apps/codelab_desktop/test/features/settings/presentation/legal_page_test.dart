@@ -31,7 +31,14 @@ import 'dart:ui' show Tristate;
 
 import 'package:codelab_desktop/app/build_version.dart';
 import 'package:codelab_desktop/app/language/app_language_cubit.dart';
+import 'package:codelab_desktop/app/app_scope.dart' show codeLabDependenciesOf;
 import 'package:codelab_desktop/app/navigation/navigation_cubit.dart';
+import 'package:codelab_desktop/app/navigation/settings_page.dart';
+import 'package:codelab_desktop/features/settings/application/legal_documents.dart'
+    show LegalTab;
+import 'package:codelab_desktop/features/settings/presentation/legal_page.dart'
+    show LegalPageHost;
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:codelab_desktop/core/platform/app_language_preferences.dart';
 import 'package:codelab_desktop/core/platform/external_link_opener.dart';
 import 'package:codelab_desktop/features/settings/application/package_license_search.dart';
@@ -43,7 +50,9 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../support/l10n_app.dart';
 import '../../../support/legal_fixture.dart';
+import '../../../support/test_app_scope.dart';
 
 const _tabs = [
   'privacy-policy',
@@ -846,6 +855,122 @@ void main() {
       );
       expect(event['packages'], 1);
       expect(event['failed'], isTrue);
+    });
+  });
+
+  // Раздел 6 change `add-app-onboarding` (задача 6.3; design.md D10 в редакции
+  // 2026-11-21): onboarding показывает `LegalPage` внутри своего экрана, вне
+  // `SettingsDestination`. Контракт: `LegalPageHost({initialTab})`; параметр
+  // перекрывает `SettingsDestination.legalTab`, без него поведение прежнее.
+  group('начальная вкладка хозяина (onboarding)', () {
+    /// Хозяин страницы в настоящих провайдерах app, но не на экране настроек:
+    /// навигация — на рабочем месте или, если задано [destinationTab], на
+    /// странице «Legal» с этой вкладкой.
+    Future<CodeLabTestBinding> pumpHost(
+      WidgetTester tester,
+      LegalFixture fixture, {
+      LegalTab? initialTab,
+      LegalTab? destinationTab,
+    }) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final binding = CodeLabTestBinding(
+        project: '/workspace',
+        legalPorts: fixture.ports,
+        externalLinkOpener: fixture.links,
+        settingsPages: const SettingsPages(
+          available: {SettingsPage.connection, SettingsPage.legal},
+        ),
+      );
+      // Назначение задаётся до построения хозяина: он читает вкладку один раз
+      // при открытии.
+      if (destinationTab != null) {
+        final navigation = binding.scope.resolve<NavigationCubit>();
+        await navigation.openSettings(
+          page: SettingsPage.connection,
+          source: SettingsOpenSource.sidebar,
+        );
+        await navigation.selectSettingsPage(
+          SettingsPage.legal,
+          legalTab: destinationTab,
+        );
+      }
+      await tester.pumpWidget(
+        binding.bootstrap(
+          child: Builder(
+            builder: (context) {
+              final dependencies = codeLabDependenciesOf(context);
+              return MultiBlocProvider(
+                providers: [
+                  BlocProvider.value(value: dependencies.navigationCubit),
+                  BlocProvider.value(value: dependencies.languageCubit),
+                ],
+                child: localizedFluentApp(
+                  LegalPageHost(initialTab: initialTab),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return binding;
+    }
+
+    testWidgets('initialTab открывает «Terms of use» вне SettingsDestination', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final fixture = LegalFixture();
+
+      await pumpHost(tester, fixture, initialTab: LegalTab.termsOfUse);
+
+      expect(_selected(tester, 'terms-of-use'), isTrue);
+      expect(_text('terms-en-body'), findsWidgets);
+      expect(fixture.reads, ['assets/legal/TERMS.md']);
+      handle.dispose();
+    });
+
+    testWidgets('initialTab перекрывает SettingsDestination.legalTab', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final fixture = LegalFixture();
+
+      await pumpHost(
+        tester,
+        fixture,
+        initialTab: LegalTab.termsOfUse,
+        destinationTab: LegalTab.license,
+      );
+
+      expect(_selected(tester, 'terms-of-use'), isTrue);
+      expect(_selected(tester, 'license'), isFalse);
+      expect(fixture.reads, ['assets/legal/TERMS.md']);
+      handle.dispose();
+    });
+
+    testWidgets('без initialTab поведение прежнее: вкладка из назначения', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+
+      await pumpHost(tester, LegalFixture(), destinationTab: LegalTab.license);
+      expect(_selected(tester, 'license'), isTrue);
+      handle.dispose();
+    });
+
+    testWidgets('без initialTab и без назначения «Legal» — «Privacy policy»', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+
+      await pumpHost(tester, LegalFixture());
+
+      expect(_selected(tester, 'privacy-policy'), isTrue);
+      handle.dispose();
     });
   });
 }

@@ -32,6 +32,7 @@ enum SettingsOpenSource { shortcut, sidebar, banner }
 /// может быть что угодно) и не мешает переходу.
 class NavigationCubit extends Cubit<AppDestination> {
   NavigationCubit({
+    AppDestination initial = const WorkbenchDestination(),
     required SettingsPageStore store,
     required SettingsPages pages,
     required String? Function() activeSessionId,
@@ -42,7 +43,7 @@ class NavigationCubit extends Cubit<AppDestination> {
        _activeSessionId = activeSessionId,
        _selectSessionIfOpen = selectSessionIfOpen,
        _logger = logger,
-       super(const WorkbenchDestination());
+       super(initial);
 
   final SettingsPageStore _store;
   final SettingsPages _pages;
@@ -67,6 +68,14 @@ class NavigationCubit extends Cubit<AppDestination> {
     if (state is SettingsDestination) {
       return;
     }
+    // Настройки на onboarding не открываются (D1; spec app-onboarding).
+    if (state is OnboardingDestination) {
+      _logger?.debug(
+        'settings.open_skipped',
+        context: {'reason': 'onboarding'},
+      );
+      return;
+    }
     final visible = _pages.visible;
     if (visible.isEmpty) {
       _logger?.debug('settings.open_skipped');
@@ -89,6 +98,19 @@ class NavigationCubit extends Cubit<AppDestination> {
     if (page != null) {
       await _savePage(target);
     }
+  }
+
+  /// Завершает onboarding и показывает рабочее место (D1, D5).
+  ///
+  /// Вне onboarding ничего не меняет. Запись флага и старт агента — забота
+  /// `OnboardingCubit`, не навигации.
+  void finishOnboarding() {
+    // Колбэк может пережить Cubit при закрытии root scope: `emit` на закрытом
+    // Cubit бросил бы `StateError` (ревью 2026-11-21, п. 7).
+    if (isClosed || state is! OnboardingDestination) {
+      return;
+    }
+    emit(const WorkbenchDestination());
   }
 
   /// Переключает страницу на экране настроек; скрытая или уже выбранная

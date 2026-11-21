@@ -9,6 +9,7 @@ import 'package:codelab_client_io/codelab_client_io.dart'
     show JsonFileProfileStore;
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/appearance/app_appearance_start.dart';
+import 'package:codelab_desktop/app/onboarding/onboarding_start.dart';
 import 'package:codelab_desktop/app/client_profile_secrets.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/connection_environment.dart';
@@ -224,12 +225,14 @@ void main() {
     AppAppearanceStart? appearance,
     ThemeLibrary? themeLibrary,
     ThemeFilePicker? themeFilePicker,
+    OnboardingStart? onboarding,
   }) => _bootstrap(
     profileSecrets,
     usageCsvSaver,
     appearance,
     themeLibrary,
     themeFilePicker,
+    onboarding,
   );
 
   /// Окружение app теста: временный `CODELAB_HOME` и токен WebSocket-агента.
@@ -270,6 +273,7 @@ void main() {
     AppAppearanceStart? appearance,
     ThemeLibrary? themeLibrary,
     ThemeFilePicker? themeFilePicker,
+    OnboardingStart? onboarding,
   ) => CodeLabBootstrap(
     scope: createCodeLabRootScope(
       embeddedOpener: kind == E2eAgentKind.embedded ? _embeddedOpener : null,
@@ -279,6 +283,9 @@ void main() {
       appearance: appearance,
       themeLibrary: themeLibrary,
       themeFilePicker: themeFilePicker,
+      // Onboarding первого запуска (`add-app-onboarding`, задача 4.1): без
+      // шва он не показывается.
+      onboarding: onboarding,
     ),
     child: const CodeLabApp(),
   );

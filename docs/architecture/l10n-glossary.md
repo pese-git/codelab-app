@@ -400,6 +400,39 @@
 
 Остальные тексты действий и мест («Open the command palette» → «Открыть палитру команд», «Show or hide the Files pane» → «Показать или скрыть панель файлов» и т. д.) собраны из терминов §3–§5 и приняты вместе с таблицей.
 
+### Onboarding
+
+Термины экрана первого запуска (change [`add-app-onboarding`](../../openspec/changes/add-app-onboarding/design.md), D14). Сообщения — `onboarding…` в `app_en.arb` и `app_ru.arb`. Имена пресетов, id провайдеров и моделей, `id` бэкенда секретов, имена переменных и секретов, пути и имена режимов (`standard`) не переводятся (§2). Строки о ключах и о том, что уходит с компьютера, несут метку `security`. Предложение архитектора, вычитывает пользователь в задаче итерации 3 change.
+
+| en | ru | Примечание |
+|---|---|---|
+| Welcome to CodeLab | Добро пожаловать в CodeLab | шапка экрана |
+| What CodeLab does | Что делает CodeLab | шаг 1 |
+| Permissions (шаг onboarding) | Разрешения | шаг 2; как страница «Permissions & tools» не называется |
+| Choose a model | Выбор модели | шаг 3 |
+| Privacy (шаг onboarding) | Приватность | шаг 4 |
+| Set up {preset}… | Настроить {preset}… | `{preset}` — плейсхолдер (§2) |
+| Set up again… | Настроить заново… | |
+| Set up later | Настроить позже | шаг 3 без записи (D8) |
+| Start using CodeLab | Начать работу с CodeLab | последняя кнопка |
+| {preset} is connected | {preset} подключён | |
+| Asks each time | Спрашивает каждый раз | `security` |
+| No prompt | Без вопроса | `security` |
+| Blocked | Запрещено | `security` |
+| What leaves this computer | Что уходит с компьютера | `security` |
+| Stays here | Остаётся здесь | `security` |
+| Every turn · Each session · Never · Local | Каждый ход · Каждая сессия · Никогда · Локально | теги шага 4; `Each session` заменил `When used` (D9, редакция 2026-11-21) |
+| Nothing to agree to | Принимать нечего | D-29 |
+| Read the privacy policy | Прочитать политику конфиденциальности | ссылка шага 4; открывает документ внутри onboarding (D10) |
+| Terms of use (ссылка шага 4) | Условия использования | совпадает с вкладкой «Legal» (§«Страница «Legal»») |
+| Back to setup | Назад к настройке | кнопка панели документа; не «Back» шага |
+| MCP servers (шаг 4) | MCP-серверы | строка сети; web-инструментов в сборке нет (D9) |
+| Client information, the tool list request and the headers from your configuration, including tokens, each time a session starts or reconnects; the arguments of every tool call | Сведения о клиенте, запрос списка инструментов и заголовки из вашей конфигурации, включая токены, — при каждом начале и переподключении сессии; аргументы каждого вызова инструмента | `security`; строка «MCP servers» шага 4 по `PRIVACY.md` §2 (D9) |
+| Only what the agent needs for the work you ask for, sent to services you set up or to addresses you choose to open. CodeLab itself collects nothing. The privacy policy lists every request. | Только то, что агенту нужно для вашей работы, — настроенным вами сервисам или по адресам, которые вы сами открываете. CodeLab сам ничего не собирает. Все запросы перечислены в политике конфиденциальности. | `security`; вводная шага 4 (D9) |
+| Reading the agent settings… | Читаются настройки агента… | шаг 2, пока факты читаются; `security` |
+| Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes. | Не удалось прочитать настройки агента. Режим новых сессий виден в «Настройки › Агенты и режимы». | шаг 2 при недоступных фактах; `security` |
+| The key stays on this computer. | Ключ остаётся на этом компьютере. | `security` |
+
 ### Страница «Legal»
 
 Термины страницы «Settings › Legal» и ссылок на неё со страницы «General» (change [`add-app-legal-page`](../../openspec/changes/archive/2026-11-20-add-app-legal-page/design.md), D1, D2, D6, D9, D10; артборды `Legal`, `Terms`, `License`, `Notices`, `NoticesSearch`, `NoticesMatch`, `NoticesEmpty`). Сообщения — `settingsLegal…`, `settingsPageLegal`, `settingsSearchKeywordsLegal` и блок «Privacy» `settingsGeneral…` в `app_en.arb` и `app_ru.arb`.

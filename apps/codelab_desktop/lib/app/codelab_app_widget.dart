@@ -12,6 +12,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../l10n/app_localizations.dart';
 import 'appearance/app_appearance_cubit.dart';
 import 'language/app_language_cubit.dart';
+import '../features/onboarding/application/onboarding_cubit.dart';
+import '../features/onboarding/application/onboarding_wizard_opener.dart';
+import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/settings/presentation/settings_shell.dart';
 import '../features/workbench/application/shell_cubit.dart';
 import '../features/workbench/presentation/widgets/restart_confirmation_dialog.dart';
@@ -137,15 +140,33 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
   var _approvalLogged = false;
 
   /// Предыдущее назначение: `BlocListener` отдаёт только текущее.
-  AppDestination _previous = const WorkbenchDestination();
+  late AppDestination _previous;
+
+  /// Триггер запуска (D19) уже сработал: ровно один раз за жизнь app
+  /// (`add-app-onboarding`, D5).
+  var _launchTriggered = false;
 
   @override
   void initState() {
     super.initState();
     _workbenchScope.addListener(_redirectScopeFocus);
-    // Триггер запуска (D19): после первого кадра, а не в `initState`, чтобы
-    // старт агента не блокировал отрисовку окна (D-15). Восстановленный проект
-    // стартует агента в его папке; без проекта агент не стартует.
+    _previous = context.read<NavigationCubit>().state;
+    // Пока показан onboarding, агент не стартует (D5): триггер сработает при
+    // первом `WorkbenchDestination` (`_onNavigation`).
+    if (_previous is! OnboardingDestination) {
+      _triggerLaunch();
+    }
+  }
+
+  /// Триггер запуска (D19): после первого кадра, а не в `initState`, чтобы
+  /// старт агента не блокировал отрисовку окна (D-15). Восстановленный проект
+  /// стартует агента в его папке; без проекта агент не стартует. Срабатывает
+  /// один раз: после onboarding и при обычном запуске одинаково.
+  void _triggerLaunch() {
+    if (_launchTriggered) {
+      return;
+    }
+    _launchTriggered = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && widget.startOnLaunch) {
         unawaited(context.read<CodeLabShellCubit>().startOnLaunch());
@@ -263,6 +284,10 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
   void _onNavigation(AppDestination current) {
     final previous = _previous;
     _previous = current;
+    if (previous is OnboardingDestination && current is WorkbenchDestination) {
+      _triggerLaunch();
+      return;
+    }
     if (current is SettingsDestination && previous is! SettingsDestination) {
       _returnFocus = FocusManager.instance.primaryFocus;
       _syncApprovalLog();
@@ -344,6 +369,15 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
           final settings = destination is SettingsDestination
               ? destination
               : null;
+          // Onboarding вместо рабочего места: оно не строится, пока пользователь
+          // не нажал «Start using CodeLab» (D5). Корневые Cubit-ы живут, как
+          // раньше.
+          if (destination is OnboardingDestination) {
+            return _OnboardingHost(
+              openWizard: dependencies.openOnboardingWizard,
+              appLogsLabel: dependencies.onboardingAppLogsLabel,
+            );
+          }
           return Stack(
             fit: StackFit.expand,
             children: [
@@ -394,4 +428,43 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
       ),
     );
   }
+}
+
+/// Владелец `OnboardingCubit` на время показа экрана onboarding.
+///
+/// Почему отдельный `State`: Cubit читает факты при создании (D6), поэтому его
+/// нельзя пересоздавать на каждой пересборке; закрывает его тот, кто создал
+/// (как страницы настроек, `createXxxCubit` из `CodeLabDependencies`).
+///
+/// Как использовать: строится по `OnboardingDestination`; при переходе на
+/// рабочее место виджет исчезает, и Cubit закрывается.
+class _OnboardingHost extends StatefulWidget {
+  const _OnboardingHost({required this.openWizard, required this.appLogsLabel});
+
+  final OnboardingWizardOpener openWizard;
+  final String appLogsLabel;
+
+  @override
+  State<_OnboardingHost> createState() => _OnboardingHostState();
+}
+
+class _OnboardingHostState extends State<_OnboardingHost> {
+  late final OnboardingCubit _cubit = codeLabDependenciesOf(
+    context,
+  ).createOnboardingCubit();
+
+  @override
+  void dispose() {
+    unawaited(_cubit.close());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => BlocProvider.value(
+    value: _cubit,
+    child: OnboardingScreen(
+      openWizard: widget.openWizard,
+      appLogsLabel: widget.appLogsLabel,
+    ),
+  );
 }
