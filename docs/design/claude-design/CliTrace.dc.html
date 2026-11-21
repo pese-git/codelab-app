@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — headless protocol trace</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>zsh — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="Headless protocol trace: stream-json with --include-acp interleaves acp lines (raw JSON-RPC frames, secrets redacted) with v1 events; --trace-file writes the same frames to a file; --include-acp without stream-json is a usage error with exit code 64">
+    <div class="ln"><span class="ok">$</span> codelab -p "why does login fail?" --output-format stream-json --include-acp</div>
+    <div class="ln mu">{"type":"init","version":1,"sessionId":"01JB8Q2W","resumed":false,"cwd":"/Users/me/notes-app",…}</div>
+    <div class="ln mu">{"type":"turn_start","turn":1,"trigger":"prompt"}</div>
+    <div class="ln mu">{"type":"user_message","turn":1,"text":"why does login fail?","attachments":[]}</div>
+    <div class="ln"><span class="wa">{"type":"acp","turn":1,"direction":"out","frame":{"jsonrpc":"2.0","id":2,"method":"session/prompt","params":{…}}}</span></div>
+    <div class="ln"><span class="wa">{"type":"acp","turn":1,"direction":"in","frame":{"jsonrpc":"2.0","method":"session/update","params":{"update":{…}}}}</span></div>
+    <div class="ln mu">{"type":"tool_call","turn":1,"toolCallId":"call_1","title":"fetch /auth/refresh","kind":"fetch","status":"pending",…}</div>
+    <div class="ln"><span class="wa">{"type":"acp","turn":1,"direction":"in","frame":{…"rawInput":{"url":"https://api.notes.dev/auth/refresh",</span></div>
+    <div class="ln"><span class="wa">                                                    "headers":{"authorization":"[REDACTED]"}}…}}</span></div>
+    <div class="ln mu">{"type":"tool_result","turn":1,"toolCallId":"call_1","status":"completed","durationMs":420,…}</div>
+    <div class="ln mu">{"type":"text_delta","turn":1,"messageId":"m_2","text":"The refresh token expires before "}</div>
+    <div class="ln"><span class="wa">{"type":"acp","turn":1,"direction":"in","frame":{"jsonrpc":"2.0","id":2,"result":{"stopReason":"end_turn"}}}</span></div>
+    <div class="ln mu">{"type":"turn_end","turn":1,"stopReason":"end_turn","durationMs":6210,"usage":null,"error":null,…}</div>
+    <div class="ln mu">{"type":"result","exitCode":0,"stopReason":"end_turn","sessionId":"01JB8Q2W","turns":1,…}</div>
+    <div class="ln"></div>
+    <div class="ln"><span class="ok">$</span> codelab -p "why does login fail?" --trace-file ~/acp-trace.jsonl</div>
+    <div class="ln">The refresh token expires before the access token, so the retry after 401 has nothing to refresh with.</div>
+    <div class="ln"><span class="ok">$</span> wc -l ~/acp-trace.jsonl</div>
+    <div class="ln">      38 /Users/me/acp-trace.jsonl</div>
+    <div class="ln mu"># every JSON-RPC frame of the run, in and out, secrets redacted: the same tap as --include-acp</div>
+    <div class="ln"></div>
+    <div class="ln"><span class="ok">$</span> codelab -p "why does login fail?" --include-acp</div>
+    <div class="ln er">codelab: --include-acp needs --output-format stream-json</div>
+    <div class="ln"><span class="ok">$</span> echo $?</div>
+    <div class="ln">64</div>
+    <div class="grow"><div class="ln"><span class="ok">$</span> <span class="cur"> </span></div></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

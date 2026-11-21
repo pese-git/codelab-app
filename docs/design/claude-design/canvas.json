@@ -2184,6 +2184,14 @@
    "y": 1264,
    "page": "phone-dark",
    "title": "P21c Protocol — log record — dark"
+  },
+  "CliTrace.dc.html": {
+   "h": 720,
+   "page": "cli",
+   "title": "C17 Headless: protocol trace (--include-acp, --trace-file)",
+   "w": 1000,
+   "x": 2160,
+   "y": 6840
   }
  },
  "createdOnFiles": {
@@ -2205,6 +2213,7 @@
   "c-row5",
   "c-row6",
   "c-row7",
+  "c-row7s",
   "d-note",
   "d-row0",
   "d-row1",
@@ -2362,9 +2371,9 @@
   },
   "c-row7": {
    "kind": "title1",
-   "maxW": 2080,
+   "maxW": 3160,
    "page": "cli",
-   "text": "Настройки и headless",
+   "text": "Настройки, headless и трасса протокола",
    "w": 240,
    "x": 0,
    "y": 6540
@@ -3018,6 +3027,15 @@
    "fill": "teal",
    "page": "phone",
    "text": "P21–P21c — панель Protocol на смартфоне (§12.8.4): дока нет, панель — свой экран из P6 › Panes › Protocol, Back — к сессии P2. Вкладки Frames и Log — SelectorBar, Pause, Clear и Export… — в меню «…». Таблиц нет: строки в две линии, детали кадра (P21a) и записи (P21c) — отдельным экраном. Выделен ответ с ошибкой −32603 на запрос id 5: «Show frame in Frames» и «Show record in Log» переводят между P21a и P21c. Фильтры прокручиваются по горизонтали, касания ≥ 44 px."
+  },
+  "c-row7s": {
+   "x": 3240,
+   "y": 6840,
+   "w": 460,
+   "size": "m",
+   "fill": "teal",
+   "page": "cli",
+   "text": "C17 — панели Protocol у CLI нет; кадры ACP видны в headless (§12.5, §9.11). --include-acp добавляет в stream-json строки acp {direction, frame} из того же отвода, что --trace-file, уже после SecretRedactor; без stream-json — код 64. --trace-file пишет кадры прогона в файл. Флаги — change add-cli-stream-json, ещё не реализованы: экран — макет по архитектуре."
   }
  },
  "order": [
@@ -3064,6 +3082,7 @@
   "CliStates.dc.html",
   "CliSettings.dc.html",
   "CliHeadless.dc.html",
+  "CliTrace.dc.html",
   "NavApp.dc.html",
   "NavCli.dc.html",
   "Coverage.dc.html",
