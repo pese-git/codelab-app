@@ -2557,6 +2557,40 @@
    "w": 2160,
    "x": 0,
    "y": 10960
+  },
+  "ProjectSecondPick.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11e Open project — second project: Open folder… while a turn runs",
+   "w": 1440,
+   "x": 6080,
+   "y": 20540
+  },
+  "ProjectSecondPick-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11e Open project — dark",
+   "w": 1440,
+   "x": 6080,
+   "y": 20540,
+   "page": "dark"
+  },
+  "ProjectSecondOpen.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11f Open project — second project opened next to the first",
+   "w": 1440,
+   "x": 7600,
+   "y": 20540
+  },
+  "ProjectSecondOpen-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "11f Open project — dark",
+   "w": 1440,
+   "x": 7600,
+   "y": 20540,
+   "page": "dark"
   }
  },
  "createdOnFiles": {
@@ -3416,7 +3450,7 @@
   },
   "row12": {
    "kind": "title1",
-   "maxW": 6000,
+   "maxW": 9040,
    "w": 240,
    "x": 0,
    "y": 20280,
@@ -3426,13 +3460,13 @@
    "fill": "blue",
    "size": 24,
    "w": 460,
-   "x": 6080,
+   "x": 9120,
    "y": 20540,
-   "text": "R-22, требования «Без выбранного проекта нет папки агента и сессий» и «Агент стартует сам» (agent-workbench-ui; change require-project-folder, D1–D17).\n11a — окно без проекта: агент не стартует, «New session» (Ctrl+N) открывает тот же выбор папки, что «Open folder…». Сюда же ведёт «Start using CodeLab» (07a), если проекта нет.\n11b — папка выбрана: проверка существования, старт агента профиля окна в этой папке, затем session/list. Сессия сама не создаётся; «New session» ждёт агента, второй транспорт не открывается.\n11c — агент готов, сессий в проекте нет. Смена проекта не перезапускает агента и не прерывает ходы других папок.\n11d — папки нет на диске: агент не стартует, сессия не создаётся и не загружается; текст из спецификации, запись в диагностике error / project; Retry — тот же триггер.\n11 (ряд «Вход, команды и диалоги») — выбор проекта со списком недавних."
+   "text": "R-22, требования «Без выбранного проекта нет папки агента и сессий» и «Агент стартует сам» (agent-workbench-ui; change require-project-folder, D1–D17).\n11a — окно без проекта: агент не стартует, «New session» (Ctrl+N) открывает тот же выбор папки, что «Open folder…». Сюда же ведёт «Start using CodeLab» (07a), если проекта нет.\n11b — папка выбрана: проверка существования, старт агента профиля окна в этой папке, затем session/list. Сессия сама не создаётся; «New session» ждёт агента, второй транспорт не открывается.\n11c — агент готов, сессий в проекте нет. Смена проекта не перезапускает агента и не прерывает ходы других папок.\n11d — папки нет на диске: агент не стартует, сессия не создаётся и не загружается; текст из спецификации, запись в диагностике error / project; Retry — тот же триггер.\n11e — второй проект при уже открытом: «Open folder…» в сайдбаре (или Ctrl+O → 11) открывает системный выбор папки, пока в первом проекте идёт ход.\n11f — второй проект открыт рядом: обе группы в сайдбаре, агент не перезапущен, ход и одобрение в codelab-app продолжаются; недавний проект открывается так же — раскрытием группы, без диалога.\n11 (ряд «Вход, команды и диалоги») — выбор проекта со списком недавних."
   },
   "d-row12": {
    "kind": "title1",
-   "maxW": 6000,
+   "maxW": 9040,
    "page": "dark",
    "w": 240,
    "x": 0,
@@ -3825,7 +3859,11 @@
   "TabletProjectNotFound-dark.dc.html",
   "NavProject.dc.html",
   "NavPhoneProject.dc.html",
-  "NavTabletProject.dc.html"
+  "NavTabletProject.dc.html",
+  "ProjectSecondPick.dc.html",
+  "ProjectSecondPick-dark.dc.html",
+  "ProjectSecondOpen.dc.html",
+  "ProjectSecondOpen-dark.dc.html"
  ],
  "pages": [
   {
