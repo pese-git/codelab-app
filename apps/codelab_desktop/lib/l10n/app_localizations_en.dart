@@ -3910,7 +3910,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingModeStandardBody =>
-      'Reads run freely; edits, commands and web access ask. Change the default in Settings › Agents & modes, or per session from the composer.';
+      'Reads run freely; edits and commands ask. Change the default in Settings › Agents & modes, or per session from the composer.';
 
   @override
   String get onboardingModeOtherBody =>
@@ -4053,11 +4053,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingPrivacyProviderTag => 'Every turn';
 
   @override
-  String get onboardingPrivacyToolsLabel => 'MCP servers and web tools';
+  String get onboardingPrivacyToolsLabel => 'MCP servers';
 
   @override
   String get onboardingPrivacyToolsBody =>
-      'Tool arguments, a URL or a search query — web access asks you first';
+      'Tool arguments and the headers from your configuration';
 
   @override
   String get onboardingPrivacyToolsTag => 'When used';
@@ -4121,5 +4121,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingNothingToAgreeBody =>
-      'CodeLab asks you to accept nothing and keeps no record of consent.';
+      'These links open the documents inside the app and work offline; Back returns to this step. You can find them later in Settings › Legal.';
+
+  @override
+  String get onboardingPrivacyPolicyLink => 'Read the privacy policy';
+
+  @override
+  String get onboardingTermsLink => 'Terms of use';
+
+  @override
+  String get onboardingDocumentBack => 'Back to setup';
 }

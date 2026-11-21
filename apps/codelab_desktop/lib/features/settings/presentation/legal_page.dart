@@ -26,8 +26,9 @@ import '../application/third_party_notices.dart';
 /// вкладки»). Порты приходят из `CodeLabDependencies.legalPorts`, виджет их не
 /// собирает (AGENTS.md §6).
 ///
-/// Как использовать: вкладку при открытии задаёт `SettingsDestination.legalTab`
-/// (`null` — «Privacy policy»), язык — `AppLanguageCubit`; смена языка при
+/// Как использовать: вкладку при открытии задаёт `initialTab` (onboarding
+/// показывает страницу внутри своего экрана, D10 `add-app-onboarding`), а без
+/// него — `SettingsDestination.legalTab` (`null` — «Privacy policy»), язык — `AppLanguageCubit`; смена языка при
 /// открытой странице уходит в `LegalPageCubit.setLanguage`.
 Widget buildLegalPage(BuildContext context) => const LegalPageHost();
 
@@ -38,7 +39,15 @@ Widget buildLegalPage(BuildContext context) => const LegalPageHost();
 /// `CodeLabDependencies` (зависимость от `InheritedWidget`), а её нельзя
 /// читать в `create`; образец — `GeneralPageHost`.
 class LegalPageHost extends StatefulWidget {
-  const LegalPageHost({super.key});
+  const LegalPageHost({this.initialTab, super.key});
+
+  /// Вкладка при открытии; перекрывает `SettingsDestination.legalTab`.
+  ///
+  /// Почему: onboarding показывает эту страницу внутри своего экрана, вне
+  /// `SettingsDestination` (design.md change `add-app-onboarding`, D10 в
+  /// редакции 2026-11-21). Страница настроек параметр не передаёт, и вкладку
+  /// задаёт назначение.
+  final LegalTab? initialTab;
 
   @override
   State<LegalPageHost> createState() => _LegalPageHostState();
@@ -62,7 +71,8 @@ class _LegalPageHostState extends State<LegalPageHost> {
     // `open` не ждём: страница рисует `Loading`.
     unawaited(
       cubit.open(
-        destination is SettingsDestination ? destination.legalTab : null,
+        widget.initialTab ??
+            (destination is SettingsDestination ? destination.legalTab : null),
         context.read<AppLanguageCubit>().state.locale.languageCode,
       ),
     );

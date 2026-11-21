@@ -223,19 +223,30 @@ void main() {
     await tester.tap(_key('onboarding-privacy-policy'));
     await tester.pumpAndSettle();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await pressShortcut(tester, CodeLabShortcut.openSettings);
     await pressShortcut(tester, CodeLabShortcut.openSettings, useMeta: true);
     await tester.tap(_key('onboarding-finish'), warnIfMissed: false);
     await tester.pumpAndSettle();
 
+    expect(_key('onboarding-document'), findsOneWidget);
+    expect(preferences.marked, 0);
+    expect(
+      binding.scope.resolve<NavigationCubit>().state,
+      const OnboardingDestination(),
+    );
+
+    // Фокус на «Back to setup»: Enter нажимает именно её и закрывает панель, а
+    // «Start using CodeLab» под панелью не срабатывает.
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(_key('onboarding-document'), findsNothing);
     expect(preferences.marked, 0);
     expect(events('onboarding.completed'), isEmpty);
     expect(
       binding.scope.resolve<NavigationCubit>().state,
       const OnboardingDestination(),
     );
-    expect(_key('onboarding-document'), findsOneWidget);
   });
 
   testWidgets('вторая ссылка открывает «Terms of use» на английском; панель '

@@ -5,6 +5,7 @@ import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/platform/onboarding_preferences.dart';
+import '../../settings/application/legal_documents.dart' show LegalTab;
 import 'onboarding_probe.dart';
 import 'onboarding_state.dart';
 
@@ -171,6 +172,7 @@ class OnboardingCubit extends Cubit<OnboardingState> {
   bool wizardStarted() {
     if (isClosed ||
         state.step != OnboardingStep.model ||
+        state.document != null ||
         _wizardPhase == ModelWizard.active) {
       return false;
     }
@@ -201,11 +203,47 @@ class OnboardingCubit extends Cubit<OnboardingState> {
     _logger?.debug('onboarding.step_shown', context: {'step': step.name});
   }
 
+  /// Открывает просмотр правового документа [tab] на шаге «Privacy» (D10 в
+  /// редакции 2026-11-21).
+  ///
+  /// Почему здесь: навигация app остаётся на `OnboardingDestination`, а то, что
+  /// показано поверх шага, — состояние экрана onboarding; сводка провайдера и
+  /// факты при этом не меняются. Возвращает `false`, если открыть нельзя: шаг
+  /// не «Privacy», документ или мастер уже открыты, идёт завершение или Cubit
+  /// закрыт.
+  ///
+  /// Как использовать: ссылки шага вызывают [openDocument], панель документа —
+  /// [closeDocument]. Событие `onboarding.document_opened {tab}` без путей.
+  bool openDocument(LegalTab tab) {
+    if (isClosed ||
+        state.step != OnboardingStep.privacy ||
+        state.document != null ||
+        state.finishing ||
+        _wizardPhase == ModelWizard.active) {
+      return false;
+    }
+    emit(state.copyWith(document: tab));
+    _logger?.info('onboarding.document_opened', context: {'tab': tab.logName});
+    return true;
+  }
+
+  /// Закрывает просмотр документа: шаг «Privacy» в прежнем виде. Без открытого
+  /// документа и после `close()` ничего не делает. Событие
+  /// `onboarding.document_closed {tab}` (debug).
+  void closeDocument() {
+    final tab = state.document;
+    if (isClosed || tab == null) {
+      return;
+    }
+    emit(state.copyWith(clearDocument: true));
+    _logger?.debug('onboarding.document_closed', context: {'tab': tab.logName});
+  }
+
   /// «Next»: переходы D4. На шаге «Permissions» при неизвестной готовности
   /// ждёт итога чтения (не дольше таймаута); повторное нажатие в ожидании
   /// игнорируется.
   Future<void> next() async {
-    if (_wizardPhase == ModelWizard.active) {
+    if (state.document != null || _wizardPhase == ModelWizard.active) {
       return;
     }
     switch (state.step) {
@@ -235,7 +273,7 @@ class OnboardingCubit extends Cubit<OnboardingState> {
 
   /// «Back»: на «Privacy» ведёт на «Choose a model», если шаг не пропущен.
   void back() {
-    if (_wizardPhase == ModelWizard.active) {
+    if (state.document != null || _wizardPhase == ModelWizard.active) {
       return;
     }
     switch (state.step) {
@@ -257,6 +295,7 @@ class OnboardingCubit extends Cubit<OnboardingState> {
   void setUpLater() {
     if (state.step != OnboardingStep.model ||
         state.model is! ModelChoose ||
+        state.document != null ||
         _wizardPhase == ModelWizard.active) {
       return;
     }
@@ -319,7 +358,9 @@ class OnboardingCubit extends Cubit<OnboardingState> {
   /// Сбой записи не запирает пользователя: onboarding покажется при
   /// следующем запуске. Повторный вызов во время записи игнорируется.
   Future<void> finish() async {
-    if (state.step != OnboardingStep.privacy || state.finishing) {
+    if (state.step != OnboardingStep.privacy ||
+        state.finishing ||
+        state.document != null) {
       return;
     }
     emit(state.copyWith(finishing: true));

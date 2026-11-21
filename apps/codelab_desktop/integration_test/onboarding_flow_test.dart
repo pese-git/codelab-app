@@ -144,6 +144,17 @@ void main() {
       await _tapKey(tester, 'onboarding-next');
       await _pumpUntil(tester, _key('onboarding-step-privacy'));
       expect(find.textContaining('secrets.yaml'), findsWidgets);
+
+      // Документ внутри onboarding (D10, редакция 2026-11-21): политика
+      // открывается поверх шага настоящим ресурсом `assets/legal/PRIVACY.md`,
+      // «Back to setup» возвращает на «Privacy» с прежним состоянием.
+      await _tapKey(tester, 'onboarding-privacy-policy');
+      await _pumpUntil(tester, _key('onboarding-document'));
+      await _pumpUntil(tester, _key('settings-legal'));
+      expect(find.byType(OnboardingScreen), findsOneWidget);
+      await _tapKey(tester, 'onboarding-document-back');
+      await _pumpUntil(tester, _key('onboarding-step-privacy'));
+      expect(_key('onboarding-document'), findsNothing);
       await _tapKey(tester, 'onboarding-finish');
       await _pumpUntil(tester, find.byType(CodeLabShell));
       expect(find.byType(OnboardingScreen), findsNothing);
@@ -179,6 +190,8 @@ void main() {
       final events = entries.map((e) => e['event']).toList();
       expect(events, contains('onboarding.shown'));
       expect(events, contains('onboarding.model_saved'));
+      expect(events, contains('onboarding.document_opened'));
+      expect(events, contains('onboarding.document_closed'));
       final completed = entries.singleWhere(
         (e) => e['event'] == 'onboarding.completed',
       );

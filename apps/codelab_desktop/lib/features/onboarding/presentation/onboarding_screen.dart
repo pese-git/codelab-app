@@ -6,6 +6,8 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../l10n/l10n.dart';
+import '../../settings/application/legal_documents.dart' show LegalTab;
+import '../../settings/presentation/legal_page.dart' show LegalPageHost;
 import '../../settings/presentation/provider_wizard_dialog.dart';
 import '../application/onboarding_cubit.dart';
 import '../application/onboarding_state.dart';
@@ -47,6 +49,15 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _titleFocus = FocusNode(debugLabel: 'OnboardingTitle');
+  final _backFocus = FocusNode(debugLabel: 'OnboardingDocumentBack');
+  final _policyFocus = FocusNode(debugLabel: 'OnboardingPolicyLink');
+  final _termsFocus = FocusNode(debugLabel: 'OnboardingTermsLink');
+
+  /// Вкладка, которую открывали последней: туда возвращается фокус.
+  LegalTab? _lastDocument;
+
+  /// Просмотр, для которого фокус уже переведён.
+  LegalTab? _handledDocument;
   String? _selectedPreset;
 
   @override
@@ -58,6 +69,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void dispose() {
     _titleFocus.dispose();
+    _backFocus.dispose();
+    _policyFocus.dispose();
+    _termsFocus.dispose();
     super.dispose();
   }
 
@@ -65,6 +79,31 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _titleFocus.requestFocus();
+      }
+    });
+  }
+
+  /// Открывает документ [tab]: состояние держит Cubit, фокус уходит на кнопку
+  /// «Back to setup» панели (D10).
+  void _openDocument(LegalTab tab) {
+    final cubit = context.read<OnboardingCubit>();
+    if (cubit.openDocument(tab)) {
+      _lastDocument = tab;
+    }
+  }
+
+  /// Фокус после смены состояния просмотра: на кнопку панели при открытии, на
+  /// ссылку, открывшую документ, при закрытии (D10).
+  void _focusAfterDocumentChange(LegalTab? document) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      if (document != null) {
+        _backFocus.requestFocus();
+      } else {
+        (_lastDocument == LegalTab.termsOfUse ? _termsFocus : _policyFocus)
+            .requestFocus();
       }
     });
   }
@@ -119,8 +158,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final l10n = context.l10n;
     final cubit = context.read<OnboardingCubit>();
     return BlocConsumer<OnboardingCubit, OnboardingState>(
-      listenWhen: (previous, current) => previous.step != current.step,
-      listener: (context, state) => _focusTitleAfterFrame(),
+      listenWhen: (previous, current) =>
+          previous.step != current.step ||
+          previous.document != current.document,
+      listener: (context, state) {
+        // Смена просмотра документа важнее смены шага: фокус ведёт
+        // `_focusAfterDocumentChange`, иначе — заголовок нового шага.
+        if (state.document != _handledDocument) {
+          _handledDocument = state.document;
+          _focusAfterDocumentChange(state.document);
+        } else {
+          _focusTitleAfterFrame();
+        }
+      },
       builder: (context, state) {
         final labels = [
           l10n.onboardingStepWelcome,
@@ -129,61 +179,140 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           l10n.onboardingStepPrivacy,
         ];
         final current = state.step.index;
-        return ColoredBox(
-          key: const ValueKey('onboarding-screen'),
-          color: FluentTheme.of(context).scaffoldBackgroundColor,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: Center(
-              child: ConstrainedBox(
-                key: const ValueKey('onboarding-content'),
-                constraints: const BoxConstraints(maxWidth: 920),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    CodeLabText(
-                      l10n.onboardingHeader,
-                      role: CodeLabTextRole.caption,
+        final document = state.document;
+        final background = FluentTheme.of(context).scaffoldBackgroundColor;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // Под панелью документа шаг не получает ни фокуса, ни Enter (D10).
+            ExcludeFocus(
+              excluding: document != null,
+              child: ColoredBox(
+                key: const ValueKey('onboarding-screen'),
+                color: background,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
+                    child: ConstrainedBox(
+                      key: const ValueKey('onboarding-content'),
+                      constraints: const BoxConstraints(maxWidth: 920),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          CodeLabText(
+                            l10n.onboardingHeader,
+                            role: CodeLabTextRole.caption,
+                          ),
+                          const SizedBox(height: 12),
+                          CodeLabSetupSteps(
+                            key: const ValueKey('onboarding-steps'),
+                            steps: labels,
+                            current: current,
+                            // Пропущенный шаг показывается отмеченным, как
+                            // пройденный (D4).
+                            done: {
+                              for (var i = 0; i < current; i++) i,
+                              if (state.model is ModelSkipped)
+                                OnboardingStep.model.index,
+                            },
+                          ),
+                          const SizedBox(height: 28),
+                          OnboardingStepBody(
+                            state: state,
+                            titleFocus: _titleFocus,
+                            appLogsLabel: widget.appLogsLabel,
+                            selectedPreset: _selectedPreset,
+                            onSelectPreset: (id) =>
+                                setState(() => _selectedPreset = id),
+                            onOpenDocument: _openDocument,
+                            policyLinkFocus: _policyFocus,
+                            termsLinkFocus: _termsFocus,
+                          ),
+                          const SizedBox(height: 28),
+                          OnboardingNavigation(
+                            state: state,
+                            selectedPreset: _selectedPreset,
+                            onBack: cubit.back,
+                            onNext: () => unawaited(cubit.next()),
+                            onFinish: () => unawaited(cubit.finish()),
+                            onLater: cubit.setUpLater,
+                            onSetUp: _openWizard,
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    CodeLabSetupSteps(
-                      key: const ValueKey('onboarding-steps'),
-                      steps: labels,
-                      current: current,
-                      // Пропущенный шаг показывается отмеченным, как
-                      // пройденный (D4).
-                      done: {
-                        for (var i = 0; i < current; i++) i,
-                        if (state.model is ModelSkipped)
-                          OnboardingStep.model.index,
-                      },
-                    ),
-                    const SizedBox(height: 28),
-                    OnboardingStepBody(
-                      state: state,
-                      titleFocus: _titleFocus,
-                      appLogsLabel: widget.appLogsLabel,
-                      selectedPreset: _selectedPreset,
-                      onSelectPreset: (id) =>
-                          setState(() => _selectedPreset = id),
-                    ),
-                    const SizedBox(height: 28),
-                    OnboardingNavigation(
-                      state: state,
-                      selectedPreset: _selectedPreset,
-                      onBack: cubit.back,
-                      onNext: () => unawaited(cubit.next()),
-                      onFinish: () => unawaited(cubit.finish()),
-                      onLater: cubit.setUpLater,
-                      onSetUp: _openWizard,
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
+            if (document != null)
+              _DocumentPanel(
+                tab: document,
+                background: background,
+                backFocus: _backFocus,
+                onClose: context.read<OnboardingCubit>().closeDocument,
+              ),
+          ],
         );
       },
     );
   }
+}
+
+/// Панель правового документа поверх шага «Privacy» (design.md change
+/// `add-app-onboarding`, D10 в редакции 2026-11-21).
+///
+/// Почему панель, а не переход в настройки: документ читают внутри экрана
+/// onboarding, назначение навигации остаётся `OnboardingDestination` (D1), а
+/// состояние шагов не теряется (D5). Тело — та же `LegalPage` страницы
+/// настроек (`LegalPageHost(initialTab:)`): второго рендера правовых текстов
+/// нет (§12.7.7а).
+///
+/// Для чего: шапка с кнопкой «Back to setup» (`onboarding-document-back`) и
+/// страница «Legal» на вкладке [tab]. «Back to setup» и Esc закрывают панель
+/// (`closeOverlay` каталога кита); при открытии фокус на кнопке.
+///
+/// Как использовать: экран показывает панель, пока `OnboardingState.document`
+/// не `null`; `LegalPageCubit` создаётся при показе и закрывается при закрытии.
+class _DocumentPanel extends StatelessWidget {
+  const _DocumentPanel({
+    required this.tab,
+    required this.background,
+    required this.backFocus,
+    required this.onClose,
+  });
+
+  final LegalTab tab;
+  final Color background;
+  final FocusNode backFocus;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) => CallbackShortcuts(
+    bindings: CodeLabShortcut.closeOverlay.bind(onClose),
+    child: FocusScope(
+      child: ColoredBox(
+        key: const ValueKey('onboarding-document'),
+        color: background,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Button(
+                  key: const ValueKey('onboarding-document-back'),
+                  focusNode: backFocus,
+                  onPressed: onClose,
+                  child: Text(context.l10n.onboardingDocumentBack),
+                ),
+              ),
+            ),
+            Expanded(child: LegalPageHost(initialTab: tab)),
+          ],
+        ),
+      ),
+    ),
+  );
 }

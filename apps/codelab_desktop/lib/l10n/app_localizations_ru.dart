@@ -3973,7 +3973,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingModeStandardBody =>
-      'Чтение идёт свободно; правки, команды и доступ в сеть спрашивают. Режим по умолчанию меняется в «Настройки › Агенты и режимы» или для сессии в композере.';
+      'Чтение идёт свободно; правки и команды спрашивают. Режим по умолчанию меняется в «Настройки › Агенты и режимы» или для сессии в композере.';
 
   @override
   String get onboardingModeOtherBody =>
@@ -4121,11 +4121,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get onboardingPrivacyProviderTag => 'Каждый ход';
 
   @override
-  String get onboardingPrivacyToolsLabel => 'MCP-серверы и веб-инструменты';
+  String get onboardingPrivacyToolsLabel => 'MCP-серверы';
 
   @override
   String get onboardingPrivacyToolsBody =>
-      'Аргументы инструмента, адрес или поисковый запрос — доступ в сеть сначала спрашивает вас';
+      'Аргументы инструмента и заголовки из вашей конфигурации';
 
   @override
   String get onboardingPrivacyToolsTag => 'При использовании';
@@ -4189,5 +4189,15 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingNothingToAgreeBody =>
-      'CodeLab ничего не просит принять и не хранит записей о согласии.';
+      'Эти ссылки открывают документы внутри приложения и работают без сети; «Назад» вернёт на этот шаг. Позже их можно найти в «Настройки › Правовая информация».';
+
+  @override
+  String get onboardingPrivacyPolicyLink =>
+      'Прочитать политику конфиденциальности';
+
+  @override
+  String get onboardingTermsLink => 'Условия использования';
+
+  @override
+  String get onboardingDocumentBack => 'Назад к настройке';
 }

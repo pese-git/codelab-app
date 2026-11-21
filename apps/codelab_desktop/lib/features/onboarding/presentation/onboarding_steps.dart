@@ -9,6 +9,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../../../l10n/l10n.dart';
+import '../../settings/application/legal_documents.dart' show LegalTab;
 import '../../settings/application/provider_wizard_view.dart'
     show wizardPresetLabel;
 import '../application/onboarding_probe.dart';
@@ -35,11 +36,22 @@ class OnboardingStepBody extends StatelessWidget {
     required this.appLogsLabel,
     required this.selectedPreset,
     required this.onSelectPreset,
+    required this.onOpenDocument,
+    required this.policyLinkFocus,
+    required this.termsLinkFocus,
     super.key,
   });
 
   final OnboardingState state;
   final FocusNode titleFocus;
+
+  /// Открывает правовой документ внутри onboarding (D10).
+  final ValueChanged<LegalTab> onOpenDocument;
+
+  /// Узлы фокуса ссылок: после закрытия панели фокус возвращается на ту,
+  /// что её открыла.
+  final FocusNode policyLinkFocus;
+  final FocusNode termsLinkFocus;
 
   /// Подпись каталога логов app из composition root: известна без фактов
   /// (design.md D9, ревью 2026-11-21, п. 4).
@@ -70,7 +82,15 @@ class OnboardingStepBody extends StatelessWidget {
       ),
       OnboardingStep.privacy => (
         l10n.onboardingPrivacyTitle,
-        _Privacy(l10n: l10n, facts: state.facts, appLogsLabel: appLogsLabel),
+        _Privacy(
+          l10n: l10n,
+          facts: state.facts,
+          appLogsLabel: appLogsLabel,
+          finishing: state.finishing,
+          onOpenDocument: onOpenDocument,
+          policyLinkFocus: policyLinkFocus,
+          termsLinkFocus: termsLinkFocus,
+        ),
       ),
     };
     return Column(
@@ -119,7 +139,7 @@ class OnboardingNavigation extends StatelessWidget {
     final model = state.model;
     // Пока мастер открывается или открыт, навигация шага неактивна (D8, ревью
     // 2026-11-21, п. 6): Cubit игнорирует нажатия, кнопки это показывают.
-    final busy = _wizardActive(model);
+    final busy = _wizardActive(model) || state.document != null;
     final actions = <Widget>[];
     switch (state.step) {
       case OnboardingStep.welcome || OnboardingStep.permissions:
@@ -635,11 +655,19 @@ class _Privacy extends StatelessWidget {
     required this.l10n,
     required this.facts,
     required this.appLogsLabel,
+    required this.finishing,
+    required this.onOpenDocument,
+    required this.policyLinkFocus,
+    required this.termsLinkFocus,
   });
 
   final AppLocalizations l10n;
   final OnboardingFactsState facts;
   final String appLogsLabel;
+  final bool finishing;
+  final ValueChanged<LegalTab> onOpenDocument;
+  final FocusNode policyLinkFocus;
+  final FocusNode termsLinkFocus;
 
   String _stays() {
     final loaded = facts is FactsLoaded ? (facts as FactsLoaded).facts : null;
@@ -723,6 +751,30 @@ class _Privacy extends StatelessWidget {
               ],
             ),
           ),
+        const SizedBox(height: 8),
+        // Ссылки открывают документы внутри экрана onboarding, а не уводят в
+        // настройки (D10, редакция 2026-11-21).
+        Wrap(
+          spacing: 16,
+          children: [
+            HyperlinkButton(
+              key: const ValueKey('onboarding-privacy-policy'),
+              focusNode: policyLinkFocus,
+              onPressed: finishing
+                  ? null
+                  : () => onOpenDocument(LegalTab.privacyPolicy),
+              child: Text(l10n.onboardingPrivacyPolicyLink),
+            ),
+            HyperlinkButton(
+              key: const ValueKey('onboarding-terms-of-use'),
+              focusNode: termsLinkFocus,
+              onPressed: finishing
+                  ? null
+                  : () => onOpenDocument(LegalTab.termsOfUse),
+              child: Text(l10n.onboardingTermsLink),
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
         InfoBar(
           key: const ValueKey('onboarding-privacy-nothing-to-agree'),

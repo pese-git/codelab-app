@@ -884,6 +884,19 @@ void main() {
           available: {SettingsPage.connection, SettingsPage.legal},
         ),
       );
+      // Назначение задаётся до построения хозяина: он читает вкладку один раз
+      // при открытии.
+      if (destinationTab != null) {
+        final navigation = binding.scope.resolve<NavigationCubit>();
+        await navigation.openSettings(
+          page: SettingsPage.connection,
+          source: SettingsOpenSource.sidebar,
+        );
+        await navigation.selectSettingsPage(
+          SettingsPage.legal,
+          legalTab: destinationTab,
+        );
+      }
       await tester.pumpWidget(
         binding.bootstrap(
           child: Builder(
@@ -902,17 +915,6 @@ void main() {
           ),
         ),
       );
-      if (destinationTab != null) {
-        final navigation = binding.scope.resolve<NavigationCubit>();
-        await navigation.openSettings(
-          page: SettingsPage.connection,
-          source: SettingsOpenSource.sidebar,
-        );
-        await navigation.selectSettingsPage(
-          SettingsPage.legal,
-          legalTab: destinationTab,
-        );
-      }
       await tester.pumpAndSettle();
       return binding;
     }

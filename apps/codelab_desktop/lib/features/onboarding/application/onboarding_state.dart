@@ -1,3 +1,4 @@
+import '../../settings/application/legal_documents.dart' show LegalTab;
 import 'onboarding_probe.dart';
 
 /// Шаг onboarding в порядке показа (design.md change `add-app-onboarding`,
@@ -175,6 +176,7 @@ final class OnboardingState {
     this.facts = const FactsLoading(),
     this.model = const ModelPending(),
     this.finishing = false,
+    this.document,
   });
 
   final OnboardingStep step;
@@ -182,16 +184,25 @@ final class OnboardingState {
   final OnboardingModelStep model;
   final bool finishing;
 
+  /// Открытый правовой документ шага «Privacy» (design.md change
+  /// `add-app-onboarding`, D10 в редакции 2026-11-21); `null` — просмотра нет.
+  /// Пока он не `null`, кнопки шага не действуют.
+  final LegalTab? document;
+
+  /// [clearDocument] нужен, потому что `null` у [document] — значимое значение.
   OnboardingState copyWith({
     OnboardingStep? step,
     OnboardingFactsState? facts,
     OnboardingModelStep? model,
     bool? finishing,
+    LegalTab? document,
+    bool clearDocument = false,
   }) => OnboardingState(
     step: step ?? this.step,
     facts: facts ?? this.facts,
     model: model ?? this.model,
     finishing: finishing ?? this.finishing,
+    document: clearDocument ? null : (document ?? this.document),
   );
 
   @override

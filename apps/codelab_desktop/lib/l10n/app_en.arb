@@ -5365,7 +5365,7 @@
       }
     }
   },
-  "onboardingModeStandardBody": "Reads run freely; edits, commands and web access ask. Change the default in Settings › Agents & modes, or per session from the composer.",
+  "onboardingModeStandardBody": "Reads run freely; edits and commands ask. Change the default in Settings › Agents & modes, or per session from the composer.",
   "@onboardingModeStandardBody": {
     "description": "Текст InfoBar при режиме standard или недоступных фактах. Метка security."
   },
@@ -5570,11 +5570,11 @@
   "@onboardingPrivacyProviderTag": {
     "description": "Тег строки. Метка security."
   },
-  "onboardingPrivacyToolsLabel": "MCP servers and web tools",
+  "onboardingPrivacyToolsLabel": "MCP servers",
   "@onboardingPrivacyToolsLabel": {
     "description": "Строка шага «Privacy». MCP не переводить."
   },
-  "onboardingPrivacyToolsBody": "Tool arguments, a URL or a search query — web access asks you first",
+  "onboardingPrivacyToolsBody": "Tool arguments and the headers from your configuration",
   "@onboardingPrivacyToolsBody": {
     "description": "Описание строки. Метка security."
   },
@@ -5689,8 +5689,20 @@
   "@onboardingNothingToAgreeTitle": {
     "description": "Заголовок InfoBar шага «Privacy» (D-29)."
   },
-  "onboardingNothingToAgreeBody": "CodeLab asks you to accept nothing and keeps no record of consent.",
+  "onboardingNothingToAgreeBody": "These links open the documents inside the app and work offline; Back returns to this step. You can find them later in Settings › Legal.",
   "@onboardingNothingToAgreeBody": {
     "description": "Текст InfoBar шага «Privacy». Метка security."
+  },
+  "onboardingPrivacyPolicyLink": "Read the privacy policy",
+  "@onboardingPrivacyPolicyLink": {
+    "description": "Ссылка шага «Privacy», открывает политику конфиденциальности внутри onboarding (D10)."
+  },
+  "onboardingTermsLink": "Terms of use",
+  "@onboardingTermsLink": {
+    "description": "Ссылка шага «Privacy», открывает условия использования внутри onboarding (D10)."
+  },
+  "onboardingDocumentBack": "Back to setup",
+  "@onboardingDocumentBack": {
+    "description": "Кнопка панели документа: закрывает просмотр и возвращает на шаг «Privacy» (D10)."
   }
 }

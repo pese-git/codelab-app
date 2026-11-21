@@ -6208,7 +6208,7 @@ abstract class AppLocalizations {
   /// Текст InfoBar при режиме standard или недоступных фактах. Метка security.
   ///
   /// In en, this message translates to:
-  /// **'Reads run freely; edits, commands and web access ask. Change the default in Settings › Agents & modes, or per session from the composer.'**
+  /// **'Reads run freely; edits and commands ask. Change the default in Settings › Agents & modes, or per session from the composer.'**
   String get onboardingModeStandardBody;
 
   /// Текст InfoBar при режиме не standard (общий с CLI конфиг). Метка security: говорит правду о режиме (D7).
@@ -6410,13 +6410,13 @@ abstract class AppLocalizations {
   /// Строка шага «Privacy». MCP не переводить.
   ///
   /// In en, this message translates to:
-  /// **'MCP servers and web tools'**
+  /// **'MCP servers'**
   String get onboardingPrivacyToolsLabel;
 
   /// Описание строки. Метка security.
   ///
   /// In en, this message translates to:
-  /// **'Tool arguments, a URL or a search query — web access asks you first'**
+  /// **'Tool arguments and the headers from your configuration'**
   String get onboardingPrivacyToolsBody;
 
   /// Тег строки. Метка security.
@@ -6512,8 +6512,26 @@ abstract class AppLocalizations {
   /// Текст InfoBar шага «Privacy». Метка security.
   ///
   /// In en, this message translates to:
-  /// **'CodeLab asks you to accept nothing and keeps no record of consent.'**
+  /// **'These links open the documents inside the app and work offline; Back returns to this step. You can find them later in Settings › Legal.'**
   String get onboardingNothingToAgreeBody;
+
+  /// Ссылка шага «Privacy», открывает политику конфиденциальности внутри onboarding (D10).
+  ///
+  /// In en, this message translates to:
+  /// **'Read the privacy policy'**
+  String get onboardingPrivacyPolicyLink;
+
+  /// Ссылка шага «Privacy», открывает условия использования внутри onboarding (D10).
+  ///
+  /// In en, this message translates to:
+  /// **'Terms of use'**
+  String get onboardingTermsLink;
+
+  /// Кнопка панели документа: закрывает просмотр и возвращает на шаг «Privacy» (D10).
+  ///
+  /// In en, this message translates to:
+  /// **'Back to setup'**
+  String get onboardingDocumentBack;
 }
 
 class _AppLocalizationsDelegate

@@ -423,6 +423,12 @@
 | Stays here | Остаётся здесь | `security` |
 | Every turn · When used · Never · Local | Каждый ход · При использовании · Никогда · Локально | теги шага 4 |
 | Nothing to agree to | Принимать нечего | D-29 |
+| Read the privacy policy | Прочитать политику конфиденциальности | ссылка шага 4; открывает документ внутри onboarding (D10) |
+| Terms of use (ссылка шага 4) | Условия использования | совпадает с вкладкой «Legal» (§«Страница «Legal»») |
+| Back to setup | Назад к настройке | кнопка панели документа; не «Back» шага |
+| MCP servers (шаг 4) | MCP-серверы | строка сети; web-инструментов в сборке нет (D9) |
+| Reading the agent settings… | Читаются настройки агента… | шаг 2, пока факты читаются; `security` |
+| Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes. | Не удалось прочитать настройки агента. Режим новых сессий виден в «Настройки › Агенты и режимы». | шаг 2 при недоступных фактах; `security` |
 | The key stays on this computer. | Ключ остаётся на этом компьютере. | `security` |
 
 ### Страница «Legal»
