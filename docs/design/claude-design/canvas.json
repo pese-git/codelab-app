@@ -2104,6 +2104,22 @@
    "y": 1600,
    "page": "tablet-dark",
    "title": "T15 Tablet — Protocol pane, Log tab — dark"
+  },
+  "TabletProtocolFrames.dc.html": {
+   "h": 820,
+   "page": "tablet",
+   "title": "T15a Tablet — Protocol pane, Frames tab",
+   "w": 1180,
+   "x": 5040,
+   "y": 1600
+  },
+  "TabletProtocolFrames-dark.dc.html": {
+   "h": 820,
+   "w": 1180,
+   "x": 5040,
+   "y": 1600,
+   "page": "tablet-dark",
+   "title": "T15a Tablet — Protocol pane, Frames tab — dark"
   }
  },
  "createdOnFiles": {
@@ -2662,7 +2678,7 @@
   },
   "t-row2": {
    "kind": "title1",
-   "maxW": 5500,
+   "maxW": 6800,
    "page": "tablet",
    "text": "Планшет: настройки, файлы, палитра, протокол",
    "w": 240,
@@ -2921,13 +2937,13 @@
    "text": "Планшет: граф первого запуска"
   },
   "t-row2s": {
-   "x": 5040,
+   "x": 6300,
    "y": 1600,
    "w": 460,
    "size": "m",
    "fill": "teal",
    "page": "tablet",
-   "text": "T15 — панель Protocol на планшете, вкладка Log: та же панель, что 18a на десктопе, в выдвижном доке поверх ленты (§12.8.5). Открывается из палитры или Cmd+Shift+I, в шапке своего переключателя нет. Колонка Category ушла в фильтр, имя компонента — в начале события. Строки и кнопки ≥ 44 px. Export… отдаёт файл системному меню «Поделиться»."
+   "text": "T15 и T15a — панель Protocol на планшете, вкладки Log и Frames: та же панель, что 18a и 18 на десктопе, в выдвижном доке поверх ленты (§12.8.5). Открывается из палитры или Cmd+Shift+I, в шапке своего переключателя нет. Log: колонка Category ушла в фильтр, имя компонента — в начале события. Frames: выделен ответ с ошибкой −32603 на запрос id 5 — сюда ведёт «Show frame in Frames» из T15, обратно — «Show record in Log». Строки и кнопки ≥ 44 px. Export… отдаёт файл системному меню «Поделиться»."
   }
  },
  "order": [
@@ -3025,6 +3041,7 @@
   "TabletFiles.dc.html",
   "TabletPalette.dc.html",
   "TabletProtocolLog.dc.html",
+  "TabletProtocolFrames.dc.html",
   "Terminal.dc.html",
   "Terminal-dark.dc.html",
   "SplitView.dc.html",
@@ -3079,6 +3096,7 @@
   "TabletFiles-dark.dc.html",
   "TabletPalette-dark.dc.html",
   "TabletProtocolLog-dark.dc.html",
+  "TabletProtocolFrames-dark.dc.html",
   "TabletPortrait-dark.dc.html",
   "TabletSettings-dark.dc.html",
   "TabletSplit-dark.dc.html",
