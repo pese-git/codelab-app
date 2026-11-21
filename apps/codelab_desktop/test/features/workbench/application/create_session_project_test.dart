@@ -2,6 +2,8 @@
 // spec agent-workbench-ui «New session без проекта открывает выбор папки»;
 // design.md D5).
 
+import 'dart:async';
+
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
@@ -24,6 +26,21 @@ final class _RecordingPicker implements ProjectFolderPicker {
     picks++;
     return answer;
   }
+}
+
+/// Выбор папки, который завершает тест: пока [complete] не вызван, диалог
+/// «открыт».
+final class _GatedPicker implements ProjectFolderPicker {
+  var picks = 0;
+  Completer<String?>? _open;
+
+  @override
+  Future<String?> pickFolder({String? initialDirectory}) {
+    picks++;
+    return (_open = Completer<String?>()).future;
+  }
+
+  void complete(String? path) => _open!.complete(path);
 }
 
 void main() {
@@ -87,5 +104,48 @@ void main() {
     expect(picker.picks, 1);
     expect(cubit.state.selectedProjectPath, isNull);
     expect(cubit.state.sessions, isEmpty);
+  });
+
+  // Задача 3.5 change `add-empty-project-screen` (spec «Второй запрос при
+  // открытом диалоге»; design.md D7): с Ctrl+O появился третий путь к выбору
+  // папки, и повторный запрос при открытом системном диалоге не должен
+  // открывать второй диалог.
+  test('while the folder dialog is open, a second request and New session do '
+      'not open another dialog; all see the chosen project', () async {
+    final picker = _GatedPicker();
+    final binding = CodeLabTestBinding(projectFolderPicker: picker);
+    final cubit = binding.scope.resolve<CodeLabShellCubit>();
+    await binding.scope.resolve<CodeLabShellParts>().settings.projectRestored;
+
+    final first = cubit.browseForProject();
+    final second = cubit.browseForProject();
+    final third = cubit.createSession();
+    await pumpEventQueue();
+    expect(picker.picks, 1);
+
+    picker.complete('/work/app');
+    await Future.wait([first, second, third]);
+
+    expect(picker.picks, 1);
+    expect(cubit.state.selectedProjectPath, '/work/app');
+  });
+
+  test('after the dialog is closed without a choice, the next request opens '
+      'a new dialog', () async {
+    final picker = _GatedPicker();
+    final binding = CodeLabTestBinding(projectFolderPicker: picker);
+    final cubit = binding.scope.resolve<CodeLabShellCubit>();
+    await binding.scope.resolve<CodeLabShellParts>().settings.projectRestored;
+
+    final first = cubit.browseForProject();
+    await pumpEventQueue();
+    picker.complete(null);
+    await first;
+    final second = cubit.browseForProject();
+    await pumpEventQueue();
+
+    expect(picker.picks, 2);
+    picker.complete(null);
+    await second;
   });
 }

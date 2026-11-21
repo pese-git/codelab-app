@@ -250,14 +250,14 @@ void main() {
       }
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-    testWidgets('полный список на Linux: пять групп и 20 строк по порядку, '
+    testWidgets('полный список на Linux: пять групп и 21 строка по порядку, '
         'тексты символ в символ', (tester) async {
       await _pumpPage(tester);
 
       expect(_rowKeysOnScreen(tester).toSet(), {
         for (final row in keyboardRows) row.id,
       });
-      expect(_rowKeysOnScreen(tester), hasLength(20));
+      expect(_rowKeysOnScreen(tester), hasLength(21));
       for (final group in keyboardGroups) {
         expect(_group(group.slug), findsOneWidget, reason: group.slug);
         expect(
@@ -343,10 +343,10 @@ void main() {
     testWidgets('сочетаний без поведения нет', (tester) async {
       await _pumpPage(tester);
 
-      expect(_rowKeysOnScreen(tester), hasLength(20));
+      expect(_rowKeysOnScreen(tester), hasLength(21));
       for (final id in _rowKeysOnScreen(tester)) {
         final caps = _caps(tester, _row(id));
-        for (final forbidden in const ['/', 'I', 'F', r'\', 'D', 'O', '`']) {
+        for (final forbidden in const ['/', 'I', 'F', r'\', 'D', '`']) {
           expect(caps, isNot(contains(forbidden)), reason: '$id: $forbidden');
         }
         // Alt+←/→ зарезервированы за инспектором, но не привязаны (DSK-18).
@@ -448,6 +448,53 @@ void main() {
       }
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
+    testWidgets('строка «Open folder»: на macOS в группе Global сразу после '
+        'new-session, кейкапы ⌘ O', (tester) async {
+      await _pumpPage(tester);
+
+      expect(
+        find.descendant(
+          of: _row('open-folder'),
+          matching: find.text('Open a folder as the project'),
+        ),
+        findsOneWidget,
+      );
+      expect(_caps(tester, _row('open-folder')), ['⌘', 'O']);
+      expect(
+        find.descendant(
+          of: _row('open-folder'),
+          matching: find.text('Workbench'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        tester.getTopLeft(_row('open-folder')).dy,
+        greaterThan(tester.getTopLeft(_row('new-session')).dy),
+      );
+      expect(
+        tester.getTopLeft(_row('open-folder')).dy,
+        lessThan(tester.getTopLeft(_row('open-settings')).dy),
+      );
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets('поиск строки «Open folder»: «ctrl o» — только группа '
+        'Global со строкой open-folder', (tester) async {
+      await _pumpPage(tester);
+
+      await _type(tester, 'ctrl o');
+
+      expect(_rowKeysOnScreen(tester), ['open-folder']);
+      expect(_group('global'), findsOneWidget);
+      for (final slug in const [
+        'navigation',
+        'transcript',
+        'composer',
+        'approvals',
+      ]) {
+        expect(_group(slug), findsNothing, reason: slug);
+      }
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
     testWidgets('«⌘K» на Linux находит command-palette с кейкапами Ctrl K', (
       tester,
     ) async {
@@ -488,7 +535,7 @@ void main() {
     testWidgets('«zzz»: ни таблицы, ни групп, строка пустого результата, '
         'footer на месте', (tester) async {
       await _pumpPage(tester);
-      expect(_rowKeysOnScreen(tester), hasLength(20));
+      expect(_rowKeysOnScreen(tester), hasLength(21));
 
       await _type(tester, 'zzz');
 
@@ -503,7 +550,7 @@ void main() {
 
     testWidgets('«Where» в поиске не участвует: «files tree»', (tester) async {
       await _pumpPage(tester);
-      expect(_rowKeysOnScreen(tester), hasLength(20));
+      expect(_rowKeysOnScreen(tester), hasLength(21));
 
       await _type(tester, 'files tree');
 
@@ -520,7 +567,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await _pumpPage(tester);
 
-      expect(_rowKeysOnScreen(tester), hasLength(20));
+      expect(_rowKeysOnScreen(tester), hasLength(21));
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
   });
 

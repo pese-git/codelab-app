@@ -27,6 +27,7 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/core/platform/connection_preferences.dart';
+import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/features/settings/application/add_profile_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/agents_modes_cubit.dart';
 import 'package:codelab_desktop/features/settings/application/provider_wizard_cubit.dart';
@@ -56,6 +57,17 @@ import '../../../support/start_agent.dart';
 import '../../../support/test_app_scope.dart';
 
 Finder _key(String key) => find.byKey(ValueKey(key));
+
+/// Выбор папки, который считает вызовы и закрывается без выбора.
+final class _CountingPicker implements ProjectFolderPicker {
+  var picks = 0;
+
+  @override
+  Future<String?> pickFolder({String? initialDirectory}) async {
+    picks++;
+    return null;
+  }
+}
 
 void main() {
   setUp(() {
@@ -369,6 +381,38 @@ void main() {
       },
       variant: TargetPlatformVariant.only(TargetPlatform.linux),
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // open-folder (change `add-empty-project-screen`, D7; spec app-settings
+  // «Сочетания app и страница «Keyboard» не расходятся»): Ctrl+O и ⌘O на
+  // рабочем месте открывают выбор папки.
+
+  group('open-folder', () {
+    for (final useMeta in [false, true]) {
+      testWidgets('${useMeta ? '⌘O' : 'Ctrl+O'} на рабочем месте без проекта '
+          'открывает выбор папки', (tester) async {
+        final picker = _CountingPicker();
+        final binding = CodeLabTestBinding(projectFolderPicker: picker);
+        await tester.pumpWidget(
+          binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+        );
+        await tester.pump();
+
+        await pressShortcut(
+          tester,
+          CodeLabShortcut.openFolder,
+          useMeta: useMeta,
+        );
+        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+        await tester.pump();
+
+        expect(picker.picks, 1);
+        await tester.pump(const Duration(seconds: 10));
+        await tester.pumpWidget(const SizedBox.shrink());
+        await closeCodeLabRootScopeInTest();
+      });
+    }
   });
 
   // -------------------------------------------------------------------------

@@ -46,7 +46,8 @@ const keyboardGroups = [
 const _approvalWhere =
     'Workbench, earliest pending approval, if it offers this option';
 
-/// 20 строк в порядке спецификации.
+/// 21 строка в порядке спецификации (`open-folder` — change
+/// `add-empty-project-screen`, D7).
 final keyboardRows = <KeyboardRow>[
   _r(
     'command-palette',
@@ -63,6 +64,14 @@ final keyboardRows = <KeyboardRow>[
     ['Ctrl', 'N'],
     ['⌘', 'N'],
     'Workbench, when a project is selected',
+  ),
+  _r(
+    'open-folder',
+    'global',
+    'Open a folder as the project',
+    ['Ctrl', 'O'],
+    ['⌘', 'O'],
+    'Workbench',
   ),
   _r(
     'open-settings',
