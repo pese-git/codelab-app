@@ -306,6 +306,18 @@ void main() {
         findsOneWidget,
       );
       expect(_key('onboarding-back'), findsOneWidget);
+      // В сборке нет web-инструментов: текст не обещает вопрос о web access.
+      expect(
+        inKey(
+          'onboarding-permissions-mode',
+          'Reads run freely; edits and commands ask.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('web access', findRichText: true),
+        findsNothing,
+      );
     });
 
     testWidgets('режим из общего с CLI конфига называется честно (Q6)', (
@@ -702,8 +714,10 @@ void main() {
   });
 
   group('шаг «Privacy»', () {
-    testWidgets('строки сети и «Nothing to agree to» без ссылок на документы '
-        '(D10, Q4)', (tester) async {
+    // Раздел 6 change (D9, D10 в редакции 2026-11-21): строка MCP вместо
+    // «MCP servers and web tools» и ссылки на документы вместо «ссылок нет».
+    testWidgets('строки сети по PRIVACY.md, ссылки на документы и InfoBar '
+        '«Nothing to agree to» (D9, D10)', (tester) async {
       await pump(tester, probeOf(const ProviderReady('llm/m1')));
       await toStep(tester, 'privacy');
 
@@ -718,7 +732,8 @@ void main() {
       for (final row in [
         'Your model provider',
         'Every turn',
-        'MCP servers and web tools',
+        'MCP servers',
+        'Tool arguments and the headers from your configuration',
         'When used',
         'Telemetry, crash reports, usage analytics',
         'Never',
@@ -727,23 +742,33 @@ void main() {
       ]) {
         expect(find.text(row), findsOneWidget, reason: row);
       }
+      // Web-инструментов в сборке нет (`PRIVACY.md` §2): ни строки, ни слов.
+      for (final gone in ['web', 'URL', 'search query']) {
+        expect(
+          find.textContaining(gone, findRichText: true),
+          findsNothing,
+          reason: gone,
+        );
+      }
+      expect(
+        inKey('onboarding-privacy-policy', 'Read the privacy policy'),
+        findsOneWidget,
+      );
+      expect(inKey('onboarding-terms-of-use', 'Terms of use'), findsOneWidget);
       expect(
         inKey('onboarding-privacy-nothing-to-agree', 'Nothing to agree to'),
         findsOneWidget,
       );
-      // Ссылок на документы и согласия нет (SETUP-17, D-29).
       expect(
-        find.textContaining('privacy policy', findRichText: true),
-        findsNothing,
+        inKey(
+          'onboarding-privacy-nothing-to-agree',
+          'These links open the documents inside the app and work offline; '
+              'Back returns to this step. You can find them later in '
+              'Settings › Legal.',
+        ),
+        findsOneWidget,
       );
-      expect(
-        find.textContaining('Terms of use', findRichText: true),
-        findsNothing,
-      );
-      expect(
-        find.textContaining('Settings › Legal', findRichText: true),
-        findsNothing,
-      );
+      // Согласия по-прежнему нет (D-29).
       expect(find.byType(Checkbox), findsNothing);
       expect(find.byType(ToggleSwitch), findsNothing);
       expect(_key('onboarding-next'), findsNothing);

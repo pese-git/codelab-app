@@ -25,6 +25,8 @@ import 'package:codelab_desktop/core/platform/onboarding_preferences.dart';
 import 'package:codelab_desktop/features/onboarding/application/onboarding_cubit.dart';
 import 'package:codelab_desktop/features/onboarding/application/onboarding_probe.dart';
 import 'package:codelab_desktop/features/onboarding/application/onboarding_state.dart';
+import 'package:codelab_desktop/features/settings/application/legal_documents.dart'
+    show LegalTab;
 import 'package:codelab_setup/codelab_setup.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -831,6 +833,151 @@ void main() {
       );
       expect(cubit.state.step, OnboardingStep.permissions);
     });
+  });
+
+  // Раздел 6 change (design.md D10 в редакции 2026-11-21): просмотр правового
+  // документа внутри onboarding. Контракт: `OnboardingState.document`
+  // (`LegalTab?`), `bool openDocument(LegalTab)` (`false`, если открыть
+  // нельзя) и `void closeDocument()`; события `onboarding.document_opened` и
+  // `onboarding.document_closed` с единственным полем `tab` (`LegalTab.logName`).
+  group('просмотр документа на шаге «Privacy» (D10)', () {
+    Future<OnboardingCubit> atPrivacy({
+      ProviderReadiness readiness = const ProviderReady('llm/m1'),
+    }) async {
+      final cubit = build(_FakeProbe.value(_facts(readiness)));
+      await settle();
+      await walkTo(cubit, OnboardingStep.privacy);
+      return cubit;
+    }
+
+    test('openDocument на «Privacy» ставит document и пишет событие без '
+        'путей', () async {
+      final cubit = await atPrivacy();
+      expect(cubit.state.document, isNull);
+
+      expect(cubit.openDocument(LegalTab.privacyPolicy), isTrue);
+
+      expect(cubit.state.document, LegalTab.privacyPolicy);
+      expect(cubit.state.step, OnboardingStep.privacy);
+      final opened = events('onboarding.document_opened').single;
+      expect(opened['tab'], 'privacy_policy');
+      expect(opened.keys, unorderedEquals(['event', 'level', 'tab']));
+    });
+
+    test('closeDocument возвращает шаг и пишет document_closed {tab} '
+        '(debug)', () async {
+      final cubit = await atPrivacy();
+      cubit.openDocument(LegalTab.termsOfUse);
+
+      cubit.closeDocument();
+
+      expect(cubit.state.document, isNull);
+      expect(cubit.state.step, OnboardingStep.privacy);
+      final closed = events('onboarding.document_closed').single;
+      expect(closed['level'], 'debug');
+      expect(closed['tab'], 'terms_of_use');
+      expect(closed.keys, unorderedEquals(['event', 'level', 'tab']));
+    });
+
+    test(
+      'вне шага «Privacy» openDocument — false и ничего не меняет',
+      () async {
+        final cubit = build(
+          _FakeProbe.value(_facts(const NoProviderConfigured())),
+        );
+        await settle();
+        for (final step in [
+          OnboardingStep.welcome,
+          OnboardingStep.permissions,
+          OnboardingStep.model,
+        ]) {
+          await walkTo(cubit, step);
+
+          expect(cubit.openDocument(LegalTab.privacyPolicy), isFalse);
+          expect(cubit.state.document, isNull, reason: step.name);
+        }
+        expect(events('onboarding.document_opened'), isEmpty);
+      },
+    );
+
+    test('повторный openDocument при открытом документе и closeDocument без '
+        'документа ничего не делают', () async {
+      final cubit = await atPrivacy();
+      cubit.closeDocument();
+      expect(events('onboarding.document_closed'), isEmpty);
+
+      cubit.openDocument(LegalTab.privacyPolicy);
+      expect(cubit.openDocument(LegalTab.termsOfUse), isFalse);
+
+      expect(cubit.state.document, LegalTab.privacyPolicy);
+      expect(events('onboarding.document_opened'), hasLength(1));
+    });
+
+    test('пока документ открыт: Back, Next, setUpLater, finish и '
+        'wizardStarted игнорируются', () async {
+      final cubit = await atPrivacy();
+      cubit.openDocument(LegalTab.privacyPolicy);
+      final before = cubit.state;
+
+      cubit.back();
+      await cubit.next();
+      cubit.setUpLater();
+      expect(cubit.wizardStarted(), isFalse);
+      await cubit.finish();
+
+      expect(cubit.state, same(before));
+      expect(cubit.state.finishing, isFalse);
+      expect(preferences.marked, 0);
+      expect(finished, 0);
+      expect(events('onboarding.completed'), isEmpty);
+    });
+
+    test('после closeDocument навигация и finish снова работают', () async {
+      final cubit = await atPrivacy();
+      cubit.openDocument(LegalTab.privacyPolicy);
+      cubit.closeDocument();
+
+      await cubit.finish();
+
+      expect(preferences.marked, 1);
+      expect(finished, 1);
+    });
+
+    test(
+      'открытие и закрытие не трогают шаг модели и сводку провайдера',
+      () async {
+        final cubit = build(
+          _FakeProbe.value(_facts(const NoProviderConfigured())),
+        );
+        await settle();
+        await walkTo(cubit, OnboardingStep.model);
+        cubit.providerSaved(_done(secret: 'codelab/llm'));
+        await cubit.next();
+        final modelBefore = cubit.state.model;
+        final factsBefore = cubit.state.facts;
+
+        cubit.openDocument(LegalTab.privacyPolicy);
+        cubit.closeDocument();
+
+        expect(cubit.state.model, modelBefore);
+        expect(cubit.state.facts, same(factsBefore));
+        cubit.back();
+        expect(cubit.state.step, OnboardingStep.model);
+        expect((cubit.state.model as ModelSaved).summary.providerId, 'llm');
+      },
+    );
+
+    test(
+      'после close() openDocument — false, без исключения и событий',
+      () async {
+        final cubit = await atPrivacy();
+        await cubit.close();
+
+        expect(cubit.openDocument(LegalTab.privacyPolicy), isFalse);
+        expect(cubit.closeDocument, returnsNormally);
+        expect(events('onboarding.document_opened'), isEmpty);
+      },
+    );
   });
 
   test('журнал полного прохода: только события D13, без путей, имён секретов, '
