@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>T16a Tablet — Projects dialog</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.tap{min-width:44px;min-height:44px;justify-content:center}
+.btn44{min-height:44px}
+.hero{width:56px;height:56px;border-radius:12px;background:var(--accent-weak);color:var(--accent-text);display:flex;align-items:center;justify-content:center;flex:none}
+.hero .ic{width:28px;height:28px}
+.hero.warn{background:var(--warn-bg);color:var(--warn)}
+.steps{display:flex;flex-direction:column}
+.step{display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--divider)}
+.step:first-child{border-top:0}
+.prow{display:flex;align-items:center;gap:12px;min-height:56px;padding:6px 16px;text-decoration:none;color:var(--text);border-radius:6px;box-sizing:border-box}
+.fx a.prow{color:var(--text)}
+.prow .txt{flex:1;min-width:0}
+.prow .ttl{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crumb{font-size:12px;line-height:16px;color:var(--text2)}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:8px 12px;align-items:center}
+.scrim{position:absolute;inset:0;background:var(--smoke);z-index:2}
+.root{height:820px;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.side{width:248px}
+.grp{display:flex;align-items:center;gap:8px;min-height:44px;margin:2px 0;padding:0 8px;border:0;background:transparent;color:var(--text);border-radius:4px;width:100%;box-sizing:border-box;text-align:left;font-weight:600;cursor:pointer}
+.grp.on{background:var(--sel)}
+.nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty{padding:6px 12px 6px 30px;font-size:12px;line-height:16px;color:var(--text2)}
+.center{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;min-height:0;overflow:auto;position:relative}
+.col{width:100%;max-width:560px;display:flex;flex-direction:column;gap:16px}
+.dlgwrap{position:absolute;inset:0;z-index:3;display:flex;align-items:center;justify-content:center}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="f-appbar" data-fluent="NavigationAppBar"><span class="f-logo">CL</span><span class="t-cap">CodeLab</span><span style="flex: 1"></span><a href="TabletPalette.dc.html" class="f-btn subtle tap" style="text-decoration: none" aria-label="Search or run a command (Cmd+K)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg></a><span class="tag ok" style="height: 28px"><span class="f-dot"></span>On this device</span></header>
+<div class="f-nv" data-fluent="NavigationView">
+  <nav class="f-pane side" aria-label="Sessions" data-fluent="NavigationPane (open)">
+    <button class="f-pi btn44" data-fluent="PaneItemAction" style="margin: 4px 0 2px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New session<span class="t-cap t2" style="margin-left: auto">⌘N</span></button>
+    <label class="f-tb btn44" data-fluent="AutoSuggestBox" style="margin: 4px 8px 6px"><input type="search" placeholder="Search sessions" aria-label="Search sessions"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg></label>
+    <div style="flex: 1; overflow: auto; min-height: 0">
+      <div class="f-ph" data-fluent="PaneItemHeader">Projects</div>
+      <div><button class="grp on" aria-expanded="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">notes-app</span><span class="t-cap t2">3</span></button></div>
+      <div><button class="grp" aria-expanded="false"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="nm">codelab-app</span><span class="t-cap t2">5</span></button></div>
+      <a href="TabletProjects.dc.html" class="f-pi btn44" data-fluent="PaneItemAction" style="gap: 10px; color: var(--text2)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Projects…<span class="t-cap t2" style="margin-left: auto">⌘O</span></a>
+    </div>
+    <div class="f-psep"></div>
+    <a href="TabletSettings.dc.html" class="f-pi btn44"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>Settings</a>
+  </nav>
+  <section class="f-content" data-fluent="NavigationBody" style="position: relative">
+    <div class="center" style="opacity: .5" aria-hidden="true"></div>
+    <div class="scrim"></div>
+    <div class="dlgwrap"><section class="f-dlg" role="dialog" aria-label="Projects" style="width: 520px" data-fluent="ContentDialog">
+      <div class="f-dlgb">
+        <div style="display: flex; align-items: center; gap: 8px"><h2 class="t-sub" style="margin: 0; flex: 1">Projects</h2><button class="f-btn subtle icon tap" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+        <label class="f-tb btn44" data-fluent="AutoSuggestBox"><input type="search" placeholder="Filter projects" aria-label="Filter projects"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg></label>
+        <span class="crumb mono">Documents › CodeLab</span>
+        <div style="display: flex; flex-direction: column; gap: 2px" data-fluent="ListView">
+          <a href="TabletWorkbench.dc.html" class="prow f-li on" data-fluent="ListTile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--text2)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="txt"><span class="ttl t-strong">notes-app</span><span class="crumb">Open now · 3 sessions</span></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+          <a href="TabletProjectOpening.dc.html" class="prow f-li" data-fluent="ListTile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--text2)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="txt"><span class="ttl">codelab-app</span><span class="crumb">5 sessions · Mon</span></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+          <a href="TabletProjectNotFound.dc.html" class="prow f-li" data-fluent="ListTile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--text2)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="txt"><span class="ttl">trip-planner</span><span class="crumb">2 sessions · Oct 28</span></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+          <a href="TabletProjectOpening.dc.html" class="prow f-li" data-fluent="ListTile"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true" style="color: var(--text2)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="txt"><span class="ttl">reading-list</span><span class="crumb">No sessions yet</span></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a>
+        </div>
+        <span class="t-cap t2">Switching projects doesn't restart the agent or stop turns in other projects.</span>
+      </div>
+      <div class="f-dlgf" style="grid-template-columns: 1fr 1fr"><a href="TabletProjectNew.dc.html" class="f-btn accent btn44" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New project</a><button class="f-btn btn44">Close</button></div>
+    </section></div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1180,"height":820}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

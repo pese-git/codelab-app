@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>P22e Project — folder not found</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.tap{min-width:44px;min-height:44px;justify-content:center}
+.btn44{min-height:44px}
+.hero{width:56px;height:56px;border-radius:12px;background:var(--accent-weak);color:var(--accent-text);display:flex;align-items:center;justify-content:center;flex:none}
+.hero .ic{width:28px;height:28px}
+.hero.warn{background:var(--warn-bg);color:var(--warn)}
+.steps{display:flex;flex-direction:column}
+.step{display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:center;padding:12px 16px;border-top:1px solid var(--divider)}
+.step:first-child{border-top:0}
+.prow{display:flex;align-items:center;gap:12px;min-height:56px;padding:6px 16px;text-decoration:none;color:var(--text);border-radius:6px;box-sizing:border-box}
+.fx a.prow{color:var(--text)}
+.prow .txt{flex:1;min-width:0}
+.prow .ttl{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crumb{font-size:12px;line-height:16px;color:var(--text2)}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:8px 12px;align-items:center}
+.scrim{position:absolute;inset:0;background:var(--smoke);z-index:2}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;position:relative;box-sizing:border-box}
+.bar{display:flex;align-items:center;gap:8px;height:56px;padding:0 8px;flex:none}
+.body{flex:1;overflow:auto;padding:8px 16px 16px;display:flex;flex-direction:column;gap:14px;min-height:0}
+.foot{padding:12px 16px 24px;display:flex;flex-direction:column;gap:8px;flex:none;border-top:1px solid var(--stroke);background:var(--layer)}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:3;background:var(--solid);border-radius:12px 12px 0 0;box-shadow:var(--shadow-dialog);padding:8px 16px 24px;display:flex;flex-direction:column;gap:12px}
+.handle{width:36px;height:4px;border-radius:2px;background:var(--cstroke2);align-self:center}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="bar" data-fluent="NavigationAppBar"><a href="PhonePane.dc.html" class="f-btn subtle icon tap" aria-label="Open navigation"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></a><span class="t-sub" style="flex: 1; font-size: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">trip-planner</span><span class="tag" style="height: 28px"><span class="f-dot"></span>Not started</span></header>
+<div class="body" style="justify-content: center" data-fluent="ScaffoldPage">
+  <div class="hero warn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true" style="color: var(--warn); width: 28px; height: 28px"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg></div>
+  <div><h1 class="t-sub" style="margin: 0">Can't open trip-planner</h1></div>
+  <div class="f-ib error" role="alert" data-fluent="InfoBar (error)"><span class="f-ibi">×</span><div style="min-width: 0"><span class="mono t-cap" style="overflow-wrap: anywhere">Project folder not found: Documents/CodeLab/trip-planner.</span><span style="display: block; margin-top: 4px">It may have been deleted or renamed in the Files app.</span></div></div>
+  <section class="f-card" style="padding: 16px; display: flex; flex-direction: column; gap: 6px" aria-label="What happened">
+    <span class="t-strong">Nothing was started</span>
+    <span class="t-cap t2">No agent was started and no session was created or loaded. Its 2 sessions stay in the list.</span>
+    <a href="PhoneProtocolLog.dc.html" class="f-hl t-cap">Open diagnostics</a>
+  </section>
+</div>
+<div class="foot">
+  <a href="PhoneProjects.dc.html" class="f-btn accent btn44" style="text-decoration: none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Choose another project</a>
+  <button class="f-btn btn44">Retry</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>
