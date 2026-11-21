@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Недавние проекты CLI
-Интерактивные режимы `codelab` — построчный REPL и `--ui tui` — SHALL записывать папку сессии в общий список недавних проектов `$CODELAB_HOME/recent_projects.json` через `JsonFileRecentProjectsStore` (acp-client-kit «Хранилище недавних проектов в CODELAB_HOME»). Запись SHALL выполняться один раз за запуск, в том числе с `--resume` и `--continue`: после мастера первого запуска (если мастер завершил процесс — записи нет) и до подключения к агенту. Папка — проверенная папка сессии: `-C`/`--cwd` или текущая, абсолютный нормализованный путь (design.md change `share-recent-projects-store`, D6).
+Интерактивные режимы `codelab` — построчный REPL и `--ui tui` — SHALL записывать папку сессии в общий список недавних проектов `$CODELAB_HOME/recent_projects.json` через `JsonFileRecentProjectsStore` (acp-client-kit «Хранилище недавних проектов в CODELAB_HOME»). Запись SHALL выполняться один раз за запуск, в том числе с `--resume` и `--continue`: после мастера первого запуска и успешного подключения к агенту (`ClientWorkspace.connect` завершился без ошибки), до открытия или загрузки сессии. Если мастер завершил процесс или старт агента не удался (ошибка конфигурации встроенного агента, сбой запуска или подключения), записи нет. С `--resume` и `--continue` папка записывается и тогда, когда сессия не найдена или не загрузилась. Папка — проверенная папка сессии: `-C`/`--cwd` или текущая, абсолютный нормализованный путь (design.md change `share-recent-projects-store`, D6).
 
 Headless (`-p`, `-f`, промпт из stdin без TTY), `test-scenario`, `config`, `provider`, `mcp`, `secret`, `profiles`, алиас `serve`, `--version` и `--help` НЕ SHALL создавать или менять `recent_projects.json`. Сбой записи (нечитаемый файл, ошибка ФС) НЕ SHALL менять поведение и код выхода. С `--verbose` SHALL печататься одна строка в stderr: `codelab: cannot record a recent project: <тип ошибки>`, без текста ошибки. Без `--verbose` вывода нет. Нечитаемый файл НЕ SHALL перезаписываться. Список CLI не показывает.
 
@@ -16,6 +16,10 @@ Headless (`-p`, `-f`, промпт из stdin без TTY), `test-scenario`, `con
 #### Scenario: Продолжение сессии записывает папку
 - **WHEN** `codelab --continue -C <tmp>/proj` запускается на терминале с `CODELAB_HOME=<home>` и выходит по `/exit`
 - **THEN** `<home>/recent_projects.json` содержит `<tmp>/proj` первой записью
+
+#### Scenario: Неудачный старт не записывает папку
+- **WHEN** `codelab -C <tmp>/proj` запускается на терминале с `CODELAB_HOME=<home>`, где нет `recent_projects.json`, и старт агента не удаётся: у встроенного агента не настроена модель (`EmbeddedAgentConfigException`) или профиль `stdio:` указывает несуществующую команду
+- **THEN** процесс завершается с ненулевым кодом (`64` для ошибки конфигурации, `1` для сбоя запуска агента), а файла `<home>/recent_projects.json` нет
 
 #### Scenario: Headless не трогает список
 - **WHEN** `codelab -p hi -C <tmp>/proj` выполняется с `CODELAB_HOME=<home>`, где `recent_projects.json` отсутствует
