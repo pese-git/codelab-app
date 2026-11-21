@@ -17,8 +17,9 @@ import 'navigation/settings_page.dart';
 /// `add-app-appearance-page` — «Appearance» (итерация 5, D14),
 /// `add-app-keyboard-page` — «Keyboard» (итерация 3, только чтение; у неё нет
 /// ключей конфигурации, её содержимое — каталог сочетаний сборки, поэтому
-/// SETUP-17 её не скрывает, D7); следующие страницы появятся вместе со
-/// своими телами.
+/// SETUP-17 её не скрывает, D7), `add-app-legal-page` — «Legal» (всегда: её
+/// содержимое задают ресурсы сборки, а не конфигурация, D1); следующие
+/// страницы появятся вместе со своими телами.
 /// Страница из набора ДОЛЖНА иметь построитель в `settingsPageBuilders`.
 const defaultSettingsPages = SettingsPages(
   available: {
@@ -30,5 +31,6 @@ const defaultSettingsPages = SettingsPages(
     SettingsPage.general,
     SettingsPage.appearance,
     SettingsPage.keyboard,
+    SettingsPage.legal,
   },
 );

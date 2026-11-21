@@ -88,7 +88,7 @@
    документация MVP в `docs/user/` (сборка из исходников, `config.yaml`, LiteLLM Proxy, ручной
    перенос, предупреждение о Python-сессиях, Zed). Установка и `docs/release/verify.md` — с
    change `add-release-pipeline-and-installer` (9.4); `PRIVACY.md`, `TERMS.md` и ссылки на них в
-   README — с change `add-privacy-policy` (D-18, D-29; §12.7.7а).
+   README — с change `add-app-legal-page` (D-18, D-29; §12.7.7а; публикация на сайте и в каталоге релиза — 9.4).
 8. **9.8. Ручная проверка совместимости с Zed** — чек-лист ниже («Чек-лист Zed»); проводит
    ответственный за релиз. Сверка с другим ACP-агентом — не на глаз, а диффом журналов ACP Zed
    на том же сценарии (там же).
@@ -145,7 +145,7 @@
 (scope: 9.1, 9.2, вторая половина 9.3, 9.5, 9.7 без установки, `PRIVACY.md` и `TERMS.md`, таблица 9.8 и ворота
 MVP; онбординг 9.6 сделан change `add-provider-setup-ui`), `add-release-pipeline-and-installer` (scope:
 поставка 9.4, U-29, §12.7.2–§12.7.6, §12.7.8), `add-signed-app-distributions` (D-16) и
-`add-privacy-policy` (D-18, D-29, §12.7.7, §12.7.7а), `retire-python-agent` (scope: политика заморозки, условие
+`add-app-legal-page` (D-18, D-29, §12.7.7, §12.7.7а), `retire-python-agent` (scope: политика заморозки, условие
 удаления, алиас `codelab serve`) и `remove-python-agent` (scope: снятие алиаса, режима `python`
 e2e и упоминаний Python-агента — после условия удаления 9.9). Смена значения по умолчанию `ui.mode` в CLI с `line` на `tui` после приёмки
 U-12 — отдельный OpenSpec change, не входящий в эти два (§12.2.1). `tasks.md` — пары

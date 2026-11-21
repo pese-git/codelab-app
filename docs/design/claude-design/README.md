@@ -2,7 +2,7 @@
 
 Экспорт канваса UI/UX из Claude Design: макеты `codelab_desktop` (десктоп, планшет, смартфон, светлая и тёмная темы), `codelab_cli` (TUI, REPL, headless), графы навигации, покрытие целей паритета и живой прототип.
 
-Экспорт снят 2026-11-20 с опубликованной версии канваса (первый экспорт — 2026-10-29, предыдущий — 2026-11-12). В этот экспорт вошли правовые документы (`TERMS.md`, D-29, §12.7.7а): шаг onboarding 07a, страница настроек Legal 32–35 и состояния поиска 35a на десктопе, P13–P16 на смартфоне, T7–T10 на планшете и граф навигации планшета. Legal стал последним пунктом группы App в панели настроек всех страниц. Позже в тот же день онбординг десктопа получил все четыре шага: к 07 (Permissions) и 07a (Privacy) добавились 07b (What CodeLab does) и 07c (Choose a model), шаги связаны кнопками Back и Next, а подсказка 07a ведёт в Settings › Legal. На странице графов к ним добавился граф первого запуска `NavOnboarding`. Затем все экраны онбординга встали в один ряд «Первый запуск» в порядке прохождения, а мастер провайдера получил собственные экраны 07c.1–07c.4 и состояние 07c.5. Потом онбординг появился у смартфона (P17–P20, мастер P11a–P11d вокруг P11) и планшета (T11–T14, мастер T13a–T13e) с ограничениями профиля `mobile`: команд нет, ключ — Keychain или «No key». К ним добавились экраны отказа проверки: P11e–P11h и T13f–T13i. Тогда же у смартфона и планшета появились тёмные темы — страницы «Смартфон — тёмная тема» и «Планшет — тёмная тема». Канвас переехал в Claude и теперь опубликован как артефакт типа «Design»; отдельный Claude Design (claude.ai/design) закрывается 14 декабря 2026 года. Ссылка на канвас приватная и в репозиторий намеренно не попадает, как и у [`../ui-canvas`](../ui-canvas/README.md). Если канвас поменялся, файлы здесь надо экспортировать заново: правки в этом каталоге обратно в канвас не уходят.
+Экспорт снят 2026-11-20 и обновлён 2026-11-21 с опубликованной версии канваса (первый экспорт — 2026-10-29, предыдущий — 2026-11-12). В этот экспорт вошли правовые документы (`TERMS.md`, D-29, §12.7.7а): шаг onboarding 07a, страница настроек Legal 32–35 и состояния поиска 35a на десктопе, P13–P16 на смартфоне, T7–T10 на планшете и граф навигации планшета. Legal стал последним пунктом группы App в панели настроек всех страниц. Позже в тот же день онбординг десктопа получил все четыре шага: к 07 (Permissions) и 07a (Privacy) добавились 07b (What CodeLab does) и 07c (Choose a model), шаги связаны кнопками Back и Next, а подсказка 07a ведёт в Settings › Legal. На странице графов к ним добавился граф первого запуска `NavOnboarding`. Затем все экраны онбординга встали в один ряд «Первый запуск» в порядке прохождения, а мастер провайдера получил собственные экраны 07c.1–07c.4 и состояние 07c.5. Потом онбординг появился у смартфона (P17–P20, мастер P11a–P11d вокруг P11) и планшета (T11–T14, мастер T13a–T13e) с ограничениями профиля `mobile`: команд нет, ключ — Keychain или «No key». К ним добавились экраны отказа проверки: P11e–P11h и T13f–T13i, Review без проверки: P11i и T13j, и шаг 3 после такого сохранения: P19b и T13k. У CLI к основному пути C5 добавились остальные исходы первого запуска: C5a–C5d. Для планшета появился граф первого запуска `NavTabletOnboarding`. У панели Protocol появилась вкладка Log — 18a, а затем та же вкладка на планшете — T15, а к ней вкладка Frames — T15a. У смартфона панель Protocol открывается отдельными экранами P21–P21c. Тогда же у смартфона и планшета появились тёмные темы — страницы «Смартфон — тёмная тема» и «Планшет — тёмная тема». Канвас переехал в Claude и теперь опубликован как артефакт типа «Design»; отдельный Claude Design (claude.ai/design) закрывается 14 декабря 2026 года. Ссылка на канвас приватная и в репозиторий намеренно не попадает, как и у [`../ui-canvas`](../ui-canvas/README.md). Если канвас поменялся, файлы здесь надо экспортировать заново: правки в этом каталоге обратно в канвас не уходят.
 
 Канвас — проектный референс. При расхождении источник истины — документы `docs/architecture/proposals/dart-agent-and-clients/` (§12.x) и `openspec/`; номера целей (D-28, U-37, T-22 …) — из `agent-parity-goals.md`.
 
@@ -30,7 +30,7 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 
 ## Артборды
 
-Для каждого светлого артборда приложения (страница «Светлая тема», 51 файл) есть тёмная копия `<Имя>-dark.dc.html` на странице «Тёмная тема», кроме `TranscriptRows` и неутверждённого варианта `SubagentsAlt`. Так же устроены экраны смартфона и планшета: у каждого есть `<Имя>-dark.dc.html` на страницах «Смартфон — тёмная тема» и «Планшет — тёмная тема». Графы навигации не тематизируются, тёмных копий у них нет.
+Для каждого светлого артборда приложения (страница «Светлая тема», 52 файла) есть тёмная копия `<Имя>-dark.dc.html` на странице «Тёмная тема», кроме `TranscriptRows` и неутверждённого варианта `SubagentsAlt`. Так же устроены экраны смартфона и планшета: у каждого есть `<Имя>-dark.dc.html` на страницах «Смартфон — тёмная тема» и «Планшет — тёмная тема». Графы навигации не тематизируются, тёмных копий у них нет.
 
 ### Приложение — светлая тема
 
@@ -64,7 +64,8 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `Ask.dc.html` | 15 Диалог ask, одобрение веб-запросов и критичных команд |
 | `Agents.dc.html` | 16 Панель Agents v1 — список субагентов сессии, ожидание одобрения, дерево шагов выбранного (change `add-subagents-and-tasks`, D33); Stop, транскрипт потомка, фоновые задачи и a2a — после 1.0 |
 | `Usage.dc.html` | 17 Панель Usage |
-| `Inspector.dc.html` | 18 Панель Protocol — кадры и лог |
+| `Inspector.dc.html` | 18 Панель Protocol — вкладка Frames: кадры JSON-RPC всего соединения, детали кадра, секреты замаскированы (R-23) |
+| `InspectorLog.dc.html` | 18a Панель Protocol — вкладка Log: тот же буфер, что у `/logs` и Expand; поиск, категория, уровень, сессия; детали записи с полями корреляции и переходом к кадру по `request_id` |
 | `States.dc.html` | 19 Состояния соединения и ошибок |
 | `Connection.dc.html` | 20 Настройки — Connection |
 | `AddProfile.dc.html` | 20a Настройки — добавление профиля подключения (§12.4.9) |
@@ -97,6 +98,10 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `CliInput.dc.html` | C3 TUI — композер, `@`-дополнение, вложения |
 | `CliRepl.dc.html` | C4 Построчный REPL (ansi) |
 | `CliSetup.dc.html` | C5 Первый запуск — мастер провайдера |
+| `CliSetupUnauthorized.dc.html` | C5a Первый запуск — ключ не принят (401): ввести ключ снова, Retry, Cancel (§12.4.4, шаги 4–5) |
+| `CliSetupUnreachable.dc.html` | C5b Первый запуск — сервер недоступен: «Save without check» с подтверждением, модель вручную, «Not verified: timeout» |
+| `CliSetupKeyMissing.dc.html` | C5c Первый запуск — провайдер без ключа: мастер не запускается, три случая ключа (§12.4.3, шаг 4) |
+| `CliSetupNoTty.dc.html` | C5d Первый запуск без мастера: `-p` без провайдера и битый конфиг — код 64, `-p` без ключа — код 1 (SETUP-7) |
 | `CliTheme.dc.html` | C6 Выбор темы `/theme` |
 | `CliSessions.dc.html` | C7 `/sessions`, `/resume`, `/rewind`, `/fork` |
 | `CliPickers.dc.html` | C8 Slash-меню, `/model`, `/mode`, `/agents` |
@@ -126,6 +131,10 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `PhoneProviders.dc.html` | P10 Настройки › Providers |
 | `PhoneWizard.dc.html` | P11 Мастер провайдера — Check: проверка адреса и ключа |
 | `PhoneStates.dc.html` | P12 Состояния |
+| `PhoneProtocol.dc.html` | P21 Панель Protocol — вкладка Frames отдельным экраном из P6 › Panes: список кадров в две строки, фильтры Requests, Notifications, Errors only и сессия; Pause, Clear, Export… — в меню «…» |
+| `PhoneProtocolFrame.dc.html` | P21a Protocol — детали кадра: ответ с ошибкой −32603 на запрос id 5, JSON, переход «Show record in Log» |
+| `PhoneProtocolLog.dc.html` | P21b Protocol — вкладка Log: записи в две строки, фильтры категории, уровня и сессии |
+| `PhoneProtocolRecord.dc.html` | P21c Protocol — запись журнала: поля корреляции столбиком, `prompt` замаскирован, переход «Show frame in Frames» |
 | `PhoneLegal.dc.html` | P13 Настройки › Legal — Privacy policy |
 | `PhoneNotices.dc.html` | P14 Legal — Third-party notices, поиск по пакетам: состояние «M of N» с подсветкой |
 | `PhoneNoticesEmpty.dc.html` | P14a Legal — Third-party notices, поиск: состояние «No packages match» с кнопкой «Clear search» |
@@ -142,7 +151,9 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `PhoneWizardFailNet.dc.html` | P11f Мастер — отказ проверки: сервер недоступен или таймаут; Retry, Back → P11a, «Save without check…» |
 | `PhoneWizardSkip.dc.html` | P11g Мастер — подтверждение «Save without check» |
 | `PhoneWizardManual.dc.html` | P11h Мастер — модель и окно контекста вручную, «Not verified: timeout» |
+| `PhoneWizardReviewUnverified.dc.html` | P11i Мастер — Review с предупреждением «Not verified: timeout» после «Save without check» |
 | `PhoneOnbModelDone.dc.html` | P19a Первый запуск — шаг 3 после Save: провайдер подключён |
+| `PhoneOnbModelUnverified.dc.html` | P19b Первый запуск — шаг 3 после сохранения без проверки: метка и плашка «Not verified», Next → P20 |
 | `PhoneOnbPrivacy.dc.html` | P20 Первый запуск — шаг 4 Privacy: ссылки на P13 и P15, «Start using CodeLab» → P1 |
 
 ### Планшет
@@ -154,6 +165,8 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `TabletSettings.dc.html` | T3 Планшет — настройки (master–detail) |
 | `TabletFiles.dc.html` | T4 Планшет — файлы и просмотр |
 | `TabletPalette.dc.html` | T5 Планшет — палитра команд |
+| `TabletProtocolLog.dc.html` | T15 Планшет — панель Protocol, вкладка Log в выдвижном доке (как 18a): открывается из палитры или Cmd+Shift+I, Category — фильтром, касания ≥ 44 px, Export… — в системное меню «Поделиться» |
+| `TabletProtocolFrames.dc.html` | T15a Планшет — панель Protocol, вкладка Frames (как 18): фильтры Requests, Notifications, Errors only и сессия, выделен ответ с ошибкой −32603 на запрос id 5; переходы в T15 и обратно через «Show frame in Frames» и «Show record in Log» |
 | `TabletSplit.dc.html` | T6 Планшет — split view при 1366 px |
 | `TabletLegal.dc.html` | T7 Планшет — настройки › Legal, Privacy policy (master–detail) |
 | `TabletTerms.dc.html` | T8 Планшет — Legal › Terms of use |
@@ -172,7 +185,9 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `TabletOnbWizardFailNet.dc.html` | T13g Планшет — мастер: сервер недоступен или таймаут, «Save without check…» |
 | `TabletOnbWizardSkip.dc.html` | T13h Планшет — мастер: подтверждение «Save without check» |
 | `TabletOnbWizardManual.dc.html` | T13i Планшет — мастер: модель вручную, «Not verified: timeout» |
+| `TabletOnbWizardReviewUnverified.dc.html` | T13j Планшет — мастер: Review с предупреждением «Not verified: timeout» |
 | `TabletOnbModelDone.dc.html` | T13e Планшет — шаг 3 после Save: провайдер подключён |
+| `TabletOnbModelUnverified.dc.html` | T13k Планшет — шаг 3 после сохранения без проверки, «Not verified» |
 | `TabletOnbPrivacy.dc.html` | T14 Планшет — шаг 4 Privacy, «Start using CodeLab» → T1 |
 
 ### Навигация, покрытие и прототип
@@ -184,5 +199,6 @@ python3 -m http.server 8765 --bind 127.0.0.1 --directory docs/design/claude-desi
 | `NavOnboarding.dc.html` | Граф первого запуска app: проверка `onboarding_done`, шаги 07b → 07 → 07c → 07a, пропуск шага 3 при `ProviderReady`, шаги мастера провайдера 06, переходы в Legal 32/33 (D-11, §12.4.9) |
 | `NavPhone.dc.html` | Граф навигации смартфона |
 | `NavTablet.dc.html` | Граф навигации планшета |
+| `NavTabletOnboarding.dc.html` | Граф первого запуска планшета: `onboarding_done`, шаги T11–T14, пропуск шага 3 при `ProviderReady`, мастер T13a–T13e, отказы проверки T13f–T13k, переходы в Legal T7/T8 (D-11, §12.4.4, §12.8.5) |
 | `Coverage.dc.html` | Покрытие целей: цель → экран |
 | `Prototype.dc.html` | Живой прототип: десктоп, планшет, смартфон; темы, состояния соединения, раскладка (A13, §12.8) |

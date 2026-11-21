@@ -25,6 +25,7 @@ String settingsPageTitleOf(
   SettingsPage.general => l10n.settingsPageGeneralTitle,
   SettingsPage.appearance => l10n.settingsPageAppearanceTitle,
   SettingsPage.keyboard => l10n.settingsPageKeyboardTitle,
+  SettingsPage.legal => l10n.settingsPageLegalTitle,
 };
 
 /// Ключевые слова поиска страницы на языке [l10n]: сообщение
@@ -50,6 +51,7 @@ List<String> settingsPageKeywordsOf(AppLocalizations l10n, SettingsPage page) {
     SettingsPage.general => l10n.settingsSearchKeywordsGeneral,
     SettingsPage.appearance => l10n.settingsSearchKeywordsAppearance,
     SettingsPage.keyboard => l10n.settingsSearchKeywordsKeyboard,
+    SettingsPage.legal => l10n.settingsSearchKeywordsLegal,
     SettingsPage.permissionsAndTools ||
     SettingsPage.redaction ||
     SettingsPage.codeAndWeb => '',

@@ -10,6 +10,7 @@ import 'connection_page.dart';
 import 'appearance_page.dart';
 import 'general_page.dart';
 import 'keyboard_page.dart';
+import 'legal_page.dart';
 import 'mcp_page.dart';
 import 'providers_page.dart';
 import 'settings_titles.dart';
@@ -25,7 +26,8 @@ import 'skills_page.dart';
 /// иметь запись (проверяет тест). Итерация 2 change `add-app-settings-shell`
 /// добавила «Connection», итерация 2 change `add-provider-setup-ui` —
 /// «Providers», change `add-app-skills-page` — «Skills & extensions», change
-/// `add-app-keyboard-page` — «Keyboard».
+/// `add-app-keyboard-page` — «Keyboard», change `add-app-legal-page` —
+/// «Legal».
 final Map<SettingsPage, WidgetBuilder> settingsPageBuilders =
     Map.unmodifiable(<SettingsPage, WidgetBuilder>{
       SettingsPage.connection: buildConnectionPage,
@@ -36,6 +38,7 @@ final Map<SettingsPage, WidgetBuilder> settingsPageBuilders =
       SettingsPage.general: buildGeneralPage,
       SettingsPage.appearance: buildAppearancePage,
       SettingsPage.keyboard: buildKeyboardPage,
+      SettingsPage.legal: buildLegalPage,
     });
 
 /// Ширина окна, меньше которой навигация настроек уходит наверх.
@@ -220,5 +223,6 @@ class _SettingsShellState extends State<SettingsShell> {
     SettingsPage.general => FluentIcons.settings,
     SettingsPage.appearance => FluentIcons.color,
     SettingsPage.keyboard => FluentIcons.keyboard_classic,
+    SettingsPage.legal => FluentIcons.document,
   };
 }

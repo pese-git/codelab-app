@@ -10,6 +10,7 @@ import 'package:codelab_desktop/app/navigation/app_destination.dart';
 import 'package:codelab_desktop/app/navigation/navigation_cubit.dart';
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/app/navigation/settings_page_store.dart';
+import 'package:codelab_desktop/features/settings/application/legal_documents.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -437,6 +438,148 @@ void main() {
     await cubit.close();
   });
 
+  // Вкладка страницы «Legal» (задача 4.1 change `add-app-legal-page`; design.md
+  // D1; spec app-settings «Страница «Legal»: видимость и вкладки»). Вкладку
+  // при открытии задаёт навигация; `last_page` хранит только страницу.
+  group('Legal tab', () {
+    const withLegal = SettingsPages(
+      available: {
+        SettingsPage.connection,
+        SettingsPage.general,
+        SettingsPage.legal,
+      },
+    );
+
+    test('selectSettingsPage(legal, legalTab:) emits the destination with '
+        'the tab and keeps returnTo', () async {
+      final cubit = build(withPages: withLegal);
+      await open(cubit);
+
+      await cubit.selectSettingsPage(
+        SettingsPage.legal,
+        legalTab: LegalTab.termsOfUse,
+      );
+
+      expect(
+        cubit.state,
+        const SettingsDestination(
+          SettingsPage.legal,
+          returnTo: 'B',
+          legalTab: LegalTab.termsOfUse,
+        ),
+      );
+      await cubit.close();
+    });
+
+    test('last_page keeps only the page: legal without a tab', () async {
+      final cubit = build(withPages: withLegal);
+      await open(cubit);
+
+      await cubit.selectSettingsPage(
+        SettingsPage.legal,
+        legalTab: LegalTab.license,
+      );
+
+      expect(store.saved, 'legal');
+      await cubit.close();
+    });
+
+    test(
+      'reopening settings after leaving Legal gives legalTab null',
+      () async {
+        final cubit = build(withPages: withLegal);
+        await open(cubit);
+        await cubit.selectSettingsPage(
+          SettingsPage.legal,
+          legalTab: LegalTab.license,
+        );
+        cubit.back();
+
+        await open(cubit);
+
+        expect(
+          cubit.state,
+          const SettingsDestination(SettingsPage.legal, returnTo: 'B'),
+        );
+        expect((cubit.state as SettingsDestination).legalTab, isNull);
+        await cubit.close();
+      },
+    );
+
+    test('selecting Legal without a tab gives legalTab null', () async {
+      final cubit = build(withPages: withLegal);
+      await open(cubit);
+
+      await cubit.selectSettingsPage(SettingsPage.legal);
+
+      expect((cubit.state as SettingsDestination).legalTab, isNull);
+      await cubit.close();
+    });
+
+    test('the tab is passed only for the Legal page', () async {
+      final cubit = build(withPages: withLegal);
+      await open(cubit);
+
+      await cubit.selectSettingsPage(
+        SettingsPage.general,
+        legalTab: LegalTab.termsOfUse,
+      );
+
+      expect((cubit.state as SettingsDestination).page, SettingsPage.general);
+      expect((cubit.state as SettingsDestination).legalTab, isNull);
+      await cubit.close();
+    });
+
+    test('the tab takes part in equality', () {
+      expect(
+        const SettingsDestination(
+          SettingsPage.legal,
+          legalTab: LegalTab.license,
+        ),
+        isNot(const SettingsDestination(SettingsPage.legal)),
+      );
+      expect(
+        const SettingsDestination(
+          SettingsPage.legal,
+          legalTab: LegalTab.license,
+        ),
+        const SettingsDestination(
+          SettingsPage.legal,
+          legalTab: LegalTab.license,
+        ),
+      );
+    });
+
+    test('a hidden Legal page ignores selectSettingsPage with a tab', () async {
+      final cubit = build();
+      await open(cubit);
+
+      await cubit.selectSettingsPage(
+        SettingsPage.legal,
+        legalTab: LegalTab.termsOfUse,
+      );
+
+      expect(
+        (cubit.state as SettingsDestination).page,
+        SettingsPage.connection,
+      );
+      await cubit.close();
+    });
+
+    test('the saved value legal opens Legal without a tab', () async {
+      store.saved = 'legal';
+      final cubit = build(withPages: withLegal);
+
+      await open(cubit);
+
+      expect(
+        cubit.state,
+        const SettingsDestination(SettingsPage.legal, returnTo: 'B'),
+      );
+      await cubit.close();
+    });
+  });
+
   // Onboarding первого запуска (change `add-app-onboarding`, задача 1.5;
   // design.md D1; spec app-onboarding «Шаги onboarding и переходы»,
   // сценарий «Esc и настройки на onboarding»). Красный до задачи 1.6:
@@ -602,16 +745,23 @@ void main() {
       );
     });
 
-    test('has the eleven pages of section 12.4.9 in two groups', () {
-      expect(SettingsPage.values, hasLength(11));
+    test('has the twelve pages of section 12.4.9 in two groups', () {
+      expect(SettingsPage.values, hasLength(12));
       expect(
         SettingsPage.values.where((p) => p.group == SettingsGroup.agent),
         hasLength(8),
       );
       expect(
         SettingsPage.values.where((p) => p.group == SettingsGroup.app),
-        hasLength(3),
+        hasLength(4),
       );
+    });
+
+    test('Legal is the last page of the App group', () {
+      expect(SettingsPage.values.last, SettingsPage.legal);
+      expect(SettingsPage.legal.group, SettingsGroup.app);
+      expect(SettingsPage.legal.navKey, 'settings-nav-legal');
+      expect(SettingsPage.fromSlug('legal'), SettingsPage.legal);
     });
   });
 }

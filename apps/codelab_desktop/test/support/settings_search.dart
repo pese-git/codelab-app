@@ -22,6 +22,7 @@ String settingsKeywordsSuffixOf(SettingsPage page) => switch (page) {
   SettingsPage.general => 'General',
   SettingsPage.appearance => 'Appearance',
   SettingsPage.keyboard => 'Keyboard',
+  SettingsPage.legal => 'Legal',
 };
 
 /// Сообщение с ключевыми словами страницы в каталоге [locale] (`en`/`ru`) как

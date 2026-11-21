@@ -2142,12 +2142,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGeneralAboutLogsFailed => 'Couldn\'t open the log folder.';
 
   @override
-  String get settingsGeneralAboutPackageLicenses => 'Package licenses';
-
-  @override
-  String get settingsGeneralAboutClose => 'Close';
-
-  @override
   String get settingsGeneralUnreadableCannotRead =>
       'Cannot read the agent settings.';
 
@@ -2188,7 +2182,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsSearchKeywordsGeneral =>
-      'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics';
+      'language, budget, steps, compaction, subagent, log level, startup, reopen, ignored, about, version, license, diagnostics, telemetry';
 
   @override
   String get settingsGeneralGroupBudget => 'Budget';
@@ -2201,10 +2195,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsGeneralGroupLogging => 'Logging';
-
-  @override
-  String get settingsGeneralAboutThirdPartyCaption =>
-      'Entries of the CodeLab third-party notices register, as kept in the repository.';
 
   @override
   String get mcpAddServer => 'Add server';
@@ -3649,6 +3639,146 @@ class AppLocalizationsEn extends AppLocalizations {
   String appearanceIssuesHintExtends(String base, String builtIn) {
     return 'Missing roles come from extends: \"$base\" ($builtIn).';
   }
+
+  @override
+  String get settingsPageLegalTitle => 'Legal';
+
+  @override
+  String get settingsSearchKeywordsLegal =>
+      'legal, privacy, terms, license, notices, third-party, telemetry, packages';
+
+  @override
+  String get settingsLegalTabsLabel => 'Legal documents';
+
+  @override
+  String get settingsLegalTabPrivacy => 'Privacy policy';
+
+  @override
+  String get settingsLegalTabTerms => 'Terms of use';
+
+  @override
+  String get settingsLegalTabLicense => 'License';
+
+  @override
+  String get settingsLegalTabNotices => 'Third-party notices';
+
+  @override
+  String settingsLegalSource(String version, String asset) {
+    return 'Bundled with CodeLab $version as $asset · readable offline';
+  }
+
+  @override
+  String get settingsLegalLoadFailed => 'Couldn\'t load this document.';
+
+  @override
+  String get settingsLegalLinkFailed => 'Couldn\'t open the link.';
+
+  @override
+  String get settingsLegalLicenseAllowed => 'Allowed';
+
+  @override
+  String get settingsLegalLicenseAllowedValue =>
+      'Use, copy, modify, merge, publish, distribute, sublicense and sell copies';
+
+  @override
+  String get settingsLegalLicenseCondition => 'Condition';
+
+  @override
+  String get settingsLegalLicenseConditionValue =>
+      'Keep the copyright and license notice in copies or substantial portions';
+
+  @override
+  String get settingsLegalLicenseNoWarranty => 'No warranty';
+
+  @override
+  String get settingsLegalLicenseNoWarrantyValue =>
+      'Provided “as is”; the authors are not liable for damages';
+
+  @override
+  String get settingsLegalLicenseSummaryNote =>
+      'This summary is not the license. The full text below is what applies.';
+
+  @override
+  String get settingsLegalComponentsTitle => 'Third-party components';
+
+  @override
+  String settingsLegalComponentsText(String link) {
+    return 'Open-source packages bundled with CodeLab keep their own licenses. They are listed in $link.';
+  }
+
+  @override
+  String get settingsLegalNoticesRegister => 'Notices register';
+
+  @override
+  String get settingsLegalNoticesCaption =>
+      'Entries of the CodeLab third-party notices register, as kept in the repository.';
+
+  @override
+  String get settingsLegalPackageLicenses => 'Package licenses';
+
+  @override
+  String get settingsLegalPackagesInfo =>
+      'Every package the build collected, including development tools of the workspace. A longer list is safe; a missing license would not be.';
+
+  @override
+  String get settingsLegalSearchHint => 'Search packages';
+
+  @override
+  String get settingsLegalSearchLabel => 'Search packages by name';
+
+  @override
+  String get settingsLegalClearSearch => 'Clear search';
+
+  @override
+  String settingsLegalPackagesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count packages',
+      one: '$count package',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String settingsLegalPackagesMatched(int matched, int total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '$total packages',
+      one: '$total package',
+    );
+    return '$matched of $_temp0';
+  }
+
+  @override
+  String settingsLegalLicensesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count licenses',
+      one: '$count license',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingsLegalEmptyTitle => 'No packages match';
+
+  @override
+  String settingsLegalEmptyText(String query) {
+    return 'No package name contains “$query”. The notices register above is not affected by search.';
+  }
+
+  @override
+  String get settingsGeneralSectionPrivacy => 'Privacy';
+
+  @override
+  String get settingsGeneralNoTelemetry => 'No telemetry';
+
+  @override
+  String get settingsGeneralNoTelemetryDescription =>
+      'The app, the CLI and the agent send no usage analytics or crash reports. Prompts and files go only to the provider and tools you set up.';
 
   @override
   String get settingsKeyboardWhereApprovalAnywhere =>

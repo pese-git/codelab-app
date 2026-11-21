@@ -461,7 +461,7 @@ Flutter-тесты app в GitHub CI не запускаются (`AGENTS.md` §2
   - ночные отчёты — артефакты GitHub CI (90 дней) со ссылками на запуски в `proposal.md`; отчёт третьей ночи перед архивированием сохраняется в `evidence/nightly/` этого change;
   - отчёты app — сырые JSON трёх прогонов в `evidence/app/run-<n>/` с относительными путями, если суммарно меньше ~5 МБ, иначе сводка (имя теста, статус, файл);
   - прочтение DoD подтверждено: ночная проверка отмечает `app:` как `deferred`, а ворота MVP — итоговый прогон с отчётами app (D9, задача 4.5).
-- **Q7** — (а): в этом change пользовательская документация MVP без установки, `docs/release/verify.md` и `PRIVACY.md`. Они уходят в `add-release-pipeline-and-installer` и `add-privacy-policy`, а для MVP есть «сборка из исходников» (D12).
+- **Q7** — (а): в этом change пользовательская документация MVP без установки, `docs/release/verify.md` и `PRIVACY.md`. Они уходят в `add-release-pipeline-and-installer` и `add-app-legal-page` (архив `2026-11-20-add-app-legal-page`), а для MVP есть «сборка из исходников» (D12).
 
 ## Решения пользователя 2026-11-10
 

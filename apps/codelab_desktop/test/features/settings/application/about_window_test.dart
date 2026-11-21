@@ -134,7 +134,6 @@ void main() {
       licenseCopyright: 'Copyright (c) 2026 alice',
       configHome: '/Users/alice/.codelab-test',
       logDirectory: '/Users/alice/Library/logs',
-      thirdPartyNotices: '',
     );
 
     final report = diagnosticsReportOf(

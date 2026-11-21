@@ -8,6 +8,7 @@ import 'codelab_connection_status_row.dart';
 import 'codelab_form.dart';
 import 'codelab_key_value_list.dart';
 import 'codelab_prompt_composer.dart';
+import 'codelab_selector_bar.dart';
 import 'codelab_session_status_bar.dart';
 import 'codelab_setup_steps.dart';
 import 'codelab_settings_row.dart';
@@ -362,6 +363,33 @@ Widget codelabFormPreview() {
 )
 Widget codelabFormDarkPreview() {
   return _AcpPreviewSurface(brightness: Brightness.dark, child: _formSample());
+}
+
+/// Образец полосы вкладок страницы «Legal» на `ru`: длинные подписи в узкой
+/// области показывают прокрутку вместо многоточия (design.md change
+/// `add-app-legal-page`, D6, задача 3.2).
+@Preview(
+  name: 'Selector bar (ru)',
+  group: codelabMoleculePreviewGroup,
+  size: Size(400, 80),
+)
+Widget codelabSelectorBarPreview() {
+  return _AcpPreviewSurface(
+    child: CodeLabSelectorBar<String>(
+      value: 'privacy',
+      semanticLabel: 'Правовые документы',
+      onChanged: (_) {},
+      items: const [
+        CodeLabSelectorItem(
+          value: 'privacy',
+          label: 'Политика конфиденциальности',
+        ),
+        CodeLabSelectorItem(value: 'terms', label: 'Условия использования'),
+        CodeLabSelectorItem(value: 'license', label: 'Лицензия'),
+        CodeLabSelectorItem(value: 'notices', label: 'Сторонние уведомления'),
+      ],
+    ),
+  );
 }
 
 @Preview(

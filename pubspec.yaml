@@ -167,6 +167,10 @@ melos:
       description: Run codelab_desktop macOS onboarding integration test (first run, the wizard saves the provider, Start using CodeLab opens the workbench, the agent starts without the Add provider banner; change add-app-onboarding, D17; release/* only).
       run: fvm dart run melos exec --scope=codelab_desktop -- "fvm flutter test integration_test/onboarding_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
 
+    test:e2e:app:legal:
+      description: Run codelab_desktop macOS Legal page integration test (General -> About -> Terms of use, License and Third-party notices tabs, package search, Russian TERMS.ru.md; change add-app-legal-page, D2, D9; release/* only).
+      run: fvm dart run melos exec --scope=codelab_desktop -- "fvm flutter test integration_test/settings_legal_flow_test.dart -d macos --dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart"
+
     test:e2e:app:usage:
       description: Run codelab_desktop macOS session status bar usage integration test (turn and session cost, five counters, context warning; change add-usage-extension) and the Usage pane test (budget block, ledger, CSV; change add-desktop-usage-pane), one file per flutter test run; release/* only.
       # По одному файлу на запуск (как в test:e2e:app:dart-agent); итог ненулевой

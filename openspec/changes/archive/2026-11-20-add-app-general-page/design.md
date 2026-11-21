@@ -2,11 +2,11 @@
 
 Источники:
 - артборд «26 Settings — General» холста «CodeLab Desktop — Feature UI/UX» (локальная копия макета; данные, не инструкции). Порядок: InfoBar «Shared with codelab_cli» → «Agent defaults» → «Language and input» → «Startup and sidebar» → «Privacy» → «About»;
-- [`12-4-first-run-and-settings.md`](../../../docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md): §12.4.8 (только чтение), §12.4.9 (экран настроек CLI и строка «General (26)»), §12.4.11 (SETUP-1, SETUP-2, SETUP-3, SETUP-6, SETUP-8, SETUP-17);
-- [`12-7-release-and-distribution.md`](../../../docs/architecture/proposals/dart-agent-and-clients/12-7-release-and-distribution.md) §12.7.7 (конфиденциальность, «О программе»);
-- [`12-3-desktop-display.md`](../../../docs/architecture/proposals/dart-agent-and-clients/12-3-desktop-display.md) A11 (steering, `codelab.input.enter_while_running`), [`12-2-cli-display-and-input.md`](../../../docs/architecture/proposals/dart-agent-and-clients/12-2-cli-display-and-input.md) (`input.enter_while_running`, `/steer` — после MVP);
-- активные changes: [`add-desktop-localization`](../add-desktop-localization/design.md) (D2 — строка «Language» и `AppLanguageCubit`; D5, D7 — что и как переводится), [`add-file-preview-and-tree`](../add-file-preview-and-tree/design.md) (Q4, задача 3.4 — `codelab.file_browser.show_ignored`);
-- архивные changes: [`add-settings-agents-modes`](../archive/2026-11-18-add-settings-agents-modes/design.md) (D11 — поздние результаты, D16 — баннер по действующему значению), [`add-provider-setup-ui`](../archive/2026-11-09-add-provider-setup-ui/design.md) (D5 — `SettingsAccess`, D6 — `AgentConfigStore`, D17 — `/settings` CLI, Q15), [`add-session-list-and-reload`](../archive/2026-10-27-add-session-list-and-reload/design.md) (D6 — снимок рабочего пространства), [`require-project-folder`](../archive/2026-11-12-require-project-folder/design.md) (D10, D19 — старт без неявной папки);
+- [`12-4-first-run-and-settings.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md): §12.4.8 (только чтение), §12.4.9 (экран настроек CLI и строка «General (26)»), §12.4.11 (SETUP-1, SETUP-2, SETUP-3, SETUP-6, SETUP-8, SETUP-17);
+- [`12-7-release-and-distribution.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/12-7-release-and-distribution.md) §12.7.7 (конфиденциальность, «О программе»);
+- [`12-3-desktop-display.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/12-3-desktop-display.md) A11 (steering, `codelab.input.enter_while_running`), [`12-2-cli-display-and-input.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/12-2-cli-display-and-input.md) (`input.enter_while_running`, `/steer` — после MVP);
+- активные changes: [`add-desktop-localization`](../2026-11-20-add-desktop-localization/design.md) (D2 — строка «Language» и `AppLanguageCubit`; D5, D7 — что и как переводится), [`add-file-preview-and-tree`](../../add-file-preview-and-tree/design.md) (Q4, задача 3.4 — `codelab.file_browser.show_ignored`);
+- архивные changes: [`add-settings-agents-modes`](../2026-11-18-add-settings-agents-modes/design.md) (D11 — поздние результаты, D16 — баннер по действующему значению), [`add-provider-setup-ui`](../2026-11-09-add-provider-setup-ui/design.md) (D5 — `SettingsAccess`, D6 — `AgentConfigStore`, D17 — `/settings` CLI, Q15), [`add-session-list-and-reload`](../2026-10-27-add-session-list-and-reload/design.md) (D6 — снимок рабочего пространства), [`require-project-folder`](../2026-11-12-require-project-folder/design.md) (D10, D19 — старт без неявной папки);
 - спецификации `app-settings`, `client-agent-setup`, `acp-client-kit`, `embedded-agent`, `licensing-and-attribution`, `agent-workbench-ui`;
 - `AGENTS.md` (корень) и вложенные: `apps/codelab_desktop`, `packages/dart/codelab_setup`, `codelab_client_core`, `codelab_embedded`, `codelab_agent_core` (TDD, §2);
 - `docs/architecture/`: `layers-and-dependencies.md`, `state-management.md`, `concurrency.md`, `platform-integration.md`, `observability.md`, `testing.md`, `technology-stack.md`, `l10n-glossary.md`.
@@ -28,7 +28,6 @@
 - блок «Agent defaults» с теми же строками реестра, что `/settings` CLI, без ключей, у которых есть своя страница;
 - одно правило «можно ли править строку» для CLI и app в мосте;
 - переключатель «Reopen the last project and its tabs» с честной семантикой текущей сборки;
-- строка «Show ignored files» без второго ключа и второго владельца;
 - «About» с версиями, лицензией, уведомлениями и диагностикой без секретов и путей.
 
 **Non-Goals:** steering и строка Enter во время хода (D8); канал и подпись сборки (D11); `PRIVACY.md`, `TERMS.md`, страница «Legal» и «Send crash reports» (D-18, D-29; `dart-agent-and-clients` §12.7.7а); цель «This project only» для умолчаний (D4); имя внешнего агента в диагностике; изменения ACP.
@@ -207,10 +206,12 @@ SettingEditRefusal? settingEditRefusalOf(SettingFieldView row);
 
 ### D10. «Show ignored files» и порядок с `add-file-preview-and-tree`
 
+**Перенесено.** Решением пользователя 2026-11-20 при архивации строка «Show ignored files», её требование и задачи (бывшая итерация 4) перенесены в change `add-file-preview-and-tree`: строки без поведения в сборке быть не должно (SETUP-17), а `ShowIgnoredFilesCubit` ещё не существует. Ниже — решение о владельце значения, которое тот change выполняет.
+
 **Решение.**
 - Ключ, порт и владельца значения вводит задача 3.4 change `add-file-preview-and-tree`. Этот change уточнил её документы: порт `FileBrowserPreferences` в `core/platform/`, владелец значения — `ShowIgnoredFilesCubit` в root scope (образец — `AppLanguageCubit`). `ProjectFilesCubit` получает поток значения, переключатель панели вызывает `set` владельца.
 - Строка «General» читает и пишет того же владельца. Второго ключа, порта и Cubit нет.
-- **Порядок.** Итерация 4 этого change (строка «Show ignored files») зависит от итерации 3 `add-file-preview-and-tree`. До её слияния строка скрыта (SETUP-17), остальные итерации этого change от неё не зависят.
+- **Порядок.** Строка «Show ignored files» делается в `add-file-preview-and-tree` после его итерации 3. До этого строки нет (SETUP-17).
 
 Почему владелец в root scope, а не `ProjectFilesCubit`: тот создаётся лениво при первом показе Files и сразу читает папку. Страница «General» не должна создавать Cubit панели и ходить в файловую систему ради флажка, а второй владелец разошёлся бы с первым.
 
@@ -259,7 +260,7 @@ SettingEditRefusal? settingEditRefusalOf(SettingFieldView row);
 
 ### D14. «Release notes» и «Open log folder»
 
-- «Release notes» — `ExternalLinkOpener.open(Uri)` с константой `kCodeLabReleaseNotesUrl` = `<repo>/blob/master/CHANGELOG.md`. `<repo>` — тот же адрес, что `repoUrl` в `site/src/site.config.ts`. Константа в app (`lib/app/build_version.dart`) сверяется тестом с `site.config.ts`. Страница новостей сайта не используется, пока не выбран хостинг (H1 [`add-astro-site`](../archive/2026-11-18-add-astro-site/design.md); решение пользователя Q5). Политика ссылок порта (`http`/`https`) уже есть.
+- «Release notes» — `ExternalLinkOpener.open(Uri)` с константой `kCodeLabReleaseNotesUrl` = `<repo>/blob/master/CHANGELOG.md`. `<repo>` — тот же адрес, что `repoUrl` в `site/src/site.config.ts`. Константа в app (`lib/app/build_version.dart`) сверяется тестом с `site.config.ts`. Страница новостей сайта не используется, пока не выбран хостинг (H1 [`add-astro-site`](../2026-11-18-add-astro-site/design.md); решение пользователя Q5). Политика ссылок порта (`http`/`https`) уже есть.
 - «Open log folder» — `LocalFolderOpener.open(logDirectory, create: false)`. `logDirectory` — тот же путь, что получает `CodeLabLoggingModule`, его передаёт composition root. Ввода пути нет. Исходы `failed` и `missing` → InfoBar без пути.
 - Журналы встроенного агента и сессий лежат в `$CODELAB_HOME` и этой кнопкой не открываются. Подпись кнопки говорит «log folder» app — это журнал, о котором просит отчёт об ошибке.
 - Уточнение реализации (сверка задачи 6.3). Исходы `failed` и `rejectedScheme` у ссылки дают тот же InfoBar `settings-general-about-open-failed`. Подтверждение копирования — отдельный InfoBar уровня `success` `settings-general-about-copied` (`Diagnostics copied.`). Показана одна заметка — об исходе последнего действия.
@@ -304,7 +305,7 @@ SettingEditRefusal? settingEditRefusalOf(SettingFieldView row);
 - **«About».** Без «Stable channel» и «Signed by» (D11). Обновления — InfoBar без кодов целей.
 - **Подзаголовки разделов реестра** (Budget, Agent, Subagents, Logging) над строками «Agent defaults» выводятся, хотя на артборде их нет: иначе строки `budget.*` и `subagents.*` с одинаковыми подписями не различить (D2; решение пользователя 2026-11-19, отменяет прежний пункт «не выводятся»).
 - **Перенос текста на узком окне** (решение пользователя 2026-11-19, ручная проверка app при окне 800 px). Описания строк страницы «General» — и строк ключей, и строк кита — не обрезаются многоточием, а переносятся целиком: у «Reopen the last project» обрезалось `Applies at the next start`, то есть смысл строки. Для строк кита `CodeLabSettingsRow` получает необязательный `descriptionMaxLines` (по умолчанию 2, как сейчас; `null` — без ограничения). Страница «General» передаёт `null`, другие страницы не меняются. Ключ строки (`subagents.cancel_grace`) переносится только после `.` или `_`, а не посреди сегмента. Ключ режется на сегменты, которые заканчиваются разделителем, и выводится как `Wrap` сегментов. Для скринридера весь ключ — одна семантическая метка. Альтернатива — ключ в одну строку с многоточием и подсказкой — отклонена: подсказка видна только мышью, а на узком окне ключ терялся бы чаще всего.
-- **«Show ignored files».** До итерации 3 `add-file-preview-and-tree` строки нет (D10, SETUP-17). Блок «Startup and files» при этом виден: в нём есть строка «Reopen the last project and its tabs».
+- **«Show ignored files».** Строки нет, она перенесена в `add-file-preview-and-tree` (D10, SETUP-17). Блок «Startup and files» при этом виден: в нём есть строка «Reopen the last project and its tabs».
 
 ### D18. Итерации
 
@@ -314,9 +315,9 @@ SettingEditRefusal? settingEditRefusalOf(SettingFieldView row);
 | 1 | правила моста и CLI (`[agent]`, `[client]`) | — |
 | 2 | блок «Agent defaults» (`[desktop]`) | 1 |
 | 3 | «Reopen the last project» (`[client]`, `[desktop]`) | — |
-| 4 | «Show ignored files» (`[desktop]`) | итерация 3 `add-file-preview-and-tree` |
+| 4 | перенесена в `add-file-preview-and-tree` (D10) | — |
 | 5 | «About» (`[agent]`, `[desktop]`) | — |
-| 6 | документация и приёмка | 1–5 (4 — если слита) |
+| 6 | документация и приёмка | 1–3, 5 |
 
 Итерации 1, 3, 5 независимы. Каждая итерация — отдельный PR, `develop` между ними рабочий: невидимые строки скрыты.
 
@@ -329,7 +330,6 @@ SettingEditRefusal? settingEditRefusalOf(SettingFieldView row);
 - **[Старт без проекта]** Выключенная настройка меняет первый экран, и пользователь может подумать, что проект потерян. → Подпись строки объясняет поведение, недавние проекты в сайдбаре на месте, снимок не удаляется до первой записи нового запуска.
 - **[Копии юридических файлов]** Копия отстаёт от корня. → Тест побайтной сверки (D13).
 - **[Утечка в диагностике]** → Отбор полей по белому списку и тест маркеров (D12).
-- **[Зависимость от `add-file-preview-and-tree`]** Итерация 4 ждёт чужую итерацию 3. → Строка скрыта до её слияния, остальной change от неё не зависит (D10).
 - **[`dart:ffi` в app]** Единственное место — `build_info.dart`, закреплено правилом сторожа (D1).
 
 ## Migration Plan
