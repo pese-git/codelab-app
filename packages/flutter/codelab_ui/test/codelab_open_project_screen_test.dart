@@ -122,6 +122,51 @@ void main() {
     expect(find.byKey(_messageKey), findsNothing);
   });
 
+  // Ревью, итерация 1: расхождение с design.md D10 и кадром 11a
+  // (`ProjectsEmpty.dc.html`: `.col` max-width 620, `.hero` с `accent-weak`,
+  // `.drop` пунктиром).
+  testWidgets('колонка экрана шириной до 620 px', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_host(_organism()));
+
+    expect(tester.getSize(find.byKey(_zoneKey)).width, 620);
+  });
+
+  testWidgets('герой — плитка 56×56 со слабым фоном акцента', (tester) async {
+    await tester.pumpWidget(_host(_organism()));
+
+    final hero = find.byKey(const ValueKey('open-project-hero'));
+    expect(hero, findsOneWidget);
+    expect(tester.getSize(hero), const Size(56, 56));
+    final decoration =
+        tester.widget<DecoratedBox>(hero).decoration as BoxDecoration;
+    final accent = CodeLabPalette.of(_lightTheme).accent;
+    // Слабый акцент: тот же оттенок, но прозрачный (не сплошной цвет акцента).
+    expect(decoration.color, isNotNull);
+    expect(decoration.color!.a, lessThan(0.5));
+    expect(decoration.color!.r, closeTo(accent.r, 0.01));
+  });
+
+  testWidgets('рамка зоны в покое — пунктир (CustomPaint), при dropActive — '
+      'сплошная рамка акцента', (tester) async {
+    Finder painter() => find.descendant(
+      of: find.byKey(_zoneKey),
+      matchRoot: true,
+      matching: find.byWidgetPredicate(
+        (w) => w is CustomPaint && w.painter != null,
+      ),
+    );
+
+    await tester.pumpWidget(_host(_organism()));
+    expect(painter(), findsOneWidget);
+
+    await tester.pumpWidget(_host(_organism(dropActive: true)));
+    await tester.pump(const Duration(seconds: 1));
+    expect(painter(), findsNothing);
+  });
+
   testWidgets('нажатие кнопки вызывает onOpen, ссылки — onOpenSettings', (
     tester,
   ) async {

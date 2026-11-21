@@ -53,9 +53,13 @@ final class _Picker implements ProjectFolderPicker {
   var picks = 0;
   Completer<String?>? _open;
 
+  /// Если задано, порт бросает эту ошибку (сбой плагина выбора папки).
+  Object? error;
+
   @override
   Future<String?> pickFolder({String? initialDirectory}) {
     picks++;
+    if (error case final failure?) return Future.error(failure);
     return (_open = Completer<String?>()).future;
   }
 
@@ -330,6 +334,74 @@ void main() {
 
       expect(scene.settings.state.dropRejection, isNull);
       expect(scene.dropEvents(), isEmpty);
+    });
+  });
+
+  // Ревью, итерация 1: плагин `desktop_drop` на Linux отдаёт не-файловые URI
+  // как есть (`https://user:token@host/…`), а относительный путь разрешался бы
+  // от папки процесса app. Путь должен быть абсолютным локальным путём; иначе
+  // `DropUnsupported` без пути, вид не запрашивается, путь не попадает ни в
+  // состояние, ни в журналы (корневой `AGENTS.md` §10, §16).
+  group('не локальный абсолютный путь', () {
+    const secret = 'ghp_SECRET_TOKEN';
+
+    for (final dropped in const [
+      'https://user:$secret@github.com/org/repo',
+      'smb://nas/share/folder',
+      'file://host/share',
+      'work/app',
+      './app',
+      '../app',
+    ]) {
+      test('«$dropped»: unsupported без пути, вид не запрашивается', () async {
+        final scene = _Scene();
+        scene.kinds.kinds[dropped] = LocalPathKind.directory;
+        await scene.settings.projectRestored;
+
+        await scene.settings.openDroppedPaths([dropped]);
+
+        expect(
+          scene.settings.state.dropRejection,
+          isA<DropUnsupported>().having((r) => r.path, 'path', isNull),
+        );
+        expect(scene.kinds.calls, isEmpty);
+        expect(scene.settings.projectDirectory, isNull);
+        expect(scene.started, isEmpty);
+        final logged = '${scene.diagnostics.entries}${scene.events.entries}';
+        expect(logged, isNot(contains(secret)));
+        expect(logged, isNot(contains('github.com')));
+        expect(logged, isNot(contains(dropped)));
+        expect(scene.dropEvents().single['reason'], 'unsupported');
+      });
+    }
+  });
+
+  // Ревью, итерация 1: порт выбора папки (`file_selector`) может бросить; ошибка
+  // не должна уходить в зону через `unawaited` (корневой `AGENTS.md` §12).
+  group('сбой системного выбора папки', () {
+    test('ошибка не выходит наружу, диагностика warning без текста ошибки, '
+        'следующий запрос открывает диалог заново', () async {
+      final scene = _Scene();
+      await scene.settings.projectRestored;
+      scene.picker.error = StateError('boom: /secret/location');
+
+      await scene.settings.browseForProject();
+
+      expect(scene.settings.projectDirectory, isNull);
+      final failures = scene.diagnostic(
+        'warning',
+        'Failed to open the folder picker.',
+      );
+      expect(failures, hasLength(1));
+      expect('${scene.diagnostics.entries}', isNot(contains('boom')));
+      expect('${scene.diagnostics.entries}', isNot(contains('/secret')));
+
+      scene.picker.error = null;
+      final again = scene.settings.browseForProject();
+      await pumpEventQueue();
+      expect(scene.picker.picks, 2);
+      scene.picker.complete(null);
+      await again;
     });
   });
 

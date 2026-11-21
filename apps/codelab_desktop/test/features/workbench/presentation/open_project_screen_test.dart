@@ -36,16 +36,14 @@ const _agent = ValueKey('open-project-agent');
 const _agentSettings = ValueKey('open-project-agent-settings');
 const _info = ValueKey('open-project-info');
 
+/// Системный выбор папки, закрытый без выбора; считает вызовы.
 final class _Picker implements ProjectFolderPicker {
-  _Picker([this.answer]);
-
-  final String? answer;
   var picks = 0;
 
   @override
   Future<String?> pickFolder({String? initialDirectory}) async {
     picks++;
-    return answer;
+    return null;
   }
 }
 
@@ -86,6 +84,10 @@ void main() {
   }
 
   Future<void> tearDownApp(WidgetTester tester) async {
+    // Запущенный агент оставляет таймеры запросов; без паузы они переживают
+    // дерево и тест падает на «Timer is still pending» (как в остальных тестах
+    // app).
+    await tester.pump(const Duration(seconds: 10));
     await tester.pumpWidget(const SizedBox.shrink());
     await closeCodeLabRootScopeInTest();
   }
@@ -271,9 +273,17 @@ void main() {
       tester,
     ) async {
       final picker = _Picker();
+      var embeddedOpened = 0;
       final cubit = await pump(
         tester,
-        CodeLabTestBinding(stdioDefault: false, projectFolderPicker: picker),
+        CodeLabTestBinding(
+          stdioDefault: false,
+          projectFolderPicker: picker,
+          embeddedOpener: ({required cwd, required hostProfile}) async {
+            embeddedOpened++;
+            throw StateError('the embedded agent must not be opened');
+          },
+        ),
       );
 
       await tester.tap(find.byKey(_openButton));
@@ -282,7 +292,7 @@ void main() {
       expect(picker.picks, 1);
       expect(cubit.state.selectedProjectPath, isNull);
       expect(find.byKey(_screen), findsOneWidget);
-      await tester.pump(const Duration(seconds: 10));
+      expect(embeddedOpened, 0, reason: 'агент не запущен');
       await tearDownApp(tester);
     });
   });
@@ -308,7 +318,6 @@ void main() {
 
       expect(cubit.state.selectedProjectPath, '/work/app');
       expect(find.byKey(_screen), findsNothing);
-      await tester.pump(const Duration(seconds: 10));
       await tearDownApp(tester);
     });
 
