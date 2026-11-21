@@ -2533,6 +2533,14 @@
    "w": 1180,
    "x": 6300,
    "y": 9620
+  },
+  "NavProject.dc.html": {
+   "h": 900,
+   "page": "nav",
+   "title": "Open project flow — codelab_app",
+   "w": 2160,
+   "x": 0,
+   "y": 4700
   }
  },
  "createdOnFiles": {
@@ -3778,7 +3786,8 @@
   "TabletProjectReady.dc.html",
   "TabletProjectReady-dark.dc.html",
   "TabletProjectNotFound.dc.html",
-  "TabletProjectNotFound-dark.dc.html"
+  "TabletProjectNotFound-dark.dc.html",
+  "NavProject.dc.html"
  ],
  "pages": [
   {
