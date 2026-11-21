@@ -7,17 +7,22 @@ import 'package:codelab_client_core/codelab_client_core.dart'
     show ClientWorkspace, RecentProjectsStore;
 import 'package:codelab_ui/codelab_ui.dart' show CodeLabRecentProject;
 
+import '../../../core/platform/local_path_kind.dart';
 import '../../../core/platform/project_folder_picker.dart';
 import '../../../core/platform/startup_preferences.dart';
+import 'project_drop.dart';
 import 'project_paths.dart';
 import 'shell_part.dart';
 import 'ui_mappers.dart';
+
+export 'project_drop.dart';
 
 /// Проект и параметры запуска агента.
 final class SettingsState {
   const SettingsState({
     this.selectedProjectPath,
     this.recentProjects = const [],
+    this.dropRejection,
   });
 
   /// Рабочая папка («проект»), выбранная через «Open Project», — `cwd`
@@ -29,12 +34,23 @@ final class SettingsState {
   /// Недавние проекты, самый свежий первым (design.md, Decision 4).
   final List<CodeLabRecentProject> recentProjects;
 
+  /// Отказ последнего броска папки; `null` — отказа нет. Держится до
+  /// следующего входа перетаскивания на экран, броска или выбора проекта
+  /// (design.md change `add-empty-project-screen`, D4).
+  final ProjectDropRejection? dropRejection;
+
+  static const Object _keep = Object();
+
   SettingsState _copyWith({
     String? selectedProjectPath,
     List<CodeLabRecentProject>? recentProjects,
+    Object? dropRejection = _keep,
   }) => SettingsState(
     selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
     recentProjects: recentProjects ?? this.recentProjects,
+    dropRejection: identical(dropRejection, _keep)
+        ? this.dropRejection
+        : dropRejection as ProjectDropRejection?,
   );
 }
 
@@ -65,6 +81,7 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
     DirectoryExists? directoryExists,
+    LocalPathKindOf localPathKind = ioLocalPathKind,
     StartupPreferences? startupPreferences,
     Logger? appLogger,
     this.projectRestoreTimeout = const Duration(seconds: 2),
@@ -75,6 +92,7 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
        _projectFolderPicker = projectFolderPicker,
        _recentProjectsStore = recentProjectsStore,
        _directoryExists = directoryExists,
+       _localPathKind = localPathKind,
        super(const SettingsState()) {
     // Недавние проекты прошлого запуска видны до первого открытия выбора.
     unawaited(_loadRecentProjects());
@@ -152,6 +170,22 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   /// `null` — папка проекта не проверяется (тесты с вымышленными путями).
   final DirectoryExists? _directoryExists;
 
+  /// Порт вида брошенного пути (D4).
+  final LocalPathKindOf _localPathKind;
+
+  /// Счётчик явных намерений выбора проекта: [selectProject],
+  /// [browseForProject] и [openDroppedPaths] его увеличивают. Бросок после
+  /// `await` проверки вида применяет результат, только если номер не
+  /// изменился: поздний результат не перебивает более новый выбор
+  /// (корневой `AGENTS.md` §9, §12; D4). Восстановление проекта прошлого
+  /// запуска — не намерение.
+  var _projectIntent = 0;
+
+  /// Незавершённый системный диалог выбора папки; единственный источник
+  /// истины «диалог открыт» (D7): повторный запрос ждёт его, а не открывает
+  /// второй диалог.
+  Future<void>? _picking;
+
   /// Папка для `cwd` сессии и процесса агента: выбранный проект без
   /// пробелов по краям; `null` — проект не выбран (пустая строка — не
   /// проект). Запасного варианта нет: `Process.start(workingDirectory: '')`
@@ -188,14 +222,20 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   /// Выбирает [path] проектом следующей сессии, записывает его в недавние и
   /// сразу перечитывает их — выбор проекта показывает новую запись, не
   /// дожидаясь следующего запуска. Пустой путь и путь из пробелов проектом не
-  /// являются и ничего не меняют (D1).
-  Future<void> selectProject(String path) async {
+  /// являются и ничего не меняют (D1). Любой выбор проекта снимает отказ
+  /// последнего броска (D4).
+  Future<void> selectProject(String path) {
+    _projectIntent++;
+    return _selectProject(path);
+  }
+
+  Future<void> _selectProject(String path) async {
     final trimmed = path.trim();
     if (trimmed.isEmpty) {
       return;
     }
 
-    emit(state._copyWith(selectedProjectPath: trimmed));
+    emit(state._copyWith(selectedProjectPath: trimmed, dropRejection: null));
     _workspace.selectProject(trimmed);
     _diagnostics.record('Selected project: $trimmed.', source: 'project');
     // Ошибки старта не теряются: `ConnectionCubit` публикует их состоянием
@@ -218,14 +258,143 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
 
   /// Открывает системный выбор папки; выбранная папка — как [selectProject],
   /// закрытый без выбора диалог ничего не меняет.
-  Future<void> browseForProject() async {
-    final path = await _projectFolderPicker.pickFolder(
-      initialDirectory: state.selectedProjectPath,
-    );
+  ///
+  /// Один диалог за раз (D7): пока диалог открыт, повторный вызов (сайдбар,
+  /// «New session» без проекта, Cmd/Ctrl+O) возвращает тот же `Future` и порт
+  /// второй раз не вызывает.
+  Future<void> browseForProject() {
+    _projectIntent++;
+    return _picking ??= _browse().whenComplete(() => _picking = null);
+  }
+
+  Future<void> _browse() async {
+    final String? path;
+    try {
+      path = await _projectFolderPicker.pickFolder(
+        initialDirectory: state.selectedProjectPath,
+      );
+    } on Object catch (error) {
+      // Плагин выбора папки может бросить (сбой платформы). Вызывающие
+      // запускают выбор через `unawaited` с нескольких триггеров, поэтому
+      // ошибка не должна уходить в зону. Текст ошибки может нести путь и в
+      // журнал не пишется (корневой `AGENTS.md` §12, §16).
+      if (!isClosed) {
+        _diagnostics.record(
+          'Failed to open the folder picker.',
+          severity: DiagnosticSeverity.warning,
+          source: 'project',
+        );
+        // Событие журнала app: только класс ошибки, без текста и пути (D7;
+        // по образцу `app.reopen_last_project_unreadable`).
+        _appLogger?.warning(
+          'project.picker_failed',
+          context: {'error_class': error.runtimeType.toString()},
+        );
+      }
+      return;
+    }
     if (isClosed || path == null) {
       return;
     }
     await selectProject(path);
+  }
+
+  /// Принимает пути, брошенные в окно из файлового менеджера ОС (D4).
+  ///
+  /// Ровно один элемент с локальным путём и видом «папка» — выбор проекта,
+  /// как «Open folder…» (недавние, триггер старта агента). Всё остальное —
+  /// отказ в [SettingsState.dropRejection] без смены проекта и без старта
+  /// агента. Порядок: пустой список — ничего; больше одного — `multiple`
+  /// (вид не проверяется); `null` или пустой путь — `unsupported`; иначе вид
+  /// пути из порта. Путь не канонизируется. Устаревший или закрытый Cubit
+  /// результат отбрасывает ([_projectIntent], `isClosed`).
+  Future<void> openDroppedPaths(List<String?> paths) async {
+    if (paths.isEmpty) {
+      return;
+    }
+    final intent = ++_projectIntent;
+    if (paths.length > 1) {
+      _reject(DropMultiple(paths.length));
+      return;
+    }
+    final path = paths.single?.trim();
+    if (path == null || path.isEmpty || !isLocalAbsolutePath(path)) {
+      // Не локальный абсолютный путь: отказ БЕЗ пути (он может нести
+      // userinfo URL), вид не запрашивается.
+      _reject(const DropUnsupported(null));
+      return;
+    }
+    LocalPathKind kind;
+    try {
+      kind = await _localPathKind(path);
+    } on Object {
+      // Порт обязан не бросать; сбой адаптера — «нельзя открыть».
+      kind = LocalPathKind.other;
+    }
+    if (isClosed || intent != _projectIntent) {
+      return;
+    }
+    switch (kind) {
+      case LocalPathKind.directory:
+        await _selectProject(path);
+        if (isClosed) return;
+        _appLogger?.info(
+          'project.drop',
+          context: {'outcome': 'opened', 'count': 1},
+        );
+      case LocalPathKind.file:
+        _reject(DropNotAFolder(path));
+      case LocalPathKind.missing:
+        _reject(DropMissing(path));
+      case LocalPathKind.other:
+        _reject(DropUnsupported(path));
+    }
+  }
+
+  /// Снимает отказ последнего броска: перетаскивание вошло на экран (D4).
+  void clearDropRejection() {
+    if (state.dropRejection != null) {
+      emit(state._copyWith(dropRejection: null));
+    }
+  }
+
+  /// Отказ: состояние, диагностика `warning` с путём и событие без путей
+  /// (корневой `AGENTS.md` §16; D4).
+  void _reject(ProjectDropRejection rejection) {
+    final (reason, text, count) = switch (rejection) {
+      DropNotAFolder(:final path) => (
+        'not_a_folder',
+        'Dropped item rejected (not_a_folder): $path.',
+        1,
+      ),
+      DropMultiple(:final count) => (
+        'multiple',
+        'Dropped items rejected (multiple): $count items.',
+        count,
+      ),
+      DropMissing(:final path) => (
+        'missing',
+        'Dropped item rejected (missing): $path.',
+        1,
+      ),
+      DropUnsupported(:final path) => (
+        'unsupported',
+        path == null
+            ? 'Dropped item rejected (unsupported).'
+            : 'Dropped item rejected (unsupported): $path.',
+        1,
+      ),
+    };
+    emit(state._copyWith(dropRejection: rejection));
+    _diagnostics.record(
+      text,
+      severity: DiagnosticSeverity.warning,
+      source: 'project',
+    );
+    _appLogger?.info(
+      'project.drop',
+      context: {'outcome': 'rejected', 'reason': reason, 'count': count},
+    );
   }
 
   /// Проект прошлого запуска выбирается, только если пользователь ещё не

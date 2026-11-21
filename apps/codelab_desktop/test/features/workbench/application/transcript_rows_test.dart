@@ -152,7 +152,8 @@ void main() {
       ),
     );
 
-    expect(find.byType(CodeLabStartScreen), findsOneWidget);
+    // Без проекта — экран кадра 11a (change `add-empty-project-screen`, D1).
+    expect(find.byType(CodeLabOpenProjectScreen), findsOneWidget);
     expect(find.byType(CodeLabConnectionScreen), findsNothing);
   });
 

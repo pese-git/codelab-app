@@ -9,8 +9,9 @@ import '../atomics/atomics.dart';
 /// сессии панель должна подсказывать следующее действие: открыть проект или
 /// начать сессию.
 ///
-/// Для чего: виджет без логики. Хост передаёт [message] (`Open a project to
-/// start a session.` или `Start a new session in app.`), подпись и
+/// Для чего: виджет без логики. Хост передаёт [message] (`Start a new session
+/// in app.`; экран «проект не выбран» теперь рисует `CodeLabOpenProjectScreen`,
+/// change `add-empty-project-screen`, D1), подпись и
 /// ключ единственного действия ([actionLabel], [actionKey]) и, пока агент
 /// стартует, [busyLabel] (`Starting <profile>…`) — индикатор показывается
 /// рядом с действием, а не вместо него.

@@ -635,6 +635,12 @@ abstract class CodeLabLocalizations {
   /// **'Open folder…'**
   String get codeLabSidebarOpenFolder;
 
+  /// Подпись пустого списка проектов в боковой панели: недавних проектов ещё нет.
+  ///
+  /// In en, this message translates to:
+  /// **'No recent projects yet.'**
+  String get codeLabSidebarNoRecentProjects;
+
   /// Кнопка перехода в настройки в боковой панели и её подсказка.
   ///
   /// In en, this message translates to:

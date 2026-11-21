@@ -111,8 +111,10 @@ class CodeLabSessionSidebar extends StatefulWidget {
     this.onProjectSelected,
     this.onLoadMore,
     this.onOpenFolder,
+    this.openFolderShortcut,
     this.onSettings,
     this.emptyLabel,
+    this.noProjectsLabel,
     super.key,
   });
 
@@ -142,11 +144,20 @@ class CodeLabSessionSidebar extends StatefulWidget {
   /// больше нет (design D7 change `add-session-list-and-reload`).
   final VoidCallback? onLoadMore;
   final VoidCallback? onOpenFolder;
+
+  /// Подсказка сочетания «Open folder…» справа от подписи (`Ctrl+O`, `⌘O`);
+  /// `null` — без подсказки. В компактном виде не показывается (D9 change
+  /// `add-empty-project-screen`).
+  final String? openFolderShortcut;
   final VoidCallback? onSettings;
 
   /// Текст проекта без сессий; `null` — текст кита («No sessions yet»,
   /// `add-desktop-localization`, D4).
   final String? emptyLabel;
+
+  /// Подпись пустого списка проектов; `null` — текст кита («No recent
+  /// projects yet.», `add-empty-project-screen`, D9, D11).
+  final String? noProjectsLabel;
 
   @override
   State<CodeLabSessionSidebar> createState() => _CodeLabSessionSidebarState();
@@ -234,8 +245,27 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(6, 0, 6, 6),
             children: [
+              if (widget.projects.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
+                  child: CodeLabText(
+                    widget.noProjectsLabel ??
+                        strings.codeLabSidebarNoRecentProjects,
+                    role: CodeLabTextRole.caption,
+                  ),
+                ),
               for (final project in widget.projects)
                 ..._projectGroup(project, query),
+              // «Open folder…» — продолжение группы «Projects», а не нижней
+              // колонки рядом с «Settings» (кадр 11a; D9 change
+              // `add-empty-project-screen`).
+              _PaneRow(
+                key: CodeLabSessionSidebar.openFolderKey,
+                icon: FluentIcons.open_folder_horizontal,
+                label: strings.codeLabSidebarOpenFolder,
+                trailing: widget.openFolderShortcut,
+                onPressed: widget.onOpenFolder,
+              ),
             ],
           ),
         ),
@@ -245,12 +275,6 @@ class _CodeLabSessionSidebarState extends State<CodeLabSessionSidebar> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _PaneRow(
-                key: CodeLabSessionSidebar.openFolderKey,
-                icon: FluentIcons.open_folder_horizontal,
-                label: strings.codeLabSidebarOpenFolder,
-                onPressed: widget.onOpenFolder,
-              ),
               _PaneRow(
                 key: CodeLabSessionSidebar.settingsKey,
                 icon: FluentIcons.settings,

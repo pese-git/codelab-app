@@ -9,10 +9,12 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ClientWorkspace,
         ConfigTransportResolver,
         ConnectionProfile,
+        EmbeddedProfile,
         ProfileSecretSource,
         RecentProjectsStore,
         SecretSource,
         SessionStatusView,
+        StdioProfile,
         WebSocketProfile,
         WorkspaceDiagnostic;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
@@ -28,6 +30,7 @@ import '../../../core/platform/dock_layout_store.dart';
 import '../../../core/platform/external_link_opener.dart';
 import '../../../core/platform/limited_network_image.dart';
 import '../../../core/platform/link_policy.dart';
+import '../../../core/platform/local_path_kind.dart';
 import '../../../core/platform/project_folder_picker.dart';
 import '../../../core/platform/startup_preferences.dart';
 import '../../../core/platform/usage_csv_saver.dart';
@@ -120,6 +123,7 @@ final class CodeLabShellParts {
     required ProjectFolderPicker projectFolderPicker,
     required RecentProjectsStore recentProjectsStore,
     DirectoryExists? directoryExists,
+    LocalPathKindOf? localPathKind,
     DockLayoutStore? dockLayoutStore,
     DefaultProfileResolver? defaultProfiles,
     Logger? logger,
@@ -143,6 +147,7 @@ final class CodeLabShellParts {
       projectFolderPicker: projectFolderPicker,
       recentProjectsStore: recentProjectsStore,
       directoryExists: directoryExists,
+      localPathKind: localPathKind ?? ioLocalPathKind,
       startupPreferences: startupPreferences,
       appLogger: appLogger,
     );
@@ -404,6 +409,14 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   Future<void> selectProject(String path) => _settings.selectProject(path);
 
   Future<void> browseForProject() => _settings.browseForProject();
+
+  /// Брошенные в окно пути (перетаскивание из ОС): решение принимает
+  /// `SettingsCubit` (design.md change `add-empty-project-screen`, D4).
+  Future<void> openDroppedPaths(List<String?> paths) =>
+      _settings.openDroppedPaths(paths);
+
+  /// Снимает сообщение об отказе брошенной папки.
+  void clearDropRejection() => _settings.clearDropRejection();
 
   /// «Use» (D18): выбирает [profile] для следующего старта агента. Работающий
   /// агент и профиль по умолчанию не меняются.
@@ -968,6 +981,11 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     return CodeLabShellState(
       connectionStatus: connection.connectionStatus,
       transportLabel: connection.transportLabel,
+      transportKind: switch (connection.shownProfile) {
+        StdioProfile() => ProfileTransportKind.stdio,
+        WebSocketProfile() => ProfileTransportKind.webSocket,
+        EmbeddedProfile() => ProfileTransportKind.embedded,
+      },
       profileLabel: connection.selectedProfileLabel,
       connectionDetail: connection.selectedConnectionDetail,
       connectionMessage: connection.connectionMessage,
@@ -1038,6 +1056,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       sessionsPaneWidth: layout.sessionsPaneWidth,
       dockWidth: layout.dockWidth,
       selectedProjectPath: settings.selectedProjectPath,
+      dropRejection: settings.dropRejection,
       recentProjects: settings.recentProjects,
       hasMoreSessions: sessions.hasMoreSessions,
       pendingRootSession: sessions.pendingRootSession,

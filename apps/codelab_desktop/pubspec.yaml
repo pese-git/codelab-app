@@ -48,6 +48,10 @@ dependencies:
   structured_log_flutter: 0.1.3
   structured_log_fluent: 0.1.2+2
   structured_log_remote_sync: 0.2.1
+  # Приём перетаскивания файлов и папок из ОС (add-empty-project-screen, D3,
+  # technology-stack §20и): точный пин 0.8.4 — 0.9.x требует Flutter >=3.47.7.
+  # Импорт — только core/platform/os_drop_region.dart (правило сторожа).
+  desktop_drop: 0.8.4
   # Системный акцент (add-app-appearance-page, D7, technology-stack §20з): точный
   # пин, API пакета меняется между минорными версиями; импорт — только
   # core/platform/system_accent_source.dart (правило сторожа).

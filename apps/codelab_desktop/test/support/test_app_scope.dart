@@ -4,6 +4,7 @@ import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/appearance/app_appearance_start.dart';
 import 'package:codelab_desktop/app/language/app_language_start.dart';
 import 'package:codelab_desktop/app/onboarding/onboarding_start.dart';
+import 'package:codelab_desktop/core/platform/local_path_kind.dart';
 import 'package:codelab_desktop/core/platform/onboarding_preferences.dart'
     show OnboardingPreferences;
 import 'package:codelab_desktop/features/onboarding/application/onboarding_probe.dart'
@@ -115,6 +116,9 @@ final class CodeLabTestBinding {
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
     Map<String, Object> preferences = const {},
     DirectoryExists? directoryExists,
+    // Вид брошенного пути (`add-empty-project-screen`, D4): без шва — реальная
+    // файловая система.
+    LocalPathKindOf? localPathKind,
     EmbeddedAgentOpener? embeddedOpener,
     Map<String, String>? environment,
     SettingsPages? settingsPages,
@@ -213,6 +217,7 @@ final class CodeLabTestBinding {
       // Тесты работают с вымышленными путями вроде `/work/app`; по
       // умолчанию любая папка считается существующей.
       directoryExists: directoryExists ?? (_) async => true,
+      localPathKind: localPathKind,
       // Без своего окружения настоящий открыватель читал бы реальный
       // `~/.codelab/config.yaml` разработчика: исход теста зависел бы от
       // машины, а открытый агент оставлял бы таймер опроса конфига

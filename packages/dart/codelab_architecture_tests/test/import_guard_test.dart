@@ -1625,6 +1625,74 @@ void main() {
     },
   );
 
+  // Перетаскивание из ОС (design.md change `add-empty-project-screen`, D3, D12;
+  // задача 5.1; spec workspace-architecture «Плагин перетаскивания из ОС только
+  // в адаптере платформы»): пакет `desktop_drop` — нативный плагин и
+  // инфраструктура (`AGENTS.md` §11); его импортирует только адаптер
+  // `core/platform/os_drop_region.dart`, остальной код видит список путей и
+  // колбэки. Правила в `rules.dart` ещё нет — тест красный по причине «нет
+  // правила».
+  test('reports desktop_drop outside core/platform/os_drop_region.dart', () {
+    const import = "import 'package:desktop_drop/desktop_drop.dart';\n";
+    final matching = rules.where(
+      (r) =>
+          r.dir == 'apps/codelab_desktop/lib' &&
+          r.forbidden.contains('package:desktop_drop/'),
+    );
+    expect(
+      matching,
+      hasLength(1),
+      reason:
+          'в rules.dart нет ровно одного правила apps/codelab_desktop/lib '
+          'для package:desktop_drop/',
+    );
+    final rule = matching.single;
+    expect(rule.exclude, ['core/platform/os_drop_region.dart']);
+
+    final tmp = Directory.systemTemp.createTempSync('guard_desktop_drop_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    for (final file in const [
+      'core/platform/os_drop_region.dart',
+      'features/workbench/presentation/widgets/open_project_screen.dart',
+      'features/workbench/application/settings_cubit.dart',
+    ]) {
+      File(p.join(tmp.path, 'lib', file))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(import);
+    }
+
+    final violations = scan(
+      tmp.path,
+      PackageRule(
+        'lib',
+        forbidden: rule.forbidden,
+        exclude: rule.exclude,
+        sealExclude: rule.sealExclude,
+      ),
+    );
+
+    // Адаптер нарушением не считается; виджет рабочего места и Cubit — да,
+    // отчёт называет файл и импорт.
+    expect(violations, hasLength(2), reason: violations.join('\n'));
+    expect(
+      violations,
+      isNot(contains(contains('core/platform/os_drop_region.dart'))),
+    );
+    expect(
+      violations,
+      containsAll([
+        endsWith(
+          'lib/features/workbench/presentation/widgets/open_project_screen.dart:1 -> '
+          'package:desktop_drop/desktop_drop.dart',
+        ),
+        endsWith(
+          'lib/features/workbench/application/settings_cubit.dart:1 -> '
+          'package:desktop_drop/desktop_drop.dart',
+        ),
+      ]),
+    );
+  });
+
   // Выбор файла темы (design.md change `add-app-appearance-page`, D1, D9;
   // задача 5.1): `file_selector` — системный диалог, то есть нативный API и
   // инфраструктура (`AGENTS.md` §11); его импортируют только адаптеры

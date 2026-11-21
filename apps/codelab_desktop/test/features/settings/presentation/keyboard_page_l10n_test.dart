@@ -134,7 +134,7 @@ void main() {
       findsOneWidget,
     );
 
-    expect(_rowIds(tester), hasLength(20));
+    expect(_rowIds(tester), hasLength(21));
     for (final row in keyboardRows) {
       final texts = _texts(tester, _row(row.id));
       expect(texts, hasLength(2), reason: '${row.id}: действие и место');
@@ -168,6 +168,17 @@ void main() {
     }
   }, variant: variant);
 
+  testWidgets('русский текст строки «Open folder»: действие переведено, '
+      'клавиши те же', (tester) async {
+    await _pump(tester, _ru);
+
+    expect(_texts(tester, _row('open-folder')), [
+      'Открыть папку как проект',
+      'Рабочее место',
+    ]);
+    expect(_caps(tester, _row('open-folder')), ['Ctrl', 'O']);
+  }, variant: variant);
+
   testWidgets('английский текст действия при русском интерфейсе: '
       '«allow always» находит строку с переводом', (tester) async {
     await _pump(tester, _ru);
@@ -196,7 +207,7 @@ void main() {
   testWidgets('«zzz» при русском интерфейсе: строка пустого результата и '
       'footer', (tester) async {
     await _pump(tester, _ru);
-    expect(_rowIds(tester), hasLength(20));
+    expect(_rowIds(tester), hasLength(21));
 
     await _type(tester, 'zzz');
 

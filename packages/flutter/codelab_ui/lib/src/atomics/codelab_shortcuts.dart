@@ -224,6 +224,11 @@ enum CodeLabShortcut {
   newSession(CodeLabShortcutGroup.global, [
     CodeLabKeyCombo(LogicalKeyboardKey.keyN, primary: true),
   ]),
+  // Cmd/Ctrl+O — выбор папки проекта (change `add-empty-project-screen`, D7);
+  // идёт сразу после `newSession`: оба открывают работу в проекте.
+  openFolder(CodeLabShortcutGroup.global, [
+    CodeLabKeyCombo(LogicalKeyboardKey.keyO, primary: true),
+  ]),
   openSettings(CodeLabShortcutGroup.global, [
     CodeLabKeyCombo(LogicalKeyboardKey.comma, primary: true),
   ]),

@@ -11,6 +11,7 @@ import '../../application/ui_mappers.dart' show projectNameOf;
 import '../workbench_shell.dart'
     show openConnectionSettings, selectPaletteCommand;
 import '../workbench_focus.dart';
+import 'open_project_screen.dart';
 import 'provider_setup_banner.dart';
 
 class WorkbenchMainPane extends StatelessWidget {
@@ -263,13 +264,7 @@ class WorkbenchMainPane extends StatelessWidget {
         _SessionHeader(state: state),
         Expanded(
           child: project == null
-              ? CodeLabStartScreen(
-                  message: l10n.workbenchOpenProjectHint,
-                  actionLabel: l10n.workbenchOpenFolder,
-                  actionKey: const ValueKey('start-open-project'),
-                  onAction: () => unawaited(cubit.browseForProject()),
-                  busyLabel: busy,
-                )
+              ? WorkbenchOpenProjectScreen(state: state, cubit: cubit)
               : CodeLabStartScreen(
                   message: l10n.workbenchStartNewSessionIn(
                     projectNameOf(project),

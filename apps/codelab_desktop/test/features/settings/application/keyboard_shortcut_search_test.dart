@@ -166,7 +166,7 @@ void main() {
   test('ничего не найдено: «zzz» даёт пустой список, а «» — все записи', () {
     // Первая проверка отличает пустой результат от «функция ничего не
     // отбирает».
-    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(20));
+    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(21));
     expect(filterKeyboardShortcuts(_entries(), 'zzz'), isEmpty);
   });
 
@@ -180,8 +180,18 @@ void main() {
     }
   });
 
+  test('«ctrl o» и «⌘O» находят только open-folder (change '
+      '`add-empty-project-screen`, D7; spec app-settings «Поиск строки «Open '
+      'folder»»)', () {
+    for (final query in const ['ctrl o', '⌘O', 'Cmd+O']) {
+      expect(_ids(filterKeyboardShortcuts(_entries(), query)), [
+        'open-folder',
+      ], reason: query);
+    }
+  });
+
   test('поиск не идёт по «Where»: «files tree» ничего не находит', () {
-    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(20));
+    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(21));
     // «Files tree» — текст «Where» строк дерева, но не их действия.
     expect(filterKeyboardShortcuts(_entries(), 'files tree'), isEmpty);
   });

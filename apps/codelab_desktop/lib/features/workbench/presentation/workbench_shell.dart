@@ -94,11 +94,12 @@ class CodeLabShell extends StatelessWidget {
               : state.isCommandPaletteOpen
               ? cubit.closeCommandPalette
               : (state.canCancel ? cubit.cancelTurn : null),
-          // Агент стартует сам (D13): «New session» доступна при выбранном
-          // проекте и без соединения.
-          onNewSession: state.selectedProjectPath != null
-              ? () => unawaited(cubit.createSession())
-              : null,
+          // Привязано всегда: без проекта сочетание делает то же, что кнопка
+          // «New session» сайдбара, — открывает выбор папки (правило
+          // `require-project-folder`, D5; InfoBar экрана без проекта обещает
+          // именно это, change `add-empty-project-screen`, D7а).
+          // С проектом и без соединения оно стартует агента (D13).
+          onNewSession: () => unawaited(cubit.createSession()),
           // Передаётся всегда: наличие цели проверяется при нажатии, иначе
           // привязка появлялась бы и пропадала с каждым снимком
           // (`fix-approval-focus`, D4, п. 1).
@@ -119,6 +120,9 @@ class CodeLabShell extends StatelessWidget {
                 )?.approvalVisibility.check(session, approval).diagnostic ??
                 'no_transcript',
           ),
+          // Cmd/Ctrl+O — тот же системный выбор папки, что «Open folder…»
+          // (D7 change `add-empty-project-screen`).
+          onOpenFolder: () => unawaited(cubit.browseForProject()),
           onOpenSettings: () =>
               _openSettings(context, SettingsOpenSource.shortcut),
           onToggleFiles: state.projectFilesAvailable
@@ -176,11 +180,18 @@ class CodeLabShell extends StatelessWidget {
                         unawaited(terminals.ensureTab());
                       }
                     },
-                    connectionTooltip: connectionTooltipOf(
-                      profileLabel: state.profileLabel,
-                      transportLabel: state.transportLabel,
-                      connectionDetail: state.connectionDetail,
-                    ),
+                    // Проекта нет и агент не запущен: бейдж говорит об этом, а не
+                    // о статусе соединения (D8 `add-empty-project-screen`).
+                    connectionLabel: state.awaitingProject
+                        ? context.l10n.workbenchBadgeNoProject
+                        : null,
+                    connectionTooltip: state.awaitingProject
+                        ? context.l10n.workbenchBadgeNoProjectTooltip
+                        : connectionTooltipOf(
+                            profileLabel: state.profileLabel,
+                            transportLabel: state.transportLabel,
+                            connectionDetail: state.connectionDetail,
+                          ),
                     // Бейдж без «Connect» (D18): агент стартует сам; в
                     // `lost`/`failed` «Retry» делает то же, что кнопка баннера.
                     onRetry: () => unawaited(cubit.retryStart()),
@@ -210,6 +221,8 @@ class CodeLabShell extends StatelessWidget {
                         ? () => unawaited(cubit.loadMoreSessions())
                         : null,
                     onOpenFolder: () => unawaited(cubit.browseForProject()),
+                    openFolderShortcut: CodeLabShortcut.openFolder.combos.single
+                        .compactFor(defaultTargetPlatform),
                     onSettings: () =>
                         _openSettings(context, SettingsOpenSource.sidebar),
                   ),
@@ -280,12 +293,17 @@ void _openSettings(BuildContext context, SettingsOpenSource source) {
 
 /// «Configure connection» экрана подключения и баннера соединения: открывает
 /// страницу «Connection» (design.md change `add-app-settings-shell`, D6;
-/// вместо прежнего диалога подключения).
-void openConnectionSettings(BuildContext context) {
+/// вместо прежнего диалога подключения). [source] различает вход в журнале:
+/// баннер (по умолчанию) или экран без проекта (`add-empty-project-screen`,
+/// D5).
+void openConnectionSettings(
+  BuildContext context, {
+  SettingsOpenSource source = SettingsOpenSource.banner,
+}) {
   unawaited(
     codeLabDependenciesOf(context).navigationCubit.openSettings(
       page: SettingsPage.connection,
-      source: SettingsOpenSource.banner,
+      source: source,
     ),
   );
 }

@@ -397,6 +397,17 @@ const rules = [
     exclude: ['core/platform/system_accent_source.dart'],
     sealExclude: false,
   ),
+  // Перетаскивание из ОС — нативный плагин и инфраструктура (`AGENTS.md` §11,
+  // `platform-integration.md` §8, §37): пакет `desktop_drop` импортирует только
+  // адаптер `OsDropRegion`; остальной код получает список путей и колбэки
+  // входа и выхода, типы плагина за адаптер не выходят (design.md change
+  // `add-empty-project-screen`, D3, D12).
+  PackageRule(
+    'apps/codelab_desktop/lib',
+    forbidden: ['package:desktop_drop/'],
+    exclude: ['core/platform/os_drop_region.dart'],
+    sealExclude: false,
+  ),
   // Application терминала не знает Flutter (D11, правило 3; задача 2.0): модель
   // эмулятора — чистый Dart из `xterm2_core`, виджеты — только presentation.
   PackageRule(

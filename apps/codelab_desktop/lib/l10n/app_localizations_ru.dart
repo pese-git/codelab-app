@@ -107,8 +107,85 @@ class AppLocalizationsRu extends AppLocalizations {
   String get workbenchNoActiveSession => 'Нет активной сессии';
 
   @override
-  String get workbenchOpenProjectHint =>
-      'Откройте проект, чтобы начать сессию.';
+  String get workbenchOpenProjectTitle => 'Откройте проект';
+
+  @override
+  String get workbenchOpenProjectDescriptionEmbedded =>
+      'Выберите папку, в которой хотите работать. Агент запускается в ней, а сессии получают её рабочей папкой. Агент не читает и не пишет вне неё.';
+
+  @override
+  String get workbenchOpenProjectDescriptionStdio =>
+      'Выберите папку, в которой хотите работать. Агент запускается в ней, а сессии получают её рабочей папкой. Внешний агент сам решает, что делать с файлами вне неё.';
+
+  @override
+  String get workbenchOpenProjectDescriptionWebSocket =>
+      'Выберите папку, в которой хотите работать. Сессии получают её рабочей папкой. Внешний агент сам решает, что делать с файлами вне неё.';
+
+  @override
+  String get workbenchOpenProjectDropLabel =>
+      'Перетащите папку сюда, чтобы открыть её';
+
+  @override
+  String get workbenchOpenProjectDropHint =>
+      'Файлы не принимаются — только папка';
+
+  @override
+  String get workbenchOpenProjectAgentEmbedded =>
+      'в процессе · профиль этого окна';
+
+  @override
+  String workbenchOpenProjectAgentStdio(String detail) {
+    return 'stdio · $detail · профиль этого окна';
+  }
+
+  @override
+  String workbenchOpenProjectAgentWebSocket(String detail) {
+    return 'WebSocket · $detail · профиль этого окна';
+  }
+
+  @override
+  String get workbenchOpenProjectAgentNoteStarts =>
+      'Запускается, когда вы откроете папку. До этого ничего не работает.';
+
+  @override
+  String get workbenchOpenProjectAgentNoteConnects =>
+      'Подключается, когда вы откроете папку. До этого подключений нет.';
+
+  @override
+  String get workbenchOpenProjectSettingsLink =>
+      'Изменить в «Настройки › Подключение»';
+
+  @override
+  String get workbenchOpenProjectInfoTitle => 'Для новой сессии нужна папка';
+
+  @override
+  String workbenchOpenProjectInfoBody(String shortcut) {
+    return '$shortcut без проекта открывает тот же выбор папки. Открытые папки появляются в боковой панели как недавние проекты.';
+  }
+
+  @override
+  String get workbenchOpenProjectDropNotAFolder =>
+      'Это файл. Перетащите папку, чтобы открыть её как проект.';
+
+  @override
+  String get workbenchOpenProjectDropMultiple =>
+      'Перетащите одну папку за раз.';
+
+  @override
+  String workbenchOpenProjectDropMissing(String path) {
+    return 'Перетащенного элемента больше нет: $path.';
+  }
+
+  @override
+  String get workbenchOpenProjectDropUnsupported =>
+      'Этот элемент нельзя открыть как проект. Перетащите папку из файловой системы.';
+
+  @override
+  String get workbenchBadgeNoProject => 'Проект не выбран · агент не запущен';
+
+  @override
+  String get workbenchBadgeNoProjectTooltip =>
+      'Проект не выбран, поэтому агент не запущен';
 
   @override
   String get workbenchOpenFolder => 'Открыть папку…';
@@ -3588,6 +3665,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsKeyboardActionCommandPalette => 'Открыть палитру команд';
 
   @override
+  String get settingsKeyboardActionOpenFolder => 'Открыть папку как проект';
+
+  @override
   String get settingsKeyboardActionOpenSettings => 'Открыть настройки';
 
   @override
@@ -3649,10 +3729,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsKeyboardWhereWorkbench => 'Рабочее место';
-
-  @override
-  String get settingsKeyboardWhereWorkbenchProject =>
-      'Рабочее место, когда выбран проект';
 
   @override
   String get settingsKeyboardWhereOverlay =>
