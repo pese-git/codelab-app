@@ -65,6 +65,7 @@ import '../core/platform/dock_layout_store.dart';
 import '../core/platform/external_link_opener.dart';
 import '../core/platform/local_folder_opener.dart';
 import '../core/platform/limited_network_image.dart';
+import '../core/platform/local_path_kind.dart';
 import '../core/platform/project_folder_picker.dart';
 import '../core/platform/usage_csv_saver.dart';
 import '../core/platform/shared_preferences_recent_projects_store.dart';
@@ -174,6 +175,9 @@ Scope createCodeLabRootScope({
   CodeLabWebSocketTransportFactory? webSocketTransportFactory,
   String? logDirectoryPath,
   DirectoryExists? directoryExists,
+  // Вид брошенного пути (`add-empty-project-screen`, D4): шов тестов, без
+  // него — `ioLocalPathKind`.
+  LocalPathKindOf? localPathKind,
   agent.EmbeddedAgentOpener? embeddedOpener,
   Duration? embeddedCloseTimeout,
   Map<String, String>? environment,
@@ -238,6 +242,7 @@ Scope createCodeLabRootScope({
       ),
       CodeLabPlatformModule(
         directoryExists: directoryExists ?? ioDirectoryExists,
+        localPathKind: localPathKind ?? ioLocalPathKind,
         userShellLauncher: userShellLauncher,
         externalLinkOpener: externalLinkOpener,
         localFolderOpener: localFolderOpener,
@@ -739,6 +744,7 @@ final class CodeLabAppearanceModule extends Module {
 final class CodeLabPlatformModule extends Module {
   CodeLabPlatformModule({
     required this.directoryExists,
+    required this.localPathKind,
     UserShellLauncher? userShellLauncher,
     ExternalLinkOpener? externalLinkOpener,
     LocalFolderOpener? localFolderOpener,
@@ -788,10 +794,15 @@ final class CodeLabPlatformModule extends Module {
   /// Проверка папки проекта; тесты с вымышленными путями подменяют её.
   final DirectoryExists directoryExists;
 
+  /// Вид пути, брошенного в окно (D4 `add-empty-project-screen`); тесты с
+  /// вымышленными путями подменяют порт.
+  final LocalPathKindOf localPathKind;
+
   @override
   void builder(Scope currentScope) {
     // Проверка папки проекта до восстановления и подключения.
     bind<DirectoryExists>().toInstance(directoryExists);
+    bind<LocalPathKindOf>().toInstance(localPathKind);
     // Настройки запуска app: читает `SettingsCubit` до восстановления
     // проекта, пишет страница «General» (D9).
     bind<StartupPreferences>().toInstance(
@@ -1050,6 +1061,7 @@ final class CodeLabPresentationModule extends Module {
             projectFolderPicker: currentScope.resolve<ProjectFolderPicker>(),
             recentProjectsStore: currentScope.resolve<RecentProjectsStore>(),
             directoryExists: currentScope.resolve<DirectoryExists>(),
+            localPathKind: currentScope.resolve<LocalPathKindOf>(),
             dockLayoutStore: currentScope.resolve<DockLayoutStore>(),
             defaultProfiles: currentScope.resolve<DefaultProfileResolver>(),
             tokenSecrets: currentScope.resolve<ProfileSecretSource>(),

@@ -17,7 +17,6 @@ import 'package:codelab_client_core/codelab_client_core.dart'
 import 'package:codelab_desktop/features/settings/application/embedded_profile.dart';
 import 'package:codelab_desktop/features/workbench/application/settings_cubit.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
-import 'package:codelab_desktop/features/workbench/application/shell_state.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -105,7 +104,7 @@ void main() {
       ('stdio', _stdio, ProfileTransportKind.stdio),
       ('WebSocket', _webSocket, ProfileTransportKind.webSocket),
     ]) {
-      test('$name', () async {
+      test(name, () async {
         await cubit.useProfile(profile);
 
         expect(cubit.state.transportKind, kind);

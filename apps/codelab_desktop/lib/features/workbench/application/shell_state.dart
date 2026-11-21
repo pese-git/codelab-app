@@ -5,6 +5,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 import '../../usage/application/usage_pane_data.dart';
 import 'agents_pane_data.dart';
 import 'connection_cubit.dart' show ProviderSetupNotice, RestartConfirmation;
+import 'project_drop.dart' show ProjectDropRejection;
 import 'sessions_cubit.dart' show PendingRootSession;
 import 'ui_mappers.dart';
 
@@ -14,6 +15,14 @@ enum ShellLinkNote {
   /// Платформа отказала открыть ссылку из ответа агента.
   openFailed,
 }
+
+/// Вид транспорта профиля окна для подписи карточки агента на экране «проект
+/// не выбран» (design.md change `add-empty-project-screen`, D5).
+///
+/// Почему тип, а не текст: подпись и пояснение зависят от языка и профиля, а
+/// текст в состоянии запрещён (`apps/codelab_desktop/AGENTS.md`,
+/// «Локализация», вид 2); строит их presentation по этому типу.
+enum ProfileTransportKind { embedded, stdio, webSocket }
 
 /// Состояние рабочего места в прежней форме — то, что читают виджеты,
 /// интеграционные и характеризационные тесты.
@@ -31,6 +40,7 @@ final class CodeLabShellState {
   const CodeLabShellState({
     required this.connectionStatus,
     required this.transportLabel,
+    required this.transportKind,
     required this.profileLabel,
     required this.connectionDetail,
     this.connectionMessage,
@@ -74,6 +84,7 @@ final class CodeLabShellState {
     required this.sessionsPaneWidth,
     this.dockWidth = 360,
     required this.selectedProjectPath,
+    this.dropRejection,
     required this.recentProjects,
     this.hasMoreSessions = false,
     this.pendingRootSession,
@@ -85,6 +96,7 @@ final class CodeLabShellState {
   // Подключение — `ConnectionCubit`.
   final CodeLabConnectionStatus connectionStatus;
   final String transportLabel;
+  final ProfileTransportKind transportKind;
   final String profileLabel;
   final String connectionDetail;
 
@@ -210,6 +222,18 @@ final class CodeLabShellState {
   final String? selectedProjectPath;
   final List<CodeLabRecentProject> recentProjects;
 
+  /// Отказ последнего броска папки; `null` — отказа нет (`SettingsCubit`).
+  final ProjectDropRejection? dropRejection;
+
+  /// Проекта нет и агент не запущен: экран «проект не выбран» и бейдж
+  /// `No project · agent not started` (D8). Истинно, только когда проект не
+  /// выбран, а соединение — `idle` или `disconnected`; сбой и потеря
+  /// соединения бейдж не перекрывают.
+  bool get awaitingProject =>
+      selectedProjectPath == null &&
+      (connectionStatus == CodeLabConnectionStatus.idle ||
+          connectionStatus == CodeLabConnectionStatus.disconnected);
+
   /// У агента есть следующая страница сессий — сайдбар показывает
   /// `Load more sessions` (design D7 change `add-session-list-and-reload`).
   final bool hasMoreSessions;
@@ -230,6 +254,7 @@ final class CodeLabShellState {
   CodeLabShellState copyWith({
     CodeLabConnectionStatus? connectionStatus,
     String? transportLabel,
+    ProfileTransportKind? transportKind,
     String? profileLabel,
     String? connectionDetail,
     Object? connectionMessage = _unset,
@@ -273,6 +298,7 @@ final class CodeLabShellState {
     double? sessionsPaneWidth,
     double? dockWidth,
     String? selectedProjectPath,
+    Object? dropRejection = _unset,
     List<CodeLabRecentProject>? recentProjects,
     bool? hasMoreSessions,
     Object? pendingRootSession = _unset,
@@ -283,6 +309,7 @@ final class CodeLabShellState {
     return CodeLabShellState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
       transportLabel: transportLabel ?? this.transportLabel,
+      transportKind: transportKind ?? this.transportKind,
       profileLabel: profileLabel ?? this.profileLabel,
       connectionDetail: connectionDetail ?? this.connectionDetail,
       connectionMessage: identical(connectionMessage, _unset)
@@ -351,6 +378,9 @@ final class CodeLabShellState {
       sessionsPaneWidth: sessionsPaneWidth ?? this.sessionsPaneWidth,
       dockWidth: dockWidth ?? this.dockWidth,
       selectedProjectPath: selectedProjectPath ?? this.selectedProjectPath,
+      dropRejection: identical(dropRejection, _unset)
+          ? this.dropRejection
+          : dropRejection as ProjectDropRejection?,
       recentProjects: recentProjects ?? this.recentProjects,
       hasMoreSessions: hasMoreSessions ?? this.hasMoreSessions,
       sessionFolders: sessionFolders ?? this.sessionFolders,

@@ -53,9 +53,9 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
 
 ## 3. Application app
 
-- [ ] 3.1 `[desktop]` Красный: `apps/codelab_desktop/test/core/platform/local_path_kind_test.dart` (обычный `test`, временный каталог): папка → `directory`; файл → `file`; несуществующий путь → `missing`; ссылка на папку → `directory`; битая ссылка → `missing`; ошибка проверки → `other`, без исключения наружу (design.md D4).
-- [ ] 3.2 `[desktop]` Реализация 3.1: `lib/core/platform/local_path_kind.dart` (`LocalPathKind`, `LocalPathKindOf`, `ioLocalPathKind`). 3.1 зелёный.
-- [ ] 3.3 `[desktop]` Красный: `apps/codelab_desktop/test/features/workbench/application/project_drop_test.dart` (`SettingsCubit` с фейковым `LocalPathKindOf`, `ProjectFolderPicker`, `RecentProjectsStore`; связка `bindProjectStart` — фейк триггера). Spec «Открытие папки перетаскиванием»:
+- [x] 3.1 `[desktop]` Красный: `apps/codelab_desktop/test/core/platform/local_path_kind_test.dart` (обычный `test`, временный каталог): папка → `directory`; файл → `file`; несуществующий путь → `missing`; ссылка на папку → `directory`; битая ссылка → `missing`; ошибка проверки → `other`, без исключения наружу (design.md D4).
+- [x] 3.2 `[desktop]` Реализация 3.1: `lib/core/platform/local_path_kind.dart` (`LocalPathKind`, `LocalPathKindOf`, `ioLocalPathKind`). 3.1 зелёный.
+- [x] 3.3 `[desktop]` Красный: `apps/codelab_desktop/test/features/workbench/application/project_drop_test.dart` (`SettingsCubit` с фейковым `LocalPathKindOf`, `ProjectFolderPicker`, `RecentProjectsStore`; связка `bindProjectStart` — фейк триггера). Spec «Открытие папки перетаскиванием»:
   - «Брошенная папка открывает проект»: `selectProject`, недавние, триггер вызван один раз, событие `project.drop {outcome: opened, count: 1}`;
   - «Файл отклоняется», «Несколько элементов отклоняются» (вид не запрашивается), «Пропавший путь», «Элемент без локального пути» (`null`, пустая строка, `other`): `dropRejection` нужного типа, триггер не вызван, диагностика `warning`/`project` с текстом spec, событие без пути;
   - «Выделение зоны и сброс отказа» — часть application: `clearDropRejection()` и `selectProject` снимают отказ;
@@ -64,16 +64,16 @@ TDD (`packages/dart/codelab_agent_core/AGENTS.md` §2): красный тест 
   - `close()` во время проверки — ничего не выбрано;
   - «Символическая ссылка на папку»: путь не раскрыт (design.md D4);
   - «Пакет macOS принимается как папка»: вид `directory` у `/Applications/Foo.app` — проект выбран (решение Q5 (а)).
-- [ ] 3.4 `[desktop]` Реализация 3.3: `SettingsCubit.openDroppedPaths`, `clearDropRejection`, `ProjectDropRejection` (sealed) в `settings_cubit.dart` или отдельном `project_drop.dart` рядом; `_projectIntent`; конструктор принимает `LocalPathKindOf`. 3.3 зелёный.
-- [ ] 3.5 `[desktop]` Красный: в `project_drop_test.dart` или `create_session_project_test.dart` — «Второй запрос при открытом диалоге»: пока `pickFolder` не завершён, второй `browseForProject` и «New session» без проекта (`SessionsCubit`) не вызывают порт второй раз; после выбора папки обе ветки видят один проект (design.md D7).
-- [ ] 3.6 `[desktop]` Реализация 3.5: общий незавершённый `Future` выбора в `browseForProject`. 3.5 зелёный; `project_required_test.dart`, `missing_project_folder_test.dart`, `agent_starts_itself_test.dart`, `settings_cubit_startup_test.dart` зелёные без правок (регрессия `require-project-folder`).
-- [ ] 3.7 `[desktop]` Красный: тест `ShellState`/`CodeLabShellCubit` (`test/features/workbench/application/`):
+- [x] 3.4 `[desktop]` Реализация 3.3: `SettingsCubit.openDroppedPaths`, `clearDropRejection`, `ProjectDropRejection` (sealed) в `settings_cubit.dart` или отдельном `project_drop.dart` рядом; `_projectIntent`; конструктор принимает `LocalPathKindOf`. 3.3 зелёный.
+- [x] 3.5 `[desktop]` Красный: в `project_drop_test.dart` или `create_session_project_test.dart` — «Второй запрос при открытом диалоге»: пока `pickFolder` не завершён, второй `browseForProject` и «New session» без проекта (`SessionsCubit`) не вызывают порт второй раз; после выбора папки обе ветки видят один проект (design.md D7).
+- [x] 3.6 `[desktop]` Реализация 3.5: общий незавершённый `Future` выбора в `browseForProject`. 3.5 зелёный; `project_required_test.dart`, `missing_project_folder_test.dart`, `agent_starts_itself_test.dart`, `settings_cubit_startup_test.dart` зелёные без правок (регрессия `require-project-folder`).
+- [x] 3.7 `[desktop]` Красный: тест `ShellState`/`CodeLabShellCubit` (`test/features/workbench/application/`):
   - `awaitingProject` истинно только без проекта при `idle`/`disconnected`;
   - `transportKind` для встроенного, stdio и WebSocket профиля;
   - `dropRejection` проходит из `SettingsState`;
   - фасад вызывает `openDroppedPaths` и `clearDropRejection`;
   - сценарий «Badge after a folder is chosen»: после выбора папки `awaitingProject` ложно (design.md D5, D8).
-- [ ] 3.8 `[desktop]` Реализация 3.7: поля и геттер в `shell_state.dart`, `ProfileTransportKind`, проброс в `shell_cubit.dart`, `SettingsOpenSource.startScreen` в `navigation_cubit.dart`, шов `localPathKind:` в `createCodeLabRootScope` и привязка в `app_scope.dart` (по образцу `directoryExists`). 3.7 зелёный.
+- [x] 3.8 `[desktop]` Реализация 3.7: поля и геттер в `shell_state.dart`, `ProfileTransportKind`, проброс в `shell_cubit.dart`, `SettingsOpenSource.startScreen` в `navigation_cubit.dart`, шов `localPathKind:` в `createCodeLabRootScope` и привязка в `app_scope.dart` (по образцу `directoryExists`). 3.7 зелёный.
 
 ## 4. Presentation app, сочетание, страница «Keyboard»
 

@@ -8,7 +8,23 @@ import 'settings_page_store.dart';
 
 /// Откуда пользователь открыл настройки; поле события `settings.opened`
 /// (design.md change `add-app-settings-shell`, D17).
-enum SettingsOpenSource { shortcut, sidebar, banner }
+///
+/// [startScreen] — ссылка `Change in Settings › Connection` на экране «проект
+/// не выбран» (change `add-empty-project-screen`, D5); в событии пишется как
+/// `start_screen`.
+enum SettingsOpenSource {
+  shortcut,
+  sidebar,
+  banner,
+  startScreen('start_screen');
+
+  const SettingsOpenSource([this._wire]);
+
+  final String? _wire;
+
+  /// Значение поля `source` события `settings.opened`.
+  String get wire => _wire ?? name;
+}
 
 /// Переходы между рабочим местом и настройками codelab-app.
 ///
@@ -93,7 +109,7 @@ class NavigationCubit extends Cubit<AppDestination> {
     emit(SettingsDestination(target, returnTo: returnTo));
     _logger?.info(
       'settings.opened',
-      context: {'page': target.slug, 'source': source.name},
+      context: {'page': target.slug, 'source': source.wire},
     );
     if (page != null) {
       await _savePage(target);
