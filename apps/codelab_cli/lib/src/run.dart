@@ -637,7 +637,6 @@ Future<int> _runRepl(
       case final code?) {
     return code;
   }
-  await _recordRecentProject(home, cwd, io, verbose: options.verbose);
   final profileSecrets = await _openProfileSecrets(
     environment,
     io,
@@ -660,6 +659,8 @@ Future<int> _runRepl(
   );
   final repl = Repl(
     setup: _setupCommands(options, environment, io, home),
+    onConnected: () =>
+        _recordRecentProject(home, cwd, io, verbose: options.verbose),
     tokenSource: ProfileSecretSource(environment, stored: profileSecrets),
     workspace: runtime.workspace,
     terminal: terminal,
@@ -745,7 +746,6 @@ Future<int> _runTui(
       case final code?) {
     return code;
   }
-  await _recordRecentProject(home, cwd, io, verbose: options.verbose);
   final profileSecrets = await _openProfileSecrets(
     environment,
     io,
@@ -771,6 +771,8 @@ Future<int> _runTui(
     // Порт пробрасывается в контекст; команд `/provider` и `/settings` в
     // TUI 4a нет, оверлеи — 4b (D17).
     setup: _setupCommands(options, environment, io, home),
+    onConnected: () =>
+        _recordRecentProject(home, cwd, io, verbose: options.verbose),
     tokenSource: ProfileSecretSource(environment, stored: profileSecrets),
     workspace: runtime.workspace,
     profile: profile,
@@ -1143,8 +1145,14 @@ Future<int?> _firstRun(
 ///
 /// Почему: app и CLI делят `$CODELAB_HOME/recent_projects.json`; человек,
 /// открывший папку в REPL или TUI, ждёт её в списке app. Вызывается только из
-/// интерактивных режимов, после мастера первого запуска и до подключения к
-/// агенту (как app пишет проект при выборе, до запуска агента).
+/// интерактивных режимов как `onConnected` у `Repl` и `TuiRunner`: после
+/// успешного `ClientWorkspace.connect` и до открытия или загрузки сессии.
+/// Запуск, не подключившийся к агенту (нет модели — `64`, сбой запуска — `1`,
+/// мастер завершил процесс), папку не записывает; `--resume` и `--continue`
+/// записывают, потому что загрузка сессии идёт после записи (D6, Q3).
+///
+/// Не бросает: исключение в обратном вызове стало бы «cannot start the
+/// agent».
 ///
 /// Как работает: ожидание без fire-and-forget (§12). Сбой — нечитаемый файл
 /// (`FormatException`, он не перезаписывается, D2) или ошибка ФС — не меняет

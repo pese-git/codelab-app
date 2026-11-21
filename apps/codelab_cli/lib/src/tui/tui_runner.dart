@@ -52,6 +52,8 @@ const _restoreSequences =
 /// ошибки ядра подряд, исключение адаптера) или код сигнала из [interrupt].
 /// [programOptions] добавляются к опциям `Program` — тесты передают
 /// `withInput`, `withOutput`, `withWindowSize`, `withoutSignalHandler`.
+/// [onConnected] — обратный вызов после успешного подключения, до открытия
+/// сессии (запись недавнего проекта, D6 change `share-recent-projects-store`).
 /// Закрывает рабочее пространство вызывающий.
 final class TuiRunner {
   TuiRunner({
@@ -75,6 +77,7 @@ final class TuiRunner {
     SecretSource? tokenSource,
     Stream<List<int>>? input,
     SetupCommands? setup,
+    Future<void> Function()? onConnected,
   }) : _workspace = workspace,
        _profile = profile,
        _cwd = cwd,
@@ -96,6 +99,7 @@ final class TuiRunner {
          ...programOptions,
        ],
        _setup = setup,
+       _onConnected = onConnected,
        _cancelGrace = cancelGrace,
        _tokenSource = tokenSource,
        _clock = clock ?? DateTime.now;
@@ -124,6 +128,13 @@ final class TuiRunner {
 
   final SetupCommands? _setup;
 
+  /// Вызывается один раз после успешного `connect` и до `openCliSession`
+  /// (change `share-recent-projects-store`, D6): запуск действительно начался,
+  /// а загрузка сессии (`--resume`, `--continue`) ещё не делалась, поэтому
+  /// запись папки не зависит от её исхода. Не должен бросать: исключение
+  /// стало бы «cannot start the agent» (хост гасит сбой внутри).
+  final Future<void> Function()? _onConnected;
+
   final _router = CommandRouter(replCommands);
   TuiCommandContext? _context;
   tea.Program? _program;
@@ -145,6 +156,7 @@ final class TuiRunner {
     final SessionHandle handle;
     try {
       await _workspace.connect(_profile, projectDirectory: _cwd);
+      await _onConnected?.call();
       handle = await openCliSession(
         _workspace,
         _cwd,
