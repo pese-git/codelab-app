@@ -421,12 +421,14 @@
 | Blocked | Запрещено | `security` |
 | What leaves this computer | Что уходит с компьютера | `security` |
 | Stays here | Остаётся здесь | `security` |
-| Every turn · When used · Never · Local | Каждый ход · При использовании · Никогда · Локально | теги шага 4 |
+| Every turn · Each session · Never · Local | Каждый ход · Каждая сессия · Никогда · Локально | теги шага 4; `Each session` заменил `When used` (D9, редакция 2026-11-21) |
 | Nothing to agree to | Принимать нечего | D-29 |
 | Read the privacy policy | Прочитать политику конфиденциальности | ссылка шага 4; открывает документ внутри onboarding (D10) |
 | Terms of use (ссылка шага 4) | Условия использования | совпадает с вкладкой «Legal» (§«Страница «Legal»») |
 | Back to setup | Назад к настройке | кнопка панели документа; не «Back» шага |
 | MCP servers (шаг 4) | MCP-серверы | строка сети; web-инструментов в сборке нет (D9) |
+| Client information, the tool list request and the headers from your configuration, including tokens, each time a session starts or reconnects; the arguments of every tool call | Сведения о клиенте, запрос списка инструментов и заголовки из вашей конфигурации, включая токены, — при каждом начале и переподключении сессии; аргументы каждого вызова инструмента | `security`; строка «MCP servers» шага 4 по `PRIVACY.md` §2 (D9) |
+| Only what the agent needs for the work you ask for, sent to services you set up or to addresses you choose to open. CodeLab itself collects nothing. The privacy policy lists every request. | Только то, что агенту нужно для вашей работы, — настроенным вами сервисам или по адресам, которые вы сами открываете. CodeLab сам ничего не собирает. Все запросы перечислены в политике конфиденциальности. | `security`; вводная шага 4 (D9) |
 | Reading the agent settings… | Читаются настройки агента… | шаг 2, пока факты читаются; `security` |
 | Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes. | Не удалось прочитать настройки агента. Режим новых сессий виден в «Настройки › Агенты и режимы». | шаг 2 при недоступных фактах; `security` |
 | The key stays on this computer. | Ключ остаётся на этом компьютере. | `security` |

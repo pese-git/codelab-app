@@ -160,9 +160,9 @@ InfoBar о мастере SHALL называть хранилище по фак�
 - **THEN** InfoBar называет `openai`, `codelab/openai` и `Settings › Providers › Edit`, карточки доступны
 
 ### Requirement: Шаг «Privacy»
-Шаг SHALL показывать заголовок `What leaves this computer`, текст `Only what the agent needs for the work you ask for, and only to services you set up. CodeLab itself collects nothing.` и строки по артборду 07a:
+Шаг SHALL показывать заголовок `What leaves this computer`, текст `Only what the agent needs for the work you ask for, sent to services you set up or to addresses you choose to open. CodeLab itself collects nothing. The privacy policy lists every request.` (design.md change `add-app-onboarding`, D9) и строки по артборду 07a:
 - «Your model provider» — `Every turn`;
-- «MCP servers» — `When used`, текст `Tool arguments and the headers from your configuration`; строк и пометок о web-инструментах НЕ SHALL быть, пока их нет в сборке (`PRIVACY.md` §2; design.md change `add-app-onboarding`, D9);
+- «MCP servers» — `Each session`, текст `Client information, the tool list request and the headers from your configuration, including tokens, each time a session starts or reconnects; the arguments of every tool call`; строк и пометок о web-инструментах НЕ SHALL быть, пока их нет в сборке. Тексты строк сети и вводной SHALL соответствовать `PRIVACY.md` §2 сборки (design.md change `add-app-onboarding`, D9);
 - «Telemetry, crash reports, usage analytics» — `Never`;
 - «Stays here» — `Local`.
 
@@ -203,6 +203,14 @@ InfoBar о мастере SHALL называть хранилище по фак�
 #### Scenario: Нет строки о web-инструментах
 - **WHEN** показан шаг «Privacy»
 - **THEN** строка «MCP servers» не содержит `web`, `URL` и `search query`
+
+#### Scenario: MCP-серверы на каждой сессии
+- **WHEN** показан шаг «Privacy»
+- **THEN** строка «MCP servers» имеет тег `Each session` и называет `tool list request`, `headers from your configuration` и `including tokens`; тега `When used` на шаге нет
+
+#### Scenario: Вводная не обещает лишнего
+- **WHEN** показан шаг «Privacy» на английском, затем на русском
+- **THEN** вводный текст содержит `addresses you choose to open` и `The privacy policy lists every request`, текста `and only to services you set up.` нет; русский текст взят из ARB `ru` по глоссарию
 
 ### Requirement: Завершение onboarding и старт рабочего места
 Пока показан onboarding, app НЕ SHALL строить рабочее место и НЕ SHALL запускать агента окна, в том числе для проекта, восстановленного из снимка прошлого запуска. «Start using CodeLab» SHALL записывать `codelab.app.onboarding_done: true`, переводить навигацию на рабочее место и запускать триггер старта при запуске (spec agent-workbench-ui «Агент стартует сам», триггер 1) ровно один раз (design.md change `add-app-onboarding`, D5). Повторное нажатие во время записи НЕ SHALL давать второй записи и второго перехода. Если onboarding закрыт, пока флаг пишется, перехода и событий после закрытия НЕ SHALL быть. Сбой записи флага SHALL давать событие `onboarding.save_failed` с именем типа ошибки и НЕ SHALL мешать переходу на рабочее место.
