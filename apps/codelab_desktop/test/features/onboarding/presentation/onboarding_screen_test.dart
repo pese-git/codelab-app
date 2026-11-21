@@ -110,6 +110,27 @@ Done _done({KeyChoice key = const KeepStoredSecret()}) => Done(
   ),
 );
 
+/// Описание строки «MCP servers» (D9, редакция 2026-11-21; `PRIVACY.md` §2).
+const _mcpBodyEn =
+    'Client information, the tool list request and the headers from your '
+    'configuration, including tokens, each time a session starts or '
+    'reconnects; the arguments of every tool call';
+
+const _introEn =
+    'Only what the agent needs for the work you ask for, sent to services you '
+    'set up or to addresses you choose to open. CodeLab itself collects '
+    'nothing. The privacy policy lists every request.';
+
+const _introRu =
+    'Только то, что агенту нужно для вашей работы, — настроенным вами '
+    'сервисам или по адресам, которые вы сами открываете. CodeLab сам ничего '
+    'не собирает. Все запросы перечислены в политике конфиденциальности.';
+
+const _mcpBodyRu =
+    'Сведения о клиенте, запрос списка инструментов и заголовки из вашей '
+    'конфигурации, включая токены, — при каждом начале и переподключении '
+    'сессии; аргументы каждого вызова инструмента';
+
 void main() {
   late FakeOnboardingPreferences preferences;
   late List<String> opened;
@@ -724,8 +745,9 @@ void main() {
       expect(find.text('What leaves this computer'), findsOneWidget);
       expect(
         find.text(
-          'Only what the agent needs for the work you ask for, and only to '
-          'services you set up. CodeLab itself collects nothing.',
+          'Only what the agent needs for the work you ask for, sent to '
+          'services you set up or to addresses you choose to open. CodeLab '
+          'itself collects nothing. The privacy policy lists every request.',
         ),
         findsOneWidget,
       );
@@ -733,8 +755,8 @@ void main() {
         'Your model provider',
         'Every turn',
         'MCP servers',
-        'Tool arguments and the headers from your configuration',
-        'When used',
+        _mcpBodyEn,
+        'Each session',
         'Telemetry, crash reports, usage analytics',
         'Never',
         'Stays here',
@@ -831,6 +853,64 @@ void main() {
         findsOneWidget,
       );
       expect(inKey('onboarding-privacy-stays', '~/.codelab'), findsNothing);
+    });
+
+    // Раздел 6, задача 6.10 (design.md D9, редакция 2026-11-21): тексты строк
+    // сети соответствуют `PRIVACY.md` §2, а не артборду.
+    testWidgets('MCP-серверы на каждой сессии: тег «Each session», описание '
+        'называет запрос списка инструментов, заголовки и токены, тега «When '
+        'used» нет', (tester) async {
+      await pump(tester, probeOf(const ProviderReady('llm/m1')));
+      await toStep(tester, 'privacy');
+
+      expect(find.text('MCP servers'), findsOneWidget);
+      expect(find.text('Each session'), findsOneWidget);
+      expect(find.text('When used'), findsNothing);
+      expect(find.text(_mcpBodyEn), findsOneWidget);
+      expect(find.textContaining('tool list request'), findsOneWidget);
+      expect(
+        find.textContaining('headers from your configuration'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('including tokens'), findsOneWidget);
+    });
+
+    testWidgets('вводная не обещает лишнего: en и ru из ARB по глоссарию', (
+      tester,
+    ) async {
+      await pump(tester, probeOf(const ProviderReady('llm/m1')));
+      await toStep(tester, 'privacy');
+
+      expect(find.text(_introEn), findsOneWidget);
+      expect(
+        find.textContaining('addresses you choose to open'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('The privacy policy lists every request'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('and only to services you set up.'),
+        findsNothing,
+      );
+
+      await pump(
+        tester,
+        probeOf(const ProviderReady('llm/m1')),
+        locale: const Locale('ru'),
+      );
+      await toStep(tester, 'privacy');
+
+      expect(find.text(_introRu), findsOneWidget);
+      expect(find.text(_mcpBodyRu), findsOneWidget);
+      expect(find.text('Каждая сессия'), findsOneWidget);
+      expect(find.text('При использовании'), findsNothing);
+      expectNoEnglish([
+        'addresses you choose to open',
+        'The privacy policy lists every request',
+        'Each session',
+      ]);
     });
 
     testWidgets('«Start using CodeLab» пишет флаг и завершает onboarding', (
