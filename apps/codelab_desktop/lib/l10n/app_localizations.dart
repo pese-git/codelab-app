@@ -284,12 +284,6 @@ abstract class AppLocalizations {
   /// **'No active session'**
   String get workbenchNoActiveSession;
 
-  /// Подсказка под названием текущей сессии и текст стартового экрана без проекта.
-  ///
-  /// In en, this message translates to:
-  /// **'Open a project to start a session.'**
-  String get workbenchOpenProjectHint;
-
   /// Заголовок экрана «проект не выбран».
   ///
   /// In en, this message translates to:

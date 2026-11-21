@@ -50,8 +50,10 @@ final class SessionsState {
   final bool hasMoreSessions;
   final String? activeSessionId;
 
-  /// Название и подпись текущей сессии для шапки. Без сессии — тексты app
-  /// на языке каталога; пересобираются по событию `AppStrings.changes`.
+  /// Название и подпись текущей сессии для шапки. Без сессии название — текст
+  /// app на языке каталога (пересобирается по `AppStrings.changes`), а подпись
+  /// — пустая строка, пока сессии в фокусе нет (change
+  /// `add-empty-project-screen`, D11).
   final String currentSessionLabel;
   final String currentSessionDetail;
 }
@@ -109,7 +111,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
        super(
          SessionsState(
            currentSessionLabel: strings.current.workbenchNoActiveSession,
-           currentSessionDetail: strings.current.workbenchOpenProjectHint,
+           currentSessionDetail: '',
          ),
        ) {
     _languageSubscription = strings.changes.listen(_handleLanguage);
@@ -434,10 +436,7 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
     final rows = _rows();
     final active = state.activeSessionId;
     final label = switch (active) {
-      null => (
-        title: l10n.workbenchNoActiveSession,
-        detail: l10n.workbenchOpenProjectHint,
-      ),
+      null => (title: l10n.workbenchNoActiveSession, detail: ''),
       final id => _titleOf(id, rows, l10n),
     };
     emit(

@@ -107,9 +107,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get workbenchNoActiveSession => 'No active session';
 
   @override
-  String get workbenchOpenProjectHint => 'Open a project to start a session.';
-
-  @override
   String get workbenchOpenProjectTitle => 'Open a project';
 
   @override

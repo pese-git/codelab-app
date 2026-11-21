@@ -134,10 +134,6 @@
   "@workbenchNoActiveSession": {
     "description": "Название текущей сессии в шапке, когда сессии нет."
   },
-  "workbenchOpenProjectHint": "Open a project to start a session.",
-  "@workbenchOpenProjectHint": {
-    "description": "Подсказка под названием текущей сессии и текст стартового экрана без проекта."
-  },
   "workbenchOpenProjectTitle": "Open a project",
   "@workbenchOpenProjectTitle": {
     "description": "Заголовок экрана «проект не выбран»."

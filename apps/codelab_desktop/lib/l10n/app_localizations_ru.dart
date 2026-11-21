@@ -107,10 +107,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get workbenchNoActiveSession => 'Нет активной сессии';
 
   @override
-  String get workbenchOpenProjectHint =>
-      'Откройте проект, чтобы начать сессию.';
-
-  @override
   String get workbenchOpenProjectTitle => 'Откройте проект';
 
   @override

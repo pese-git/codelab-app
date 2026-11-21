@@ -31,7 +31,6 @@
   "workbenchSessionUpdated": "Обновлено {time}",
   "workbenchNoProject": "Нет проекта",
   "workbenchNoActiveSession": "Нет активной сессии",
-  "workbenchOpenProjectHint": "Откройте проект, чтобы начать сессию.",
   "workbenchOpenProjectTitle": "Откройте проект",
   "workbenchOpenProjectDescriptionEmbedded": "Выберите папку, в которой хотите работать. Агент запускается в ней, а сессии получают её рабочей папкой. Агент не читает и не пишет вне неё.",
   "workbenchOpenProjectDescriptionStdio": "Выберите папку, в которой хотите работать. Агент запускается в ней, а сессии получают её рабочей папкой. Внешний агент сам решает, что делать с файлами вне неё.",
