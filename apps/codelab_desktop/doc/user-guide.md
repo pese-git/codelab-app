@@ -14,7 +14,7 @@ CodeLab app — окно для работы с AI-агентом над пап�
 
 1. Запустите приложение. Без открытого проекта окно показывает экран «Open a project».
 
-   <!-- screenshot: apps/codelab_desktop/doc/images/first-launch-no-project.png — экран «Open a project» без проекта (кнопка «Open folder…», зона «Drop a folder here to open it», карточка агента окна, плашка «New session needs a folder») -->
+   ![Экран «Open a project» без проекта: кнопка «Open folder…» с ⌘O, зона «Drop a folder here to open it», карточка встроенного агента и плашка «New session needs a folder»](images/first-launch-no-project.png)
 
    На экране:
 
@@ -100,7 +100,7 @@ defaults delete com.example.codelabApp flutter.codelab.app.onboarding_done
 
 Сессии сгруппированы по проектам в боковой панели. В узком окне панель выдвигается кнопкой меню слева от заголовка CodeLab или сочетанием ⌘B.
 
-<!-- screenshot: apps/codelab_desktop/doc/images/sidebar-projects.png — боковая панель: «Projects» с недавним проектом demo, «Open folder…» с подсказкой сочетания в конце списка проектов, «Settings» внизу -->
+![Боковая панель: в «Projects» недавний проект demo-app, «Open folder…» с ⌘O в конце списка проектов, «Settings» внизу](images/sidebar-projects.png)
 
 В группе «Projects» — недавние проекты (не больше 10); список общий с `codelab`: папка, открытая в построчном или полноэкранном режиме `codelab`, появляется и здесь. Пока недавних проектов нет, там написано «No recent projects yet.» Пункт «Open folder…» с подсказкой сочетания стоит в конце списка проектов, «Settings» — внизу панели.
 
