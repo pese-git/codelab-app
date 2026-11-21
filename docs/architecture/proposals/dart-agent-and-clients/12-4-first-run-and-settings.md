@@ -912,8 +912,9 @@ Plugins (E-10), переопределение системного промпт
    приёмники), транспортов, платформы, presentation, затем `AcpClientApplication`,
    `CodeLabShellCubit` и `CodeLabRootLifecycle`. Исключение здесь даёт серый экран релизной
    сборки.
-5. Конструктор `CodeLabShellCubit` запускает `_loadRecentProjects()` (`shared_preferences`) без
-   ожидания.
+5. Конструктор `CodeLabShellCubit` запускает `_loadRecentProjects()` без ожидания. Тогда список
+   лежал в `shared_preferences`; с change `share-recent-projects-store` — в общем с CLI файле
+   `$CODELAB_HOME/recent_projects.json` (D1, D4).
 6. `FluentApp(home: CodeLabShell)`.
 
 Автоподключения сейчас нет. Оно появляется вместе с `ProfileStore` kit и восстановлением после
@@ -928,7 +929,7 @@ Plugins (E-10), переопределение системного промпт
 |---|---|---|---|---|
 | `window` | первый кадр `BootHost` (`endOfFrame`), `getApplicationSupportDirectory()` | 10 с | critical | — |
 | `services` | `createCodeLabRootScope` без файлового логирования: транспорты, платформа, `ClientWorkspace`, Cubit-ы | 10 с | critical | — |
-| `stores` | `ProfileStore` (`~/.codelab/profiles.json`), недавние проекты (`shared_preferences`), `SettingsAccess` и снимок конфига для профиля по умолчанию, проверка доступности `SecretStore` (`names()`) | 5 с | degradable | профили и проекты в памяти, настройки только для чтения с баннером `storeUnavailable` |
+| `stores` | `ProfileStore` (`~/.codelab/profiles.json`), недавние проекты (`~/.codelab/recent_projects.json`, change `share-recent-projects-store`), `SettingsAccess` и снимок конфига для профиля по умолчанию, проверка доступности `SecretStore` (`names()`) | 5 с | degradable | профили и проекты в памяти, настройки только для чтения с баннером `storeUnavailable` |
 | `logging` | `configureCodeLabLogging`: файловые приёмники в `<support>/logs`, перенос событий `BootLog` в лог | 5 с | degradable | консоль и `LogBuffer` без файлов, баннер «File logging is off» |
 | `routes` | начальный экран: последний проект и профиль из снимка; при `autoConnect` — `WorkspaceRestorer` (§9.10, задача 5.12): `ClientWorkspace.connect` до ответа `initialize` (под таймаутом шага); `session/list` и `session/load` активной сессии продолжаются после `BootReady` | 20 с | degradable | экран workbench без подключения; снимок не удаляется |
 

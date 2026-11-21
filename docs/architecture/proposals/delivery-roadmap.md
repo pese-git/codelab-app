@@ -265,7 +265,11 @@ macOS и Linux, ручная проверка Windows откладывается
 * Python-агент заморожен, алиас `codelab serve` есть в первой `stable` с пометкой deprecated. Удаление —
   после одного релизного цикла без регрессий (задача 9.9): change `remove-python-agent` по условию
   D4 change `retire-python-agent`; сам алиас снимается первой minor-версией после условия, не
-  patch-версией 1.0.x (§12.7.8, решение пользователя 2026-11-10, Q3).
+  patch-версией 1.0.x (§12.7.8, решение пользователя 2026-11-10, Q3);
+* код переноса недавних проектов из `shared_preferences` (`MigratingRecentProjectsStore` app,
+  design.md change `share-recent-projects-store`, D4, D9) удалён до первого `stable`: перенос
+  живёт только в предвыпускных сборках, change `remove-recent-projects-migration` (решение
+  пользователя 2026-11-22, Q2 (б); строка §10.4).
 
 **Блокирует.** 1.x и этап 10.
 
@@ -277,7 +281,11 @@ macOS и Linux, ручная проверка Windows откладывается
 * хранение закрытых ключей `release-ed25519` и `sums-p256`: два владельца офлайн-копии, кто
   одобряет джобы окружения `release` — до задачи 9.4;
 * домен источника релизов `kUpdateBaseUrl`, страницы правовых документов `<сайт>/privacy` и
-  `<сайт>/terms`, постоянный идентификатор пакета app вместо `com.example.codelabApp` — до задачи 9.4;
+  `<сайт>/terms`, постоянный идентификатор пакета app вместо `com.example.codelabApp` — до задачи 9.4.
+  Недавние проекты от идентификатора не зависят: они в `$CODELAB_HOME/recent_projects.json`
+  (change `share-recent-projects-store`). Остальные настройки app в `shared_preferences` (снимок
+  рабочего места, профиль по умолчанию, раскладка, язык, оформление, флаг onboarding) при смене
+  идентификатора начинаются заново — это отмечается в разделе выпуска 1.0 `CHANGELOG.md`;
 * юридическая проверка `PRIVACY.md` и `TERMS.md` и язык документов — до задачи 9.4
   ([CL §11](dart-agent-and-clients/11-assumptions-and-open-questions.md), §12.7.7а);
 * песочница ОС (P-13): граница папки и одобрения, песочница только на macOS или на трёх ОС —
@@ -647,6 +655,7 @@ Definition of Done и правки ленты по ручной регресси
 
 | Задача | Исполнитель | Откуда | Суть |
 |---|---|---|---|
+| Удаление переноса недавних проектов | `[desktop]` | change `share-recent-projects-store` (design.md, D4, D9; решение пользователя 2026-11-22, Q2 (б)) | Перенос ключа `codelab.recent_projects` из `shared_preferences` в `$CODELAB_HOME/recent_projects.json` нужен только предвыпускным сборкам: 1.0 выходит с постоянным идентификатором бандла (задача 9.4) и прежний домен настроек не читает. Нужно: change `remove-recent-projects-migration` до первого `stable` — удалить `MigratingRecentProjectsStore`, чтение и удаление ключа, события `recent_projects.migrated`, `recent_projects.legacy_unreadable`, `recent_projects.migration_failed` и требование о переносе в spec `agent-workbench-ui`; привязать `JsonFileRecentProjectsStore` напрямую. Условие выхода M4 (§4.5) |
 | Запрет редиректов WebSocket-транспорта | `[protocol]` | ревью итерации 3 `add-app-settings-shell` (design.md, Risks; решение пользователя 2026-11-05) | `WebSocket.connect` следует редиректу, в том числе `wss://` → `http://` другого origin, и через `IOWebSocketChannel` это не отключается. Токен SDK не переносит (`shouldCopyHeaderOnRedirect`), но промпты и файлы пошли бы открытым текстом без подтверждения SETUP-10. Нужно: `WebSocketAcpTransport` не следует редиректам (ответ 3xx — отказ рукопожатия со статусом), тест на loopback. Поведение то же в `develop` |
 | Таймаут открытия транспорта / отмена переподключения | `[protocol]` | финальное ревью итерации 4 `add-app-settings-shell` (design.md, Risks, safety LOW) | У открытия WebSocket-транспорта нет своего таймаута (`IOWebSocketChannel.connect`/`channel.ready`): зависшее рукопожатие держит `reconnecting` до таймаута ОС, а у строки «Current» в это время нет ни «Connect», ни «Restart agent» (обход — «Connect» другой строки). Нужно: таймаут открытия в `codelab_acp_transports` с типизированной ошибкой и отмена идущего переподключения в kit (`ClientWorkspace`), тест на loopback-сервере, который не отвечает на upgrade |
 | `agentInfo` агента в `WorkspaceState` | `[client]` | итерация 2 `add-provider-setup-ui` (design.md, D5; решение оркестратора) | Имени агента из ответа `initialize` в `WorkspaceState` kit нет, поэтому `SettingsAccess` stdio-профиля решается только по базовому имени команды. Нужно: публиковать `agentInfo` (`name`, `version`) принятого подключения в `WorkspaceState` и в app/CLI опровергать `EditableSettings`, если агент с командой `codelab-agent` назвался иначе; тест на scripted-агенте с другим `agentInfo.name` |
