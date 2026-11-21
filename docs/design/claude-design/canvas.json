@@ -2317,6 +2317,222 @@
    "w": 2960,
    "x": 0,
    "y": 7660
+  },
+  "PhoneProjectsEmpty.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone",
+   "title": "P22 Project — first start, no projects",
+   "w": 390,
+   "x": 0,
+   "y": 9480
+  },
+  "PhoneProjectsEmpty-dark.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P22 Project — first start, no projects — dark",
+   "w": 390,
+   "x": 0,
+   "y": 9480
+  },
+  "PhoneProjects.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone",
+   "title": "P22a Projects — folders in Documents › CodeLab",
+   "w": 390,
+   "x": 470,
+   "y": 9480
+  },
+  "PhoneProjects-dark.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P22a Projects — folders in Documents › CodeLab — dark",
+   "w": 390,
+   "x": 470,
+   "y": 9480
+  },
+  "PhoneProjectNew.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone",
+   "title": "P22b New project — name and folder",
+   "w": 390,
+   "x": 940,
+   "y": 9480
+  },
+  "PhoneProjectNew-dark.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P22b New project — name and folder — dark",
+   "w": 390,
+   "x": 940,
+   "y": 9480
+  },
+  "PhoneProjectOpening.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone",
+   "title": "P22c Project — starting the agent",
+   "w": 390,
+   "x": 1410,
+   "y": 9480
+  },
+  "PhoneProjectOpening-dark.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P22c Project — starting the agent — dark",
+   "w": 390,
+   "x": 1410,
+   "y": 9480
+  },
+  "PhoneProjectReady.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone",
+   "title": "P22d Project — ready, no sessions",
+   "w": 390,
+   "x": 1880,
+   "y": 9480
+  },
+  "PhoneProjectReady-dark.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P22d Project — ready, no sessions — dark",
+   "w": 390,
+   "x": 1880,
+   "y": 9480
+  },
+  "PhoneProjectNotFound.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone",
+   "title": "P22e Project — folder not found",
+   "w": 390,
+   "x": 2350,
+   "y": 9480
+  },
+  "PhoneProjectNotFound-dark.dc.html": {
+   "expand": "fill",
+   "h": 844,
+   "page": "phone-dark",
+   "title": "P22e Project — folder not found — dark",
+   "w": 390,
+   "x": 2350,
+   "y": 9480
+  },
+  "TabletProjectsEmpty.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet",
+   "title": "T16 Tablet — first start, no projects",
+   "w": 1180,
+   "x": 0,
+   "y": 9620
+  },
+  "TabletProjectsEmpty-dark.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T16 Tablet — first start, no projects — dark",
+   "w": 1180,
+   "x": 0,
+   "y": 9620
+  },
+  "TabletProjects.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet",
+   "title": "T16a Tablet — Projects dialog",
+   "w": 1180,
+   "x": 1260,
+   "y": 9620
+  },
+  "TabletProjects-dark.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T16a Tablet — Projects dialog — dark",
+   "w": 1180,
+   "x": 1260,
+   "y": 9620
+  },
+  "TabletProjectNew.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet",
+   "title": "T16b Tablet — New project",
+   "w": 1180,
+   "x": 2520,
+   "y": 9620
+  },
+  "TabletProjectNew-dark.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T16b Tablet — New project — dark",
+   "w": 1180,
+   "x": 2520,
+   "y": 9620
+  },
+  "TabletProjectOpening.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet",
+   "title": "T16c Tablet — starting the agent",
+   "w": 1180,
+   "x": 3780,
+   "y": 9620
+  },
+  "TabletProjectOpening-dark.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T16c Tablet — starting the agent — dark",
+   "w": 1180,
+   "x": 3780,
+   "y": 9620
+  },
+  "TabletProjectReady.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet",
+   "title": "T16d Tablet — ready, no sessions",
+   "w": 1180,
+   "x": 5040,
+   "y": 9620
+  },
+  "TabletProjectReady-dark.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T16d Tablet — ready, no sessions — dark",
+   "w": 1180,
+   "x": 5040,
+   "y": 9620
+  },
+  "TabletProjectNotFound.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet",
+   "title": "T16e Tablet — folder not found",
+   "w": 1180,
+   "x": 6300,
+   "y": 9620
+  },
+  "TabletProjectNotFound-dark.dc.html": {
+   "expand": "fill",
+   "h": 820,
+   "page": "tablet-dark",
+   "title": "T16e Tablet — folder not found — dark",
+   "w": 1180,
+   "x": 6300,
+   "y": 9620
   }
  },
  "createdOnFiles": {
@@ -2405,7 +2621,13 @@
   "row12",
   "row12s",
   "d-row12",
-  "p-row6"
+  "p-row6",
+  "p-row7",
+  "p-row7s",
+  "t-row7",
+  "t-row7s",
+  "dp-row7",
+  "dt-row7"
  ],
  "notes": {
   "c-row1": {
@@ -3198,6 +3420,60 @@
    "x": 0,
    "y": 7400,
    "text": "Смартфон: граф первого запуска"
+  },
+  "p-row7": {
+   "kind": "title1",
+   "maxW": 2740,
+   "page": "phone",
+   "w": 240,
+   "x": 0,
+   "y": 9220,
+   "text": "Смартфон: открытие проекта"
+  },
+  "p-row7s": {
+   "fill": "blue",
+   "page": "phone",
+   "size": 24,
+   "w": 460,
+   "x": 2820,
+   "y": 9480,
+   "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nP22 — первый старт, проектов нет: «New project»; New session без проекта ведёт сюда.\nP22a — Projects (из P6 / P1): список подпапок, текущий отмечен.\nP22b — New project: имя → папка; занятое имя делает Create недоступной.\nP22c — старт агента «On this device» в папке, затем session/list.\nP22d — сессий нет: New session, Import from Files….\nP22e — папку удалили или переименовали в «Файлах»: текст ошибки — мобильный вариант, на десктопе он ссылается на «Open folder…», которого здесь нет; нужна правка требования.\nWebSocket-профиль: папки на машине агента — здесь не нарисовано, требований нет."
+  },
+  "t-row7": {
+   "kind": "title1",
+   "maxW": 7480,
+   "page": "tablet",
+   "w": 240,
+   "x": 0,
+   "y": 9360,
+   "text": "Планшет: открытие проекта"
+  },
+  "t-row7s": {
+   "fill": "blue",
+   "page": "tablet",
+   "size": 24,
+   "w": 460,
+   "x": 7560,
+   "y": 9620,
+   "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nT16 — первый старт, проектов нет. T16a — диалог Projects (⌘O, пункт «Projects…» в сайдбаре). T16b — New project. T16c — старт агента, сайдбар показывает загрузку сессий. T16d — сессий нет. T16e — папки нет.\nРаскладка — T1 (альбомная, класс «средний»); в портрете то же содержимое с сайдбаром minimal (MOB-3)."
+  },
+  "dp-row7": {
+   "kind": "title1",
+   "maxW": 2740,
+   "page": "phone-dark",
+   "w": 240,
+   "x": 0,
+   "y": 9220,
+   "text": "Тёмная тема — смартфон: открытие проекта"
+  },
+  "dt-row7": {
+   "kind": "title1",
+   "maxW": 7480,
+   "page": "tablet-dark",
+   "w": 240,
+   "x": 0,
+   "y": 9360,
+   "text": "Тёмная тема — планшет: открытие проекта"
   }
  },
  "order": [
@@ -3478,7 +3754,31 @@
   "ProjectReady-dark.dc.html",
   "ProjectNotFound.dc.html",
   "ProjectNotFound-dark.dc.html",
-  "NavPhoneOnboarding.dc.html"
+  "NavPhoneOnboarding.dc.html",
+  "PhoneProjectsEmpty.dc.html",
+  "PhoneProjectsEmpty-dark.dc.html",
+  "PhoneProjects.dc.html",
+  "PhoneProjects-dark.dc.html",
+  "PhoneProjectNew.dc.html",
+  "PhoneProjectNew-dark.dc.html",
+  "PhoneProjectOpening.dc.html",
+  "PhoneProjectOpening-dark.dc.html",
+  "PhoneProjectReady.dc.html",
+  "PhoneProjectReady-dark.dc.html",
+  "PhoneProjectNotFound.dc.html",
+  "PhoneProjectNotFound-dark.dc.html",
+  "TabletProjectsEmpty.dc.html",
+  "TabletProjectsEmpty-dark.dc.html",
+  "TabletProjects.dc.html",
+  "TabletProjects-dark.dc.html",
+  "TabletProjectNew.dc.html",
+  "TabletProjectNew-dark.dc.html",
+  "TabletProjectOpening.dc.html",
+  "TabletProjectOpening-dark.dc.html",
+  "TabletProjectReady.dc.html",
+  "TabletProjectReady-dark.dc.html",
+  "TabletProjectNotFound.dc.html",
+  "TabletProjectNotFound-dark.dc.html"
  ],
  "pages": [
   {
