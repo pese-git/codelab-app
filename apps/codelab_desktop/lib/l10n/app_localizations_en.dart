@@ -4040,7 +4040,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingPrivacyIntro =>
-      'Only what the agent needs for the work you ask for, and only to services you set up. CodeLab itself collects nothing.';
+      'Only what the agent needs for the work you ask for, sent to services you set up or to addresses you choose to open. CodeLab itself collects nothing. The privacy policy lists every request.';
 
   @override
   String get onboardingPrivacyProviderLabel => 'Your model provider';
@@ -4057,10 +4057,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingPrivacyToolsBody =>
-      'Tool arguments and the headers from your configuration';
+      'Client information, the tool list request and the headers from your configuration, including tokens, each time a session starts or reconnects; the arguments of every tool call';
 
   @override
-  String get onboardingPrivacyToolsTag => 'When used';
+  String get onboardingPrivacyToolsTag => 'Each session';
 
   @override
   String get onboardingPrivacyTelemetryLabel =>

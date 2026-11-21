@@ -28,8 +28,9 @@ import '../application/third_party_notices.dart';
 ///
 /// Как использовать: вкладку при открытии задаёт `initialTab` (onboarding
 /// показывает страницу внутри своего экрана, D10 `add-app-onboarding`), а без
-/// него — `SettingsDestination.legalTab` (`null` — «Privacy policy»), язык — `AppLanguageCubit`; смена языка при
-/// открытой странице уходит в `LegalPageCubit.setLanguage`.
+/// него — `SettingsDestination.legalTab` (`null` — «Privacy policy»). Язык
+/// берётся из `AppLanguageCubit`; смена языка при открытой странице уходит в
+/// `LegalPageCubit.setLanguage`.
 Widget buildLegalPage(BuildContext context) => const LegalPageHost();
 
 /// Хозяин `LegalPageCubit`: создаёт, открывает, закрывает и передаёт смену

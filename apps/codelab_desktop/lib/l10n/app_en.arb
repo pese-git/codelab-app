@@ -5554,7 +5554,7 @@
   "@onboardingPrivacyTitle": {
     "description": "Заголовок шага «Privacy». Метка security."
   },
-  "onboardingPrivacyIntro": "Only what the agent needs for the work you ask for, and only to services you set up. CodeLab itself collects nothing.",
+  "onboardingPrivacyIntro": "Only what the agent needs for the work you ask for, sent to services you set up or to addresses you choose to open. CodeLab itself collects nothing. The privacy policy lists every request.",
   "@onboardingPrivacyIntro": {
     "description": "Вводный текст шага «Privacy». Метка security."
   },
@@ -5574,11 +5574,11 @@
   "@onboardingPrivacyToolsLabel": {
     "description": "Строка шага «Privacy». MCP не переводить."
   },
-  "onboardingPrivacyToolsBody": "Tool arguments and the headers from your configuration",
+  "onboardingPrivacyToolsBody": "Client information, the tool list request and the headers from your configuration, including tokens, each time a session starts or reconnects; the arguments of every tool call",
   "@onboardingPrivacyToolsBody": {
     "description": "Описание строки. Метка security."
   },
-  "onboardingPrivacyToolsTag": "When used",
+  "onboardingPrivacyToolsTag": "Each session",
   "@onboardingPrivacyToolsTag": {
     "description": "Тег строки. Метка security."
   },

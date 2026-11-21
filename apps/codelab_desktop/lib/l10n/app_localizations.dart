@@ -6386,7 +6386,7 @@ abstract class AppLocalizations {
   /// Вводный текст шага «Privacy». Метка security.
   ///
   /// In en, this message translates to:
-  /// **'Only what the agent needs for the work you ask for, and only to services you set up. CodeLab itself collects nothing.'**
+  /// **'Only what the agent needs for the work you ask for, sent to services you set up or to addresses you choose to open. CodeLab itself collects nothing. The privacy policy lists every request.'**
   String get onboardingPrivacyIntro;
 
   /// Строка шага «Privacy».
@@ -6416,13 +6416,13 @@ abstract class AppLocalizations {
   /// Описание строки. Метка security.
   ///
   /// In en, this message translates to:
-  /// **'Tool arguments and the headers from your configuration'**
+  /// **'Client information, the tool list request and the headers from your configuration, including tokens, each time a session starts or reconnects; the arguments of every tool call'**
   String get onboardingPrivacyToolsBody;
 
   /// Тег строки. Метка security.
   ///
   /// In en, this message translates to:
-  /// **'When used'**
+  /// **'Each session'**
   String get onboardingPrivacyToolsTag;
 
   /// Строка шага «Privacy». Метка security.

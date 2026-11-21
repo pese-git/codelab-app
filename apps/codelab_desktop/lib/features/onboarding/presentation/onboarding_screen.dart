@@ -273,7 +273,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 /// (`closeOverlay` каталога кита); при открытии фокус на кнопке.
 ///
 /// Как использовать: экран показывает панель, пока `OnboardingState.document`
-/// не `null`; `LegalPageCubit` создаётся при показе и закрывается при закрытии.
+/// не `null`. `LegalPageCubit` создаёт и закрывает `LegalPageHost` вместе со
+/// своим жизненным циклом (D7 `add-app-legal-page`), панель к этому отношения
+/// не имеет.
 class _DocumentPanel extends StatelessWidget {
   const _DocumentPanel({
     required this.tab,

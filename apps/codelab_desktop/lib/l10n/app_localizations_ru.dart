@@ -4108,7 +4108,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingPrivacyIntro =>
-      'Только то, что нужно агенту для вашей задачи, и только в сервисы, которые вы настроили. Сам CodeLab ничего не собирает.';
+      'Только то, что агенту нужно для вашей работы, — настроенным вами сервисам или по адресам, которые вы сами открываете. CodeLab сам ничего не собирает. Все запросы перечислены в политике конфиденциальности.';
 
   @override
   String get onboardingPrivacyProviderLabel => 'Ваш провайдер модели';
@@ -4125,10 +4125,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingPrivacyToolsBody =>
-      'Аргументы инструмента и заголовки из вашей конфигурации';
+      'Сведения о клиенте, запрос списка инструментов и заголовки из вашей конфигурации, включая токены, — при каждом начале и переподключении сессии; аргументы каждого вызова инструмента';
 
   @override
-  String get onboardingPrivacyToolsTag => 'При использовании';
+  String get onboardingPrivacyToolsTag => 'Каждая сессия';
 
   @override
   String get onboardingPrivacyTelemetryLabel =>
