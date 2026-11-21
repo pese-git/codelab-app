@@ -4037,8 +4037,16 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get onboardingStaysUnavailable =>
-      'Логи приложения остаются на этом компьютере; конфиг и ключи агента тоже остаются на этом компьютере';
+  String onboardingStaysUnavailable(String logs) {
+    return 'Логи приложения в $logs; конфиг и ключи агента остаются на этом компьютере';
+  }
+
+  @override
+  String get onboardingPermissionsLoading => 'Читаются настройки агента…';
+
+  @override
+  String get onboardingModeUnavailable =>
+      'Не удалось прочитать настройки агента. Режим новых сессий виден в «Настройки › Агенты и режимы».';
 
   @override
   String get onboardingNothingToAgreeTitle => 'Принимать нечего';

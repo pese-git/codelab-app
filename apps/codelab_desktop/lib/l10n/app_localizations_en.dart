@@ -3975,8 +3975,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get onboardingStaysUnavailable =>
-      'App logs stay on this computer; the agent\'s config and keys stay on this computer too';
+  String onboardingStaysUnavailable(String logs) {
+    return 'App logs in $logs; the agent\'s config and keys stay on this computer';
+  }
+
+  @override
+  String get onboardingPermissionsLoading => 'Reading the agent settings…';
+
+  @override
+  String get onboardingModeUnavailable =>
+      'Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes.';
 
   @override
   String get onboardingNothingToAgreeTitle => 'Nothing to agree to';

@@ -6299,11 +6299,23 @@ abstract class AppLocalizations {
   /// **'Config and sessions of the external agent are managed by that agent; app logs in {logs}'**
   String onboardingStaysExternal(String logs);
 
-  /// «Stays here» при недоступных фактах. Метка security.
+  /// «Stays here» при недоступных фактах. Плейсхолдер logs — путь каталога логов app, не переводить. Метка security.
   ///
   /// In en, this message translates to:
-  /// **'App logs stay on this computer; the agent\'s config and keys stay on this computer too'**
-  String get onboardingStaysUnavailable;
+  /// **'App logs in {logs}; the agent\'s config and keys stay on this computer'**
+  String onboardingStaysUnavailable(String logs);
+
+  /// Строка с индикатором на шаге «Permissions», пока читаются настройки агента: режим новых сессий до чтения не называется (ревью 2026-11-21, п. 1). Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading the agent settings…'**
+  String get onboardingPermissionsLoading;
+
+  /// InfoBar шага «Permissions» при недоступных настройках: режим не утверждается (в общем конфиге может быть bypass). Метка security.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes.'**
+  String get onboardingModeUnavailable;
 
   /// Заголовок InfoBar шага «Privacy» (D-29).
   ///

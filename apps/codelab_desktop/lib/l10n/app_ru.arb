@@ -1028,7 +1028,9 @@
   "onboardingStaysKeychain": "Конфиг и сессии в {home}; логи приложения в {logs}; API-ключи в системной связке ключей ({backend})",
   "onboardingStaysOther": "Конфиг и сессии в {home}; логи приложения в {logs}; API-ключи в хранилище секретов агента ({backend})",
   "onboardingStaysExternal": "Конфиг и сессии внешнего агента ведёт сам агент; логи приложения в {logs}",
-  "onboardingStaysUnavailable": "Логи приложения остаются на этом компьютере; конфиг и ключи агента тоже остаются на этом компьютере",
+  "onboardingStaysUnavailable": "Логи приложения в {logs}; конфиг и ключи агента остаются на этом компьютере",
+  "onboardingPermissionsLoading": "Читаются настройки агента…",
+  "onboardingModeUnavailable": "Не удалось прочитать настройки агента. Режим новых сессий виден в «Настройки › Агенты и режимы».",
   "onboardingNothingToAgreeTitle": "Принимать нечего",
   "onboardingNothingToAgreeBody": "CodeLab ничего не просит принять и не хранит записей о согласии."
 }

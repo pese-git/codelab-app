@@ -1,4 +1,5 @@
-import 'package:codelab_setup/codelab_setup.dart' show ProviderReadiness;
+import 'package:codelab_setup/codelab_setup.dart'
+    show EditableSettings, ProviderReadiness;
 
 /// Факты, которые нужны шагам onboarding (design.md change
 /// `add-app-onboarding`, D6).
@@ -14,16 +15,17 @@ import 'package:codelab_setup/codelab_setup.dart' show ProviderReadiness;
 final class OnboardingFacts {
   const OnboardingFacts({
     required ProviderReadiness this.readiness,
+    required EditableSettings this.access,
     required String this.backendId,
     required bool this.backendWritable,
     required String this.mode,
     required String this.homeLabel,
-    required this.logsLabel,
   });
 
-  /// Внешний профиль по умолчанию: известны только подписи каталога логов.
-  const OnboardingFacts.external({required this.logsLabel})
+  /// Внешний профиль по умолчанию: настраиваемого агента нет, фактов нет.
+  const OnboardingFacts.external()
     : readiness = null,
+      access = null,
       backendId = null,
       backendWritable = null,
       mode = null,
@@ -31,6 +33,12 @@ final class OnboardingFacts {
 
   /// Готовность провайдера; `null` у внешнего профиля.
   final ProviderReadiness? readiness;
+
+  /// Доступ к настройкам, по которому прочитан снимок: тот же `EditableSettings`
+  /// получает мастер шага 3, поэтому зонд и мастер видят один конфиг
+  /// (design.md change `add-app-onboarding`, D6, D8, ревью 2026-11-21, п. 2).
+  /// `null` у внешнего профиля.
+  final EditableSettings? access;
 
   /// `SecretBackendInfo.id` (`env`, `file`, …); `null` у внешнего профиля.
   final String? backendId;
@@ -41,9 +49,6 @@ final class OnboardingFacts {
 
   /// Каталог конфига и сессий с `~` вместо домашнего каталога.
   final String? homeLabel;
-
-  /// Каталог логов app с `~`.
-  final String logsLabel;
 
   bool get isExternal => readiness == null;
 }

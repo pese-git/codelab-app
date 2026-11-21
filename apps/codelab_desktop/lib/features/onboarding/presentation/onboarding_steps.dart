@@ -32,6 +32,7 @@ class OnboardingStepBody extends StatelessWidget {
   const OnboardingStepBody({
     required this.state,
     required this.titleFocus,
+    required this.appLogsLabel,
     required this.selectedPreset,
     required this.onSelectPreset,
     super.key,
@@ -39,6 +40,10 @@ class OnboardingStepBody extends StatelessWidget {
 
   final OnboardingState state;
   final FocusNode titleFocus;
+
+  /// Подпись каталога логов app из composition root: известна без фактов
+  /// (design.md D9, ревью 2026-11-21, п. 4).
+  final String appLogsLabel;
   final String? selectedPreset;
   final ValueChanged<String> onSelectPreset;
 
@@ -65,7 +70,7 @@ class OnboardingStepBody extends StatelessWidget {
       ),
       OnboardingStep.privacy => (
         l10n.onboardingPrivacyTitle,
-        _Privacy(l10n: l10n, facts: state.facts),
+        _Privacy(l10n: l10n, facts: state.facts, appLogsLabel: appLogsLabel),
       ),
     };
     return Column(
@@ -112,6 +117,9 @@ class OnboardingNavigation extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final model = state.model;
+    // Пока мастер открывается или открыт, навигация шага неактивна (D8, ревью
+    // 2026-11-21, п. 6): Cubit игнорирует нажатия, кнопки это показывают.
+    final busy = _wizardActive(model);
     final actions = <Widget>[];
     switch (state.step) {
       case OnboardingStep.welcome || OnboardingStep.permissions:
@@ -128,18 +136,22 @@ class OnboardingNavigation extends StatelessWidget {
           actions.add(
             Button(
               key: const ValueKey('onboarding-model-later'),
-              onPressed: onLater,
+              onPressed: busy ? null : onLater,
               child: Text(l10n.onboardingSetUpLater),
             ),
           );
         }
-        final blocked = _wizardBlocked(model);
+        final blocked = busy || _wizardBlocked(model);
         final selected = selectedPreset;
         actions.add(
           saved
               ? Button(
                   key: const ValueKey('onboarding-model-again'),
-                  onPressed: () => onSetUp(selected ?? _defaultPreset),
+                  // Без выбранной карточки «Set up again…» неактивна: id пресета
+                  // не придумывается.
+                  onPressed: blocked || selected == null
+                      ? null
+                      : () => onSetUp(selected),
                   child: Text(l10n.onboardingSetUpAgain),
                 )
               : FilledButton(
@@ -160,7 +172,7 @@ class OnboardingNavigation extends StatelessWidget {
           actions.add(
             FilledButton(
               key: const ValueKey('onboarding-next'),
-              onPressed: onNext,
+              onPressed: busy ? null : onNext,
               child: Text(l10n.onboardingNext),
             ),
           );
@@ -179,7 +191,7 @@ class OnboardingNavigation extends StatelessWidget {
         if (state.step != OnboardingStep.welcome)
           Button(
             key: const ValueKey('onboarding-back'),
-            onPressed: onBack,
+            onPressed: busy ? null : onBack,
             child: Text(l10n.onboardingBack),
           ),
         const Spacer(),
@@ -209,7 +221,12 @@ bool _wizardBlocked(OnboardingModelStep model) => switch (model) {
   ModelSaved() => false,
 };
 
-const _defaultPreset = 'custom-openai';
+/// Мастер открывается или открыт: навигация шага заблокирована.
+bool _wizardActive(OnboardingModelStep model) => switch (model) {
+  ModelChoose(:final wizard) => wizard == ModelWizard.active,
+  ModelSaved(:final wizard) => wizard == ModelWizard.active,
+  _ => false,
+};
 
 ProviderPreset _presetOf(String id) => ProviderPresets.all.firstWhere(
   (preset) => preset.id == id,
@@ -327,28 +344,44 @@ class _Permissions extends StatelessWidget {
         l10n.onboardingPermBlocked,
       ),
     ];
-    // Режим из фактов; недоступные факты и режим standard читаются одинаково.
-    final loaded = facts is FactsLoaded ? (facts as FactsLoaded).facts : null;
-    final Widget mode;
-    if (loaded != null && loaded.isExternal) {
-      mode = InfoBar(
+    // Режим называется только по прочитанным фактам (design.md D7, ревью
+    // 2026-11-21, п. 1): до чтения — индикатор, при сбое — нейтральный текст;
+    // «standard» неизвестному не приписывается (AGENTS.md §2).
+    final Widget mode = switch (facts) {
+      FactsLoading() => Row(
+        key: const ValueKey('onboarding-permissions-loading'),
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: ProgressRing(strokeWidth: 2),
+          ),
+          const SizedBox(width: 8),
+          CodeLabText(l10n.onboardingPermissionsLoading),
+        ],
+      ),
+      FactsUnavailable() => InfoBar(
+        key: const ValueKey('onboarding-permissions-mode'),
+        title: Text(l10n.onboardingModeUnavailable),
+        severity: InfoBarSeverity.warning,
+        isLong: true,
+      ),
+      FactsLoaded(:final facts) when facts.isExternal => InfoBar(
         key: const ValueKey('onboarding-permissions-mode'),
         title: Text(l10n.onboardingModeExternal),
         isLong: true,
-      );
-    } else {
-      final id = loaded?.mode ?? 'standard';
-      mode = InfoBar(
+      ),
+      FactsLoaded(:final facts) => InfoBar(
         key: const ValueKey('onboarding-permissions-mode'),
-        title: Text(l10n.onboardingModeTitle(id)),
+        title: Text(l10n.onboardingModeTitle(facts.mode ?? 'standard')),
         content: Text(
-          id == 'standard'
+          (facts.mode ?? 'standard') == 'standard'
               ? l10n.onboardingModeStandardBody
               : l10n.onboardingModeOtherBody,
         ),
         isLong: true,
-      );
-    }
+      ),
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -397,7 +430,7 @@ class _Model extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final model = state.model;
-    final blocked = _wizardBlocked(model);
+    final blocked = _wizardActive(model) || _wizardBlocked(model);
     final loaded = state.facts is FactsLoaded
         ? (state.facts as FactsLoaded).facts
         : null;
@@ -598,36 +631,38 @@ class _Connected extends StatelessWidget {
 /// Шаг 4: что уходит с компьютера; строка «Stays here» — по фактам сборки, а
 /// не по артборду (D9); согласия и ссылок на документы нет (D10, D-29).
 class _Privacy extends StatelessWidget {
-  const _Privacy({required this.l10n, required this.facts});
+  const _Privacy({
+    required this.l10n,
+    required this.facts,
+    required this.appLogsLabel,
+  });
 
   final AppLocalizations l10n;
   final OnboardingFactsState facts;
+  final String appLogsLabel;
 
   String _stays() {
     final loaded = facts is FactsLoaded ? (facts as FactsLoaded).facts : null;
+    final logs = appLogsLabel;
     if (loaded == null) {
-      return l10n.onboardingStaysUnavailable;
+      return l10n.onboardingStaysUnavailable(logs);
     }
     if (loaded.isExternal) {
-      return l10n.onboardingStaysExternal(loaded.logsLabel);
+      return l10n.onboardingStaysExternal(logs);
     }
     final home = loaded.homeLabel!;
     final id = loaded.backendId!;
     return switch (id) {
-      'env' => l10n.onboardingStaysEnv(home, loaded.logsLabel),
-      'file' => l10n.onboardingStaysFile(
-        home,
-        loaded.logsLabel,
-        '$home/secrets.yaml',
-      ),
+      'env' => l10n.onboardingStaysEnv(home, logs),
+      'file' => l10n.onboardingStaysFile(home, logs, '$home/secrets.yaml'),
       'secret-service' ||
-      'wincred' => l10n.onboardingStaysKeychain(home, loaded.logsLabel, id),
+      'wincred' => l10n.onboardingStaysKeychain(home, logs, id),
       _ when id.startsWith('keychain') => l10n.onboardingStaysKeychain(
         home,
-        loaded.logsLabel,
+        logs,
         id,
       ),
-      _ => l10n.onboardingStaysOther(home, loaded.logsLabel, id),
+      _ => l10n.onboardingStaysOther(home, logs, id),
     };
   }
 

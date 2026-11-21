@@ -5508,9 +5508,22 @@
       }
     }
   },
-  "onboardingStaysUnavailable": "App logs stay on this computer; the agent's config and keys stay on this computer too",
+  "onboardingStaysUnavailable": "App logs in {logs}; the agent's config and keys stay on this computer",
   "@onboardingStaysUnavailable": {
-    "description": "«Stays here» при недоступных фактах. Метка security."
+    "description": "«Stays here» при недоступных фактах. Плейсхолдер logs — путь каталога логов app, не переводить. Метка security.",
+    "placeholders": {
+      "logs": {
+        "type": "String"
+      }
+    }
+  },
+  "onboardingPermissionsLoading": "Reading the agent settings…",
+  "@onboardingPermissionsLoading": {
+    "description": "Строка с индикатором на шаге «Permissions», пока читаются настройки агента: режим новых сессий до чтения не называется (ревью 2026-11-21, п. 1). Метка security."
+  },
+  "onboardingModeUnavailable": "Agent settings could not be read. The mode for new sessions is shown in Settings › Agents & modes.",
+  "@onboardingModeUnavailable": {
+    "description": "InfoBar шага «Permissions» при недоступных настройках: режим не утверждается (в общем конфиге может быть bypass). Метка security."
   },
   "onboardingNothingToAgreeTitle": "Nothing to agree to",
   "@onboardingNothingToAgreeTitle": {

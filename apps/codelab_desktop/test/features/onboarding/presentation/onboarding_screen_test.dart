@@ -148,7 +148,9 @@ void main() {
       preferences: preferences,
       onFinished: () => finished++,
     );
-    addTearDown(cubit.close);
+    // Повторный `close()` в teardown fake-async зоны не завершается: тест,
+    // который закрыл Cubit сам, второй раз его не закрывает.
+    addTearDown(() => cubit.isClosed ? Future<void>.value() : cubit.close());
     await tester.pumpWidget(
       localizedFluentApp(
         BlocProvider<OnboardingCubit>.value(
@@ -891,8 +893,9 @@ void main() {
   group('мастер: доступ из фактов и навигация шага (п. 2, 6)', () {
     /// Cubit мастера на двойнике сессии: диалог начинается с «Base URL».
     Future<(ProviderWizardCubit, FakeAgentConfigStore)> makeWizard(
-      WidgetTester tester,
-    ) async {
+      WidgetTester tester, {
+      bool spy = false,
+    }) async {
       final store = FakeAgentConfigStore();
       final session = FakeProviderSettingsSession(store);
       final flow = (await tester.runAsync(
@@ -901,15 +904,28 @@ void main() {
           entry: ProviderWizardEntry.onboarding,
         ),
       ))!;
-      final wizard = ProviderWizardCubit(
-        strings: FixedAppStrings(AppLocalizationsEn()),
-        flow: flow,
-        access: session.access,
-        backendId: store.backend.id,
-        forceDefault: true,
-        isAgentConnected: () => false,
-      )..dispatch(const PresetChosen('anthropic'));
-      addTearDown(wizard.close);
+      final strings = FixedAppStrings(AppLocalizationsEn());
+      final wizard = spy
+          ? _SpyWizard(
+              strings: strings,
+              flow: flow,
+              access: session.access,
+              backendId: store.backend.id,
+            )
+          : ProviderWizardCubit(
+              strings: strings,
+              flow: flow,
+              access: session.access,
+              backendId: store.backend.id,
+              forceDefault: true,
+              isAgentConnected: () => false,
+            );
+      wizard.dispatch(const PresetChosen('anthropic'));
+      // Шпион не закрывается по-настоящему: закрытие настоящего мастера ждёт
+      // реальные Future и в fake-async зоне виджет-теста не завершается.
+      if (!spy) {
+        addTearDown(wizard.close);
+      }
       return (wizard, store);
     }
 
@@ -927,7 +943,6 @@ void main() {
             backendWritable: true,
             mode: 'standard',
             homeLabel: '/agent-home',
-            logsLabel: fakeLogsLabel,
           ),
         ),
       );
@@ -976,7 +991,7 @@ void main() {
 
     testWidgets('открыватель вернул мастер после закрытия onboarding: диалога '
         'нет, Cubit мастера закрыт, конфиг не тронут', (tester) async {
-      final (wizard, store) = await makeWizard(tester);
+      final (wizard, store) = await makeWizard(tester, spy: true);
       openGate = Completer<ProviderWizardCubit?>();
       await pump(
         tester,
@@ -992,7 +1007,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(_key('provider-wizard-base-url-field'), findsNothing);
-      expect(wizard.isClosed, isTrue);
+      expect(
+        (wizard as _SpyWizard).closeCalls,
+        1,
+        reason: 'экран закрывает ненужный мастер',
+      );
       expect(store.applied, isEmpty);
     });
   });
@@ -1004,4 +1023,26 @@ final class _GatedProbe implements OnboardingProbe {
 
   @override
   Future<OnboardingFacts> read() => gate.future;
+}
+
+/// Мастер, который считает вызовы `close()` и не закрывается по-настоящему:
+/// тест проверяет, что экран закрывает ненужный мастер (ревью 2026-11-21,
+/// п. 6), а не поведение закрытия.
+final class _SpyWizard extends ProviderWizardCubit {
+  _SpyWizard({
+    required super.strings,
+    required super.flow,
+    required super.access,
+    required super.backendId,
+  }) : super(forceDefault: true, isAgentConnected: _never);
+
+  static bool _never() => false;
+
+  var closeCalls = 0;
+
+  @override
+  // ignore: must_call_super, шпион намеренно не закрывает настоящий мастер
+  Future<void> close() async {
+    closeCalls++;
+  }
 }

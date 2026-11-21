@@ -69,7 +69,10 @@ class NavigationCubit extends Cubit<AppDestination> {
     }
     // Настройки на onboarding не открываются (D1; spec app-onboarding).
     if (state is OnboardingDestination) {
-      _logger?.debug('settings.open_skipped');
+      _logger?.debug(
+        'settings.open_skipped',
+        context: {'reason': 'onboarding'},
+      );
       return;
     }
     final visible = _pages.visible;
@@ -101,7 +104,9 @@ class NavigationCubit extends Cubit<AppDestination> {
   /// Вне onboarding ничего не меняет. Запись флага и старт агента — забота
   /// `OnboardingCubit`, не навигации.
   void finishOnboarding() {
-    if (state is! OnboardingDestination) {
+    // Колбэк может пережить Cubit при закрытии root scope: `emit` на закрытом
+    // Cubit бросил бы `StateError` (ревью 2026-11-21, п. 7).
+    if (isClosed || state is! OnboardingDestination) {
       return;
     }
     emit(const WorkbenchDestination());

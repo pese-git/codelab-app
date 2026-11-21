@@ -224,7 +224,6 @@ Scope createCodeLabRootScope({
         probe: onboardingProbe,
         preferences: onboardingPreferences,
         environment: connectionEnvironment,
-        logDirectory: logDirectoryPath ?? Directory.systemTemp.path,
       ),
       CodeLabAppearanceModule(
         appearance: appearance,
@@ -594,14 +593,12 @@ final class CodeLabOnboardingModule extends Module {
     required this.probe,
     required this.preferences,
     required this.environment,
-    required this.logDirectory,
   });
 
   final OnboardingStart? start;
   final OnboardingProbe? probe;
   final OnboardingPreferences? preferences;
   final ConnectionEnvironment environment;
-  final String logDirectory;
 
   @override
   void builder(Scope currentScope) {
@@ -632,7 +629,6 @@ final class CodeLabOnboardingModule extends Module {
                 .resolve<DefaultProfileResolver>()
                 .resolve,
             codelabHome: environment.codelabHome ?? '',
-            logDirectory: logDirectory,
             environment: environment.variables,
             logger: CodeLabEmbeddedLogger(),
           ),
@@ -1338,18 +1334,13 @@ final class CodeLabPresentationModule extends Module {
     // (D26) и со второго шага onboarding (`add-app-onboarding`, D8). Сессия
     // настроек встроенного профиля — той же фабрикой, что у страницы
     // «Providers»; цель по умолчанию `user`, «Make default» не снимается.
-    Future<ProviderWizardCubit?> openEmbeddedWizardFor({
-      required String cwd,
+    Future<ProviderWizardCubit?> openWizardFor({
+      required EditableSettings access,
       required ProviderWizardEntry entry,
       required bool Function() isAgentConnected,
     }) async {
       final environment = currentScope.resolve<ConnectionEnvironment>();
-      final access = resolveSettingsAccess(
-        kind: AgentLaunchKind.embedded,
-        cwd: cwd.isEmpty ? null : cwd,
-        defaultCodelabHome: environment.codelabHome ?? '',
-      );
-      if (access is! EditableSettings || access.paths.codelabHome.isEmpty) {
+      if (access.paths.codelabHome.isEmpty) {
         return null;
       }
       try {
@@ -1373,22 +1364,32 @@ final class CodeLabPresentationModule extends Module {
       }
     }
 
-    bind<EmbeddedWizardOpener>().toInstance(
-      ({required String cwd}) => openEmbeddedWizardFor(
-        cwd: cwd,
+    bind<EmbeddedWizardOpener>().toInstance(({required String cwd}) async {
+      final environment = currentScope.resolve<ConnectionEnvironment>();
+      final access = resolveSettingsAccess(
+        kind: AgentLaunchKind.embedded,
+        cwd: cwd.isEmpty ? null : cwd,
+        defaultCodelabHome: environment.codelabHome ?? '',
+      );
+      if (access is! EditableSettings) {
+        return null;
+      }
+      return openWizardFor(
+        access: access,
         entry: ProviderWizardEntry.banner,
         // Баннер виден, пока агент не открылся: подключения нет.
         isAgentConnected: () => false,
-      ),
-    );
-    // Onboarding: проекта и агента ещё нет (D5), поэтому папка пустая и
-    // подключения нет; пресет выбран на карточке, и диалог начинается с
-    // «Base URL» (D8).
+      );
+    });
+    // Onboarding: проекта и агента ещё нет (D5), подключения нет; доступ
+    // приходит из фактов шага (ревью 2026-11-21, п. 2), пресет выбран на
+    // карточке, и диалог начинается с «Base URL» (D8).
     bind<OnboardingWizardOpener>().toInstance(({
       required String presetId,
+      required EditableSettings access,
     }) async {
-      final wizard = await openEmbeddedWizardFor(
-        cwd: '',
+      final wizard = await openWizardFor(
+        access: access,
         entry: ProviderWizardEntry.onboarding,
         isAgentConnected: () => false,
       );
@@ -1794,6 +1795,7 @@ final class CodeLabDependencies {
     required this.openEmbeddedWizard,
     required this.createOnboardingCubit,
     required this.openOnboardingWizard,
+    required this.onboardingAppLogsLabel,
     this.projectFilesCubit,
   });
 
@@ -1871,6 +1873,11 @@ final class CodeLabDependencies {
 
   /// Открывает мастер провайдера для шага «Choose a model» (D8).
   final OnboardingWizardOpener openOnboardingWizard;
+
+  /// Подпись каталога логов app с `~` для строки «Stays here» шага «Privacy»:
+  /// известна без чтения фактов, поэтому показывается и при недоступных
+  /// фактах (design.md D9, ревью 2026-11-21, п. 4).
+  final String onboardingAppLogsLabel;
 
   /// Отдаёт Cubit панели Files — один на окно, создаётся лениво при первом
   /// вызове; панель его только читает и не закрывает. `null` — хост не
@@ -1995,6 +2002,10 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     openEmbeddedWizard: _scope.resolve<EmbeddedWizardOpener>(),
     createOnboardingCubit: _scope.resolve<OnboardingCubit>,
     openOnboardingWizard: _scope.resolve<OnboardingWizardOpener>(),
+    onboardingAppLogsLabel: homePathLabel(
+      widget.logDirectoryPath ?? Directory.systemTemp.path,
+      _scope.resolve<ConnectionEnvironment>().variables,
+    ),
     projectFilesCubit: _projectFilesCubitOf(_scope),
   );
 

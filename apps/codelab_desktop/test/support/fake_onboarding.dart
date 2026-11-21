@@ -11,7 +11,8 @@ import 'package:codelab_desktop/core/platform/onboarding_preferences.dart';
 import 'package:codelab_desktop/features/onboarding/application/onboarding_probe.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 
-/// Подпись каталога логов app в фактах двойника.
+/// Подпись каталога логов app, которую composition root передаёт экрану
+/// (`OnboardingScreen.appLogsLabel`; ревью 2026-11-21, п. 4).
 const fakeLogsLabel = '~/Library/Application Support/CodeLab/logs';
 
 /// Факты настраиваемого агента: готовность [readiness], бэкенд [backend].
@@ -21,17 +22,15 @@ OnboardingFacts onboardingFacts(
   String mode = 'standard',
 }) => OnboardingFacts(
   readiness: readiness,
+  access: const EditableSettings(ConfigPaths(codelabHome: '/home/u/.codelab')),
   backendId: backend,
   backendWritable: backend != 'env',
   mode: mode,
   homeLabel: '~/.codelab',
-  logsLabel: fakeLogsLabel,
 );
 
 /// Факты внешнего профиля по умолчанию.
-const onboardingExternalFacts = OnboardingFacts.external(
-  logsLabel: fakeLogsLabel,
-);
+const onboardingExternalFacts = OnboardingFacts.external();
 
 /// Порт фактов: готовый ответ или ошибка; `reads` — число чтений.
 final class FakeOnboardingProbe implements OnboardingProbe {

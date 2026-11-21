@@ -30,9 +30,16 @@ import 'onboarding_steps.dart';
 /// экранный диктор его прочитал. Контент не шире 920 px и прокручивается
 /// по вертикали в узком окне.
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({required this.openWizard, super.key});
+  const OnboardingScreen({
+    required this.openWizard,
+    required this.appLogsLabel,
+    super.key,
+  });
 
   final OnboardingWizardOpener openWizard;
+
+  /// Подпись каталога логов app для шага «Privacy» (composition root, D9).
+  final String appLogsLabel;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -41,7 +48,6 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _titleFocus = FocusNode(debugLabel: 'OnboardingTitle');
   String? _selectedPreset;
-  var _wizardOpen = false;
 
   @override
   void initState() {
@@ -63,31 +69,45 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     });
   }
 
-  /// Открывает мастер для [presetId]; повторное нажатие, пока диалог открыт,
-  /// игнорируется. Итог `Done` передаётся Cubit-у, отмена шаг не меняет.
+  /// Открывает мастер для [presetId] по доступу из фактов шага.
+  ///
+  /// Фаза мастера принадлежит Cubit-у: `wizardStarted` блокирует навигацию шага
+  /// на время асинхронного открытия и отвечает `false` на повторное нажатие
+  /// (D8, ревью 2026-11-21, п. 6). Если к моменту готовности мастера шаг уже
+  /// другой или onboarding закрыт, диалог не показывается, Cubit мастера
+  /// закрывается. Итог `Done` передаётся Cubit-у, отмена шаг не меняет.
   Future<void> _openWizard(String presetId) async {
-    if (_wizardOpen) {
+    final onboarding = context.read<OnboardingCubit>();
+    final facts = onboarding.state.facts;
+    final access = facts is FactsLoaded ? facts.facts.access : null;
+    if (access == null || !onboarding.wizardStarted()) {
       return;
     }
-    _wizardOpen = true;
-    final onboarding = context.read<OnboardingCubit>();
     try {
-      final wizard = await widget.openWizard(presetId: presetId);
+      final wizard = await widget.openWizard(
+        presetId: presetId,
+        access: access,
+      );
       if (wizard == null) {
         return;
       }
-      if (!mounted) {
+      if (!mounted ||
+          onboarding.isClosed ||
+          onboarding.state.step != OnboardingStep.model) {
         await wizard.close();
         return;
       }
       await showProviderWizardDialog(context, wizard);
       final setup = wizard.state.setup;
-      await wizard.close();
-      if (setup is Done && !onboarding.isClosed) {
+      // Итог и снятие блокировки — до `await close()`: закрытие мастера
+      // ждёт отмену подписок и не должно держать навигацию шага.
+      if (setup is Done) {
         onboarding.providerSaved(setup);
       }
+      onboarding.wizardEnded();
+      await wizard.close();
     } finally {
-      _wizardOpen = false;
+      onboarding.wizardEnded();
     }
   }
 
@@ -139,6 +159,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     OnboardingStepBody(
                       state: state,
                       titleFocus: _titleFocus,
+                      appLogsLabel: widget.appLogsLabel,
                       selectedPreset: _selectedPreset,
                       onSelectPreset: (id) =>
                           setState(() => _selectedPreset = id),

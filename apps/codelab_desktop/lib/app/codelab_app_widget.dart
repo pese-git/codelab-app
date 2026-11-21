@@ -375,6 +375,7 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
           if (destination is OnboardingDestination) {
             return _OnboardingHost(
               openWizard: dependencies.openOnboardingWizard,
+              appLogsLabel: dependencies.onboardingAppLogsLabel,
             );
           }
           return Stack(
@@ -438,9 +439,10 @@ class _CodeLabHomeState extends State<_CodeLabHome> {
 /// Как использовать: строится по `OnboardingDestination`; при переходе на
 /// рабочее место виджет исчезает, и Cubit закрывается.
 class _OnboardingHost extends StatefulWidget {
-  const _OnboardingHost({required this.openWizard});
+  const _OnboardingHost({required this.openWizard, required this.appLogsLabel});
 
   final OnboardingWizardOpener openWizard;
+  final String appLogsLabel;
 
   @override
   State<_OnboardingHost> createState() => _OnboardingHostState();
@@ -460,6 +462,9 @@ class _OnboardingHostState extends State<_OnboardingHost> {
   @override
   Widget build(BuildContext context) => BlocProvider.value(
     value: _cubit,
-    child: OnboardingScreen(openWizard: widget.openWizard),
+    child: OnboardingScreen(
+      openWizard: widget.openWizard,
+      appLogsLabel: widget.appLogsLabel,
+    ),
   );
 }

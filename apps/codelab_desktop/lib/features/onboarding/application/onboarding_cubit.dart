@@ -96,7 +96,9 @@ class OnboardingCubit extends Cubit<OnboardingState> {
         model: const ModelChoose(ModelNotice.unavailable),
       ),
     );
-    _factsDone.complete();
+    if (!_factsDone.isCompleted) {
+      _factsDone.complete();
+    }
   }
 
   void _applyFacts(OnboardingFacts facts) {
@@ -125,7 +127,9 @@ class OnboardingCubit extends Cubit<OnboardingState> {
       );
     }
     emit(state.copyWith(facts: FactsLoaded(facts), model: model));
-    _factsDone.complete();
+    if (!_factsDone.isCompleted) {
+      _factsDone.complete();
+    }
   }
 
   static String _readinessName(ProviderReadiness readiness) =>
@@ -138,6 +142,60 @@ class OnboardingCubit extends Cubit<OnboardingState> {
 
   bool get _modelSkipped => state.model is ModelSkipped;
 
+  /// Фаза мастера на шаге модели; у остальных видов шага — `idle`.
+  ModelWizard get _wizardPhase => switch (state.model) {
+    ModelChoose(:final wizard) => wizard,
+    ModelSaved(:final wizard) => wizard,
+    _ => ModelWizard.idle,
+  };
+
+  OnboardingModelStep _withWizard(
+    OnboardingModelStep model,
+    ModelWizard phase,
+  ) => switch (model) {
+    ModelChoose(:final notice) => ModelChoose(notice, wizard: phase),
+    ModelSaved(:final summary) => ModelSaved(summary, wizard: phase),
+    _ => model,
+  };
+
+  /// Мастер провайдера начинает открываться (D8, ревью 2026-11-21, п. 6).
+  ///
+  /// Почему здесь: открытие мастера асинхронно (хранилище секретов, снимок), и
+  /// без блокировки пользователь успел бы уйти с шага, а диалог появился бы
+  /// поверх чужого шага. Возвращает `false`, если мастер открывать нельзя:
+  /// шаг не «Choose a model», мастер уже активен, конфиг битый или факты
+  /// недоступны (мастер не пишет поверх битого файла), Cubit закрыт.
+  ///
+  /// Как использовать: экран вызывает до открытия, при `false` ничего не
+  /// открывает; после диалога вызывает [wizardEnded].
+  bool wizardStarted() {
+    if (isClosed ||
+        state.step != OnboardingStep.model ||
+        _wizardPhase == ModelWizard.active) {
+      return false;
+    }
+    final model = state.model;
+    final allowed =
+        model is ModelSaved ||
+        model is ModelChoose &&
+            (model.notice == ModelNotice.none ||
+                model.notice == ModelNotice.keyMissing);
+    if (!allowed) {
+      return false;
+    }
+    emit(state.copyWith(model: _withWizard(model, ModelWizard.active)));
+    return true;
+  }
+
+  /// Диалог мастера закрыт (сохранением или отменой): навигация шага снова
+  /// действует. Без активного мастера и после `close()` ничего не делает.
+  void wizardEnded() {
+    if (isClosed || _wizardPhase != ModelWizard.active) {
+      return;
+    }
+    emit(state.copyWith(model: _withWizard(state.model, ModelWizard.idle)));
+  }
+
   void _show(OnboardingStep step) {
     emit(state.copyWith(step: step));
     _logger?.debug('onboarding.step_shown', context: {'step': step.name});
@@ -147,6 +205,9 @@ class OnboardingCubit extends Cubit<OnboardingState> {
   /// ждёт итога чтения (не дольше таймаута); повторное нажатие в ожидании
   /// игнорируется.
   Future<void> next() async {
+    if (_wizardPhase == ModelWizard.active) {
+      return;
+    }
     switch (state.step) {
       case OnboardingStep.welcome:
         _show(OnboardingStep.permissions);
@@ -174,6 +235,9 @@ class OnboardingCubit extends Cubit<OnboardingState> {
 
   /// «Back»: на «Privacy» ведёт на «Choose a model», если шаг не пропущен.
   void back() {
+    if (_wizardPhase == ModelWizard.active) {
+      return;
+    }
     switch (state.step) {
       case OnboardingStep.welcome:
         break;
@@ -191,7 +255,9 @@ class OnboardingCubit extends Cubit<OnboardingState> {
   /// «Set up later» (Q3, D8): на «Privacy» без записи; доступна, пока
   /// провайдер не сохранён.
   void setUpLater() {
-    if (state.step != OnboardingStep.model || state.model is! ModelChoose) {
+    if (state.step != OnboardingStep.model ||
+        state.model is! ModelChoose ||
+        _wizardPhase == ModelWizard.active) {
       return;
     }
     _show(OnboardingStep.privacy);
@@ -234,6 +300,9 @@ class OnboardingCubit extends Cubit<OnboardingState> {
             model: '${plan.providerId}/${plan.model.id}',
             keyStorage: storage,
           ),
+          // Итог приходит, пока диалог ещё закрывается: фазу снимает
+          // `wizardEnded`, а не `Done`.
+          wizard: _wizardPhase,
         ),
       ),
     );
@@ -252,10 +321,18 @@ class OnboardingCubit extends Cubit<OnboardingState> {
     try {
       await _preferences.markDone();
     } on Object catch (error) {
+      if (isClosed) {
+        return;
+      }
       _logger?.warning(
         'onboarding.save_failed',
         context: {'error_type': error.runtimeType.toString()},
       );
+    }
+    // Закрытие во время записи: итог не публикуется, `onFinished` не зовётся
+    // (design.md D5, ревью 2026-11-21, п. 7; CON-005).
+    if (isClosed) {
+      return;
     }
     _logger?.info(
       'onboarding.completed',
@@ -273,6 +350,11 @@ class OnboardingCubit extends Cubit<OnboardingState> {
   @override
   Future<void> close() {
     _timeout?.cancel();
+    // `next()` на шаге «Permissions» ждёт факты: закрытие завершает ожидание,
+    // иначе он повис бы (D6, ревью 2026-11-21, п. 8).
+    if (!_factsDone.isCompleted) {
+      _factsDone.complete();
+    }
     return super.close();
   }
 }

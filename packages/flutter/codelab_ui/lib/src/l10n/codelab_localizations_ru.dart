@@ -521,4 +521,9 @@ class CodeLabLocalizationsRu extends CodeLabLocalizations {
   String codeLabShortcutAlternatives(String first, String second) {
     return '$first или $second';
   }
+
+  @override
+  String codeLabSetupStepPosition(int index, int total) {
+    return 'Шаг $index из $total';
+  }
 }

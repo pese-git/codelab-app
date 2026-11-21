@@ -106,6 +106,14 @@ final class OnboardingSavedSummary {
   int get hashCode => Object.hash(providerId, model, keyStorage);
 }
 
+/// Фаза мастера провайдера на шаге «Choose a model» (design.md change
+/// `add-app-onboarding`, D8, ревью 2026-11-21, п. 6).
+///
+/// Почему поле шага, а не отдельный флаг состояния: фаза имеет смысл только у
+/// `Choose` и `Saved`, и набора независимых флагов быть не должно (AGENTS.md
+/// §8). `active` — мастер открывается или открыт: навигация шага блокируется.
+enum ModelWizard { idle, active }
+
 /// Шаг «Choose a model» (D4): `Pending` — готовность ещё не известна.
 sealed class OnboardingModelStep {
   const OnboardingModelStep();
@@ -129,29 +137,31 @@ final class ModelSkipped extends OnboardingModelStep {
 }
 
 final class ModelChoose extends OnboardingModelStep {
-  const ModelChoose(this.notice);
+  const ModelChoose(this.notice, {this.wizard = ModelWizard.idle});
 
   final ModelNotice notice;
+  final ModelWizard wizard;
 
   @override
   bool operator ==(Object other) =>
-      other is ModelChoose && other.notice == notice;
+      other is ModelChoose && other.notice == notice && other.wizard == wizard;
 
   @override
-  int get hashCode => notice.hashCode;
+  int get hashCode => Object.hash(notice, wizard);
 }
 
 final class ModelSaved extends OnboardingModelStep {
-  const ModelSaved(this.summary);
+  const ModelSaved(this.summary, {this.wizard = ModelWizard.idle});
 
   final OnboardingSavedSummary summary;
+  final ModelWizard wizard;
 
   @override
   bool operator ==(Object other) =>
-      other is ModelSaved && other.summary == summary;
+      other is ModelSaved && other.summary == summary && other.wizard == wizard;
 
   @override
-  int get hashCode => summary.hashCode;
+  int get hashCode => Object.hash(summary, wizard);
 }
 
 /// Состояние onboarding (D4).

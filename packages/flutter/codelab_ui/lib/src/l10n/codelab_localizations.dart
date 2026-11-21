@@ -994,6 +994,12 @@ abstract class CodeLabLocalizations {
   /// In en, this message translates to:
   /// **'{first} or {second}'**
   String codeLabShortcutAlternatives(String first, String second);
+
+  /// Подсказка экранному диктору у шага строки шагов `CodeLabSetupSteps`: позиция шага. Плейсхолдеры index и total — числа.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {index} of {total}'**
+  String codeLabSetupStepPosition(int index, int total);
 }
 
 class _CodeLabLocalizationsDelegate

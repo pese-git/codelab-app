@@ -21,13 +21,13 @@ import '../features/onboarding/application/onboarding_probe.dart';
 /// (внешний агент) даёт `OnboardingFacts.external` без чтения конфига.
 ///
 /// Как использовать: composition root передаёт `DefaultProfileResolver.resolve`
-/// в [resolveProfile], каталог логов app в [logDirectory] и окружение app.
+/// в [resolveProfile] и окружение app; каталог логов app в факты не входит
+/// (design.md D9, ревью 2026-11-21, п. 4).
 /// [keysOf] — шов тестов над `providerKeysOf`.
 final class SetupOnboardingProbe implements OnboardingProbe {
   SetupOnboardingProbe({
     required Future<ConnectionProfile> Function() resolveProfile,
     required String codelabHome,
-    required String logDirectory,
     required Map<String, String> environment,
     required setup.Logger logger,
     ProviderKeys Function(
@@ -38,14 +38,12 @@ final class SetupOnboardingProbe implements OnboardingProbe {
         setup.providerKeysOf,
   }) : _resolveProfile = resolveProfile,
        _codelabHome = codelabHome,
-       _logDirectory = logDirectory,
        _environment = environment,
        _logger = logger,
        _keysOf = keysOf;
 
   final Future<ConnectionProfile> Function() _resolveProfile;
   final String _codelabHome;
-  final String _logDirectory;
   final Map<String, String> _environment;
   final setup.Logger _logger;
   final ProviderKeys Function(
@@ -56,7 +54,6 @@ final class SetupOnboardingProbe implements OnboardingProbe {
 
   @override
   Future<OnboardingFacts> read() async {
-    final logsLabel = homePathLabel(_logDirectory, _environment);
     final profile = await _resolveProfile();
     // Без папки проекта (`cwd: null`): при первом запуске проекта нет, а
     // проектные слои применяются только к доверенному проекту (D6, п. 1).
@@ -80,7 +77,7 @@ final class SetupOnboardingProbe implements OnboardingProbe {
       ),
     };
     if (access is! EditableSettings) {
-      return OnboardingFacts.external(logsLabel: logsLabel);
+      return const OnboardingFacts.external();
     }
     final home = access.paths.codelabHome;
     if (home.isEmpty) {
@@ -100,14 +97,17 @@ final class SetupOnboardingProbe implements OnboardingProbe {
       secrets: secrets,
       logger: _logger,
     );
-    final snapshot = await store.snapshot(cwd: '');
+    // Тот же `cwd`, что у мастера (`openWizard`: `cwd ?? codelabHome`): в
+    // снимок попадают только слои без проекта, а `.codelab/config*.yaml` папки
+    // процесса не читается (design.md D6, ревью 2026-11-21, п. 3).
+    final snapshot = await store.snapshot(cwd: home);
     return OnboardingFacts(
       readiness: await checkProviderReadiness(snapshot, keys, _environment),
+      access: access,
       backendId: keys.backend.id,
       backendWritable: keys.backend.writable,
       mode: sessionDefaultsOf(snapshot, access).mode.id,
       homeLabel: homePathLabel(home, _environment),
-      logsLabel: logsLabel,
     );
   }
 }

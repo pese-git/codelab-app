@@ -61,7 +61,6 @@ final class _NoReadKeys implements ProviderKeys {
 void main() {
   late Directory root;
   late String home;
-  late String logs;
   late Map<String, String> environment;
   late _NoReadKeys keys;
   var keysOpened = 0;
@@ -71,7 +70,6 @@ void main() {
     addTearDown(() => root.deleteSync(recursive: true));
     home = p.join(root.path, '.codelab');
     Directory(home).createSync();
-    logs = p.join(root.path, 'Library', 'logs');
     // HOME нужен подписям путей: `homePathLabel` сокращает по нему до `~`.
     environment = {'HOME': root.path, 'CODELAB_HOME': home};
     keysOpened = 0;
@@ -86,7 +84,6 @@ void main() {
     final probe = SetupOnboardingProbe(
       resolveProfile: () async => profile,
       codelabHome: home,
-      logDirectory: logs,
       environment: environment,
       logger: CodeLabEmbeddedLogger(),
       keysOf: (access, {required String home}) {
@@ -193,17 +190,18 @@ providers:
       expect(facts.isExternal, isTrue);
       expect(facts.readiness, isNull);
       expect(keysOpened, 0, reason: 'хранилище секретов не открывается');
-      expect(facts.logsLabel, isNotEmpty);
     },
   );
 
-  test('подписи путей: дом и каталог логов с ~', () async {
-    final facts = await read();
+  test(
+    'подпись пути: дом с ~ (каталог логов в факты не входит, п. 4)',
+    () async {
+      final facts = await read();
 
-    expect(facts.homeLabel, p.join('~', '.codelab'));
-    expect(facts.logsLabel, p.join('~', 'Library', 'logs'));
-    expect(facts.homeLabel, isNot(contains(root.path)));
-  });
+      expect(facts.homeLabel, p.join('~', '.codelab'));
+      expect(facts.homeLabel, isNot(contains(root.path)));
+    },
+  );
 
   test('значения ключей не читаются: двойник без read не вызывался', () async {
     config(

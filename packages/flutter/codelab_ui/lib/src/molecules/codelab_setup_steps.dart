@@ -1,6 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/semantics.dart' show SemanticsRole;
 
 import '../atomics/codelab_text.dart';
+import '../l10n/strings.dart';
 
 /// Строка шагов многошагового экрана: кружок с номером или `✓` и подпись.
 ///
@@ -45,60 +47,73 @@ class CodeLabSetupSteps extends StatelessWidget {
         CodeLabText.styleOf(context, CodeLabTextRole.caption) ??
         const TextStyle();
 
-    return Wrap(
-      spacing: 20,
-      runSpacing: 8,
-      children: [
-        for (var i = 0; i < steps.length; i++)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: done.contains(i) ? theme.accentColor.normal : null,
-                  border: Border.all(
-                    color: i == current
-                        ? theme.accentColor.normal
-                        : resources.controlStrokeColorDefault,
-                    width: 2,
+    final strings = codeLabStringsOf(context);
+
+    // Список шагов для экранного диктора: контейнер-список и элементы с
+    // позицией «шаг n из m» (spec app-onboarding «Локализация и
+    // доступность»; design.md change `add-app-onboarding`, D12, ревью
+    // 2026-11-21).
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      role: SemanticsRole.list,
+      child: Wrap(
+        spacing: 20,
+        runSpacing: 8,
+        children: [
+          for (var i = 0; i < steps.length; i++)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: done.contains(i) ? theme.accentColor.normal : null,
+                    border: Border.all(
+                      color: i == current
+                          ? theme.accentColor.normal
+                          : resources.controlStrokeColorDefault,
+                      width: 2,
+                    ),
                   ),
-                ),
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: Center(
-                    child: Text(
-                      done.contains(i) ? '✓' : '${i + 1}',
-                      style: base.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: done.contains(i)
-                            ? Colors.white
-                            : resources.textFillColorSecondary,
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Center(
+                      child: Text(
+                        done.contains(i) ? '✓' : '${i + 1}',
+                        style: base.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: done.contains(i)
+                              ? resources.textOnAccentFillColorPrimary
+                              : resources.textFillColorSecondary,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Semantics(
-                selected: i == current,
-                child: Text(
-                  steps[i],
-                  softWrap: false,
-                  style: base.copyWith(
-                    color: i == current
-                        ? resources.textFillColorPrimary
-                        : resources.textFillColorSecondary,
-                    fontWeight: i == current
-                        ? FontWeight.w600
-                        : FontWeight.w400,
+                const SizedBox(width: 8),
+                Semantics(
+                  role: SemanticsRole.listItem,
+                  selected: i == current,
+                  hint: strings.codeLabSetupStepPosition(i + 1, steps.length),
+                  child: Text(
+                    steps[i],
+                    softWrap: false,
+                    style: base.copyWith(
+                      color: i == current
+                          ? resources.textFillColorPrimary
+                          : resources.textFillColorSecondary,
+                      fontWeight: i == current
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-      ],
+              ],
+            ),
+        ],
+      ),
     );
   }
 }

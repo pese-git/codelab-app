@@ -79,11 +79,11 @@ OnboardingFacts _facts(
   String mode = 'standard',
 }) => OnboardingFacts(
   readiness: readiness,
+  access: const EditableSettings(ConfigPaths(codelabHome: '/home/u/.codelab')),
   backendId: backend,
   backendWritable: backend != 'env',
   mode: mode,
   homeLabel: '~/.codelab',
-  logsLabel: '~/Library/Application Support/CodeLab/logs',
 );
 
 const _keyMissing = ProviderKeyMissing(
@@ -218,9 +218,7 @@ void main() {
     );
 
     test('внешний профиль: access external, шаг модели пропущен', () async {
-      final cubit = build(
-        _FakeProbe.value(const OnboardingFacts.external(logsLabel: '~/logs')),
-      );
+      final cubit = build(_FakeProbe.value(const OnboardingFacts.external()));
       await settle();
 
       expect((cubit.state.facts as FactsLoaded).facts.isExternal, isTrue);
