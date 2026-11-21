@@ -48,16 +48,19 @@ void main() {
         connect: false,
       );
 
-      expect(
-        find.text('Откройте проект, чтобы начать сессию.'),
-        findsOneWidget,
-      );
+      // Экран кадра 11a (change `add-empty-project-screen`): заголовок,
+      // кнопка и зона перетаскивания на русском.
+      expect(find.text('Откройте проект'), findsOneWidget);
       expect(
         _inKey('start-open-project', find.text('Открыть папку…')),
         findsOneWidget,
       );
-      // Группа сайдбара без проекта — вне глоссария.
-      expect(find.text('Нет проекта'), findsWidgets);
+      expect(
+        find.text('Перетащите папку сюда, чтобы открыть её'),
+        findsOneWidget,
+      );
+      // Пустой сайдбар: подпись каталога кита вместо группы без проекта.
+      expect(find.text('Недавних проектов пока нет.'), findsOneWidget);
       // Шапка сессии: подпись текущей сессии строит `SessionsCubit`.
       expect(find.text('Нет активной сессии'), findsOneWidget);
       // Кит (итерация 2): «Settings» сайдбара.

@@ -59,6 +59,7 @@ Change `require-project-folder` (архив 2026-11-12) сделал прави�
   - MODIFIED «Project selection is independent of the connection type» и «Агент стартует сам» — в перечень явных выборов проекта (триггер 1) добавлена перетащенная папка;
   - MODIFIED «App bar with palette search and connection badge» — бейдж без проекта;
   - MODIFIED «Sessions sidebar grouped by project» — пустой список проектов, место «Open folder…» и подсказка сочетания.
+  - MODIFIED «Empty session after connecting» — без проекта панель показывает экран «Экран без выбранного проекта», текст `Open a project to start a session.` уходит; шапка без сессии в фокусе — без подписи (D11).
 - `app-settings` — MODIFIED «Страница «Keyboard»: строки таблицы»: строка `open-folder`, 21 строка, Cmd/Ctrl+O убран из списка непривязанных.
 - `workspace-architecture` — ADDED «Плагин перетаскивания из ОС только в адаптере платформы» (правило сторожа).
 

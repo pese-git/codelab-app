@@ -119,6 +119,9 @@ class CodeLabShell extends StatelessWidget {
                 )?.approvalVisibility.check(session, approval).diagnostic ??
                 'no_transcript',
           ),
+          // Cmd/Ctrl+O — тот же системный выбор папки, что «Open folder…»
+          // (D7 change `add-empty-project-screen`).
+          onOpenFolder: () => unawaited(cubit.browseForProject()),
           onOpenSettings: () =>
               _openSettings(context, SettingsOpenSource.shortcut),
           onToggleFiles: state.projectFilesAvailable
@@ -176,11 +179,18 @@ class CodeLabShell extends StatelessWidget {
                         unawaited(terminals.ensureTab());
                       }
                     },
-                    connectionTooltip: connectionTooltipOf(
-                      profileLabel: state.profileLabel,
-                      transportLabel: state.transportLabel,
-                      connectionDetail: state.connectionDetail,
-                    ),
+                    // Проекта нет и агент не запущен: бейдж говорит об этом, а не
+                    // о статусе соединения (D8 `add-empty-project-screen`).
+                    connectionLabel: state.awaitingProject
+                        ? context.l10n.workbenchBadgeNoProject
+                        : null,
+                    connectionTooltip: state.awaitingProject
+                        ? context.l10n.workbenchBadgeNoProjectTooltip
+                        : connectionTooltipOf(
+                            profileLabel: state.profileLabel,
+                            transportLabel: state.transportLabel,
+                            connectionDetail: state.connectionDetail,
+                          ),
                     // Бейдж без «Connect» (D18): агент стартует сам; в
                     // `lost`/`failed` «Retry» делает то же, что кнопка баннера.
                     onRetry: () => unawaited(cubit.retryStart()),
@@ -210,6 +220,8 @@ class CodeLabShell extends StatelessWidget {
                         ? () => unawaited(cubit.loadMoreSessions())
                         : null,
                     onOpenFolder: () => unawaited(cubit.browseForProject()),
+                    openFolderShortcut: CodeLabShortcut.openFolder.combos.single
+                        .compactFor(defaultTargetPlatform),
                     onSettings: () =>
                         _openSettings(context, SettingsOpenSource.sidebar),
                   ),

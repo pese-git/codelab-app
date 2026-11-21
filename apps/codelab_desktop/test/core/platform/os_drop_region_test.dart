@@ -22,6 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 const _channel = MethodChannel('desktop_drop');
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 

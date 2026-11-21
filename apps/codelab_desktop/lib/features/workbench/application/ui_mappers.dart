@@ -1103,6 +1103,12 @@ List<CodeLabSidebarProject> sidebarProjectsOf({
         s.status == CodeLabSessionStatus.awaitingApproval ||
         s.status == CodeLabSessionStatus.failed,
   );
+  // Ни проекта, ни недавних, ни сессий: групп нет, сайдбар показывает
+  // `No recent projects yet.` и «Open folder…» (кадр 11a, D9
+  // `add-empty-project-screen`).
+  if (selected == null && recentProjects.isEmpty && sessions.isEmpty) {
+    return const [];
+  }
   return [
     CodeLabSidebarProject(
       path: selected ?? '',

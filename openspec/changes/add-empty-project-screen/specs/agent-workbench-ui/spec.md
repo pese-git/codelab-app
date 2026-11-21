@@ -55,7 +55,7 @@ CodeLab SHALL show an app bar with the app name, a search field labelled "Search
 - **THEN** while the agent starts the badge shows the connecting status, and `No project · agent not started` is no longer shown
 
 ### Requirement: Sessions sidebar grouped by project
-The sessions sidebar SHALL show, from top to bottom, "New session" with its shortcut, a filter field, a "Projects" section with one group per project followed by "Open folder…" with the Cmd/Ctrl+O shortcut hint, and "Settings" at the bottom. With no project groups (no project selected and no recent projects) the "Projects" section SHALL show `No recent projects yet.` above "Open folder…" (frame 11a; design.md change `add-empty-project-screen`, D9). The compact (icon-only) sidebar keeps "Open folder…" as an icon button next to "Settings" without a shortcut hint. The selected project's group SHALL be expanded and list its sessions with their status and "Load more sessions"; recent projects SHALL be collapsed groups named after the folder. A session opened in this run SHALL be listed in the group of the project whose path equals its `cwd` (exact string match): one agent serves sessions of any folder, and a session of another project keeps running after the project is switched. A recent project's group that holds open sessions SHALL list them with their live status, and stays collapsed only while none of them is running, waiting for approval or failed; it SHALL NOT list that project's `session/list` rows until the project is selected. An open session whose `cwd` matches no group SHALL be listed in the selected project's group with its folder as the subtitle (design.md change `require-project-folder`, Q23 (a)). The filter SHALL narrow the listed sessions by title.
+The sessions sidebar SHALL show, from top to bottom, "New session" with its shortcut, a filter field, a "Projects" section with one group per project followed by "Open folder…" with the Cmd/Ctrl+O shortcut hint, and "Settings" at the bottom. With no project groups (no project selected, no recent projects and no open sessions) the "Projects" section SHALL show `No recent projects yet.` above "Open folder…" (frame 11a; design.md change `add-empty-project-screen`, D9). The compact (icon-only) sidebar keeps "Open folder…" as an icon button next to "Settings" without a shortcut hint. The selected project's group SHALL be expanded and list its sessions with their status and "Load more sessions"; recent projects SHALL be collapsed groups named after the folder. A session opened in this run SHALL be listed in the group of the project whose path equals its `cwd` (exact string match): one agent serves sessions of any folder, and a session of another project keeps running after the project is switched. A recent project's group that holds open sessions SHALL list them with their live status, and stays collapsed only while none of them is running, waiting for approval or failed; it SHALL NOT list that project's `session/list` rows until the project is selected. An open session whose `cwd` matches no group SHALL be listed in the selected project's group with its folder as the subtitle (design.md change `require-project-folder`, Q23 (a)). The filter SHALL narrow the listed sessions by title.
 
 #### Scenario: Groups by project
 - **WHEN** the selected project has three sessions and two other projects are in the recent list
@@ -84,6 +84,25 @@ The sessions sidebar SHALL show, from top to bottom, "New session" with its shor
 #### Scenario: Open folder… follows the project groups
 - **WHEN** a project is selected and two other projects are in the recent list
 - **THEN** "Open folder…" is listed right after the last project group inside the "Projects" section, and `No recent projects yet.` is not shown
+
+### Requirement: Empty session after connecting
+Without a session in focus, the session pane SHALL show a start screen instead of a connection screen: without a selected project — the screen of requirement «Экран без выбранного проекта» with "Open folder…" (key `start-open-project`; design.md change `add-empty-project-screen`, D1, D2); with a selected project — `Start a new session in <folder name>.` and "New session" (key `start-new-session`), with the progress text `Starting <profile title>…` while the agent starts. The session pane header SHALL NOT show a subtitle while no session is in focus (D11). When a session is in focus and has no transcript items and the agent runs, the session pane SHALL show an empty state inviting the user to send the first message. When starting the agent fails, the session pane SHALL show the failure reason with "Retry", which repeats the intent that started the agent, and "Connection settings". The workbench SHALL NOT offer a Connect action (design.md change `require-project-folder`, D18).
+
+#### Scenario: New session while connected
+- **WHEN** the agent runs and the user creates a new session
+- **THEN** the session pane shows the empty state with the composer focused, and no Connect button
+
+#### Scenario: Start screen without a project
+- **WHEN** no project is selected and no session is in focus
+- **THEN** the session pane shows `open-project-screen` with "Open folder…" (`start-open-project`), the text `Open a project to start a session.` is not shown anywhere in the window, and no Connect button
+
+#### Scenario: Start screen with a project
+- **WHEN** the project `/work/app` is selected and no session is in focus
+- **THEN** the session pane shows `Start a new session in app.` and "New session" (`start-new-session`); pressing it creates a session with `cwd` `/work/app`
+
+#### Scenario: Agent start fails
+- **WHEN** the user selects a project with the embedded agent and an invalid `config.yaml`
+- **THEN** the session pane shows the config problems and "Retry"; after the config is fixed, "Retry" (or any other start trigger) starts it
 
 ### Requirement: Агент стартует сам
 Отдельного шага подключения в рабочем месте НЕ SHALL быть. Агент профиля окна SHALL стартовать, если он не работает (в том числе после сбоя старта), на одном из триггеров (design.md change `require-project-folder`, D11–D17):

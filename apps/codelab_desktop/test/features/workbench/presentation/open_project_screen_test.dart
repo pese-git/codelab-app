@@ -282,6 +282,7 @@ void main() {
       expect(picker.picks, 1);
       expect(cubit.state.selectedProjectPath, isNull);
       expect(find.byKey(_screen), findsOneWidget);
+      await tester.pump(const Duration(seconds: 10));
       await tearDownApp(tester);
     });
   });

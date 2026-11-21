@@ -67,7 +67,8 @@ void main() {
     await pump(tester, binding);
 
     // Экран «проект не выбран» (кадр 11a; change `add-empty-project-screen`,
-    // D1): прежнего текста нет, ключ кнопки сохранён.
+    // D1): прежнего текста нет нигде в окне (ни на экране, ни в шапке
+    // сессии, задача 4.7), ключ кнопки сохранён.
     expect(find.text('Open a project to start a session.'), findsNothing);
     expect(find.byKey(const ValueKey('open-project-screen')), findsOneWidget);
     expect(find.byKey(connectKey), findsNothing);

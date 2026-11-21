@@ -430,12 +430,24 @@ void main() {
       final groups = sidebarProjectsOf(
         selectedProjectPath: null,
         sessions: const [],
-        recentProjects: const [],
+        recentProjects: const [CodeLabRecentProject(path: '/work/old')],
         l10n: _ru,
       );
 
       // Вне глоссария.
-      expect(groups.single.name, 'Нет проекта');
+      expect(groups.first.name, 'Нет проекта');
+    });
+
+    test('ни проекта, ни недавних, ни сессий: групп нет (кадр 11a, D9)', () {
+      expect(
+        sidebarProjectsOf(
+          selectedProjectPath: null,
+          sessions: const [],
+          recentProjects: const [],
+          l10n: _ru,
+        ),
+        isEmpty,
+      );
     });
 
     test('строка статуса без usage на ru: подпись и подсказка', () {

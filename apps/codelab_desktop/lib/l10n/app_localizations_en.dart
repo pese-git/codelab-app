@@ -110,6 +110,85 @@ class AppLocalizationsEn extends AppLocalizations {
   String get workbenchOpenProjectHint => 'Open a project to start a session.';
 
   @override
+  String get workbenchOpenProjectTitle => 'Open a project';
+
+  @override
+  String get workbenchOpenProjectDescriptionEmbedded =>
+      'Choose the folder you want to work in. The agent starts in it, and sessions get it as their working directory. The agent can\'t read or write outside it.';
+
+  @override
+  String get workbenchOpenProjectDescriptionStdio =>
+      'Choose the folder you want to work in. The agent starts in it, and sessions get it as their working directory. An external agent applies its own rules to files outside it.';
+
+  @override
+  String get workbenchOpenProjectDescriptionWebSocket =>
+      'Choose the folder you want to work in. Sessions get it as their working directory. An external agent applies its own rules to files outside it.';
+
+  @override
+  String get workbenchOpenProjectDropLabel => 'Drop a folder here to open it';
+
+  @override
+  String get workbenchOpenProjectDropHint =>
+      'Files are not accepted — only a folder';
+
+  @override
+  String get workbenchOpenProjectAgentEmbedded =>
+      'in-process · profile of this window';
+
+  @override
+  String workbenchOpenProjectAgentStdio(String detail) {
+    return 'stdio · $detail · profile of this window';
+  }
+
+  @override
+  String workbenchOpenProjectAgentWebSocket(String detail) {
+    return 'WebSocket · $detail · profile of this window';
+  }
+
+  @override
+  String get workbenchOpenProjectAgentNoteStarts =>
+      'Starts when you open a folder. Nothing runs before that.';
+
+  @override
+  String get workbenchOpenProjectAgentNoteConnects =>
+      'Connects when you open a folder. Nothing connects before that.';
+
+  @override
+  String get workbenchOpenProjectSettingsLink =>
+      'Change in Settings › Connection';
+
+  @override
+  String get workbenchOpenProjectInfoTitle => 'New session needs a folder';
+
+  @override
+  String workbenchOpenProjectInfoBody(String shortcut) {
+    return '$shortcut without a project opens the same folder picker. Opened folders appear in the sidebar as recent projects.';
+  }
+
+  @override
+  String get workbenchOpenProjectDropNotAFolder =>
+      'That\'s a file. Drop a folder to open it as a project.';
+
+  @override
+  String get workbenchOpenProjectDropMultiple => 'Drop one folder at a time.';
+
+  @override
+  String workbenchOpenProjectDropMissing(String path) {
+    return 'The dropped item no longer exists: $path.';
+  }
+
+  @override
+  String get workbenchOpenProjectDropUnsupported =>
+      'This item can\'t be opened as a project. Drop a folder from your file system.';
+
+  @override
+  String get workbenchBadgeNoProject => 'No project · agent not started';
+
+  @override
+  String get workbenchBadgeNoProjectTooltip =>
+      'No project is selected, so no agent is running';
+
+  @override
   String get workbenchOpenFolder => 'Open folder…';
 
   @override

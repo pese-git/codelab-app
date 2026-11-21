@@ -138,6 +138,106 @@
   "@workbenchOpenProjectHint": {
     "description": "Подсказка под названием текущей сессии и текст стартового экрана без проекта."
   },
+  "workbenchOpenProjectTitle": "Open a project",
+  "@workbenchOpenProjectTitle": {
+    "description": "Заголовок экрана «проект не выбран»."
+  },
+  "workbenchOpenProjectDescriptionEmbedded": "Choose the folder you want to work in. The agent starts in it, and sessions get it as their working directory. The agent can't read or write outside it.",
+  "@workbenchOpenProjectDescriptionEmbedded": {
+    "description": "Пояснение экрана без проекта для встроенного агента. Встроенный агент ограничен папкой проекта (BoundedEnv), поэтому обещание верно только для него."
+  },
+  "workbenchOpenProjectDescriptionStdio": "Choose the folder you want to work in. The agent starts in it, and sessions get it as their working directory. An external agent applies its own rules to files outside it.",
+  "@workbenchOpenProjectDescriptionStdio": {
+    "description": "Пояснение экрана без проекта для профиля stdio. Внешний агент сам решает, что делать с файлами вне папки, поэтому обещания границы нет."
+  },
+  "workbenchOpenProjectDescriptionWebSocket": "Choose the folder you want to work in. Sessions get it as their working directory. An external agent applies its own rules to files outside it.",
+  "@workbenchOpenProjectDescriptionWebSocket": {
+    "description": "Пояснение экрана без проекта для профиля WebSocket: агент уже работает отдельно, папку получают только сессии."
+  },
+  "workbenchOpenProjectDropLabel": "Drop a folder here to open it",
+  "@workbenchOpenProjectDropLabel": {
+    "description": "Подпись зоны перетаскивания папки на экране без проекта."
+  },
+  "workbenchOpenProjectDropHint": "Files are not accepted — only a folder",
+  "@workbenchOpenProjectDropHint": {
+    "description": "Подсказка зоны перетаскивания: файлы не принимаются."
+  },
+  "workbenchOpenProjectAgentEmbedded": "in-process · profile of this window",
+  "@workbenchOpenProjectAgentEmbedded": {
+    "description": "Строка транспорта карточки агента: встроенный агент работает в процессе app. profile of this window — профиль выбран для этого окна."
+  },
+  "workbenchOpenProjectAgentStdio": "stdio · {detail} · profile of this window",
+  "@workbenchOpenProjectAgentStdio": {
+    "description": "Строка транспорта карточки агента для stdio. Плейсхолдер detail — команда без аргументов, не переводить. stdio — название протокола.",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchOpenProjectAgentWebSocket": "WebSocket · {detail} · profile of this window",
+  "@workbenchOpenProjectAgentWebSocket": {
+    "description": "Строка транспорта карточки агента для WebSocket. Плейсхолдер detail — адрес без userinfo, пути и query, не переводить. WebSocket — название протокола.",
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchOpenProjectAgentNoteStarts": "Starts when you open a folder. Nothing runs before that.",
+  "@workbenchOpenProjectAgentNoteStarts": {
+    "description": "Пояснение карточки агента (встроенный агент и stdio): агент стартует после выбора папки."
+  },
+  "workbenchOpenProjectAgentNoteConnects": "Connects when you open a folder. Nothing connects before that.",
+  "@workbenchOpenProjectAgentNoteConnects": {
+    "description": "Пояснение карточки агента (WebSocket): подключение только после выбора папки."
+  },
+  "workbenchOpenProjectSettingsLink": "Change in Settings › Connection",
+  "@workbenchOpenProjectSettingsLink": {
+    "description": "Ссылка карточки агента: открывает настройки на странице подключения."
+  },
+  "workbenchOpenProjectInfoTitle": "New session needs a folder",
+  "@workbenchOpenProjectInfoTitle": {
+    "description": "Заголовок InfoBar экрана без проекта."
+  },
+  "workbenchOpenProjectInfoBody": "{shortcut} without a project opens the same folder picker. Opened folders appear in the sidebar as recent projects.",
+  "@workbenchOpenProjectInfoBody": {
+    "description": "Текст InfoBar. Плейсхолдер shortcut — подсказка сочетания «New session» для платформы (Ctrl+N, ⌘N), не переводить.",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchOpenProjectDropNotAFolder": "That's a file. Drop a folder to open it as a project.",
+  "@workbenchOpenProjectDropNotAFolder": {
+    "description": "Отказ броска: перетащен обычный файл. Сообщение безопасности (причина отказа открыть как проект)."
+  },
+  "workbenchOpenProjectDropMultiple": "Drop one folder at a time.",
+  "@workbenchOpenProjectDropMultiple": {
+    "description": "Отказ броска: перетащено больше одного элемента."
+  },
+  "workbenchOpenProjectDropMissing": "The dropped item no longer exists: {path}.",
+  "@workbenchOpenProjectDropMissing": {
+    "description": "Отказ броска: пути больше нет. Плейсхолдер path — путь элемента, не переводить.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "workbenchOpenProjectDropUnsupported": "This item can't be opened as a project. Drop a folder from your file system.",
+  "@workbenchOpenProjectDropUnsupported": {
+    "description": "Отказ броска: у элемента нет локального пути или вид пути не подходит."
+  },
+  "workbenchBadgeNoProject": "No project · agent not started",
+  "@workbenchBadgeNoProject": {
+    "description": "Подпись бейджа соединения в шапке, пока проект не выбран и агент не запущен."
+  },
+  "workbenchBadgeNoProjectTooltip": "No project is selected, so no agent is running",
+  "@workbenchBadgeNoProjectTooltip": {
+    "description": "Подсказка бейджа соединения без проекта."
+  },
   "workbenchOpenFolder": "Open folder…",
   "@workbenchOpenFolder": {
     "description": "Кнопка стартового экрана без проекта; то же название кнопки сайдбара."

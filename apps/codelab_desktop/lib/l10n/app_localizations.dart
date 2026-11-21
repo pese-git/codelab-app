@@ -290,6 +290,126 @@ abstract class AppLocalizations {
   /// **'Open a project to start a session.'**
   String get workbenchOpenProjectHint;
 
+  /// Заголовок экрана «проект не выбран».
+  ///
+  /// In en, this message translates to:
+  /// **'Open a project'**
+  String get workbenchOpenProjectTitle;
+
+  /// Пояснение экрана без проекта для встроенного агента. Встроенный агент ограничен папкой проекта (BoundedEnv), поэтому обещание верно только для него.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the folder you want to work in. The agent starts in it, and sessions get it as their working directory. The agent can\'t read or write outside it.'**
+  String get workbenchOpenProjectDescriptionEmbedded;
+
+  /// Пояснение экрана без проекта для профиля stdio. Внешний агент сам решает, что делать с файлами вне папки, поэтому обещания границы нет.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the folder you want to work in. The agent starts in it, and sessions get it as their working directory. An external agent applies its own rules to files outside it.'**
+  String get workbenchOpenProjectDescriptionStdio;
+
+  /// Пояснение экрана без проекта для профиля WebSocket: агент уже работает отдельно, папку получают только сессии.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the folder you want to work in. Sessions get it as their working directory. An external agent applies its own rules to files outside it.'**
+  String get workbenchOpenProjectDescriptionWebSocket;
+
+  /// Подпись зоны перетаскивания папки на экране без проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop a folder here to open it'**
+  String get workbenchOpenProjectDropLabel;
+
+  /// Подсказка зоны перетаскивания: файлы не принимаются.
+  ///
+  /// In en, this message translates to:
+  /// **'Files are not accepted — only a folder'**
+  String get workbenchOpenProjectDropHint;
+
+  /// Строка транспорта карточки агента: встроенный агент работает в процессе app. profile of this window — профиль выбран для этого окна.
+  ///
+  /// In en, this message translates to:
+  /// **'in-process · profile of this window'**
+  String get workbenchOpenProjectAgentEmbedded;
+
+  /// Строка транспорта карточки агента для stdio. Плейсхолдер detail — команда без аргументов, не переводить. stdio — название протокола.
+  ///
+  /// In en, this message translates to:
+  /// **'stdio · {detail} · profile of this window'**
+  String workbenchOpenProjectAgentStdio(String detail);
+
+  /// Строка транспорта карточки агента для WebSocket. Плейсхолдер detail — адрес без userinfo, пути и query, не переводить. WebSocket — название протокола.
+  ///
+  /// In en, this message translates to:
+  /// **'WebSocket · {detail} · profile of this window'**
+  String workbenchOpenProjectAgentWebSocket(String detail);
+
+  /// Пояснение карточки агента (встроенный агент и stdio): агент стартует после выбора папки.
+  ///
+  /// In en, this message translates to:
+  /// **'Starts when you open a folder. Nothing runs before that.'**
+  String get workbenchOpenProjectAgentNoteStarts;
+
+  /// Пояснение карточки агента (WebSocket): подключение только после выбора папки.
+  ///
+  /// In en, this message translates to:
+  /// **'Connects when you open a folder. Nothing connects before that.'**
+  String get workbenchOpenProjectAgentNoteConnects;
+
+  /// Ссылка карточки агента: открывает настройки на странице подключения.
+  ///
+  /// In en, this message translates to:
+  /// **'Change in Settings › Connection'**
+  String get workbenchOpenProjectSettingsLink;
+
+  /// Заголовок InfoBar экрана без проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'New session needs a folder'**
+  String get workbenchOpenProjectInfoTitle;
+
+  /// Текст InfoBar. Плейсхолдер shortcut — подсказка сочетания «New session» для платформы (Ctrl+N, ⌘N), не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'{shortcut} without a project opens the same folder picker. Opened folders appear in the sidebar as recent projects.'**
+  String workbenchOpenProjectInfoBody(String shortcut);
+
+  /// Отказ броска: перетащен обычный файл. Сообщение безопасности (причина отказа открыть как проект).
+  ///
+  /// In en, this message translates to:
+  /// **'That\'s a file. Drop a folder to open it as a project.'**
+  String get workbenchOpenProjectDropNotAFolder;
+
+  /// Отказ броска: перетащено больше одного элемента.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop one folder at a time.'**
+  String get workbenchOpenProjectDropMultiple;
+
+  /// Отказ броска: пути больше нет. Плейсхолдер path — путь элемента, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'The dropped item no longer exists: {path}.'**
+  String workbenchOpenProjectDropMissing(String path);
+
+  /// Отказ броска: у элемента нет локального пути или вид пути не подходит.
+  ///
+  /// In en, this message translates to:
+  /// **'This item can\'t be opened as a project. Drop a folder from your file system.'**
+  String get workbenchOpenProjectDropUnsupported;
+
+  /// Подпись бейджа соединения в шапке, пока проект не выбран и агент не запущен.
+  ///
+  /// In en, this message translates to:
+  /// **'No project · agent not started'**
+  String get workbenchBadgeNoProject;
+
+  /// Подсказка бейджа соединения без проекта.
+  ///
+  /// In en, this message translates to:
+  /// **'No project is selected, so no agent is running'**
+  String get workbenchBadgeNoProjectTooltip;
+
   /// Кнопка стартового экрана без проекта; то же название кнопки сайдбара.
   ///
   /// In en, this message translates to:
