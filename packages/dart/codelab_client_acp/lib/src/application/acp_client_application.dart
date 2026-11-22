@@ -268,14 +268,17 @@ final class AcpClientApplication {
   ClientConnectionState _connectionState =
       const ClientConnectionState.disconnected();
 
-  /// Incremented every time the underlying transport is replaced
-  /// (initial [connect] counts as generation 0, each [reconnect] bumps it).
+  /// Поколение соединения: растёт на единицу при каждой замене транспорта,
+  /// то есть при каждом [connect] и [reconnect] (0 — до первой замены).
   ///
-  /// In-flight operations capture the generation they started with and
-  /// discard their result instead of mutating session state if a reconnect
-  /// happened while they were awaiting a response, so a stale prompt/cancel/
-  /// permission outcome from a superseded transport can never be applied on
-  /// top of the state produced by a newer connection.
+  /// Почему: ответы и события прежнего транспорта не должны менять состояние,
+  /// созданное более новым (AGENTS.md §9).
+  ///
+  /// Для чего: поколение — номер попытки подключения. Долгие операции
+  /// (промпт, отмена, одобрение) запоминают его при старте и после `await`
+  /// отбрасывают результат, если поколение сменилось; попытка подключения
+  /// ([_replaceTransport], [_establishConnection]) так же определяет, что её
+  /// вытеснила более новая.
   var _generation = 0;
 
   int get generation => _generation;
@@ -308,8 +311,11 @@ final class AcpClientApplication {
     AcpTransport transport, {
     Duration? closeTimeout,
   }) async {
-    await _replaceTransport(transport, closeTimeout: closeTimeout);
-    return _establishConnection();
+    final generation = await _replaceTransport(
+      transport,
+      closeTimeout: closeTimeout,
+    );
+    return _establishConnection(generation);
   }
 
   Future<AcpSession> createSession(CreateSessionCommand command) async {
@@ -651,11 +657,14 @@ final class AcpClientApplication {
 
   /// Переподключение на транспорт из фабрики.
   ///
-  /// Параллельные вызовы не сериализуются здесь: это забота вызывающего.
-  /// Kit вытесняет устаревшую попытку номером `_attempt`
-  /// (`ClientWorkspace._reconnect`, `_isStale`), а `open` встроенного агента
-  /// сериализует `EmbeddedTransportResolver` (`_tail`). Откат метки при сбое
-  /// фабрики закрывает основные случаи наложения.
+  /// Параллельные вызовы не сериализуются очередью. Начиная с
+  /// [_replaceTransport] ядро само вытесняет устаревшую попытку поколением:
+  /// она закрывает свой транспорт, не делает переходов автомата соединения и
+  /// завершается `StateTransitionException`. Окно самой фабрики
+  /// `createTransport()` остаётся заботой вызывающего: kit вытесняет попытку
+  /// номером `_attempt` (`ClientWorkspace._reconnect`, `_isStale`), а `open`
+  /// встроенного агента сериализует `EmbeddedTransportResolver` (`_tail`).
+  /// Откат метки при сбое фабрики закрывает основные случаи наложения.
   Future<ClientConnectionState> reconnect(ReconnectCommand command) async {
     final createTransport = command.transportFactory ?? _reconnectTransport;
     if (createTransport == null) {
@@ -698,15 +707,33 @@ final class AcpClientApplication {
       await _closeUnusedTransport(replacement);
       throw const AcpClientApplicationException('ACP application disposed.');
     }
-    await _replaceTransport(replacement, closeTimeout: command.closeTimeout);
+    final generation = await _replaceTransport(
+      replacement,
+      closeTimeout: command.closeTimeout,
+    );
 
-    return _establishConnection();
+    return _establishConnection(generation);
   }
 
-  /// Starts the freshly bound transport and performs the ACP `initialize`
-  /// handshake required before any session operation, per
-  /// `docs/protocols/acp/protocol/02-Initialization.md`.
-  Future<ClientConnectionState> _establishConnection() async {
+  /// Запускает привязанный транспорт и выполняет ACP `initialize`,
+  /// обязательный до любой операции с сессией
+  /// (`docs/protocols/acp/protocol/02-Initialization.md`).
+  ///
+  /// [generation] — поколение, которое вернул [_replaceTransport] этой
+  /// попытке. Почему: повторный `connect()`/`reconnect()` вытесняет попытку в
+  /// любой точке ожидания после [_replaceTransport], а автомат соединения
+  /// общий; без проверки `fail`/`ready` устаревшей попытки попали бы в
+  /// [connectionStateChanges] во время подключения новой, и хост показал бы
+  /// чужой сбой или мигающее «подключено» (требование «Явный автомат
+  /// соединения» спецификации `acp-client-kit`, AGENTS.md §9). Вытесненная
+  /// попытка не делает переходов и завершается `StateTransitionException`
+  /// ([_requireCurrentGeneration]); её транспорт закроет замена новой
+  /// попытки. Исходная ошибка вытесненной попытки пишется в журнал
+  /// ([_requireCurrentAttempt], §16), чтобы причина не терялась.
+  Future<ClientConnectionState> _establishConnection(int generation) async {
+    // Продолжение после `await _replaceTransport` могло выполниться уже после
+    // вытеснения: до первого перехода проверяем поколение.
+    _requireCurrentGeneration(generation);
     if (_connectionState is! ClientConnectionDisconnected) {
       _transitionConnection(const ConnectionStateEvent.disconnect());
     }
@@ -715,6 +742,7 @@ final class AcpClientApplication {
     try {
       await _transport.start();
     } on Object catch (error) {
+      _requireCurrentAttempt(generation, 'start', error);
       _transitionConnection(
         ConnectionStateEvent.fail(
           reason: ConnectionFailureReason.startFailed,
@@ -732,6 +760,7 @@ final class AcpClientApplication {
     if (_disposed) {
       throw const AcpClientApplicationException('ACP application disposed.');
     }
+    _requireCurrentGeneration(generation);
 
     _transitionConnection(const ConnectionStateEvent.initialize());
 
@@ -753,6 +782,10 @@ final class AcpClientApplication {
         ),
       );
     } on Object catch (error) {
+      // Замена транспорта новой попыткой роняет ожидающий `initialize`
+      // ошибкой «transport was replaced»: это не сбой соединения, а
+      // вытеснение, и `fail` в автомат не попадает.
+      _requireCurrentAttempt(generation, 'initialize', error);
       _transitionConnection(
         ConnectionStateEvent.fail(
           reason: ConnectionFailureReason.protocolViolation,
@@ -762,6 +795,9 @@ final class AcpClientApplication {
       );
       rethrow;
     }
+
+    // Ответ мог прийти до вытеснения, а продолжение — после него.
+    _requireCurrentGeneration(generation);
 
     if (response.protocolVersion != supportedProtocolVersion) {
       final failure = UnsupportedProtocolVersionException(
@@ -787,6 +823,29 @@ final class AcpClientApplication {
     );
 
     return _connectionState;
+  }
+
+  /// Как [_requireCurrentGeneration], но для ошибки попытки подключения:
+  /// если попытку вытеснили, исходная [error] пишется в журнал до того, как
+  /// её заменит `StateTransitionException` (§16: причина не теряется).
+  ///
+  /// Ошибка проходит редакцию секретов: сообщения транспортов могут
+  /// содержать командную строку или заголовки.
+  void _requireCurrentAttempt(int generation, String phase, Object error) {
+    if (generation != _generation) {
+      _logger
+          .bind({logComponentKey: clientComponent})
+          .withCorrelation(connectionGeneration: generation)
+          .debug(
+            'attempt_superseded',
+            context: {
+              'phase': phase,
+              'current_generation': _generation,
+              'error': _redactor.redactText('$error'),
+            },
+          );
+    }
+    _requireCurrentGeneration(generation);
   }
 
   void _transitionConnection(ConnectionStateEvent event) {
@@ -858,7 +917,16 @@ final class AcpClientApplication {
         session.id,
   };
 
-  Future<void> _replaceTransport(
+  /// Заменяет транспорт и возвращает поколение этой замены.
+  ///
+  /// Замены не сериализуются очередью, вместо этого каждая запоминает своё
+  /// поколение: вторая замена, начатая, пока первая ждёт закрытия прежнего
+  /// транспорта, делает первую устаревшей. Устаревшая замена закрывает
+  /// свой транспорт, не привязывая его, и бросает `StateTransitionException`;
+  /// иначе она привязала бы транспорт, а победитель перезаписал бы `_transport`
+  /// без отмены подписок и закрытия — процесс агента осиротел бы (§9: у
+  /// подписки один owner, reconnect не плодит подписки).
+  Future<int> _replaceTransport(
     AcpTransport transport, {
     Duration? closeTimeout,
   }) async {
@@ -866,7 +934,7 @@ final class AcpClientApplication {
     // старом транспорте, увидят новое поколение, как только продолжатся,
     // даже если их продолжение запланировано, пока этот метод закрывает
     // старый транспорт (§9, поздние события).
-    _generation++;
+    final generation = ++_generation;
     // Ход, шедший в момент замены, агент отменил вместе с соединением; ход
     // остаётся `running` до `session/load`, который и покажет его
     // отменённым (D2 change `cancel-turn-on-ws-disconnect`).
@@ -885,7 +953,19 @@ final class AcpClientApplication {
     _failPendingRequests(
       const AcpClientApplicationException('ACP transport was replaced.'),
     );
-    await _transport.close(timeout: closeTimeout);
+    // Ошибка закрытия прежнего транспорта не должна оставить переданный
+    // [transport] без владельца: сначала разбираются ветки «ядро закрыто» и
+    // «попытку вытеснили», потом ошибка пробрасывается. Подписки прежнего
+    // транспорта уже сняты, а ошибка закрытия остаётся ошибкой этой попытки
+    // (как и раньше); транспорт, который не привязан, закрывается всегда.
+    Object? closeError;
+    StackTrace? closeStackTrace;
+    try {
+      await _transport.close(timeout: closeTimeout);
+    } on Object catch (error, stackTrace) {
+      closeError = error;
+      closeStackTrace = stackTrace;
+    }
 
     // [dispose] мог прийти, пока закрывался прежний транспорт: новый не
     // привязывается и не запускается (D12 change
@@ -894,9 +974,25 @@ final class AcpClientApplication {
       await _closeUnusedTransport(transport);
       throw const AcpClientApplicationException('ACP application disposed.');
     }
+    // Пока закрывался прежний транспорт, пришла более новая замена: этот
+    // транспорт проиграл и никому не принадлежит.
+    if (generation != _generation) {
+      await _closeUnusedTransport(transport);
+      // Ошибка закрытия прежнего транспорта вытесненной попытки не
+      // пробрасывается (её заменяет вытеснение), но в журнал попадает.
+      if (closeError != null) {
+        _requireCurrentAttempt(generation, 'replace', closeError);
+      }
+      _requireCurrentGeneration(generation);
+    }
+    if (closeError != null) {
+      await _closeUnusedTransport(transport);
+      Error.throwWithStackTrace(closeError, closeStackTrace!);
+    }
 
     _transport = transport;
     _bindTransport();
+    return generation;
   }
 
   /// Закрывает транспорт, который так и не был привязан к ядру.
