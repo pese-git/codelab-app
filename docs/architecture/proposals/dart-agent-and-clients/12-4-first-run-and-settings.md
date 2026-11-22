@@ -1391,7 +1391,7 @@ sequenceDiagram
    (§12.7.7, §12.7.7а; change `add-app-legal-page`) внутри экрана onboarding, без перехода в
    настройки: «Back to setup» и Esc возвращают на шаг с прежним состоянием (D10, редакция 2026-11-21).
 5. «Open a project» (рабочее название кадра 07d; change
-   [`add-onboarding-project-step`](../../../../openspec/changes/add-onboarding-project-step/design.md),
+   [`add-onboarding-project-step`](../../../../openspec/changes/archive/2026-11-22-add-onboarding-project-step/design.md),
    решения пользователя 2026-11-22): тело экрана без проекта 11a (`CodeLabOpenProjectBody`) — «Open
    folder…» с ⌘O/Ctrl+O, перетаскивание папки, до пяти недавних проектов без проверки папки, строка
    `Last project` с именем и путём восстановленного проекта. Onboarding завершается выбором папки,
