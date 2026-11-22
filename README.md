@@ -2,6 +2,8 @@
 
 Monorepo CodeLab на Dart и Flutter: desktop-клиент (`apps/codelab_desktop`) для работы с AI-агентами по ACP (Agent Client Protocol) и встраиваемое ядро Dart-агента, которое подключается к клиентам через ACP. Решение и план — ADR-0001 (`docs/architecture/adr/0001-embed-dart-agent-core-behind-acp.md`) и дорожная карта `docs/architecture/proposals/delivery-roadmap.md`.
 
+Статус: выпусков пока нет (тегов нет, в [`CHANGELOG.md`](CHANGELOG.md) разделов выпусков нет); приложения `codelab_desktop`, `codelab_cli` и `codelab_agent` имеют версию 0.1.0. Собирать приходится из исходников — [`docs/user/run-from-source.md`](docs/user/run-from-source.md); установщик появится с выпуском 1.0.
+
 ## Структура
 
 Пакеты называются по схеме `codelab_<сторона>_<слой>` (ADR-0002, `docs/architecture/adr/0002-name-packages-codelab-side-layer.md`): сторона — `acp` (общий протокольный слой), `client` или `agent`; слой — `core` (логика без IO), `io` (адаптеры `dart:io`), `acp` (проекция стороны в протокол).
@@ -26,7 +28,7 @@ Monorepo CodeLab на Dart и Flutter: desktop-клиент (`apps/codelab_deskt
 | [`packages/dart/codelab_architecture_tests`](packages/dart/codelab_architecture_tests/README.md) | сторож границ пакетов и схемы имён (`melos run guard`) |
 | [`packages/flutter/codelab_ui`](packages/flutter/codelab_ui/README.md) | Fluent UI виджеты рабочего места |
 | `openspec/` | спецификации поведения и активные изменения |
-| `docs/` | архитектура, спецификация ACP, интеграции |
+| [`docs/`](docs/README.md) | указатель документации: архитектура, руководства пользователя и эксплуатации, референсные протоколы (ACP, A2A, MCP, Agent Skills), backlog, дизайн, интеграции, исторический `codelab-spec.md` |
 | `site/` | сайт CodeLab на Astro: главная, возможности, документация из `docs/user/`, `docs/ops/`, README и `doc/` приложений и пакетов без копий, новости; вне pub workspace (ADR-0003, `docs/architecture/adr/0003-build-project-site-with-astro-in-monorepo.md`) |
 
 Документация пакета и приложения — `README.md` в его каталоге; сквозные руководства — [`docs/user/README.md`](docs/user/README.md) и [`docs/ops/README.md`](docs/ops/README.md).
@@ -124,6 +126,7 @@ fvm dart run melos run check
 ## Правила разработки
 
 - Обязательные правила для разработчиков и AI-агентов — `AGENTS.md`.
+- Весь состав документации — [`docs/README.md`](docs/README.md).
 - Архитектура — `docs/architecture/README.md`; ядро агента — `docs/architecture/proposals/agent-core-architecture.md`.
 - Поведение продукта — `openspec/specs/`; изменения — через OpenSpec change (`AGENTS.md` §17).
 - Ветвление — git flow: `feature/*` от `develop`, pull request в `develop` (`AGENTS.md` §22).
