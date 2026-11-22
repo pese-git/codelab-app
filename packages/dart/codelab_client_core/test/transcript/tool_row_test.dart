@@ -65,6 +65,103 @@ void main() {
       expect(row.toString(), isNot(contains('token=abc')));
     });
 
+    test('a URL loses its userinfo', () {
+      final row = _format(
+        ToolKind.fetch,
+        rawInput: {'url': 'https://user:pass@example.com/x?t=1'},
+      );
+
+      expect(row, const ToolRowView(label: 'Fetch', detail: 'example.com/x'));
+      expect(row.toString(), isNot(contains('user')));
+      expect(row.toString(), isNot(contains('pass')));
+    });
+
+    test('a password with @ is dropped up to the last @', () {
+      final row = _format(
+        ToolKind.fetch,
+        rawInput: {'url': 'https://user:p@ss@example.com/x'},
+      );
+
+      expect(row, const ToolRowView(label: 'Fetch', detail: 'example.com/x'));
+      expect(row.toString(), isNot(contains('user')));
+      expect(row.toString(), isNot(contains('p@ss')));
+      expect(row.toString(), isNot(contains('ss@')));
+    });
+
+    test('an @ in the path is kept', () {
+      expect(
+        _format(ToolKind.fetch, rawInput: {'url': 'https://example.com/a@b'}),
+        const ToolRowView(label: 'Fetch', detail: 'example.com/a@b'),
+      );
+    });
+
+    test('a URL without a scheme loses its userinfo', () {
+      final row = _format(
+        ToolKind.fetch,
+        rawInput: {'url': 'user:pass@example.com/x'},
+      );
+
+      expect(row, const ToolRowView(label: 'Fetch', detail: 'example.com/x'));
+      expect(row.toString(), isNot(contains('pass')));
+    });
+
+    test('other URL shapes keep only host and path', () {
+      const cases = {
+        'https://ghp_token@github.com/org/repo': 'github.com/org/repo',
+        'https://example.com?u=a@b': 'example.com',
+        'ssh://git@host/repo': 'host/repo',
+        'https://example.com#a@b': 'example.com',
+        // Ведущие слэши снимаются, пустая authority не роняет форматирование.
+        '/docs/a@b': 'docs/a@b',
+        'https:///x': 'x',
+        // `\` границей authority не считается: по RFC 3986 `h\a` — userinfo,
+        // поэтому показываем меньше, а не больше (D2).
+        r'https://h\a@b/x': 'b/x',
+        // Двоеточие порта без слэша — не схема.
+        'localhost:8080/x': 'localhost:8080/x',
+      };
+      for (final MapEntry(key: url, value: detail) in cases.entries) {
+        expect(
+          _format(ToolKind.fetch, rawInput: {'url': url}),
+          ToolRowView(label: 'Fetch', detail: detail),
+          reason: url,
+        );
+      }
+    });
+
+    test('unusual spellings of a URL do not leak userinfo', () {
+      // Записи, которые парсер WHATWG (Node) или RFC 3986 (Python `urllib`,
+      // `requests`) принимает за адрес с userinfo, и пробелы по краям —
+      // юникодные и вперемешку с управляющими символами; design.md D2.
+      const urls = [
+        '//user:pass@host/x',
+        ' https://user:pass@host/x',
+        '\nhttps://user:pass@host/x',
+        'ht\ttps://user:pass@host/x',
+        'https:///user:pass@host/x',
+        'https:/user:pass@host/x',
+        r'https:/\user:pass@host/x',
+        r'https:\\user:pass@host/x',
+        'https:user:pass@host/x',
+        r'https://h\user:pass@host/x',
+        '\u00A0https://user:pass@host/x',
+        '\uFEFFhttps://user:pass@host/x',
+        '\u3000//user:pass@host/x',
+        'https:// /user:pass@host/x',
+        ' / /user:pass@host/x',
+        '\x01\u00A0https://user:pass@host/x',
+      ];
+      for (final url in urls) {
+        final row = _format(ToolKind.fetch, rawInput: {'url': url});
+        expect(
+          row,
+          const ToolRowView(label: 'Fetch', detail: 'host/x'),
+          reason: url,
+        );
+        expect(row.toString(), isNot(contains('pass')), reason: url);
+      }
+    });
+
     test('a tool without scalar fields shows no JSON', () {
       expect(
         _format(
