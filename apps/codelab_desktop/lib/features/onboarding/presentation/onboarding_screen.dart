@@ -225,11 +225,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final current = state.step.index;
     final document = state.document;
     final theme = FluentTheme.of(context);
-    final background = theme.scaffoldBackgroundColor;
-    // Фон панели документа непрозрачный: `scaffoldBackgroundColor` у
-    // Fluent полупрозрачный (под ним задумана слюда), и шаг просвечивал бы
-    // сквозь документ (ручная проверка 2026-11-21).
-    final panelBackground = theme.resources.solidBackgroundFillColorBase;
+    // Фон экрана и панели документа непрозрачный: `scaffoldBackgroundColor`
+    // у Fluent полупрозрачный (под ним задумана слюда). С ним шаг просвечивал
+    // бы сквозь документ (ручная проверка 2026-11-21), а в светлой теме при
+    // тёмном режиме macOS сквозь шаги видно тёмное окно (ручная проверка
+    // 2026-11-22). Тот же цвет — фон страницы рабочего места
+    // (`fluent_theme_builder.dart`).
+    final background = theme.resources.solidBackgroundFillColorBase;
+    final panelBackground = background;
     final onProjectStep = state.step == OnboardingStep.project && shell != null;
     Widget screen = ColoredBox(
       key: const ValueKey('onboarding-screen'),
