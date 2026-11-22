@@ -1,5 +1,5 @@
 name: terminal_spike
-description: Спайк 1.1 add-integrated-terminal (D14, D15). Не часть workspace, удаляется в задаче 3.9.
+description: Спайк 1.1 add-integrated-terminal (D14, D15). Не часть workspace, удаляется в задаче 3.9 change add-terminal-keys-and-isolate.
 publish_to: none
 
 environment:

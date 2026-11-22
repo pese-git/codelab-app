@@ -121,8 +121,8 @@ class _GeneralPageHostState extends State<GeneralPageHost> {
 /// блоков: InfoBar и «Agent defaults», «Interface», «Startup and files»,
 /// «Privacy» (справка «No telemetry» со ссылкой на «Legal», D9), «About»
 /// (раздел показывается, если передан [about]). Строка «Show ignored
-/// files» появится после итерации 3 `add-file-preview-and-tree` (D10): строка
-/// без поведения не показывается (SETUP-17).
+/// files» появится после итерации 3 `add-file-tree-ignore-watch-follow`
+/// (D10): строка без поведения не показывается (SETUP-17).
 ///
 /// Как использовать: строится из `settingsPageBuilders` хозяином
 /// [GeneralPageHost]; `AppLanguageCubit` и `AgentDefaultsCubit` берутся из

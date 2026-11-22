@@ -35,7 +35,7 @@ Backlog не заменяет `openspec/`. Утверждённое поведе
 | 2026-11-02 | smoke | [`smoke-2026-11-02-cli-embedded.md`](smoke-2026-11-02-cli-embedded.md) | CLI со встроенным агентом | SMK-21…27 | 7 из 7 (1 частично, SMK-27 — заметка) |
 | 2026-11-03 | review | [`review-2026-11-03-codelab-links.md`](review-2026-11-03-codelab-links.md) | Ссылки в `.codelab/**` вне проектного конфига | REV-1 | 1 из 1 (частично) |
 | 2026-11-03 | smoke | [`smoke-2026-11-03-builtin-commands.md`](smoke-2026-11-03-builtin-commands.md) | Встроенные команды `/config` и `/mcp` | SMK-37…39 | 3 из 3 |
-| 2026-11-03 | smoke | [`smoke-2026-11-03-config-cli.md`](smoke-2026-11-03-config-cli.md) | Подкоманды `config` | SMK-31…33 | 3 из 3 (2 частично); SMK-31 исправлен в PR #226, но в сводке не зачёркнут — см. файл |
+| 2026-11-03 | smoke | [`smoke-2026-11-03-config-cli.md`](smoke-2026-11-03-config-cli.md) | Подкоманды `config` | SMK-31…33 | 2 из 3 (2 частично) |
 | 2026-11-03 | smoke | [`smoke-2026-11-03-live-reload.md`](smoke-2026-11-03-live-reload.md) | Живая перезагрузка конфига | SMK-34…36 | 3 из 3 |
 | 2026-11-04 | smoke | [`smoke-2026-11-04-app-secret-migrate.md`](smoke-2026-11-04-app-secret-migrate.md) | Перенос секретов в app | SMK-40…41 | 2 из 2 |
 | 2026-11-17 | review | [`review-2026-11-17-summarizer-no-usage.md`](review-2026-11-17-summarizer-no-usage.md) | Суммаризатор без usage не даёт `noUsage` | REV-2 | 1 из 1 |
