@@ -28,8 +28,13 @@ sealed class ConnectionView with _$ConnectionView {
 
   const factory ConnectionView.connected() = Connected;
 
-  /// Идёт переподключение; [attempt] начинается с 1. Сейчас попытка одна,
-  /// повторы с паузами — change `add-session-list-and-reload` (design D4).
+  /// Идёт переподключение; [attempt] начинается с 1.
+  ///
+  /// Действующая норма — требование «Явный автомат соединения» спецификации
+  /// `openspec/specs/acp-client-kit/spec.md`: переподключение — одна попытка
+  /// `reconnect()` текущего профиля, без повторов, поэтому [attempt] сейчас
+  /// всегда 1. Поле оставлено на случай будущей политики повторов; её
+  /// введение потребует отдельного OpenSpec change.
   const factory ConnectionView.reconnecting({required int attempt}) =
       Reconnecting;
 
