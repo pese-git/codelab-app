@@ -26,6 +26,8 @@ void main() {
       // `hidden` содержит `id`, `spinning` — `pin`, но это не учётные данные.
       'hidden_tokens': 12,
       'tokens_spinning': 3,
+      // D2: стоп-слово `key` сравнивается с целым сегментом.
+      'monkey_tokens': 5,
     };
     for (final entry in visible.entries) {
       test('${entry.key}: ${entry.value}', () {
@@ -70,6 +72,9 @@ void main() {
       'tokens_session': 1,
       'session__tokens': 1,
       'Access-Tokens': 1,
+      // D2: `key` — стоп-слово, порядок частей имени не важен.
+      'tokens_key': 1,
+      'key_tokens': 1,
     };
     for (final entry in hidden.entries) {
       test('${entry.key}: ${entry.value}', () {
@@ -98,5 +103,190 @@ void main() {
         'tokens_in=$redactedSecret',
       );
     });
+  });
+
+  group('a key-like name is redacted', () {
+    // D1: три признака — последний сегмент `key`, `access[_-]?key`,
+    // camelCase `…Key`.
+    const names = [
+      'OPENAI_KEY',
+      'STRIPE_KEY',
+      'ENCRYPTION_KEY',
+      'SIGNING_KEY',
+      'openai-key',
+      'openaiKey',
+      'signingKey',
+      'subscriptionKey',
+      'AWS_ACCESS_KEY_ID',
+      'aws_access_key',
+      'accessKeyId',
+      'Ocp-Apim-Subscription-Key',
+      'X-Functions-Key',
+    ];
+    for (final name in names) {
+      test(name, () {
+        expect(redactor.redact('sk-secret', key: name), redactedSecret);
+      });
+    }
+
+    test('redactMap of a nested map hides the same values', () {
+      expect(
+        redactor.redactMap({
+          'env': {for (final name in names) name: 'v'},
+        }),
+        {
+          'env': {for (final name in names) name: redactedSecret},
+        },
+      );
+    });
+  });
+
+  group('a key-like name that is not a secret stays visible', () {
+    // Страж D1: зелёный до и после реализации.
+    const names = [
+      'key',
+      'keyboard',
+      'monkey',
+      'turnkey',
+      'hotkey',
+      'keys',
+      'key_count',
+      'keyId',
+      'KEY_ID',
+      'signing_key_id',
+    ];
+    for (final name in names) {
+      test(name, () {
+        expect(redactor.redact('visible', key: name), 'visible');
+      });
+    }
+
+    test('a settings key path under `key` stays visible', () {
+      expect(
+        redactor.redact('providers.openai.api_key', key: 'key'),
+        'providers.openai.api_key',
+      );
+    });
+
+    for (final text in ['keyboard=us', 'key_count=3', 'hotkey=ctrl+k']) {
+      test('text "$text" is unchanged', () {
+        expect(redactor.redactText(text), text);
+      });
+    }
+  });
+
+  group('an identifier under a key name is redacted by design', () {
+    // D1: осознанная цена правила (Q4), а не дефект: отличить `cache_key`
+    // от `signing_key` по имени нельзя.
+    const names = [
+      'cache_key',
+      'primary_key',
+      'idempotency_key',
+      'public_key',
+      'hotKey',
+    ];
+    for (final name in names) {
+      test(name, () {
+        expect(redactor.redact('id-1', key: name), redactedSecret);
+      });
+    }
+  });
+
+  group('a key assignment in text is redacted', () {
+    const cases = <String, String>{
+      'OPENAI_KEY=sk-1': 'OPENAI_KEY=$redactedSecret',
+      'X-Functions-Key: abc': 'X-Functions-Key: $redactedSecret',
+      'export AWS_ACCESS_KEY_ID=AKIA1':
+          'export AWS_ACCESS_KEY_ID=$redactedSecret',
+      'openaiKey: sk-2': 'openaiKey: $redactedSecret',
+      // Страж прежнего поведения: значение несекретного имени не
+      // поглощает вложенное присваивание (D3).
+      'url=https://h/x?access_token=abc':
+          'url=https://h/x?access_token=$redactedSecret',
+      'token=foo=abc': 'token=$redactedSecret',
+      'my_api_key=x': 'my_api_key=$redactedSecret',
+    };
+    for (final entry in cases.entries) {
+      test(entry.key, () {
+        expect(redactor.redactText(entry.key), entry.value);
+      });
+    }
+  });
+
+  group('URL userinfo is redacted', () {
+    test('a string under a non-secret key', () {
+      expect(
+        redactor.redact(
+          'postgres://user:pass@db.local:5432/app',
+          key: 'DATABASE_URL',
+        ),
+        'postgres://$redactedSecret@db.local:5432/app',
+      );
+    });
+
+    const hidden = <String, String>{
+      'REDIS_DSN=redis://:pw@cache:6379/0':
+          'REDIS_DSN=redis://$redactedSecret@cache:6379/0',
+      'clone https://ghp_abc@github.com/org/repo.git':
+          'clone https://$redactedSecret@github.com/org/repo.git',
+      'mysql://u:p@ss@h/db': 'mysql://$redactedSecret@h/db',
+      'ssh://git@host/repo': 'ssh://$redactedSecret@host/repo',
+    };
+    for (final entry in hidden.entries) {
+      test(entry.key, () {
+        expect(redactor.redactText(entry.key), entry.value);
+      });
+    }
+
+    const unchanged = [
+      '{"url":"https://h","mail":"a@b.c"}',
+      'https://example.com/a?u=a@b',
+      'https://example.com/@user',
+      'git@github.com:org/repo.git',
+      'mailto:a@b.c',
+      'https://example.com',
+    ];
+    for (final text in unchanged) {
+      test('unchanged: $text', () {
+        expect(redactor.redactText(text), text);
+      });
+    }
+
+    test('is idempotent', () {
+      const text = 'clone https://u:p@h/x and ssh://git@host/repo';
+      final once = redactor.redactText(text);
+      expect(redactor.redactText(once), once);
+    });
+  });
+
+  group('masking is linear in input length', () {
+    // D5: бюджет 2 с на строку. До 2.2 ожидаемо красные (квадратичный
+    // ведущий префикс и хвост прежнего шаблона): `a`, `_key`, `access_key`,
+    // `token`; остальные — стражи.
+    final inputs = <String, String>{
+      'a x 262144': 'a' * 262144,
+      '_key x 65536': '_key' * 65536,
+      'access_key x 26214': 'access_key' * 26214,
+      'token x 52428': 'token' * 52428,
+      '://  x 87381': '://' * 87381,
+      'a:// + b x 262140': 'a://${'b' * 262140}',
+      'x= x 131072': 'x=' * 131072,
+      'OPENAI_KEY=v...': 'OPENAI_KEY=${'v' * 262133}',
+    };
+    for (final entry in inputs.entries) {
+      test(entry.key, () {
+        final watch = Stopwatch()..start();
+        final result = redactor.redactText(entry.value);
+        watch.stop();
+        expect(
+          watch.elapsed,
+          lessThan(const Duration(seconds: 2)),
+          reason: 'redactText on ${entry.key}',
+        );
+        if (entry.key == 'OPENAI_KEY=v...') {
+          expect(result, 'OPENAI_KEY=$redactedSecret');
+        }
+      });
+    }
   });
 }
