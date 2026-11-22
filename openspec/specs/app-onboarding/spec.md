@@ -1,7 +1,7 @@
 # app-onboarding Specification
 
 ## Purpose
-TBD - created by archiving change add-app-onboarding. Update Purpose after archive.
+Экран первого запуска app (onboarding): пять шагов — что делает CodeLab, разрешения, выбор модели, приватность и открытие проекта — показываются до рабочего места, пока не записан флаг завершения `codelab.app.onboarding_done`; правила показа, переходов между шагами, пропуска шага модели и завершения. Требования введены changes `add-app-onboarding` и `add-onboarding-project-step`.
 ## Requirements
 ### Requirement: Показ onboarding при первом запуске
 App SHALL показывать onboarding (`OnboardingDestination`, ключ `onboarding`) вместо рабочего места, если в `shared_preferences` нет ключа `codelab.app.onboarding_done`. Ключ SHALL читаться до `runApp`, чтобы первый кадр уже был экраном onboarding или рабочим местом, без промежуточного кадра другого экрана (design.md change `add-app-onboarding`, D2, D3).

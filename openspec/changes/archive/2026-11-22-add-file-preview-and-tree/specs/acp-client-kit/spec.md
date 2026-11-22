@@ -33,17 +33,6 @@
 - **WHEN** `relativeToRoot` получает `/private/tmp/w/lib/a.dart` при `cwd` сессии `/tmp/w` и каноническом корне `/private/tmp/w`
 - **THEN** результат — `lib/a.dart`
 
-### Requirement: Места вызова с номером строки
-`ToolCallView` SHALL нести `locations` — места вызова (`path` и необязательный `line` из ACP `ToolCallLocation`) в порядке прихода; поле `paths` SHALL сохраняться без изменений. Обновление вызова с новыми `locations` SHALL заменять места, как это делает доменная модель. Инкрементальная проекция SHALL совпадать с проекцией с нуля (требование «Инкрементальная проекция транскрипта»). Диапазон строк kit НЕ SHALL выводить: ACP его не определяет (design.md change `add-file-preview-and-tree`, D8).
-
-#### Scenario: Место со строкой
-- **WHEN** агент присылает `tool_call` с `locations: [{"path": "/w/lib/a.dart", "line": 42}]`
-- **THEN** `ToolCallView.locations` содержит одно место с путём `/w/lib/a.dart` и строкой 42, а `paths` — `["/w/lib/a.dart"]`
-
-#### Scenario: Место без строки
-- **WHEN** агент присылает место без `line`
-- **THEN** у места в `ToolCallView.locations` строка не задана
-
 ## MODIFIED Requirements
 
 ### Requirement: IO-адаптеры клиента
@@ -54,9 +43,9 @@
 - `IoProjectFiles` — порт `ProjectFiles`: лексическая проверка вместе со склейкой пути в стиле текущей ОС до обращения к диску (на Windows сегмент с `\` или `:` даёт `invalidPath`); realpath корня; проверка границы по realpath до перечисления и чтения; если цель не разрешается (любая ошибка разрешения), путь проходится от корня без перехода по ссылкам: ссылка, чей realpath не разрешается или разрешается вне корня, либо ближайший разрешимый предок вне корня дают `outsideRoot`, иначе — исходная ошибка (`notFound`, `unreadable`); перечисление одного уровня с лимитом записей, чтение не больше `maxBytes + 1` байт с классификацией `classifyPreview` kit; символическая ссылка с целью вне корня перечисляется как `symlinkOutside` и не раскрывается; битая ссылка, FIFO и сокет перечисляются как `other`; `list` файла и `read` папки дают `unreadable` (design.md change `add-file-preview-and-tree`, D3, Q16);
 - `ioTransportResolver` — `ConfigTransportResolver` kit с настоящими транспортами stdio и WebSocket;
 - `JsonFileProfileStore` (`$CODELAB_HOME/profiles.json`, общий файл CLI и app);
-- `JsonFileRecentProjectsStore`.
+- `JsonFileRecentProjectsStore` (`$CODELAB_HOME/recent_projects.json`, общий файл CLI и app; требование «Хранилище недавних проектов в CODELAB_HOME»).
 
-Реализации на Flutter-плагинах (`SharedPreferencesRecentProjectsStore`, `FileSelectorProjectFolderPicker`) SHALL оставаться в app. `ProfileStore.remove(id)` SHALL удалять профиль с этим `id` и возвращать `true`, а без такого профиля — возвращать `false` и не менять файл. `JsonFileProfileStore` SHALL записывать `profiles.json` через уникальный временный файл в том же каталоге, сброшенный на диск (`flush`) до атомарного переименования: прерванная запись НЕ SHALL оставлять под именем `profiles.json` пустой или неполный файл (design.md change `add-app-settings-shell`, D7). Классификатора ошибок проверки профиля (`classifyProbeFailure`) в пакете НЕ SHALL быть: проверка профиля удалена (design.md change `remove-test-connection`, D2).
+Реализации на Flutter-плагинах (`FileSelectorProjectFolderPicker`) SHALL оставаться в app; отдельной реализации `RecentProjectsStore` на `shared_preferences` в app НЕ SHALL быть (design.md change `share-recent-projects-store`, D9). `ProfileStore.remove(id)` SHALL удалять профиль с этим `id` и возвращать `true`, а без такого профиля — возвращать `false` и не менять файл. `JsonFileProfileStore` SHALL записывать `profiles.json` через уникальный временный файл в том же каталоге, сброшенный на диск (`flush`) до атомарного переименования: прерванная запись НЕ SHALL оставлять под именем `profiles.json` пустой или неполный файл (design.md change `add-app-settings-shell`, D7). Классификатора ошибок проверки профиля (`classifyProbeFailure`) в пакете НЕ SHALL быть: проверка профиля удалена (design.md change `remove-test-connection`, D2).
 
 #### Scenario: Профили сохраняются в JSON
 - **WHEN** `JsonFileProfileStore` сохраняет профиль `WebSocketProfile` и читает его заново

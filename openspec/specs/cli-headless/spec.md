@@ -64,7 +64,7 @@ stdout в headless SHALL содержать только текст ответо
 - **THEN** агент получает `reject_once`
 
 ### Requirement: Коды выхода headless
-Код выхода headless SHALL вычисляться одним модулем (`lib/src/headless/exit_codes.dart`) из ответа `session/prompt`, ошибок и сигналов, а не из текста транскрипта (H-02):
+Код выхода headless SHALL вычисляться одним модулем (`lib/src/exit_codes.dart`) из ответа `session/prompt`, ошибок и сигналов, а не из текста транскрипта (H-02):
 - `0` — `stopReason: end_turn` и ответ не пустой;
 - `1` — JSON-RPC ошибка на `session/prompt`, `end_turn` без единого `agent_message_chunk`, `max_tokens`, `max_turn_requests`, `refusal`, не удалось подключиться к агенту, агент завершился или соединение оборвалось;
 - `64` — ошибка использования: неизвестный флаг или подкоманда, нет промпта, неверное значение `--agent`, нет профиля;

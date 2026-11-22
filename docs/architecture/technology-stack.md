@@ -807,7 +807,7 @@ Architectural dependency rules важнее технической доступ�
 
 ## 20г. `codelab_desktop`: рендер терминала пользователя — `xterm2`
 
-**Статус: утверждено.** Решение пользователя 2026-11-11 (Q2, Q3). Пакет и версия выбраны спайком 1.1 — [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D15; запасной `xterm` не понадобился. В `pubspec.yaml` app пакеты попадают задачей 1.4 change.
+**Статус: утверждено.** Решение пользователя 2026-11-11 (Q2, Q3). Пакет и версия выбраны спайком 1.1 — [`design.md` change `add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D15; запасной `xterm` не понадобился. В `pubspec.yaml` app пакеты попадают задачей 1.4 change.
 
 Технология: [`xterm2`](https://pub.dev/packages/xterm2) **5.4.0** — форк `xterm.dart`, виджет `TerminalView`. Модель экрана — отдельный пакет [`xterm2_core`](https://pub.dev/packages/xterm2_core) **1.0.0** на чистом Dart: автомат, буферы, парсер escape-последовательностей, кодирование ввода. Пин точных версий в `apps/codelab_desktop/pubspec.yaml`.
 
@@ -861,7 +861,7 @@ Architectural dependency rules важнее технической доступ�
 
 ## 20д. `codelab_desktop`: PTY для терминала пользователя — `pty2`
 
-**Статус: утверждено.** Решение пользователя 2026-11-11 (Q1, Q3). Пакет и версия выбраны спайком 1.1 — [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D15; запасной `flutter_pty` не понадобился.
+**Статус: утверждено.** Решение пользователя 2026-11-11 (Q1, Q3). Пакет и версия выбраны спайком 1.1 — [`design.md` change `add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D15; запасной `flutter_pty` не понадобился.
 
 Вариант `Process.start` без PTY отклонён: без TTY не работают:
 * редактирование строки, история и Tab-дополнение;
@@ -873,7 +873,7 @@ Architectural dependency rules важнее технической доступ�
 Технология: [`pty2`](https://pub.dev/packages/pty2) **0.8.1** — PTY на чистом Dart. C-код (`forkpty`, `setsid`) собирается хуком native assets; на Windows — ConPTY. Пин точной версии в `apps/codelab_desktop/pubspec.yaml`.
 
 1. **Назначение.** Запуск интерактивного shell пользователя (`$SHELL -l`) в псевдотерминале: ввод, вывод, размер окна, сигналы.
-2. **Где используется.** Только адаптер `apps/codelab_desktop/lib/core/platform/user_shell_launcher.dart` за портом `UserShellLauncher` (§24, `platform-integration.md` §8, §73). Правило сторожа — D11 change. **Сейчас** адаптер вызывает `pty2` на UI isolate, запись в PTY синхронная. **План после 1.0** (решение Q24 принято 2026-11-12, реализация отложена; терминал выпускается в 1.0 с известными ограничениями): адаптер держит `pty2` целиком в фоновом isolate — по одному на shell вкладки: старт, чтение, запись, `resize`, сигналы и ожидание выхода идут там, UI isolate обменивается с ним сообщениями (D2 change, «Фоновый isolate вкладки»; задача 2.13).
+2. **Где используется.** Только адаптер `apps/codelab_desktop/lib/core/platform/user_shell_launcher.dart` за портом `UserShellLauncher` (§24, `platform-integration.md` §8, §73). Правило сторожа — D11 change. **Сейчас** адаптер вызывает `pty2` на UI isolate, запись в PTY синхронная. **План после 1.0** (решение Q24 принято 2026-11-12, реализация отложена; терминал выпускается в 1.0 с известными ограничениями): адаптер держит `pty2` целиком в фоновом isolate — по одному на shell вкладки: старт, чтение, запись, `resize`, сигналы и ожидание выхода идут там, UI isolate обменивается с ним сообщениями (D2 change, «Фоновый isolate вкладки»; задача 2.13, перенесена в change `add-terminal-keys-and-isolate`).
 3. **Где не используется.**
    * ACP `terminal/*`: `IoTerminalProcessRunner` в `codelab_client_io` остаётся на `Process.start`;
    * процесс агента (`StdioAcpTransport`);
@@ -904,7 +904,7 @@ Architectural dependency rules важнее технической доступ�
   * Выход из app закрывает все вкладки: обработчик `AppLifecycleListener.onExitRequested` → `closeAll()`. Он обязателен — без него штатный выход зависает на `waitpid` `pty2` (решение пользователя 2026-11-12; D14, D15 п. 9 change).
   * Крах или убийство app — `SIGHUP` от закрытия PTY-мастера, подтверждено спайком; при штатном выходе эта страховка не срабатывает (`concurrency.md` §45, `platform-integration.md` §23).
   * Задание интерактивного shell с игнором `SIGHUP` после `SIGKILL` shell остаётся сиротой — поведение пользователя, как `nohup`.
-* **Threading.** Сейчас: чтение — в фоновых isolate `pty2` (без модели поток 585 КБ читается за 0,29 с), запись, `resize` и сигналы — на UI isolate; запись при полном буфере PTY блокирует UI isolate (открытый риск, принят для 1.0 как известная проблема). Разбор эмулятором — на UI isolate, порциями (§20г). План после 1.0 (Q24): весь `pty2` — в isolate вкладки, `UserShell.write` ставит строку в очередь и сразу возвращается; вывод проходит лишний переход между isolate, его стоимость под «Flood» меряет задача 2.13 change.
+* **Threading.** Сейчас: чтение — в фоновых isolate `pty2` (без модели поток 585 КБ читается за 0,29 с), запись, `resize` и сигналы — на UI isolate; запись при полном буфере PTY блокирует UI isolate (открытый риск, принят для 1.0 как известная проблема). Разбор эмулятором — на UI isolate, порциями (§20г). План после 1.0 (Q24): весь `pty2` — в isolate вкладки, `UserShell.write` ставит строку в очередь и сразу возвращается; вывод проходит лишний переход между isolate, его стоимость под «Flood» меряет задача 2.13 (перенесена в change `add-terminal-keys-and-isolate`).
 * **Security.** Shell пользователя вне permission policy и containment (`permissions.md` §2), окружение app целиком (`platform-integration.md` §53, исключение).
 * **Testing.** Native assets собираются под `fvm flutter test` и `fvm dart test`; контрактный тест адаптера идёт на Dart VM в `feature/*`. На код выхода тесты не опираются.
 * **Maintenance.** 0.8.1 от 2026-11-10; активное сопровождение, но ломающие версии 0.6–0.8 вышли за две недели. Мера — пин точной версии, обновление — отдельным PR с контрактным тестом.
@@ -934,7 +934,7 @@ Architectural dependency rules важнее технической доступ�
 
 ## 20е. `codelab_desktop`: открытие ссылок во внешнем приложении — `url_launcher`
 
-**Статус: утверждено.** Пакет введён change `add-desktop-markdown` (архив 2026-11-11, D5/D10; строка таблицы §1); терминал переиспользует его порт, правило сторожа и зависимость — решение пользователя 2026-11-11 (Q16), [`design.md` change `add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D11; задача 2.10.
+**Статус: утверждено.** Пакет введён change `add-desktop-markdown` (архив 2026-11-11, D5/D10; строка таблицы §1); терминал переиспользует его порт, правило сторожа и зависимость — решение пользователя 2026-11-11 (Q16), [`design.md` change `add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D11; задача 2.10.
 
 Технология: [`url_launcher`](https://pub.dev/packages/url_launcher) **6.3.3** (BSD-3-Clause, publisher `flutter.dev`). При слиянии терминала запись приведена к точному пину `6.3.3` (было `^6.3.3`; D11) и граница `flutter:` у app поднята до `>=3.41.0` — требование пакета.
 
