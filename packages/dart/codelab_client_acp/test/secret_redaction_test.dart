@@ -133,11 +133,16 @@ void main() {
       });
     });
 
-    test('a token counter name is not a secret name', () {
-      // Исключение счётчиков токенов то же, что у правила по ключу (D4).
-      expect(redactor.redact(pair('tokens_in', '900')), {
+    test('a numeric token counter under a counter name stays visible', () {
+      // Исключение счётчиков то же, что у правила по ключу: только число
+      // (design.md D4); строка под тем же именем скрывается как секрет.
+      expect(redactor.redact({'name': 'tokens_in', 'value': 900}), {
         'name': 'tokens_in',
-        'value': '900',
+        'value': 900,
+      });
+      expect(redactor.redact(pair('tokens_in', 'sk-abc')), {
+        'name': 'tokens_in',
+        'value': redactedSecret,
       });
     });
 
@@ -200,6 +205,100 @@ void main() {
         {'name': 'OPENAI_API_KEY', 'value': redactedSecret},
         {'name': 'PATH', 'value': '/usr/bin'},
       ]);
+    });
+  });
+
+  test('a long string without separators is masked in linear time', () {
+    // Регрессия: ведущий `[A-Za-z0-9_.-]*` шаблона присваивания давал
+    // квадратичный перебор, 20 тыс. символов обрабатывались десятки секунд.
+    final text = 'a' * 250000;
+    final watch = Stopwatch()..start();
+    expect(redactor.redactText(text), text);
+    expect(
+      redactor.redactText('${'b' * 100000}token=abc'),
+      '${'b' * 100000}token=$redactedSecret',
+    );
+    expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+  });
+
+  group('repeats of a secret word are masked in bounded time', () {
+    // Ревью change `redesign-protocol-pane`: хвост `[A-Za-z0-9_.-]*` после
+    // секретного слова и ленивый `[\s\S]*?` ключа давали квадратичный
+    // перебор на повторах слова (20 000 символов — около 2 секунд).
+    const budget = Duration(milliseconds: 500);
+
+    for (final word in ['token', 'secret', 'password', 'api_key']) {
+      test('$word repeated 50000 times', () {
+        final text = word * 50000;
+        final watch = Stopwatch()..start();
+        final masked = redactor.redactText(text);
+        expect(watch.elapsed, lessThan(budget));
+        expect(masked, isNotEmpty);
+      });
+    }
+
+    test('BEGIN PRIVATE KEY repeated without END', () {
+      final text = '-----BEGIN RSA PRIVATE KEY-----\n' * 20000;
+      final watch = Stopwatch()..start();
+      redactor.redactText(text);
+      expect(watch.elapsed, lessThan(budget));
+    });
+
+    test('previous masking results are unchanged', () {
+      expect(
+        redactor.redactText('api_key=abc123 and token: xyz; password=p1'),
+        'api_key=$redactedSecret and token: $redactedSecret; '
+        'password=$redactedSecret',
+      );
+      expect(
+        redactor.redactText('x_secret_value = abc'),
+        'x_secret_value = $redactedSecret',
+      );
+      expect(
+        redactor.redactText(
+          'a -----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY----- b',
+        ),
+        'a $redactedSecret b',
+      );
+      expect(
+        redactor.redactText('Authorization: Bearer abc.def'),
+        'Authorization: Bearer $redactedSecret',
+      );
+    });
+  });
+
+  group('private key blocks and the name tail bound', () {
+    test('thousands of complete BEGIN..END blocks in bounded time', () {
+      // Ревью change `redesign-protocol-pane`: `substring(begin.end)` на каждом
+      // BEGIN копировал хвост — квадратичная работа на длинном тексте.
+      const block =
+          '-----BEGIN RSA PRIVATE KEY-----\nabcdef\n'
+          '-----END RSA PRIVATE KEY-----\n';
+      final text = block * 3500;
+      expect(text.length, greaterThan(240000));
+      final watch = Stopwatch()..start();
+      final masked = redactor.redactText(text);
+      expect(watch.elapsed, lessThan(const Duration(milliseconds: 500)));
+      expect(masked, '$redactedSecret\n' * 3500);
+    });
+
+    test('a tail of exactly 64 characters is masked, 65 stays visible '
+        '(cost of D4)', () {
+      expect(
+        redactor.redactText('token${'x' * 64}=val'),
+        'token${'x' * 64}=$redactedSecret',
+      );
+      expect(
+        redactor.redactText('token${'x' * 65}=val'),
+        'token${'x' * 65}=val',
+      );
+    });
+
+    test('a long prefix does not hide the secret word', () {
+      expect(
+        redactor.redactText('${'x' * 70}token=val'),
+        '${'x' * 70}token=$redactedSecret',
+      );
     });
   });
 }

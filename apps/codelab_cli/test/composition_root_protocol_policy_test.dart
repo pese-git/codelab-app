@@ -15,7 +15,6 @@ import 'dart:io';
 import 'package:codelab_cli/codelab_cli.dart';
 import 'package:codelab_cli/src/composition_root.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
-import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:codelab_embedded/testing.dart';
 import 'package:test/test.dart';
 

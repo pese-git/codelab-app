@@ -277,7 +277,8 @@ void main() {
       expect(entry['kind'], 'request');
       expect(entry['method'], sessionPromptMethod);
       final sent = fake.sentMessages.single as JsonRpcRequest;
-      expect(entry['request_id'].toString(), sent.id.toJsonValue().toString());
+      expect(entry['request_id'], isA<String>());
+      expect(entry['request_id'], sent.id.toJsonValue().toString());
       expect(entry['size'], isA<int>());
       expect(entry['size'], greaterThan(0));
       expect(entry['connection_generation'], 0);

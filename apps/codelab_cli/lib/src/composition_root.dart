@@ -117,6 +117,14 @@ CliRuntime buildCliRuntime({
     textFileWriter: textFileIo,
     terminalProcessRunner: const IoTerminalProcessRunner(),
     logger: clientLogger,
+    // Политика payload — решение хоста (design.md change
+    // `redesign-protocol-pane`, D3): `--verbose` — явное согласие на полные
+    // payload (после маскирования), иначе только метаданные. Кадров CLI не
+    // показывает, но запись `protocol_message` и буфер kit следуют той же
+    // политике.
+    protocolPayloads: verbose
+        ? ProtocolPayloadPolicy.full
+        : ProtocolPayloadPolicy.metadataOnly,
   );
   // Лог агента: полный с `--verbose`; `--debug-secrets` (или
   // `CODELAB_DEBUG_SECRETS=1`) без `--verbose` пишет только `secrets.lookup`

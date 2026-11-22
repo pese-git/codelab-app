@@ -8,6 +8,7 @@ import '../connection/connection_profile.dart';
 import '../connection/connection_view.dart';
 import '../connection/transport_resolver.dart';
 import '../diagnostics/diagnostics.dart';
+import '../protocol/protocol_frame_log.dart';
 import '../queue/prompt_queue.dart';
 import '../restore/workspace_restorer.dart';
 import '../restore/workspace_snapshot.dart';
@@ -231,6 +232,11 @@ abstract interface class ClientWorkspace {
   /// секретов; доставляется синхронно, после публикации состояния.
   Stream<WorkspaceDiagnostic> get diagnostics;
 
+  /// Буфер кадров ACP соединения: создаётся вместе с рабочим пространством и
+  /// закрывается в [dispose]. Кадры не входят в [WorkspaceState] (design.md
+  /// change `redesign-protocol-pane`, D5).
+  ProtocolFrameLog get protocolFrames;
+
   /// Отписывается от бэкенда и закрывает потоки; бэкенд закрывает его
   /// владелец.
   Future<void> dispose();
@@ -314,6 +320,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     );
     _sessionSubscription = backend.sessionChanges.listen(_handleSession);
     _usageSubscription = backend.usageNotifications.listen(_handleUsage);
+    protocolFrames = ProtocolFrameLog(backend: backend, logger: _logger);
   }
 
   /// Часы kit: момент первого появления вызова `agent` для времени строк
@@ -427,6 +434,9 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
   @override
   Stream<WorkspaceDiagnostic> get diagnostics => _diagnostics.stream;
+
+  @override
+  late final ProtocolFrameLog protocolFrames;
 
   @override
   Future<void> connect(
@@ -1159,6 +1169,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     await _connectionSubscription.cancel();
     await _sessionSubscription.cancel();
     await _usageSubscription.cancel();
+    await protocolFrames.dispose();
     for (final handle in _handles.values) {
       await handle.close();
     }

@@ -49,7 +49,8 @@ void main() {
   });
 
   group('пределы', () {
-    setUp(create);
+    // Базовая `full`: payload кадров хранится без включения Trace.
+    setUp(() => create(traceAvailable: false));
 
     test('2001-й кадр вытесняет первый, ревизия растёт', () async {
       final log = workspace.protocolFrames;
@@ -342,6 +343,95 @@ void main() {
     });
 
     test(
+      'снятие payload у ошибки заменяет текст на стандартное имя кода',
+      () async {
+        final log = workspace.protocolFrames;
+        log.setTrace(true);
+        await push(
+          _frame(
+            1,
+            kind: ProtocolFrameKind.error,
+            direction: ProtocolFrameDirection.inbound,
+            errorCode: -32603,
+            detail: 'failed at /Users/dev/secret-project',
+            payload: {'error': 'x'},
+          ),
+        );
+        await push(
+          _frame(
+            2,
+            kind: ProtocolFrameKind.error,
+            direction: ProtocolFrameDirection.inbound,
+            errorCode: -31999,
+            detail: 'vendor text with /private/path',
+            payload: {'error': 'y'},
+          ),
+        );
+        await push(_frame(3, detail: 'agent_message_chunk', payload: {'a': 1}));
+
+        log.setTrace(false);
+        await pumpEventQueue();
+
+        expect(log.frames[0].detail, 'Internal error');
+        expect(log.frames[1].detail, isNull);
+        // Подробность не-ошибки — поле схемы, а не текст агента: остаётся.
+        expect(log.frames[2].detail, 'agent_message_chunk');
+      },
+    );
+
+    test('кадр-ошибка в пути после выключения теряет текст ошибки', () async {
+      final log = workspace.protocolFrames;
+      log.setTrace(true);
+      log.setTrace(false);
+
+      await push(
+        _frame(
+          1,
+          kind: ProtocolFrameKind.error,
+          direction: ProtocolFrameDirection.inbound,
+          errorCode: -32601,
+          detail: 'method /home/dev/x not found',
+          payload: {'error': 'z'},
+        ),
+      );
+
+      expect(log.frames.single.payload, isNull);
+      expect(log.frames.single.detail, 'Method not found');
+    });
+
+    test('кадр-ошибка tooLarge без payload тоже теряет текст ошибки', () async {
+      final log = workspace.protocolFrames;
+      log.setTrace(true);
+      await push(
+        _frame(
+          1,
+          kind: ProtocolFrameKind.error,
+          direction: ProtocolFrameDirection.inbound,
+          errorCode: -32603,
+          detail: 'failed at /Users/dev/secret-project',
+        ).copyWith(payloadOmitted: ProtocolPayloadOmitted.tooLarge),
+      );
+      expect(log.frames.single.detail, contains('secret-project'));
+
+      log.setTrace(false);
+      await pumpEventQueue();
+      expect(log.frames.single.detail, 'Internal error');
+      expect(log.frames.single.payloadOmitted, ProtocolPayloadOmitted.tooLarge);
+
+      // Кадр в пути после выключения — то же правило.
+      await push(
+        _frame(
+          2,
+          kind: ProtocolFrameKind.error,
+          direction: ProtocolFrameDirection.inbound,
+          errorCode: -32601,
+          detail: 'method /home/dev/x not found',
+        ).copyWith(payloadOmitted: ProtocolPayloadOmitted.tooLarge),
+      );
+      expect(log.frames.last.detail, 'Method not found');
+    });
+
+    test(
       'при выключенном Trace входящий payload не попадает в буфер',
       () async {
         final log = workspace.protocolFrames;
@@ -365,6 +455,14 @@ void main() {
 
         expect(log.frames.single.payload, {'a': 1});
         expect(backend.traceCalls, isEmpty);
+
+        // `setTrace` при недоступном Trace — no-op: бэкенд не вызывается,
+        // ревизия не растёт (D17).
+        final revision = log.revision;
+        log.setTrace(true);
+        expect(log.traceEnabled, isFalse);
+        expect(backend.traceCalls, isEmpty);
+        expect(log.revision, revision);
       },
     );
   });
@@ -379,6 +477,7 @@ ProtocolFrame _frame(
   JsonRpcId? id,
   String? sessionId,
   int? errorCode,
+  String? detail,
   Map<String, Object?>? payload,
 }) => ProtocolFrame(
   seq: seq,
@@ -389,7 +488,7 @@ ProtocolFrame _frame(
   method: method,
   id: id,
   sessionId: sessionId,
-  detail: null,
+  detail: detail,
   errorCode: errorCode,
   size: payload == null ? 120 : utf8.encode(jsonEncode(payload)).length,
   payload: payload,

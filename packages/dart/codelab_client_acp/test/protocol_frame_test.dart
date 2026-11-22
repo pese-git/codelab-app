@@ -47,8 +47,8 @@ void main() {
   setUp(() {
     logged = [];
     configureCodeLabLogging(
-      applicationOutput: (entry, level) => logged.add(entry),
-      protocolTraceOutput: (entry, level) => logged.add(entry),
+      applicationOutput: (entry, level) {},
+      protocolTraceOutput: (entry, level) {},
       inAppViewerOutput: (entry, level) => logged.add(entry),
     );
   });
@@ -279,12 +279,13 @@ void main() {
       await pumpEventQueue();
       frames.clear();
 
-      // Подписка на старый транспорт снята до смены транспорта, поэтому
-      // поздний кадр не доходит до обработчика совсем (AGENTS.md §9).
-      // Проверка `event_ignored` для этого пути недостижима через транспорт:
-      // см. отчёт этапа 1.
-      old.emitInbound(
-        const JsonRpcMessage.notification(method: '_vendor/late'),
+      // Старый транспорт закрыт и подписка на него снята до привязки нового:
+      // поздний кадр до обработчика не доходит (AGENTS.md §9; design.md D2).
+      expect(
+        () => old.emitInbound(
+          const JsonRpcMessage.notification(method: '_vendor/late'),
+        ),
+        throwsA(isA<AcpTransportException>()),
       );
       await pumpEventQueue();
 
@@ -353,6 +354,8 @@ void main() {
     });
 
     test('сбой построения кадра не ломает обработку сообщения', () async {
+      setProtocolTracingEnabled(true);
+      addTearDown(() => setProtocolTracingEnabled(false));
       // `Object()` не кодируется в JSON: размер кадра посчитать нельзя.
       transport.emitInbound(
         JsonRpcMessage.request(
@@ -373,6 +376,23 @@ void main() {
       );
       expect(failure['method'], '_vendor/feature');
       expect(failure['error_class'], isNotNull);
+      // Кадр не публикуется (D2), а запись трассы идёт без size и payload.
+      expect(
+        frames.where(
+          (f) =>
+              f.method == '_vendor/feature' &&
+              f.direction == ProtocolFrameDirection.inbound,
+        ),
+        isEmpty,
+      );
+      final traced = logged.singleWhere(
+        (e) =>
+            e['event'] == 'protocol_message' &&
+            e['direction'] == 'inbound' &&
+            e['method'] == '_vendor/feature',
+      );
+      expect(traced.containsKey('size'), isFalse);
+      expect(traced.containsKey('payload'), isFalse);
     });
   });
 
@@ -544,16 +564,17 @@ void main() {
     test('сбой транспорта и ошибка протокола Trace не включают', () async {
       await openSession();
       final id = await startPrompt();
-      transport.fail(
-        const AcpTransportException(
-          code: AcpTransportErrorCode.sendFailed,
-          message: 'boom',
-        ),
-      );
       transport.emitInbound(
         JsonRpcMessage.response(
           id: id,
           error: const JsonRpcError(code: -32603, message: 'boom'),
+        ),
+      );
+      await pumpEventQueue();
+      transport.fail(
+        const AcpTransportException(
+          code: AcpTransportErrorCode.sendFailed,
+          message: 'boom',
         ),
       );
       await pumpEventQueue();
@@ -615,6 +636,19 @@ void main() {
       expect(text, isNot(contains('ghp_abc123')));
     });
 
+    test('двойное включение пишет одно событие', () async {
+      client.setFrameTrace(true);
+      client.setFrameTrace(true);
+      client.setFrameTrace(false);
+      client.setFrameTrace(false);
+
+      final events = logged
+          .where((e) => e['event'] == 'protocol_frames.policy')
+          .map((e) => e['reason'])
+          .toList();
+      expect(events, ['trace_on', 'trace_off']);
+    });
+
     test('смена режима пишет protocol_frames.policy с причиной', () async {
       client.setFrameTrace(true);
       client.setFrameTrace(false);
@@ -627,6 +661,140 @@ void main() {
       expect(events[0]['reason'], 'trace_on');
       expect(events[1]['policy'], 'metadataOnly');
       expect(events[1]['reason'], 'trace_off');
+    });
+  });
+
+  group('Trace при базовой full', () {
+    setUp(() => start(policy: ProtocolPayloadPolicy.full));
+
+    test('traceAvailable ложен, setFrameTrace — no-op без события', () async {
+      expect(client.traceAvailable, isFalse);
+
+      client.setFrameTrace(true);
+      client.setFrameTrace(false);
+
+      expect(
+        logged.where((e) => e['event'] == 'protocol_frames.policy'),
+        isEmpty,
+      );
+      transport.emitInbound(
+        const JsonRpcMessage.notification(method: '_vendor/x'),
+      );
+      await pumpEventQueue();
+      expect(frames.single.payload, isNotNull);
+    });
+  });
+
+  group('ограничение длины строк кадра (ревью, п. 6)', () {
+    setUp(start);
+
+    test('sessionUpdate и метод обрезаются до 120 символов', () async {
+      transport.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: {
+            'sessionId': 's1',
+            'update': {'sessionUpdate': 'k' * 300},
+          },
+        ),
+      );
+      transport.emitInbound(
+        JsonRpcMessage.notification(method: '_vendor/${'m' * 300}'),
+      );
+      await pumpEventQueue();
+
+      expect(frames[0].detail!.length, 120);
+      expect(frames[1].method!.length, 120);
+    });
+
+    test('обрезка не разрезает суррогатную пару', () async {
+      // 119 символов и эмодзи (две кодовые единицы) на границе 120.
+      final text = '${'a' * 119}\u{1F600}tail';
+      transport.emitInbound(
+        JsonRpcMessage.notification(
+          method: sessionUpdateMethod,
+          params: {
+            'sessionId': 's1',
+            'update': {'sessionUpdate': text},
+          },
+        ),
+      );
+      await pumpEventQueue();
+
+      final detail = frames.single.detail!;
+      // Строка без «одинокого» суррогата кодируется в UTF-8 без замены U+FFFD.
+      expect(utf8.decode(utf8.encode(detail)), detail);
+      expect(detail.codeUnits.last, isNot(inInclusiveRange(0xD800, 0xDBFF)));
+      expect(detail, 'a' * 119);
+    });
+  });
+
+  group('ключ учёта запросов различает тип id (ревью, п. 7)', () {
+    setUp(start);
+
+    test(
+      'ответ со строковым id "1" не сопоставляется с запросом id 1',
+      () async {
+        final created = client.createSession(
+          const CreateSessionCommand(cwd: '/workspace'),
+        );
+        created.then<void>((_) {}, onError: (_) {});
+        await pumpEventQueue();
+        final request = transport.sentMessages.last as JsonRpcRequest;
+        expect(request.id, isA<JsonRpcIntId>());
+        frames.clear();
+
+        transport.emitInbound(
+          JsonRpcMessage.response(
+            id: JsonRpcId.string(request.id.toJsonValue().toString()),
+            result: const {},
+          ),
+        );
+        await pumpEventQueue();
+
+        expect(frames.single.method, isNull);
+      },
+    );
+  });
+
+  group('ProtocolFrame.withoutPayload (ревью, п. 5)', () {
+    test('снимает payload и текст ошибки', () {
+      final frame = ProtocolFrame(
+        seq: 1,
+        time: DateTime.utc(2026),
+        direction: ProtocolFrameDirection.inbound,
+        connectionGeneration: 0,
+        kind: ProtocolFrameKind.error,
+        errorCode: jsonRpcInternalErrorCode,
+        detail: 'at /Users/dev',
+        size: 10,
+        payload: {'a': 1},
+      );
+
+      final stripped = frame.withoutPayload();
+
+      expect(stripped.payload, isNull);
+      expect(stripped.payloadOmitted, ProtocolPayloadOmitted.policy);
+      expect(stripped.detail, 'Internal error');
+      expect(stripped.seq, 1);
+      expect(stripped.size, 10);
+    });
+
+    test('tooLarge не заменяется на policy', () {
+      final frame = ProtocolFrame(
+        seq: 1,
+        time: DateTime.utc(2026),
+        direction: ProtocolFrameDirection.inbound,
+        connectionGeneration: 0,
+        kind: ProtocolFrameKind.result,
+        size: 10,
+        payloadOmitted: ProtocolPayloadOmitted.tooLarge,
+      );
+
+      expect(
+        frame.withoutPayload().payloadOmitted,
+        ProtocolPayloadOmitted.tooLarge,
+      );
     });
   });
 
