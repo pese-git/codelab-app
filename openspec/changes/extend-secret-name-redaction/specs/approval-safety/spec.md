@@ -20,7 +20,9 @@ CodeLab SHALL редактировать секреты в логах, диаг�
 
 В тексте присваивание `имя=значение` или `имя: значение` (имя — непрерывная последовательность символов `A–Z`, `a–z`, `0–9`, `_`, `.`, `-`; вокруг `=` или `:` допустимы пробельные символы; значение — до пробельного символа, `,` или `;`) SHALL скрывать значение, если имя содержит одно из слов `api_key`, `cookie`, `credential`, `jwt`, `pass`, `password`, `private_key`, `secret`, `session_token`, `session_cookie`, `session_secret`, `session_key`, `token` или подпадает под признаки `access_key`, последнего сегмента `key` или camelCase-окончания `Key` правила секретных имён. Имя при этом SHALL оставаться видимым. Присваивание внутри значения несекретного имени SHALL проверяться так же: `url=https://h/x?access_token=abc` скрывает `abc` (D3).
 
-В тексте учётные данные адреса SHALL скрываться: в фрагменте `<схема>://<userinfo>@` userinfo целиком — всё от `://` до последнего `@` перед первым `/`, `?`, `#`, пробельным символом, `"`, `<`, `>`, `\` или `` ` `` — SHALL заменяться на `<redacted>`. Правило SHALL действовать для строкового значения под любым ключом, в том числе несекретным (`DATABASE_URL`, `REDIS_DSN`). Фрагменты без `://` (`git@github.com:org/repo.git`, `mailto:a@b.c`) и `@` после `/`, `?` или `#` SHALL оставаться как есть. Userinfo без секрета (`ssh://git@host`) скрывается тоже: это осознанная цена (D4).
+В тексте учётные данные адреса SHALL скрываться: в фрагменте `<схема>://<userinfo>@` userinfo целиком — всё от `://` до последнего `@` перед первым `/`, `?`, `#`, пробельным символом, `"`, `<`, `>` или `` ` `` — SHALL заменяться на `<redacted>`. Правило SHALL действовать для строкового значения под любым ключом, в том числе несекретным (`DATABASE_URL`, `REDIS_DSN`). Фрагменты без `://` (`git@github.com:org/repo.git`, `mailto:a@b.c`) и `@` после `/`, `?` или `#` SHALL оставаться как есть. Userinfo без секрета (`ssh://git@host`) скрывается тоже: это осознанная цена (D4). `\` границей SHALL NOT считаться: `https://h\user:pass@host/x` даёт `https://<redacted>@host/x` (разбор по RFC 3986 видит здесь userinfo).
+
+В тексте приватный ключ SHALL скрываться: блок от `-----BEGIN <…>PRIVATE KEY-----` до ближайшего следующего `-----END <…>PRIVATE KEY-----` заменяется на `<redacted>`; если после `BEGIN` строки `END` нет (вывод оборван, усечён или ещё идёт), SHALL скрываться всё от `BEGIN` до конца текста (D8).
 
 Каждое правило маскирования текста SHALL работать за время, линейное по длине входа, в том числе на строках без разделителей и на повторах секретного слова (D5).
 
@@ -63,6 +65,10 @@ CodeLab SHALL редактировать секреты в логах, диаг�
 #### Scenario: Учётные данные адреса скрыты
 - **WHEN** запись несёт поле `DATABASE_URL: "postgres://user:pass@db.local:5432/app"`, а текст — `REDIS_DSN=redis://:pw@cache:6379/0`, `clone https://ghp_abc@github.com/org/repo.git` и `mysql://u:p@ss@h/db`
 - **THEN** значение поля — `postgres://<redacted>@db.local:5432/app`, в тексте — `REDIS_DSN=redis://<redacted>@cache:6379/0`, `clone https://<redacted>@github.com/org/repo.git` и `mysql://<redacted>@h/db`
+
+#### Scenario: Приватный ключ без строки END скрыт
+- **WHEN** маскируется текст `out: -----BEGIN RSA PRIVATE KEY-----\nMIIEow…` без строки `-----END … PRIVATE KEY-----` (например, `head -n 10 id_rsa` или усечённый payload)
+- **THEN** текст — `out: <redacted>`; полный блок `BEGIN … END` по-прежнему заменяется на `<redacted>`, а текст после `END` остаётся видимым
 
 #### Scenario: Адрес без учётных данных не меняется
 - **WHEN** маскируется текст `https://example.com/a?u=a@b`, `https://example.com/@user`, `git@github.com:org/repo.git`, `mailto:a@b.c`, `https://example.com`
