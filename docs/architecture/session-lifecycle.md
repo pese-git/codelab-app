@@ -1,54 +1,39 @@
-# Lifecycle соединения и ACP-сессии
+# Жизненный цикл соединения и ACP-сессии
 
-Этот документ описывает lifecycle соединения с AI agent и ACP session.
+Документ задаёт, как клиент CodeLab моделирует соединение с агентом, ACP-сессию, ход и вызов инструмента.
 
 Цели:
 
 * исключить невозможные состояния;
-* сделать reconnect предсказуемым;
-* корректно обрабатывать cancellation;
-* исключить влияние stale events;
-* отделить transport lifecycle от session lifecycle;
-* обеспечить тестируемую state machine.
+* сделать переподключение предсказуемым;
+* корректно обрабатывать отмену;
+* не давать устаревшим событиям менять текущее состояние;
+* отделить жизненный цикл транспорта от жизненного цикла сессии;
+* сделать автомат состояний тестируемым.
 
-Общие правила:
+Общие правила — корневой `AGENTS.md` (§8, §9, §12), [`acp-boundary.md`](acp-boundary.md), [`streaming.md`](streaming.md), [`concurrency.md`](concurrency.md).
 
-* `AGENTS.md`
-* `docs/architecture/acp-boundary.md`
-* `docs/architecture/streaming.md`
-* `docs/architecture/concurrency.md`
+Термины:
+
+* **Ход** (prompt turn) — один запрос `session/prompt`: поток `session/update` до ответа агента со `stopReason`.
+* **Поколение соединения** (generation) — локальный номер экземпляра транспорта; растёт при каждой его замене.
+* **Устаревшее событие** (stale event) — событие прежнего поколения, запроса или сессии, пришедшее поздно.
+
+Где в коде: три автомата — `ConnectionStateMachine`, `SessionStateMachine`, `PromptTurnStateMachine` (`packages/dart/codelab_client_acp/lib/src/domain/state_machines.dart`); их состояния — `ClientConnectionState`, `SessionLifecycleStatus`, `PromptTurnStatus` (`domain_models.dart` того же каталога). Представления для app и CLI — `ConnectionView` и `SessionStatusView` в `codelab_client_core`.
 
 ---
 
 ## 1. Основной принцип
 
-Connection и Session — разные lifecycle concepts.
+Соединение и сессия — разные жизненные циклы.
 
-Не следует смешивать:
+НЕ СЛЕДУЕТ сводить в один набор boolean-флагов транспортное соединение, ACP-сессию, активный запрос, вызов инструмента и запрос разрешения.
 
-```text
-transport connection
-ACP session
-active request
-tool call
-permission request
-```
-
-в один общий набор boolean flags.
-
-Каждый lifecycle должен иметь:
-
-* owner;
-* state;
-* transitions;
-* identifiers;
-* failure semantics.
+У каждого жизненного цикла ДОЛЖНЫ быть владелец, состояние, переходы, идентификаторы и семантика отказа.
 
 ---
 
-## 2. Уровни lifecycle
-
-Основные уровни:
+## 2. Уровни жизненного цикла
 
 ```text
 Transport
@@ -66,126 +51,49 @@ Request / Prompt
 Tool Call / Permission
 ```
 
-Lower-level lifecycle не должен автоматически определять higher-level semantics.
-
-Например:
-
-```text
-transport disconnected
-```
-
-не всегда означает:
-
-```text
-session permanently lost
-```
-
-Session может перейти в reconnecting/recovering state.
+Жизненный цикл нижнего уровня НЕ ДОЛЖЕН сам определять семантику верхнего. Например, обрыв транспорта не всегда значит, что сессия потеряна навсегда: сессия может перейти в переподключение или восстановление.
 
 ---
 
-## 3. Connection lifecycle
+## 3. Жизненный цикл соединения
 
-Connection описывает физическую или логическую связь с agent.
+Соединение — физическая или логическая связь с агентом.
 
-Типичные состояния:
+Типичные состояния: `disconnected`, `connecting`, `connected`, `disconnecting`, `reconnecting`, `failed`.
 
-```text
-disconnected
-connecting
-connected
-disconnecting
-reconnecting
-failed
-```
-
-Конкретная модель должна соответствовать реализации.
+Конкретная модель ДОЛЖНА соответствовать реализации. В коде: протокольный автомат `ClientConnectionState` (`disconnected`, `connecting`, `initializing`, `ready`, `failed`) и представление `ConnectionView` (`Disconnected`, `Connecting`, `Connected`, `Reconnecting`, `ConnectionLost`, `ConnectionFailed`; спецификация `acp-client-kit`, требование «Явный автомат соединения»).
 
 ---
 
-## 4. Session lifecycle
+## 4. Жизненный цикл сессии
 
-ACP session описывает logical interaction context.
+ACP-сессия — логический контекст взаимодействия с агентом.
 
-Типичные состояния:
+Типичные состояния: `notCreated`, `creating`, `ready`, `running`, `cancelling`, `recovering`, `closed`, `failed`. Использовать именно эти имена не требуется.
 
-```text
-notCreated
-creating
-ready
-running
-cancelling
-recovering
-closed
-failed
-```
+Важно, чтобы состояния:
 
-Не требуется использовать именно эти имена.
-
-Важно, чтобы states:
-
-* были mutually exclusive;
-* имели понятные transitions;
-* не допускали невозможных комбинаций.
+* взаимно исключали друг друга;
+* имели понятные переходы;
+* не допускали невозможных сочетаний.
 
 ---
 
-## 5. Request lifecycle
+## 5. Жизненный цикл запроса
 
-Prompt/request также должен иметь отдельный lifecycle.
+У хода (запроса) тоже ДОЛЖЕН быть отдельный жизненный цикл.
 
-Пример:
+Пример: `idle`, `starting`, `streaming`, `waitingForPermission`, `cancelling`, `completed`, `cancelled`, `failed`.
 
-```text
-idle
-starting
-streaming
-waitingForPermission
-cancelling
-completed
-cancelled
-failed
-```
-
-Session state и request state не обязательно должны быть одним типом.
-
-Например:
-
-```text
-Session = ready
-Request = completed
-```
-
-является нормальным состоянием.
+Состояние сессии и состояние запроса не обязаны быть одним типом. Сочетание «сессия `ready`, запрос `completed`» — нормальное.
 
 ---
 
-## 6. Почему нельзя использовать набор boolean flags
+## 6. Почему не набор boolean-флагов
 
-Плохо:
+Набор `isConnected`, `isRunning`, `isCancelling`, `isReconnecting`, `hasError` допускает, например, `isConnected = false` при `isRunning = isCancelling = isReconnecting = true` и не говорит, валидно ли это (корневой `AGENTS.md` §8).
 
-```dart
-bool isConnected;
-bool isRunning;
-bool isCancelling;
-bool isReconnecting;
-bool hasError;
-```
-
-Такая модель допускает:
-
-```text
-isConnected = false
-isRunning = true
-isCancelling = true
-isReconnecting = true
-```
-
-и не объясняет, валидно ли это.
-
-Предпочтительно использовать explicit state types.
-
-Например:
+СЛЕДУЕТ использовать явные типы состояний — `sealed class` или Freezed union:
 
 ```dart
 sealed class SessionState {
@@ -193,32 +101,28 @@ sealed class SessionState {
 }
 ```
 
-или Freezed union.
-
 ---
 
-## 7. State ownership
+## 7. Владение состоянием
 
-Рекомендуемое ownership:
+СЛЕДУЕТ распределять владение так:
 
 ```text
-Transport state
+Состояние транспорта
     → codelab_acp_transports
 
-Connection/session semantics
+Семантика соединения и сессии
     → codelab_client_acp
 
-Presentation state
+Состояние представления
     → BLoC/Cubit
 ```
 
-BLoC не должен быть единственным владельцем низкоуровневого lifecycle, если тот reusable и относится к ACP client semantics.
+BLoC НЕ ДОЛЖЕН быть единственным владельцем низкоуровневого жизненного цикла, если тот переиспользуем и относится к семантике ACP-клиента.
 
 ---
 
-## 8. Базовый lifecycle
-
-Типовой flow:
+## 8. Базовый жизненный цикл
 
 ```text
 Disconnected
@@ -245,188 +149,122 @@ Running
     └──► Failed ──────► SessionReady / Failed
 ```
 
-Это conceptual model, а не обязательные имена классов.
+Это концептуальная модель, а не обязательные имена классов.
 
 ---
 
-## 9. Connect
+## 9. Подключение
 
-Connect operation должен быть идемпотентным или явно запрещать повторный вызов.
+`connect()` ДОЛЖЕН быть идемпотентным или явно запрещать повторный вызов.
 
-Следует определить behavior для:
+СЛЕДУЕТ определить поведение `connect()` в каждом состоянии: `disconnected`, `connecting`, `connected`, `reconnecting`. Оставлять эти случаи неявными ЗАПРЕЩЕНО.
+
+---
+
+## 10. Повторное подключение во время подключения
+
+Если `connect()` вызван в состоянии `connecting`, допустимы стратегии:
+
+* вернуть существующий `Future`;
+* проигнорировать повторное намерение;
+* вернуть типизированную ошибку состояния.
+
+НЕ СЛЕДУЕТ создавать второе транспортное соединение.
+
+---
+
+## 11. Отключение
+
+Отключение ДОЛЖНО быть явной операцией. Она ДОЛЖНА определять:
+
+* что происходит с активным запросом;
+* отменяются ли подписки;
+* сохраняются ли метаданные сессии;
+* допускается ли переподключение;
+* какое состояние становится итоговым.
+
+---
+
+## 12. Намеренное отключение
+
+Клиент ДОЛЖЕН отличать отключение по просьбе пользователя от неожиданной потери транспорта.
+
+Намеренное отключение обычно НЕ ДОЛЖНО запускать политику переподключения.
+
+---
+
+## 13. Неожиданное отключение
+
+Неожиданное отключение ДОЛЖНО переводить в сценарий восстановления, который определяет приложение. В зависимости от политики:
 
 ```text
-connect() while disconnected
-connect() while connecting
-connect() while connected
-connect() while reconnecting
-```
-
-Нельзя оставлять эти случаи неявными.
-
----
-
-## 10. Duplicate connect
-
-Если `connect()` вызван во время `connecting`, допустимые стратегии:
-
-* вернуть существующий Future;
-* игнорировать повторный intent;
-* вернуть typed state error.
-
-Не следует создавать второй transport connection.
-
----
-
-## 11. Disconnect
-
-Disconnect должен быть explicit operation.
-
-Он должен определить:
-
-* что происходит с active request;
-* отменяются ли subscriptions;
-* сохраняется ли session metadata;
-* допускается ли reconnect;
-* какой final state устанавливается.
-
----
-
-## 12. Intentional disconnect
-
-Нужно отличать:
-
-```text
-user requested disconnect
-```
-
-от:
-
-```text
-unexpected transport loss
-```
-
-Intentional disconnect обычно НЕ должен запускать reconnect policy.
-
----
-
-## 13. Unexpected disconnect
-
-Unexpected disconnect должен переходить в application-defined recovery flow.
-
-Типовой вариант:
-
-```text
-Connected
-    │
-    ▼
-ConnectionLost
-    │
-    ▼
-Reconnecting
+Connected → ConnectionLost → Reconnecting
 ```
 
 или:
 
 ```text
-Connected
-    │
-    ▼
-Failed
+Connected → Failed
 ```
-
-в зависимости от policy.
 
 ---
 
-## 14. Reconnect
+## 14. Переподключение
 
-Reconnect является отдельным lifecycle.
+Переподключение — отдельный жизненный цикл. Оно НЕ ДОЛЖНО быть скрытым побочным эффектом без наблюдаемого состояния.
 
-Он не должен быть скрытым side effect без observable state.
-
-UI должен иметь возможность отличать:
-
-```text
-connecting first time
-```
-
-от:
-
-```text
-reconnecting after loss
-```
-
-если это влияет на UX.
+UI ДОЛЖЕН иметь возможность отличить первое подключение от переподключения после потери, если это влияет на UX.
 
 ---
 
-## 15. Connection generation
+## 15. Поколение соединения
 
-Каждое новое физическое connection instance должно иметь local generation/token.
+Каждый новый экземпляр физического соединения ДОЛЖЕН получать локальное поколение или токен (например, 10, 11, 12).
 
-Пример:
+Событие ДОЛЖНО быть связано с поколением, если оно может прийти поздно.
 
-```text
-generation 10
-generation 11
-generation 12
-```
-
-Event должен быть связан с generation, если существует риск late delivery.
+В коде: `AcpClientApplication.generation`; оно растёт при каждой замене транспорта.
 
 ---
 
-## 16. Stale events
+## 16. Устаревшие события
 
-Event от предыдущей connection generation НЕ ДОЛЖЕН менять current state.
+Событие прежнего поколения соединения НЕ ДОЛЖНО менять текущее состояние.
 
-Пример:
+Пример: поколение 5 отключилось, поколение 6 подключилось, затем пришло позднее событие поколения 5. Это событие игнорируется.
 
-```text
-generation 5 disconnects
-generation 6 connects
-late event from generation 5 arrives
-```
-
-Late event generation 5 игнорируется.
+Норма закреплена в `acp-client-kit`, требование «Явный автомат соединения» (сценарий «Позднее событие старого соединения»), и в `acp-protocol-client`, требование «Неожиданный отказ транспорта транслируется в состояние соединения» (сценарий «Событие от заменённого транспорта не влияет на текущее соединение»).
 
 ---
 
-## 17. Session resume
+## 17. Возобновление сессии
 
-Если ACP поддерживает session resume/recovery, необходимо различать:
+Если ACP поддерживает возобновление или восстановление сессии, ДОЛЖНЫ различаться три операции:
 
-```text
-new session
-resume existing session
-reconnect transport
-```
+* создание новой сессии;
+* возобновление существующей сессии;
+* переподключение транспорта.
 
-Это разные операции.
-
-Transport reconnect не должен автоматически создавать новую ACP session, если protocol поддерживает восстановление старой.
+Переподключение транспорта НЕ ДОЛЖНО само создавать новую ACP-сессию, если протокол позволяет восстановить старую.
 
 ---
 
-## 18. Session identity
+## 18. Идентичность сессии
 
-Следует различать:
+СЛЕДУЕТ различать:
 
-```text
-local session object
-ACP session id
-connection generation
-active request id
-```
+* локальный объект сессии;
+* ACP `sessionId`;
+* поколение соединения;
+* id активного запроса.
 
-Один identifier не должен использоваться как surrogate для всех lifecycle уровней.
+Один идентификатор НЕ ДОЛЖЕН подменять собой все уровни жизненного цикла.
 
 ---
 
-## 19. Session creation
+## 19. Создание сессии
 
-Создание session должно иметь явный transition:
+У создания сессии ДОЛЖЕН быть явный переход:
 
 ```text
 connected
@@ -438,67 +276,57 @@ creating session
     └──► failed
 ```
 
-UI не должен считать session созданной до подтверждения ACP, если protocol требует response.
+UI НЕ ДОЛЖЕН считать сессию созданной до подтверждения ACP, если протокол требует ответа.
 
 ---
 
-## 20. Session ready
+## 20. Сессия готова
 
 `ready` означает:
 
-* connection пригодно;
-* session существует;
-* нет active request, блокирующего новый prompt;
-* application может принимать допустимые user intents.
+* соединение пригодно;
+* сессия существует;
+* нет активного запроса, блокирующего новый промпт;
+* приложение может принимать допустимые намерения пользователя.
 
-Это application semantics, а не transport state.
-
----
-
-## 21. Running
-
-`running` означает, что существует активная ACP operation/request.
-
-Running state должен быть связан с конкретным request identifier.
-
-Не следует хранить просто:
-
-```text
-isRunning = true
-```
-
-без ownership/correlation.
+Это семантика приложения, а не состояние транспорта.
 
 ---
 
-## 22. Concurrent requests
+## 21. Выполнение
 
-Если ACP не поддерживает concurrent requests внутри session, client должен явно запрещать их.
+`running` означает, что идёт активная ACP-операция (запрос).
 
-Если поддерживает, state model должна отражать несколько active requests.
-
-Не следует случайно получить concurrency только потому, что API асинхронный.
+Состояние `running` ДОЛЖНО быть связано с конкретным идентификатором запроса. НЕ СЛЕДУЕТ хранить просто `isRunning = true` без владельца и корреляции.
 
 ---
 
-## 23. Request correlation
+## 22. Параллельные запросы
 
-Каждый active request должен иметь:
+Если ACP не поддерживает параллельные запросы в одной сессии, клиент ДОЛЖЕН явно их запрещать.
 
-* request id;
-* owning session;
-* connection generation;
-* lifecycle state.
+Если поддерживает, модель состояния ДОЛЖНА отражать несколько активных запросов.
 
-Это позволяет отфильтровывать stale events.
+НЕ СЛЕДУЕТ получать параллельность случайно — только потому, что API асинхронный.
 
 ---
 
-## 24. Streaming state
+## 23. Корреляция запросов
 
-Request может находиться в streaming state после первого response/event.
+У каждого активного запроса ДОЛЖНЫ быть:
 
-Типовой flow:
+* id запроса;
+* сессия-владелец;
+* поколение соединения;
+* состояние жизненного цикла.
+
+По ним можно отсеивать устаревшие события.
+
+---
+
+## 24. Потоковая передача
+
+После первого ответа или события запрос может перейти в состояние `streaming`:
 
 ```text
 starting
@@ -511,27 +339,25 @@ streaming
    └──► failed
 ```
 
-Streaming details описаны в:
-
-`docs/architecture/streaming.md`
+Подробности — [`streaming.md`](streaming.md).
 
 ---
 
-## 25. Completion
+## 25. Завершение
 
-Completion должен быть обработан ровно один раз на уровне state semantics.
+Завершение ДОЛЖНО обрабатываться ровно один раз на уровне семантики состояния.
 
-Duplicate completion event не должен:
+Повторное событие завершения НЕ ДОЛЖНО:
 
-* повторно завершать state;
-* добавлять дублированное сообщение;
-* повторно запускать side effect.
+* снова завершать состояние;
+* добавлять дублирующее сообщение;
+* снова запускать побочный эффект.
 
 ---
 
-## 26. Cancellation
+## 26. Отмена
 
-Cancellation является отдельным transition:
+Отмена — отдельный переход:
 
 ```text
 running
@@ -544,63 +370,45 @@ cancelling
    └──► failed
 ```
 
-Важно: `completed` во время cancellation может быть valid race.
+`completed` во время отмены может быть допустимой гонкой.
 
 ---
 
-## 27. Cancel race
+## 27. Гонка отмены и завершения
 
-Типичный race:
+Типичная гонка: пользователь нажал «Отмена», клиент отправил отмену, а агент завершил ход раньше, чем обработал её.
 
-```text
-user presses Cancel
-client sends cancel
-agent completes before cancel is processed
-```
+У клиента ДОЛЖНО быть детерминированное правило. Например: «побеждает завершение, если корректное завершение пришло первым».
 
-Client должен иметь deterministic rule.
-
-Например:
-
-```text
-completion wins if valid completion arrived first
-```
-
-Конкретное правило должно соответствовать ACP/OpenSpec.
+Конкретное правило ДОЛЖНО соответствовать ACP и OpenSpec. Для хода его задаёт `acp-protocol-client`, требование «Отмена prompt turn»: после `session/cancel` ход ждёт ответа на `session/prompt`, и итог определяет `stopReason` этого ответа.
 
 ---
 
-## 28. Cancellation acknowledgement
+## 28. Подтверждение отмены
 
-Если ACP предоставляет explicit acknowledgement cancellation, UI не должен считать operation окончательно cancelled до соответствующего application transition.
+Если ACP даёт явное подтверждение отмены, UI НЕ ДОЛЖЕН считать операцию окончательно отменённой до соответствующего перехода приложения.
 
-Допустимо показывать:
-
-```text
-Cancelling...
-```
-
-между user intent и подтверждением.
+Между намерением пользователя и подтверждением МОЖНО показывать `Cancelling...`.
 
 ---
 
-## 29. Double cancel
+## 29. Повторная отмена
 
-Повторный cancel не должен отправлять бесконечное число cancellation requests.
+Повторная отмена НЕ ДОЛЖНА отправлять бесконечное число запросов отмены.
 
 Допустимые стратегии:
 
-* ignore;
-* return current cancellation Future;
-* typed already-cancelling result.
+* проигнорировать;
+* вернуть текущий `Future` отмены;
+* вернуть типизированный результат «уже отменяется».
+
+Для хода — сценарий «Повторная отмена идемпотентна» требования «Отмена prompt turn» (`acp-protocol-client`).
 
 ---
 
-## 30. Disconnect during running
+## 30. Отключение во время выполнения
 
-При disconnect во время active request client должен определить, что происходит с request.
-
-Возможные варианты:
+При отключении во время активного запроса клиент ДОЛЖЕН определить судьбу запроса. Варианты:
 
 ```text
 request failed
@@ -609,228 +417,173 @@ request awaiting reconnect
 request recoverable
 ```
 
-Это должно определяться protocol/application semantics, а не UI.
+Это ДОЛЖНО определяться семантикой протокола и приложения, а не UI.
 
-В CodeLab MVP (change `cancel-turn-on-ws-disconnect`) выбран вариант request failed. Обрыв соединения отменяет ход на стороне агента: у stdio умирает процесс, у `codelab-agent serve --ws` `detachGrace` ноль. Клиент запоминает прерванный ход и после `session/load` показывает последний ход реплея отменённым (`stopReason: cancelled`). Возобновление хода после переподключения (request awaiting reconnect) — после MVP.
+В CodeLab MVP (change `cancel-turn-on-ws-disconnect`) выбран вариант request failed. Обрыв соединения отменяет ход на стороне агента: у stdio умирает процесс, у `codelab-agent serve --ws` `detachGrace` равен нулю. Клиент запоминает прерванный ход и после `session/load` показывает последний ход реплея отменённым (`stopReason: cancelled`). Возобновление хода после переподключения (request awaiting reconnect) — после MVP.
 
 ---
 
-## 31. Disconnect during cancellation
+## 31. Отключение во время отмены
 
-Race:
+Гонка: `running` → `cancelling` → соединение потеряно.
 
-```text
-running
-  ↓
-cancelling
-  ↓
-connection lost
-```
+Клиент ДОЛЖЕН определить:
 
-Client должен определить:
-
-* считать ли cancel unresolved;
-* пытаться ли reconnect;
+* считать ли отмену нерешённой;
+* пытаться ли переподключиться;
 * можно ли узнать итог;
-* какой state показать UI.
+* какое состояние показать в UI.
 
-Нельзя оставлять operation в вечном `cancelling`.
-
----
-
-## 32. Failure model
-
-Следует различать:
-
-```text
-transport failure
-protocol failure
-session failure
-request failure
-```
-
-Они имеют разные recovery semantics.
+Оставлять операцию в вечном `cancelling` ЗАПРЕЩЕНО.
 
 ---
 
-## 33. Recoverable failure
+## 32. Модель отказов
 
-Recoverable failure может привести к:
-
-```text
-reconnecting
-retrying
-session restoring
-```
-
-но не должен автоматически выглядеть как terminal error.
+СЛЕДУЕТ различать отказ транспорта, протокола, сессии и запроса. Восстанавливаются они по-разному.
 
 ---
 
-## 34. Terminal failure
+## 33. Восстановимый отказ
 
-Terminal failure означает, что automatic recovery завершилась или невозможна.
-
-UI должен получить application-level reason, а не raw socket/process exception.
+Восстановимый отказ может привести к переподключению, повтору или восстановлению сессии. Он НЕ ДОЛЖЕН сам по себе выглядеть как окончательная ошибка.
 
 ---
 
-## 35. Retry policy
+## 34. Окончательный отказ
 
-Retry/reconnect policy должна находиться вне widget.
+Окончательный отказ значит, что автоматическое восстановление закончилось или невозможно.
 
-Она должна определять:
+UI ДОЛЖЕН получать причину уровня приложения, а не сырое исключение сокета или процесса.
+
+---
+
+## 35. Политика повторов
+
+Политика повторов и переподключения ДОЛЖНА находиться вне виджета. Она ДОЛЖНА определять:
 
 * максимальное число попыток;
-* delay/backoff;
-* какие ошибки retryable;
-* когда stop;
-* как обрабатывается manual disconnect.
+* паузу между попытками (delay/backoff);
+* какие ошибки допускают повтор;
+* когда остановиться;
+* как обрабатывается ручное отключение.
 
-Если policy ещё не утверждена, не следует придумывать её в feature-коде.
-
----
-
-## 36. Backoff
-
-Если используется exponential backoff, он должен быть централизован и тестируем.
-
-Не следует размножать:
-
-```dart
-Future.delayed(...)
-```
-
-по BLoC и widgets.
+Если политика ещё не утверждена, НЕ СЛЕДУЕТ придумывать её в feature-коде. Утверждённая сейчас политика — одна попытка переподключения без повторов (`acp-client-kit`, «Явный автомат соединения»).
 
 ---
 
-## 37. Manual retry
+## 36. Нарастающая пауза
 
-UI может выражать intent:
+Если используется нарастающая пауза между попытками (exponential backoff), она ДОЛЖНА быть централизованной и тестируемой.
+
+НЕ СЛЕДУЕТ размножать `Future.delayed(...)` по BLoC и виджетам.
+
+---
+
+## 37. Ручной повтор
+
+UI МОЖЕТ выражать намерение `RetryConnection`. Семантика повтора принадлежит слою приложения и клиента.
+
+---
+
+## 38. Автоматическое переподключение
+
+Автоматическое переподключение ДОЛЖНО быть наблюдаемым. Представление ДОЛЖНО иметь возможность показать:
+
+* потерю соединения;
+* переподключение;
+* число попыток, если оно нужно;
+* окончательный отказ.
+
+---
+
+## 39. Владелец переподключения
+
+У переподключения ДОЛЖЕН быть один владелец.
+
+Запускать переподключение одновременно из транспорта, ядра клиента, BLoC и виджета ЗАПРЕЩЕНО: так возникают дублирующие соединения.
+
+---
+
+## 40. Жизненный цикл подписки
+
+У каждой подписки ДОЛЖЕН быть владелец (корневой `AGENTS.md` §9). Например:
 
 ```text
-RetryConnection
+подписка на ACP-транспорт   → codelab_client_acp
+подписка на события клиента → BLoC
 ```
 
-Но retry semantics принадлежат application/client layer.
+Владелец ОБЯЗАН отменить подписку (cancel/dispose).
 
 ---
 
-## 38. Auto reconnect
+## 41. Освобождение (dispose)
 
-Auto reconnect должен быть observable.
+После `dispose` владельца:
 
-Presentation должна иметь возможность показать:
-
-* lost connection;
-* reconnecting;
-* retry count, если требуется;
-* final failure.
+* новые события НЕ ДОЛЖНЫ менять его состояние;
+* подписки ДОЛЖНЫ быть закрыты;
+* отложенные callbacks ДОЛЖНЫ быть безопасны;
+* устаревшие асинхронные результаты ДОЛЖНЫ игнорироваться.
 
 ---
 
-## 39. Reconnect ownership
+## 42. Закрытие приложения
 
-Reconnect должен иметь одного owner.
-
-Нельзя одновременно запускать reconnect из:
-
-* transport;
-* client core;
-* BLoC;
-* widget.
-
-Иначе возможны duplicate connections.
-
----
-
-## 40. Subscription lifecycle
-
-Каждая subscription должна иметь owner.
-
-Например:
+При закрытии desktop-приложения СЛЕДУЕТ определить упорядоченное завершение:
 
 ```text
-ACP transport subscription
-    → codelab_client_acp
-
-client event subscription
-    → BLoC
+перестать принимать намерения
+    ↓
+отменить или закрыть активную сессию, если требуется
+    ↓
+закрыть ACP-клиент
+    ↓
+закрыть транспорт
+    ↓
+освободить ресурсы DI и приложения
 ```
 
-Owner обязан cancel/dispose subscription.
-
----
-
-## 41. Dispose
-
-После dispose owner:
-
-* новые events не должны менять его state;
-* subscriptions должны быть закрыты;
-* pending callbacks должны быть безопасны;
-* stale async results должны игнорироваться.
-
----
-
-## 42. Application close
-
-При закрытии desktop application следует определить orderly shutdown:
-
-```text
-stop accepting intents
-    ↓
-cancel/close active session as required
-    ↓
-close ACP client
-    ↓
-close transport
-    ↓
-dispose DI/application resources
-```
-
-Не следует просто уничтожать Flutter tree и надеяться, что process/streams завершатся сами.
+НЕ СЛЕДУЕТ просто уничтожать дерево Flutter в надежде, что процессы и потоки завершатся сами.
 
 В CodeLab desktop дерево при штатном выходе (macOS `terminate:`) вообще не размонтируется, поэтому эту последовательность запускает обработчик `AppLifecycleListener.onExitRequested` — `CodeLabRootLifecycle.dispose()` с общим пределом 5 с; терминал пользователя закрывается параллельно (`concurrency.md` §45–§46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md)). `session/cancel` перед закрытием не отправляется: агент отменяет ход по закрытию соединения сам (D7 change).
 
 ---
 
-## 43. External agent process
+## 43. Внешний процесс агента
 
-Если agent запускается как child process, lifecycle process должен быть частью transport/infrastructure layer.
+Если агент запускается дочерним процессом, жизненный цикл процесса ДОЛЖЕН быть частью слоя транспорта и инфраструктуры.
 
-Следует определить:
+СЛЕДУЕТ определить:
 
-* кто запускает process;
-* кто владеет его lifetime;
-* кто завершает;
-* что делать при abnormal exit;
-* что делать при app shutdown.
+* кто запускает процесс;
+* кто владеет временем его жизни;
+* кто его завершает;
+* что делать при аварийном выходе;
+* что делать при завершении приложения.
 
 ---
 
-## 44. Process exit
+## 44. Выход процесса
 
-Unexpected process exit должен преобразовываться:
+Неожиданный выход процесса ДОЛЖЕН преобразовываться так:
 
 ```text
-process exit
+выход процесса
     ↓
-transport failure
+отказ транспорта
     ↓
-connection/session transition
+переход соединения или сессии
 ```
 
-UI не должен напрямую подписываться на process exit.
+UI НЕ ДОЛЖЕН подписываться на выход процесса напрямую.
 
 ---
 
-## 45. State machine validation
+## 45. Проверка переходов
 
-Каждый transition должен иметь определённые source states.
-
-Пример:
+У каждого перехода ДОЛЖНЫ быть определены исходные состояния. Пример:
 
 ```text
 sendPrompt
@@ -843,18 +596,13 @@ not allowed:
   cancelling
 ```
 
-Invalid transition должен быть:
-
-* невозможен через API;
-* либо возвращать typed error.
+Недопустимый переход ДОЛЖЕН быть невозможен через API либо возвращать типизированную ошибку. В коде автоматы возвращают `StateTransitionResult`: `applied` — переход выполнен, `rejected` — недопустимый переход, `ignored` — повторное или запоздалое событие, которое не меняет состояние.
 
 ---
 
-## 46. Transition table
+## 46. Таблица переходов
 
-Рекомендуется поддерживать transition table для сложных lifecycle.
-
-Пример:
+Для сложных жизненных циклов СЛЕДУЕТ вести таблицу переходов. Пример:
 
 | Current state   | Event          | Next state       |
 | --------------- | -------------- | ---------------- |
@@ -870,15 +618,13 @@ Invalid transition должен быть:
 | reconnecting    | connected      | recovering/ready |
 | reconnecting    | exhausted      | failed           |
 
-Таблица должна соответствовать фактическому OpenSpec.
+Таблица ДОЛЖНА соответствовать действующему OpenSpec.
 
 ---
 
-## 47. Presentation state
+## 47. Состояние представления
 
-Presentation может преобразовывать lifecycle state в UI-specific state.
-
-Например:
+Представление МОЖЕТ преобразовывать состояние жизненного цикла в состояние для UI:
 
 ```text
 application: reconnecting
@@ -887,17 +633,13 @@ presentation:
   disablePromptInput = true
 ```
 
-Это допустимо как derived state.
-
-Source of truth остаётся application lifecycle.
+Это допустимо как производное состояние. Источником истины остаётся жизненный цикл в слое приложения.
 
 ---
 
-## 48. UI controls
+## 48. Элементы управления UI
 
-Доступность действий должна выводиться из state.
-
-Например:
+Доступность действий ДОЛЖНА выводиться из состояния:
 
 ```text
 ready
@@ -913,165 +655,104 @@ reconnecting
   → send disabled
 ```
 
-Не следует хранить отдельный authoritative boolean `canSend`, если его можно derive из state.
+НЕ СЛЕДУЕТ хранить отдельный авторитетный флаг `canSend`, если его можно вывести из состояния.
 
 ---
 
-## 49. Persisted session state
+## 49. Сохраняемое состояние сессии
 
-Persisted state и runtime state — разные concepts.
+Сохраняемое состояние и состояние времени выполнения (runtime) — разные понятия. Например, сохранённые метаданные переписки могут существовать после отключения runtime-сессии.
 
-Например:
-
-```text
-saved conversation metadata
-```
-
-может существовать после:
-
-```text
-runtime session disconnected
-```
-
-Не следует сериализовать весь runtime state machine напрямую как persistence model без явного решения.
+НЕ СЛЕДУЕТ сериализовать весь автомат времени выполнения напрямую как модель хранения без явного решения.
 
 ---
 
-## 50. Restore after application restart
+## 50. Восстановление после перезапуска приложения
 
-Если приложение поддерживает restore, нужно различать:
+Если приложение умеет восстанавливаться, ДОЛЖНЫ различаться:
 
-```text
-restore local history
-restore logical ACP session
-reconnect agent
-resume active request
-```
+* восстановление локальной истории;
+* восстановление логической ACP-сессии;
+* переподключение к агенту;
+* возобновление активного запроса.
 
-Нельзя считать эти операции одинаковыми.
+Считать эти операции одинаковыми ЗАПРЕЩЕНО.
 
 ---
 
-## 51. Active request after restart
+## 51. Активный запрос после перезапуска
 
-Если ACP не гарантирует resume active request после restart, клиент не должен показывать его как всё ещё running без подтверждения.
+Если ACP не гарантирует возобновление активного запроса после перезапуска, клиент НЕ ДОЛЖЕН показывать запрос выполняющимся без подтверждения.
 
-Persisted UI state не должен подменять runtime truth.
-
----
-
-## 52. Permission during reconnect
-
-Если connection теряется во время pending permission request, application должна определить outcome.
-
-Возможные варианты:
-
-* permission request invalidated;
-* restored after reconnect;
-* request failed.
-
-Нельзя автоматически применить старое решение к новому tool call.
+Сохранённое состояние UI НЕ ДОЛЖНО подменять фактическое состояние времени выполнения.
 
 ---
 
-## 53. Tool call lifecycle
+## 52. Разрешение во время переподключения
 
-Tool call может иметь отдельный lifecycle:
+Если соединение теряется, пока запрос разрешения ждёт ответа, приложение ДОЛЖНО определить исход:
 
-```text
-requested
-awaitingPermission
-approved
-denied
-executing
-completed
-failed
-cancelled
-```
+* запрос разрешения становится недействительным;
+* запрос восстанавливается после переподключения;
+* ход (запрос) завершается отказом.
 
-Он не обязан быть частью session state type.
-
-Главное — correlation и ownership.
+Автоматически применять старое решение к новому вызову инструмента ЗАПРЕЩЕНО (корневой `AGENTS.md` §10).
 
 ---
 
-## 54. Unknown lifecycle event
+## 53. Жизненный цикл вызова инструмента
 
-Unknown или unexpected event не должен тихо ломать state machine.
+У вызова инструмента МОЖЕТ быть отдельный жизненный цикл: `requested`, `awaitingPermission`, `approved`, `denied`, `executing`, `completed`, `failed`, `cancelled`.
 
-Следует:
-
-* логировать event;
-* сохранить correlation context;
-* игнорировать, если безопасно;
-* либо переводить в failure, если protocol semantics нарушены.
+Он не обязан входить в тип состояния сессии. Главное — корреляция и владелец.
 
 ---
 
-## 55. Impossible state
+## 54. Неизвестное событие
 
-State model должна делать невозможные состояния труднопредставимыми.
+Неизвестное или неожиданное событие НЕ ДОЛЖНО тихо ломать автомат состояний.
 
-Например, лучше:
+СЛЕДУЕТ:
+
+* залогировать событие;
+* сохранить контекст корреляции;
+* проигнорировать его, если это безопасно;
+* либо перевести в отказ, если нарушена семантика протокола.
+
+---
+
+## 55. Невозможные состояния
+
+Модель состояния ДОЛЖНА делать невозможные состояния труднопредставимыми. Например, если сочетание противоречиво, лучше
 
 ```text
 SessionState.running(requestId)
 ```
 
-чем:
+чем
 
 ```text
 state = ready
 activeRequestId = abc
 ```
 
-если это противоречие.
+---
+
+## 56. Неизменяемое состояние
+
+Состояние жизненного цикла СЛЕДУЕТ делать неизменяемым (корневой `AGENTS.md` §8). Переход «старое состояние + событие → новое состояние» предпочтительнее скрытого изменяемого автомата с множеством локальных флагов.
 
 ---
 
-## 56. Immutable state
+## 57. Единый механизм переходов
 
-Lifecycle state следует делать immutable.
-
-Transition:
-
-```text
-old state
-   +
-event
-   ↓
-new state
-```
-
-предпочтительнее скрытой mutable state machine с множеством локальных flags.
+Сложный жизненный цикл СЛЕДУЕТ сводить к одному механизму переходов `State + Event → State`. Так проще тестировать, разбирать гонки, логировать, воспроизводить и отлаживать. В коде это статический `reduce` каждого автомата.
 
 ---
 
-## 57. Reducer/state machine
+## 58. Логирование переходов
 
-Сложный lifecycle желательно свести к одному transition mechanism.
-
-Например:
-
-```text
-State + Event → State
-```
-
-Это упрощает:
-
-* tests;
-* race analysis;
-* logging;
-* replay;
-* debugging.
-
----
-
-## 58. Transition logging
-
-Significant transitions следует логировать.
-
-Например:
+Значимые переходы СЛЕДУЕТ логировать. Например:
 
 ```text
 session: ready → running
@@ -1086,112 +767,99 @@ reason: transport_lost
 generation: 7
 ```
 
-Sensitive payload для этого не нужен.
+Чувствительный payload для этого не нужен. Правила логирования — [`observability.md`](observability.md).
 
 ---
 
-## 59. Testing
+## 59. Тесты
 
-Минимальные lifecycle tests:
+Минимальный набор тестов жизненного цикла:
 
-* connect success;
-* connect failure;
-* duplicate connect;
-* session create success;
-* session create failure;
-* prompt start;
-* streaming completion;
-* cancellation;
-* duplicate cancel;
-* completion/cancel race;
-* disconnect during running;
-* reconnect success;
-* reconnect exhausted;
-* stale event;
-* duplicate completion;
-* dispose during async operation.
+* успешное подключение;
+* неудачное подключение;
+* повторное подключение во время подключения;
+* успешное создание сессии;
+* неудачное создание сессии;
+* начало хода;
+* завершение потока;
+* отмена;
+* повторная отмена;
+* гонка завершения и отмены;
+* отключение во время выполнения;
+* успешное переподключение;
+* исчерпанное переподключение;
+* устаревшее событие;
+* повторное завершение;
+* `dispose` во время асинхронной операции.
 
----
-
-## 60. Deterministic tests
-
-Lifecycle tests не должны зависеть от real delays, если можно использовать:
-
-* fake clock;
-* fake transport;
-* controlled streams;
-* explicit completers.
-
-Retry/backoff следует тестировать детерминированно.
+Виды и уровни тестов — [`testing.md`](testing.md).
 
 ---
 
-## 61. Property of stale events
+## 60. Детерминированные тесты
 
-Отдельно полезно тестировать invariant:
+Тесты жизненного цикла НЕ ДОЛЖНЫ зависеть от реальных задержек, если можно использовать поддельные часы, поддельный транспорт, управляемые потоки и явные `Completer`.
 
-> Event от старой generation/request/session не изменяет current state.
-
-Это один из ключевых invariants ACP client.
+Повторы и паузы между ними СЛЕДУЕТ тестировать детерминированно.
 
 ---
 
-## 62. BLoC tests
+## 61. Свойство устаревших событий
 
-BLoC tests должны проверять presentation mapping и intents, а не повторять всю ACP lifecycle state machine.
+Инвариант полезно проверять отдельным тестом:
 
-Core lifecycle следует тестировать в `codelab_client_acp`.
+> Событие старого поколения, запроса или сессии не меняет текущее состояние.
+
+Это один из ключевых инвариантов ACP-клиента.
 
 ---
 
-## 63. Integration tests
+## 62. Тесты BLoC
 
-Integration tests должны покрывать end-to-end flows:
+Тесты BLoC ДОЛЖНЫ проверять отображение состояния и намерения, а не повторять весь автомат жизненного цикла ACP.
+
+Основной жизненный цикл СЛЕДУЕТ тестировать в `codelab_client_acp`.
+
+---
+
+## 63. Интеграционные тесты
+
+Интеграционные тесты ДОЛЖНЫ покрывать сквозные сценарии:
 
 ```text
-connect
-create session
-send prompt
-receive stream
-complete
+connect → create session → send prompt → receive stream → complete
 ```
 
-а также:
+и, если восстановление поддерживается:
 
 ```text
-connect
-send prompt
-disconnect
-reconnect
-recover
+connect → send prompt → disconnect → reconnect → recover
 ```
 
-если recovery поддерживается.
+---
+
+## 64. Изменение жизненного цикла
+
+Перед изменением жизненного цикла агент ОБЯЗАН определить:
+
+1. Какой жизненный цикл меняется: транспорта, соединения, сессии, запроса или вызова инструмента.
+2. Кто его владелец.
+3. Какие состояния добавляются или удаляются.
+4. Какие переходы меняются.
+5. Какие появляются гонки.
+6. Как влияет переподключение.
+7. Как влияет отмена.
+8. Как отсеиваются устаревшие события.
+9. Как меняется UI.
+10. Какие тесты нужно добавить.
 
 ---
 
-## 64. Изменение lifecycle
+## 65. Главный инвариант
 
-Перед изменением lifecycle агент ОБЯЗАН определить:
+Жизненный цикл ДОЛЖЕН моделироваться как последовательность явных переходов.
 
-1. Какой lifecycle изменяется: transport, connection, session, request или tool call.
-2. Кто является owner.
-3. Какие states добавляются/удаляются.
-4. Какие transitions меняются.
-5. Какие races появляются.
-6. Как влияет reconnect.
-7. Как влияет cancellation.
-8. Как фильтруются stale events.
-9. Как изменяется UI.
-10. Какие tests должны быть добавлены.
-
----
-
-## 65. Главный invariant
-
-Lifecycle должен быть моделируем как последовательность явных transitions.
-
-Желаемый принцип:
+Желаемая схема:
 
 ```text
 event
@@ -1201,7 +869,7 @@ validated transition
 new state
 ```
 
-Нежелательный:
+Нежелательная:
 
 ```text
 callback A → bool 1
@@ -1210,4 +878,4 @@ timer      → bool 3
 widget     → bool 4
 ```
 
-Если корректность session зависит от синхронизации множества независимых mutable flags, архитектуру следует пересмотреть.
+Если корректность сессии зависит от синхронизации множества независимых изменяемых флагов, архитектуру СЛЕДУЕТ пересмотреть.
