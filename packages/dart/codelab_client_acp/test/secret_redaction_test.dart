@@ -231,6 +231,9 @@ void main() {
           'clone https://$redactedSecret@github.com/org/repo.git',
       'mysql://u:p@ss@h/db': 'mysql://$redactedSecret@h/db',
       'ssh://git@host/repo': 'ssh://$redactedSecret@host/repo',
+      // `\` — не граница: разбор по RFC 3986 (Python-агенты) видит здесь
+      // userinfo `h\user:pass` (D4).
+      r'https://h\user:pass@host/x': 'https://$redactedSecret@host/x',
     };
     for (final entry in hidden.entries) {
       test(entry.key, () {
