@@ -23,11 +23,13 @@
 
 ## 3. Слои
 
+Виджеты ниже — примеры слоя, а не полный перечень; полный состав — барели слоёв и таблица в `README.md` пакета.
+
 * `atomics/` — без составных частей кита: `CodeLabText` с ролями, `CodeLabBadge`, `CodeLabMonospaceBlock`, `CodeLabPressable` (нажимаемая область без таймеров кнопки Fluent: курсор, наведение, фокус, Enter/Space; внутренняя деталь — барелем не экспортируется, её используют `CodeLabAgentsPane`, `CodeLabUsagePane` и `CodeLabSessionStatusBar`).
 * `molecules/` — из атомов: `CodeLabKeyValueList`, `CodeLabStepBreadcrumb`, `CodeLabSetupSteps`, `CodeLabThoughtBlock`, `CodeLabToolCallSummary`, `CodeLabSelectorBar`.
 * `rendering/` — отрисовка ответа агента как markdown: `CodeLabMarkdown`, `CodeLabMarkdownConfig`, `CodeLabMarkdownScope`, `CodeLabCodeBlock`, счётчики `CodeLabMarkdownStats`. Импортирует только `atomics/`; его импортируют `organisms/`. Единственный слой, где разрешены `gpt_markdown` и `val_highlight`. `CodeLabMarkdown(wrapTables: true)` включает перенос текста в таблицах (документы Legal), по умолчанию таблицы прокручиваются. `escapeForDisplay` (управляющие и bidi-символы → `\\uXXXX`) — публичное API: им пользуются кит и app для недоверенного текста (текст файла темы на странице «Appearance», `add-app-appearance-page`, D10).
 * `organisms/` — ленты, плитки, таблицы, панели: `CodeLabTranscriptPanel`, `CodeLabToolCallTile`, `CodeLabApprovalPrompt`, `CodeLabStatusTable`, `CodeLabUsagePane`, `CodeLabOpenProjectScreen` (экран «проект не выбран») и его тело `CodeLabOpenProjectBody`.
-* Импорт — только вниз по слоям; экспорт — через барели слоёв (`atomics.dart`, `molecules.dart`, `organisms.dart`) и `lib/codelab_ui.dart`. Новый атом — при втором употреблении (как `CodeLabMonospaceBlock`, D19), не «на вырост» (корневой `AGENTS.md` §13).
+* Импорт — только вниз по слоям (известное исключение — `CodeLabPromptComposer` из `molecules/` берёт `CodeLabCommandPaletteSurface` из `organisms/`; новых не добавлять); экспорт — через барели слоёв (`atomics.dart`, `molecules.dart`, `organisms.dart`) и `lib/codelab_ui.dart`. Новый атом — при втором употреблении (как `CodeLabMonospaceBlock`, D19), не «на вырост» (корневой `AGENTS.md` §13).
 
 ## 4. Отдельные виджеты
 

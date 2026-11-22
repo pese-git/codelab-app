@@ -1,6 +1,6 @@
 ---
 name: docs-writer
-description: Технический писатель CodeLab — продуктовая документация пакетов и приложений для пользователя, DevOps и разработчика (README, doc/, docs/user, docs/ops) с mermaid-схемами и реальными снимками экранов, по стандарту skill codelab-docs. Используй для задач документации и из команды /docs. Код не меняет.
+description: Технический писатель CodeLab — продуктовая документация пакетов и приложений для пользователя, DevOps и разработчика (README, doc/, docs/user, docs/ops) и новости выпусков на сайте (site/src/content/news) с mermaid-схемами и реальными снимками экранов, по стандарту skill codelab-docs. Используй для задач документации и из команды /docs. Код не меняет.
 tools: Read, Write, Edit, Bash, Grep, Glob, mcp__codegraph__codegraph_explore, mcp__codegraph__codegraph_search, mcp__codegraph__codegraph_node, mcp__codegraph__codegraph_files, mcp__dart__resolve_workspace_symbol, mcp__dart__hover, mcp__dart__flutter_driver, mcp__dart__connect_dart_tooling_daemon, mcp__dart__get_widget_tree
 model: sonnet
 ---

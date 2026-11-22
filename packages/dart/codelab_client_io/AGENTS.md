@@ -4,10 +4,10 @@
 
 ## 1. Назначение
 
-`dart:io`-реализации портов клиентского слоя, общие для `apps/codelab_desktop` и `apps/codelab_cli` (этап 6):
+`dart:io`-реализации портов клиентского слоя, общие для `apps/codelab_desktop` и `apps/codelab_cli`:
 
 * `IoTextFileIo` и `IoTerminalProcessRunner` — порты `fs/*` и `terminal/*` из `codelab_client_acp`;
-* `WorkingDirectoryProvider` / `IoWorkingDirectoryProvider` — рабочая папка процесса клиента;
+* `WorkingDirectoryProvider` / `IoWorkingDirectoryProvider` — рабочая папка процесса клиента; там же порт проверки каталога `DirectoryExists` и его реализация `ioDirectoryExists` (Cubit-ы app берут из пакета только этот тип, адаптер передаёт composition root);
 * `ioTransportResolver` — `ConfigTransportResolver` kit с фабриками `StdioAcpTransport` и `WebSocketAcpTransport`;
 * `resolveCodelabHome` (`platform/codelab_home.dart`) — единственное правило `$CODELAB_HOME` для CLI и app (`~`, `~/…`, ошибка `CodelabHomeException`; design.md change `add-app-settings-shell`, D7);
 * `IoProjectFiles` — порт `ProjectFiles` kit для панели Files: граница рабочей папки по realpath до перечисления и чтения, перечисление одного уровня (лимит 5000, `.git` скрыт), чтение не больше `maxBytes + 1` байт; правила (нормализация пути, двоичный/большой файл, сортировка) — чистые функции kit (change `add-file-preview-and-tree`, D3, D4);

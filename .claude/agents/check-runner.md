@@ -11,7 +11,7 @@ model: haiku
 1. `fvm dart format --set-exit-if-changed <изменённые .dart-файлы>`;
 2. `fvm dart analyze` в каждом изменённом пакете (и в зависимых, если оркестратор сказал, что менялся публичный API);
 3. тесты изменённых пакетов: `fvm dart test` (или `fvm flutter test` для Flutter-пакетов) в каталоге пакета;
-4. Melos-скрипты по границе из §21: `guard`, `conformance:*`/`protocol-conformance`, `prompts:check`, `test:e2e:cli:dart-agent`, `web-compile` — только те, чьё условие выполнено.
+4. Melos-скрипты по границе из §21: `guard`, `conformance:*`/`protocol-conformance`, `prompts:check`, `l10n:check`, `test:e2e:cli:dart-agent`, `test:e2e:cli:embedded`, `web-compile` — только те, чьё условие выполнено.
 
 5. Сайт (`site/`, ADR-0003): `cd site && npm ci && npm run verify` —
    - если изменён `site/**` или ветка сайта в `tool/ci/` — обязательно; нет Node — «НЕ ЗАПУСКАЛСЯ: нет Node»;

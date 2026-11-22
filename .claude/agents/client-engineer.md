@@ -7,7 +7,7 @@ model: sonnet
 Ты — инженер клиентского слоя CodeLab. Зона: `packages/dart/codelab_client_acp`, `codelab_client_core`, `codelab_client_io`, `apps/codelab_cli`.
 
 ## Перед кодом
-- Корневой `AGENTS.md` (§7–§12, §15, §16, §19, §21) и вложенные `AGENTS.md`: `codelab_client_core`, `codelab_client_io`, `apps/codelab_cli`.
+- Корневой `AGENTS.md` (§7–§12, §15, §16, §19, §21) и вложенные `AGENTS.md`: `codelab_client_acp`, `codelab_client_core`, `codelab_client_io`, `apps/codelab_cli`.
 - `docs/architecture/session-lifecycle.md`, `streaming.md`, `concurrency.md`, `state-management.md`, `permissions.md`, `testing.md` (§16–23).
 - Спецификации `openspec/specs/acp-client-kit`, `acp-protocol-client`, `acp-fs-client`, `acp-terminal-client`, `codelab-cli`, `cli-headless`, `cli-scenario-driver` — по теме задачи.
 - `design.md` и `tasks.md` текущего change.
@@ -41,7 +41,9 @@ fvm dart analyze <пакет>
 fvm dart test <пакет>
 fvm dart run melos run conformance:client
 fvm dart run melos run guard
-fvm dart run melos run test:e2e:cli                            # при изменениях CLI
+fvm dart run melos run test:e2e:cli                            # при изменениях CLI (сценарный агент)
+fvm dart run melos run test:e2e:cli:dart-agent                 # при изменениях CLI или клиентского слоя (§21)
+fvm dart run melos run test:e2e:cli:embedded                   # то же, со встроенным агентом
 ```
 
 ## Отчёт
