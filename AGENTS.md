@@ -195,10 +195,10 @@ AI-agent обязан интерпретировать эти формулиро
 
 Назначение пакетов:
 
-* `codelab_acp_protocol` — типизированные модели ACP JSON-RPC, codecs и validation.
-* `codelab_acp_transports` — заменяемые ACP transports (stdio, WebSocket, тестовые).
-* `codelab_acp_testing` — fixtures, fake transports и helpers для conformance-тестов.
-* `codelab_client_acp` — протокольный клиент `AcpClientApplication`: domain, application state и use cases ACP-клиента.
+* `codelab_acp_protocol` — типизированные модели ACP JSON-RPC, codecs и validation; правила — во вложенном `AGENTS.md` пакета.
+* `codelab_acp_transports` — заменяемые ACP transports (stdio, WebSocket, тестовые); правила — во вложенном `AGENTS.md` пакета.
+* `codelab_acp_testing` — fixtures, fake transports и helpers для conformance-тестов; правила — во вложенном `AGENTS.md` пакета.
+* `codelab_client_acp` — протокольный клиент `AcpClientApplication`: domain, application state и use cases ACP-клиента; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_client_core` — общий клиентский слой без UI для app и CLI, web-безопасный: рабочее пространство, соединение, сессии, транскрипт, очередь промптов, одобрения, опции и команды агента, инспектор, диагностика, порты хранилищ; владелец клиентского состояния — Cubit-ы app только отображают его; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_client_io` — `dart:io`-адаптеры клиентского слоя: файлы, процессы, рабочая папка, настоящие транспорты (`ioTransportResolver`), JSON-хранилища профилей и недавних проектов; без Flutter; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_agent_core` — встраиваемое ядро Dart-агента на чистом Dart (LLM, цикл, инструменты, разрешения, сессии); правила — во вложенном `AGENTS.md` пакета.
@@ -207,7 +207,7 @@ AI-agent обязан интерпретировать эти формулиро
 * `codelab_agent_mcp` — MCP-клиент агента без `dart:io`: протокол MCP, streamable HTTP на внедрённом `http.Client`, проекция MCP-инструментов в инструменты ядра; stdio-процесс сервера приходит портом ядра из `codelab_agent_io`; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_setup` — мост настроек Dart-агента для клиентов: основной барель реэкспортирует чистые типы конфигурации ядра, `lib/io.dart` — общие подкоманды `config` из `codelab_agent_io` (`codelab config check`); клиенты получают их отсюда, а не из `package:codelab_agent_*`; правила — во вложенном `AGENTS.md` пакета.
 * `codelab_embedded` — мост встроенного Dart-агента для клиентов (ADR-0002: мост между сторонами без префикса `codelab_agent_`): хост ядра, который собирает агента через `buildAgentCore` и `AcpAgentServer` и соединяет его с клиентом парой `InProcessAcpLink` в процессе клиента; основной барель web-безопасен, `lib/io.dart` — настольный открыватель (конфигурация, секреты, журнал сессий, MCP), `lib/testing.dart` — сценарный открыватель для тестов; клиенты получают агента отсюда, а не из `package:codelab_agent_*`; правила — во вложенном `AGENTS.md` пакета.
-* `codelab_architecture_tests` — только тесты: сторож импортов и allowlist зависимостей ядра (`melos run guard`).
+* `codelab_architecture_tests` — только тесты, сторож репозитория (`melos run guard`): импорты между пакетами и allowlist зависимостей, имена пакетов, сборка хостов ядра, литералы интерфейса, правовые документы, доказательства матрицы целей, утечки в отчётах тестов, выбор затронутого в CI (`tool/ci`); описание — `README.md` пакета.
 * `codelab_ui` — Fluent UI widgets рабочего места CodeLab.
 * `apps/codelab_desktop` — десктопный клиент; `apps/codelab_agent` — бинарь Dart-агента `codelab-agent serve --stdio | --ws`; `apps/codelab_cli` — терминальный клиент `codelab` на чистом Dart (REPL, headless `-p`, драйвер фикстур `test-scenario`, `config check`, переходный алиас `codelab serve`) поверх `codelab_client_core`; правила — во вложенном `AGENTS.md` приложения.
 * Роли исполняемых файлов: `codelab` — терминальный клиент (`apps/codelab_cli`), `codelab-agent` — Dart-агент как отдельный процесс (`apps/codelab_agent`). Профиль подключения по умолчанию в app и CLI — встроенный агент (`codelab_embedded`, в процессе клиента); `default` — его алиас, внешний агент выбирается явно (профиль, `stdio:…`, `ws://…`). Python-агент не входит в monorepo и заморожен; политика заморозки и удаления — change `retire-python-agent` (границы — `docs/architecture/proposals/dart-agent-and-clients/09-14-stage-9-switch-default.md`).
@@ -751,7 +751,7 @@ melos run check
 
 ### Проверка перед pull request
 
-Полный `melos run check` идёт больше 10 минут, а в GitHub CI он и так выполняется на каждый pull request в `develop` и остаётся условием merge. Поэтому локально перед pull request из `feature/*` и `hotfix/*` агент проверяет только затронутое изменением:
+Полный `melos run check` идёт больше 10 минут, а GitHub CI полностью выполняет его после merge в `develop` и ночью; зелёный CI pull request остаётся условием merge. Поэтому локально перед pull request из `feature/*` и `hotfix/*` агент проверяет только затронутое изменением:
 
 1. `fvm dart format --set-exit-if-changed <изменённые файлы>`.
 2. `fvm dart analyze` в каждом изменённом пакете; если изменён публичный API пакета — ещё и в пакетах, которые от него зависят.
@@ -759,7 +759,9 @@ melos run check
 4. Скрипты Melos, которые относятся к изменённой границе:
    * `guard` — если изменены `pubspec.yaml`, импорты между пакетами или правила сторожа;
    * `protocol-conformance`, `conformance:client`, `conformance:agent` — если изменены ACP-модели, транспорты, ACP-проекция агента, клиентский ACP-слой или фикстуры;
+   * `conformance:embedded`, `test:e2e:cli:embedded` — если изменены `codelab_embedded`, встроенный агент или клиентский слой, через который с ним работает CLI;
    * `prompts:check` — если изменены промпты агента;
+   * `l10n:check` — если изменены `l10n.yaml`, `pubspec.yaml`, ARB-каталоги или сгенерированный код локализации `apps/codelab_desktop` и `codelab_ui`;
    * `test:e2e:cli:dart-agent` — если изменены `apps/codelab_cli`, `apps/codelab_agent` или клиентский слой, через который они работают;
    * `web-compile` — если изменён web-безопасный пакет или его импорты.
 5. `cd site && npm ci && npm run verify` — если изменён `site/**`; СЛЕДУЕТ — если изменены опубликованные на сайте документы (`README.md` и `doc/` приложений и пакетов, `docs/user/`, `docs/ops/`) и установлен Node.

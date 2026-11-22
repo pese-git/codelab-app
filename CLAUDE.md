@@ -10,7 +10,7 @@
 |---|---|---|
 | `codelab-architect` | OpenSpec changes, `docs/architecture/` | только `openspec/`, `docs/` |
 | `acp-protocol-engineer` | `codelab_acp_protocol`, `codelab_acp_transports`, `codelab_acp_testing`, `codelab_agent_acp` | да |
-| `agent-core-engineer` | `codelab_agent_core`, `codelab_agent_io`, `codelab_embedded`, `apps/codelab_agent` | да |
+| `agent-core-engineer` | `codelab_agent_core`, `codelab_agent_io`, `codelab_agent_mcp`, `codelab_setup`, `codelab_embedded`, `apps/codelab_agent` | да |
 | `client-engineer` | `codelab_client_acp`, `codelab_client_core`, `codelab_client_io`, `apps/codelab_cli` | да |
 | `desktop-engineer` | `apps/codelab_desktop`, `packages/flutter/codelab_ui` | да |
 | `site-engineer` | `site/` (сайт на Astro), джоб `site` в CI, ветка сайта в `tool/ci/ci_scope.dart` | да |
@@ -18,6 +18,8 @@
 | `check-runner` | проверки затронутого; полный `melos run check` — по просьбе | нет |
 | `architecture-reviewer` | спецификации, границы, слои, паттерны, тесты, комментарии | нет |
 | `acp-safety-reviewer` | безопасность, ACP, данные, состояние, наблюдаемость (§2, приоритеты 1–5) | нет |
+
+Правила сторожа (`packages/dart/codelab_architecture_tests/test/support/rules.dart`, `pubspec_allowlist_test.dart`) правит тот инженер, чью границу меняет задача (корневой `AGENTS.md` §5: правило нового пакета добавляется вместе с пакетом).
 
 ## Команды
 - `/change <задача>` — полный цикл: OpenSpec change → одобрение пользователя → реализация по `tasks.md` (TDD) → обновление затронутой документации (`docs-writer`) → проверка затронутого (§21) → двойное ревью → исправления.
