@@ -32,14 +32,15 @@ body{margin:0}
         <li class="step done"><i>✓</i>Permissions</li>
         <li class="step done"><i>✓</i>Choose a model</li>
         <li class="step cur" aria-current="step"><i>4</i>Privacy</li>
+        <li class="step"><i>5</i>Open a project</li>
       </ol>
       <div>
         <h1 class="t-tl" style="margin: 0 0 8px">What leaves this computer</h1>
-        <p class="t-bl t2" style="margin: 0; max-width: 720px">Only what the agent needs for the work you ask for, and only to services you set up. CodeLab itself collects nothing.</p>
+        <p class="t-bl t2" style="margin: 0; max-width: 720px">Only what the agent needs for the work you ask for, sent to services you set up or to addresses you choose to open. CodeLab itself collects nothing. The privacy policy lists every request.</p>
       </div>
       <div style="display: flex; flex-direction: column; gap: 4px">
         <div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z"/></svg><div style="flex: 1"><div>Your model provider</div><div class="t-cap t2">Every turn: your prompt, the session history, files and command output the agent read</div></div><span class="tag acc">Every turn</span></div>
-        <div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/></svg><div style="flex: 1"><div>MCP servers and web tools</div><div class="t-cap t2">Tool arguments, a URL or a search query — web access asks you first</div></div><span class="tag acc">When used</span></div>
+        <div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/></svg><div style="flex: 1"><div>MCP servers</div><div class="t-cap t2">Client information, the tool list request and the headers from your configuration, including tokens, each time a session starts or reconnects; the arguments of every tool call</div></div><span class="tag acc">Each session</span></div>
         <div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18M8 8a5 5 0 0 0 8 8M12 4v2M4 12h2M18 12h2"/></svg><div style="flex: 1"><div>Telemetry, crash reports, usage analytics</div><div class="t-cap t2">Not collected by the app, the CLI or the embedded agent</div></div><span class="tag ok">Never</span></div>
         <div class="f-sc"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><div style="flex: 1"><div>Stays here</div><div class="t-cap t2">Config, sessions and logs in <span class="mono">~/.codelab</span>; API keys in the system keychain</div></div><span class="tag">Local</span></div>
       </div>
@@ -53,7 +54,7 @@ body{margin:0}
       </div>
       <div style="display: flex; gap: 8px; justify-content: flex-end">
         <a href="OnboardingModel.dc.html" class="f-btn" style="min-width: 120px; text-decoration: none">Back</a>
-        <a href="Main.dc.html" class="f-btn accent" style="min-width: 160px; text-decoration: none">Start using CodeLab</a>
+        <a href="OnboardingProject.dc.html" class="f-btn accent" style="min-width: 120px; text-decoration: none">Next</a>
       </div>
     </div>
   </section>

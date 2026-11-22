@@ -2663,6 +2663,74 @@
    "w": 1180,
    "x": 8820,
    "y": 9620
+  },
+  "OnboardingProject.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07d Onboarding — step 5 Open a project, new install",
+   "w": 1440,
+   "x": 13680,
+   "y": 19100
+  },
+  "OnboardingProject-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07d Onboarding — dark",
+   "w": 1440,
+   "x": 13680,
+   "y": 19100,
+   "page": "dark"
+  },
+  "OnboardingProjectRecents.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07d.1 Onboarding — step 5 with recent projects",
+   "w": 1440,
+   "x": 15200,
+   "y": 19100
+  },
+  "OnboardingProjectRecents-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07d.1 Onboarding — dark",
+   "w": 1440,
+   "x": 15200,
+   "y": 19100,
+   "page": "dark"
+  },
+  "OnboardingProjectRestored.dc.html": {
+   "expand": "fill",
+   "h": 960,
+   "title": "07d.2 Onboarding — step 5, project restored (Continue in …)",
+   "w": 1440,
+   "x": 16720,
+   "y": 19100
+  },
+  "OnboardingProjectRestored-dark.dc.html": {
+   "expand": "fill",
+   "h": 960,
+   "title": "07d.2 Onboarding — dark",
+   "w": 1440,
+   "x": 16720,
+   "y": 19100,
+   "page": "dark"
+  },
+  "OnboardingProjectDropRejected.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07d.3 Onboarding — step 5, dropped item rejected",
+   "w": 1440,
+   "x": 18240,
+   "y": 19100
+  },
+  "OnboardingProjectDropRejected-dark.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "07d.3 Onboarding — dark",
+   "w": 1440,
+   "x": 18240,
+   "y": 19100,
+   "page": "dark"
   }
  },
  "createdOnFiles": {
@@ -3372,7 +3440,7 @@
   },
   "row11": {
    "kind": "title1",
-   "maxW": 13680,
+   "maxW": 19680,
    "w": 240,
    "x": 0,
    "y": 18840,
@@ -3380,7 +3448,7 @@
   },
   "d-row11": {
    "kind": "title1",
-   "maxW": 13680,
+   "maxW": 19680,
    "page": "dark",
    "w": 240,
    "x": 0,
@@ -3391,9 +3459,9 @@
    "fill": "purple",
    "size": 24,
    "w": 460,
-   "x": 13680,
+   "x": 19760,
    "y": 19100,
-   "text": "Onboarding app (D-11, §12.4.9): 07b → 07 → 07c → 07a, после BootReady, флаг onboarding_done.\n07b — шаг 1 «What CodeLab does»: проектная папка, одобрения, своя модель и ключ; встроенный агент по умолчанию. Back нет.\n07 — шаг 2 «Permissions»: что агент делает сам, где спрашивает, что запрещено.\n07c — шаг 3 «Choose a model»: пресеты ProviderPresets.all; кнопка открывает ProviderWizardDialog (тот же ProviderSetupFlow, §12.4.4). Шаг пропускается при ProviderReady.\n07c.1–07c.4 — мастер поверх шага 3: Base URL → Key → Check (успех сразу ведёт на Model; отказ — 06) → Model → Review, Save.\n07c.5 — шаг 3 после Save: провайдер подключён, Next ведёт на 07a.\n07a — шаг 4 «Privacy»: ссылки на 32 и 33 (ряд «Правовые документы»), «Start using CodeLab» → 01.\nГраф переходов — NavOnboarding на странице навигации."
+   "text": "Onboarding app (D-11, §12.4.9): 07b → 07 → 07c → 07a → 07d, после BootReady, флаг onboarding_done.\n07b — шаг 1 «What CodeLab does»: проектная папка, одобрения, своя модель и ключ; встроенный агент по умолчанию. Back нет.\n07 — шаг 2 «Permissions»: что агент делает сам, где спрашивает, что запрещено.\n07c — шаг 3 «Choose a model»: пресеты ProviderPresets.all; кнопка открывает ProviderWizardDialog (тот же ProviderSetupFlow, §12.4.4). Шаг пропускается при ProviderReady.\n07c.1–07c.4 — мастер поверх шага 3: Base URL → Key → Check (успех сразу ведёт на Model; отказ — 06) → Model → Review, Save.\n07c.5 — шаг 3 после Save: провайдер подключён, Next ведёт на 07a.\n07a — шаг 4 «Privacy»: ссылки на 32 и 33 (ряд «Правовые документы»), «Next» → 07d.\n07d — шаг 5 «Open a project» (change add-onboarding-project-step): Open folder…, бросок папки, недавние; выбор папки или «Continue in <папка>» записывает onboarding_done и открывает рабочее место с этим проектом, «Skip for now» — 11a; Back → 07a. Агент не стартует, пока показан onboarding.\n07d.1 — есть недавние (до пяти). 07d.2 — проект прошлого запуска восстановлен: «Last project», «Continue in …» вместо «Skip for now». 07d.3 — отказ броска (файл).\nГраф переходов — NavOnboarding на странице навигации."
   },
   "p-row5": {
    "kind": "title1",
@@ -3943,7 +4011,15 @@
   "TabletProjectSecondPick.dc.html",
   "TabletProjectSecondPick-dark.dc.html",
   "TabletProjectSecondOpen.dc.html",
-  "TabletProjectSecondOpen-dark.dc.html"
+  "TabletProjectSecondOpen-dark.dc.html",
+  "OnboardingProject.dc.html",
+  "OnboardingProject-dark.dc.html",
+  "OnboardingProjectRecents.dc.html",
+  "OnboardingProjectRecents-dark.dc.html",
+  "OnboardingProjectRestored.dc.html",
+  "OnboardingProjectRestored-dark.dc.html",
+  "OnboardingProjectDropRejected.dc.html",
+  "OnboardingProjectDropRejected-dark.dc.html"
  ],
  "pages": [
   {
