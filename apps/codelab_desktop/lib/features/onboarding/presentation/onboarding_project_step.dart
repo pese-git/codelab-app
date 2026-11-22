@@ -93,6 +93,11 @@ class OnboardingProjectBody extends StatelessWidget {
                 defaultTargetPlatform,
               ),
               onOpen: busy ? null : onOpenFolder,
+              // При восстановленном проекте основная кнопка шага — «Continue
+              // in …»; «Open folder…» вторичная (кадр 07d.2, tasks.md 3.7).
+              openEmphasis: restored == null
+                  ? CodeLabButtonEmphasis.primary
+                  : CodeLabButtonEmphasis.secondary,
               dropLabel: l10n.workbenchOpenProjectDropLabel,
               dropHint: l10n.workbenchOpenProjectDropHint,
               dropActive: dropActive,

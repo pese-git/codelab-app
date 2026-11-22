@@ -384,6 +384,35 @@ void main() {
       );
     });
 
+    testWidgets('выделение «Open folder…»: основная по умолчанию, '
+        'вторичная по параметру', (tester) async {
+      await tester.pumpWidget(host(body()));
+      expect(
+        tester.widget<CodeLabButton>(find.byKey(_openKey)).emphasis,
+        CodeLabButtonEmphasis.primary,
+      );
+
+      await tester.pumpWidget(
+        host(
+          const CodeLabOpenProjectBody(
+            description: 'Choose the folder you want to work in.',
+            openLabel: 'Open folder…',
+            onOpen: null,
+            openEmphasis: CodeLabButtonEmphasis.secondary,
+            dropLabel: 'Drop a folder here to open it',
+            dropHint: 'Files are not accepted — only a folder',
+            agentName: 'Embedded agent',
+            agentDetail: 'in-process · profile of this window',
+            agentNote: 'Starts when you open a folder.',
+          ),
+        ),
+      );
+      expect(
+        tester.widget<CodeLabButton>(find.byKey(_openKey)).emphasis,
+        CodeLabButtonEmphasis.secondary,
+      );
+    });
+
     testWidgets('рисует пояснение, кнопку с подсказкой, зону и карточку, '
         'но не героя, заголовок и InfoBar', (tester) async {
       await tester.pumpWidget(host(body()));
