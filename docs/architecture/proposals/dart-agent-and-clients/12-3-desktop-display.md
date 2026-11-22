@@ -1307,7 +1307,7 @@ R8-3, R8-4; design.md change `add-config-literal-secrets-and-migrate`, D8).** Л
 macOS. Для `gpt_markdown`, `val_highlight` и `url_launcher` проверка — задача 1.1 change
 `add-desktop-markdown` (лицензии транзитивных пакетов, шрифты JetBrains Mono и Latin Modern в
 `THIRD_PARTY_NOTICES.md`). Для `desktop_drop` решение принял change
-[`add-empty-project-screen`](../../../../openspec/changes/add-empty-project-screen/design.md) (D3):
+[`add-empty-project-screen`](../../../../openspec/changes/archive/2026-11-22-add-empty-project-screen/design.md) (D3):
 импорт только в адаптере `OsDropRegion` (`apps/codelab_desktop/lib/core/platform/`), проверка —
 его задача 1.1, итог — §20и `technology-stack.md`; D-12 переиспользует этот адаптер, а не
 добавляет второй (`platform-integration.md` §37а). `pasteboard` остаётся до D-12.

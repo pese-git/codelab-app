@@ -777,7 +777,7 @@ Filesystem path может содержать sensitive information.
 
 ### 43а. Путь проекта в desktop-клиенте
 
-Источник — change [`add-empty-project-screen`](../../openspec/changes/add-empty-project-screen/design.md), D4, D7.
+Источник — change [`add-empty-project-screen`](../../openspec/changes/archive/2026-11-22-add-empty-project-screen/design.md), D4, D7.
 
 * Путь выбранной папки проекта **не считается чувствительным полем**. Пользователь выбрал его сам, он виден в интерфейсе, а диагностика — журнал app на этой машине. Поэтому полный путь пишется в диагностику (`WorkspaceDiagnostic`): `Selected project: <path>.`, `Project folder not found: <path>. …`, `Dropped item rejected (<reason>): <path>.`.
 * События структурированного журнала app о выборе проекта путей и имён папок **не содержат**: `project.drop {outcome, reason?, count}`, `project.picker_failed {error_class}`. Структурированный журнал может пересылаться на dev-сервер (`structured_log_remote_sync`, `technology-stack.md` §17.2), поэтому в нём — минимально достаточные поля (§43).

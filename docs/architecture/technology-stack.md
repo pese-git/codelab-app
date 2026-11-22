@@ -46,7 +46,7 @@
 | Подсветка кода (`codelab_ui`, только `lib/src/rendering/`) | `val_highlight` (change `add-desktop-markdown`, D4) |
 | Открытие внешних ссылок (`codelab_desktop`, только `lib/core/platform/`) | `url_launcher` (change `add-desktop-markdown`, D5) |
 | Системный цвет акцента (`codelab_desktop`, только `lib/core/platform/`) | `system_theme` (change [`add-app-appearance-page`](../../openspec/changes/archive/2026-11-20-add-app-appearance-page/design.md), D7; §20з) |
-| Приём перетаскивания файлов и папок из ОС (`codelab_desktop`, только `lib/core/platform/os_drop_region.dart`) | `desktop_drop` (change [`add-empty-project-screen`](../../openspec/changes/add-empty-project-screen/design.md), D3; §20и) |
+| Приём перетаскивания файлов и папок из ОС (`codelab_desktop`, только `lib/core/platform/os_drop_region.dart`) | `desktop_drop` (change [`add-empty-project-screen`](../../openspec/changes/archive/2026-11-22-add-empty-project-screen/design.md), D3; §20и) |
 | Локализация интерфейса (`codelab_desktop`, `codelab_ui`) | `flutter_localizations`, `gen-l10n` (ARB), `intl` для сгенерированного кода (change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md), D1; §20ж) |
 | Сайт-визитка (`site/`, вне pub workspace и Melos) | Astro на Node, пакетный менеджер npm (ADR-0003, §28) |
 
@@ -994,7 +994,7 @@ Architectural dependency rules важнее технической доступ�
 
 ## 20и. `codelab_desktop`: приём перетаскивания из ОС — `desktop_drop`
 
-**Статус: утверждено** решением пользователя 2026-11-22 по итогам проверки — задачи 1.1 change [`add-empty-project-screen`](../../openspec/changes/add-empty-project-screen/design.md) (D3). Первый потребитель — экран без проекта (кадр 11a); вложения композера D-12 переиспользуют тот же адаптер (`proposals/dart-agent-and-clients/12-3-desktop-display.md` §12.3.6). Пакет добавлен в `pubspec.yaml` app задачей 5.4 change.
+**Статус: утверждено** решением пользователя 2026-11-22 по итогам проверки — задачи 1.1 change [`add-empty-project-screen`](../../openspec/changes/archive/2026-11-22-add-empty-project-screen/design.md) (D3). Первый потребитель — экран без проекта (кадр 11a); вложения композера D-12 переиспользуют тот же адаптер (`proposals/dart-agent-and-clients/12-3-desktop-display.md` §12.3.6). Пакет добавлен в `pubspec.yaml` app задачей 5.4 change.
 
 Технология: [`desktop_drop`](https://pub.dev/packages/desktop_drop) **0.8.4** (опубликован 2026-09-01; Apache-2.0; publisher `mixin.dev`). Требует Dart `^3.5.0` и Flutter `>=3.0.0`; проект на Flutter 3.47.0 / Dart 3.13.0 (`.fvmrc`) — совместимо. Пин — точная версия `0.8.4`, как у `url_launcher` и `system_theme` (§20е, §20з).
 
