@@ -119,37 +119,14 @@
     - Q18 по realpath: корень против кэшированного `canonicalRoot(projectDirectory)`, пересчёт при смене проекта, неразрешимая папка проекта → подпись (сценарии «Путь проекта с `..` или ссылкой наружу», «Одна папка под двумя путями»);
     - `error_type` в событии `kind: unexpected` — имя типа исключения без текста (D6, «Ошибки порта»).
 
-## 3. Итерация 3 — `.gitignore`
+## 3–5. Итерации 3–5 — перенесено
 
-- [ ] 3.1 `[client]` Красный: `packages/dart/codelab_client_core/test/files/gitignore_matcher_test.dart` — таблица правил: `#`, `!`, якорь `/` в начале и конце, `*`, `?`, `**`, классы `[…]`, `\#`, `\!`, порядок файлов `IgnoreStack` (требование «Игнорируемые записи по `.gitignore`», сценарий «Отрицание правила»). Источник семантики — документация git; сторонний код не копируется (AGENTS.md §5).
-- [ ] 3.2 `[client]` Реализация `GitIgnoreMatcher` и `IgnoreStack`.
-- [ ] 3.3 `[client]` Красный: `io_project_files_test.dart` — `list` с `IgnoreStack`: поле `ignored`, загрузка `.gitignore` папки и `.git/info/exclude`, файл правил больше 256 КиБ пропускается. Реализация в `IoProjectFiles`.
-- [ ] 3.4 `[desktop]` Красный: `project_files_pane_test.dart` — сценарии «`build/` скрыт по `.gitignore`» и «Одно значение на панель и «General»», переключатель `file-tree-show-ignored` и его сохранение в `codelab.file_browser.show_ignored`. Реализация: порт `FileBrowserPreferences` в `lib/core/platform/` (`load` не бросает, сбой — `false`; образец — `AppLanguagePreferences`), владелец значения — `ShowIgnoredFilesCubit` в root scope (образец — `AppLanguageCubit`), `ProjectFilesCubit` получает поток значения, переключатель панели вызывает `set` владельца. Строка «Show ignored files» страницы «General» пишет то же значение через того же владельца (задачи 3.5–3.6, D14); второго ключа и порта нет.
-- [ ] 3.5 `[desktop]` Красный: `apps/codelab_desktop/test/features/settings/presentation/general_page_test.dart` и `test/features/project_files/project_files_pane_test.dart` — spec app-settings «Показ игнорируемых файлов на странице «General»», сценарий «Одна настройка на две точки»: переключение на «General» меняет `ShowIgnoredFilesCubit`, переключатель `file-tree-show-ignored` открытой панели и приглушённую `build`; «Порядок блоков» требования «Страница «General»: состав и порядок» — `settings-general-show-ignored` после `settings-general-reopen-last-project`; без привязки `ProjectFiles` строки нет; `expectNoStaleLanguage` на `ru`. Перенесено из `add-app-general-page`, задача 4.1 (D14).
-- [ ] 3.6 `[desktop]` Реализация 3.5: строка `settings-general-show-ignored` в блоке «Startup and files» поверх `ShowIgnoredFilesCubit` (задача 3.4), ARB `en` и `ru`; строка о владельце в разделе «Страница «General»» `apps/codelab_desktop/AGENTS.md`; раздел страницы «General» в `apps/codelab_desktop/doc/user-guide.md` через `docs-writer`. 3.5 зелёный, `l10n:check` зелёный. Перенесено из `add-app-general-page`, задача 4.2 (D14).
-
-## 4. Итерация 4 — наблюдение
-
-- [ ] 4.1 `[client]` Красный: `io_project_files_test.dart` — `watch` папки выдаёт событие при создании файла и прекращает при отмене подписки. Реализация `IoProjectFiles.watch` (D11).
-- [ ] 4.2 `[desktop]` Красный: `project_files_cubit_test.dart`. Требование «Наблюдение за раскрытыми папками», сценарии «Новый файл без Refresh» и «Сворачивание отменяет подписку». Проверяет:
-  - склейку 200 мс (fake async);
-  - лимит 256;
-  - строку «Changes are not tracked» при ошибке;
-  - отмену подписок при смене корня и `close()`;
-  - пересборку правил при изменении `.gitignore`.
-- [ ] 4.3 `[desktop]` Реализация в `ProjectFilesCubit` и `ProjectFilesPane`.
-
-## 5. Итерация 5 — «Open file» и Following
-
-- [ ] 5.1 `[client]` Красный: `packages/dart/codelab_client_core/test/transcript/` — `ToolCallView.locations` с `line`, замена при `tool_call_update`, равенство инкрементальной проекции и проекции с нуля. Требование «Места вызова с номером строки», сценарии «Место со строкой», «Место без строки».
-- [ ] 5.2 `[client]` Реализация `ToolLocationView` и поля `locations`; `build_runner`; анализ и тесты `apps/codelab_cli` (публичный API kit).
-- [ ] 5.3 `[desktop]` Красный: `project_files_pane_test.dart` и тест маппера строки ленты — требование ««Open file» из строки вызова инструмента», сценарии «Открытие у строки», «Место вне корня»; ключ `tool-row-open-file-<toolCallId>`; ссылка наружу не даёт действия.
-- [ ] 5.4 `[desktop]` Реализация: действие строки вызова в `codelab_ui` (только колбэк), маппер и `ProjectFilesCubit.openLocation` (раскрыть, выбрать, прочитать, `line`).
-- [ ] 5.5 `[desktop]` Красный: `project_files_cubit_test.dart` — требование «Following за местами хода», сценарии «Следование во время хода», «Чужая сессия не уводит просмотр», «Ручной выбор выключает Following»; вне хода места игнорируются; по умолчанию выключен, не сохраняется.
-- [ ] 5.6 `[desktop]` Реализация переключателя `file-preview-following` и подписки Cubit на места сессии в фокусе (D8). Владелец подписки — Cubit; отмена при `close()`.
+Итерации 3–5 (задачи 3.1–3.6, 4.1–4.3, 5.1–5.6) перенесены в change `add-file-tree-ignore-watch-follow` с прежними номерами (разделение 2026-11-23): этот change описывает только влитый объём — итерации 0–2. Требования этих итераций — в дельте того change.
 
 ## 6. Завершение
 
-- [ ] 6.1 `[desktop]` Строка D-13 в `agent-parity-goals.md` — выполнено, со ссылками на тесты; экран 03 в `delivery-roadmap.md` §10.1.
-- [ ] 6.2 Проверки затронутого (§21) по каждой итерации, `openspec validate add-file-preview-and-tree --strict`. Полный `melos run check` — только по просьбе пользователя.
-- [ ] 6.3 Перед архивированием: требование acp-client-kit «IO-адаптеры клиента» в `openspec/specs/` уже изменено архивированным change [`share-recent-projects-store`](../archive/2026-11-22-share-recent-projects-store/tasks.md) (задача 5.4 там). В MODIFIED-дельту этого change перенести из текущей спецификации пункт `JsonFileRecentProjectsStore` (`$CODELAB_HOME/recent_projects.json` …) и первую фразу абзаца о Flutter-плагинах (без `SharedPreferencesRecentProjectsStore`). Иначе архивирование вернёт прежний текст.
+- 6.1 `[desktop]` — перенесено в change `add-file-tree-ignore-watch-follow` (тот же номер): строка D-13 закрывается после итерации 5.
+- 6.2 — перенесено в change `add-file-tree-ignore-watch-follow` для итераций 3–5; проверки итераций 1–2 — в задачах 1.5 и 2.11.
+- [x] 6.3 Перед архивированием: требование acp-client-kit «IO-адаптеры клиента» в `openspec/specs/` уже изменено архивированным change [`share-recent-projects-store`](../archive/2026-11-22-share-recent-projects-store/tasks.md) (задача 5.4 там). В MODIFIED-дельту этого change перенести из текущей спецификации пункт `JsonFileRecentProjectsStore` (`$CODELAB_HOME/recent_projects.json` …) и первую фразу абзаца о Flutter-плагинах (без `SharedPreferencesRecentProjectsStore`). Иначе архивирование вернёт прежний текст.
+  Выполнено 2026-11-23 при разделении: MODIFIED «IO-адаптеры клиента» в `specs/acp-client-kit/spec.md` взят из текущей главной спецификации с добавленным пунктом `IoProjectFiles` и сценариями этого change.
+- [x] 6.4 Архивирование change — только по просьбе пользователя, обычное, со слиянием дельт (`openspec archive add-file-preview-and-tree`). Этот change архивируется раньше `add-file-tree-ignore-watch-follow`: тот добавляет требования в capability `workspace-file-browser`, которую создаёт этот.

@@ -1,6 +1,6 @@
 ## Purpose
 
-Заменяемый транспортный слой, соединяющий CodeLab с процессом или endpoint'ом ACP-агента — общий порт transport, конкретные реализации stdio и WebSocket, встроенный референсный профиль `Codelab Agent`, а также fake/test-двойники, используемые для проверки остального приложения без реального агента.
+Заменяемый транспортный слой, соединяющий CodeLab с процессом или endpoint'ом ACP-агента — общий порт transport, конкретные реализации stdio и WebSocket, встроенное описание stdio-агента `codelabAgentStdioProfile` (`codelab-agent serve --stdio`) для Dart-агента CodeLab, а также fake/test-двойники, используемые для проверки остального приложения без реального агента.
 ## Requirements
 ### Requirement: Общий порт transport
 CodeLab SHALL предоставлять общую абстракцию transport для входящих сообщений, исходящей отправки, событий жизненного цикла, штатного завершения и типизированных ошибок. Порт общий для клиентской и агентской стороны: `inbound` несёт сообщения другой стороны соединения, `send` — сообщения этой стороны (design.md change `add-codelab-agent-binary`, D2).
@@ -60,15 +60,33 @@ CodeLab SHALL поддерживать локальных ACP-агентов ч�
 - **THEN** после запуска процесс получает закрытие stdin и при необходимости сигналы, процесс завершён, `start` завершается ошибкой с кодом `closed`, `close` завершается после завершения процесса
 
 ### Requirement: Референсный профиль codelab-agent
-CodeLab SHALL предоставлять встроенный редактируемый stdio-профиль для `https://github.com/pese-git/codelab-agent`.
+CodeLab SHALL предоставлять встроенное описание stdio-агента `codelabAgentStdioProfile` (основной барель `codelab_acp_transports`) для Dart-агента CodeLab (задача 9.3; design.md change `switch-default-agent-to-dart`, D10). Значения описания:
+- имя — `codelab-agent (stdio)`;
+- команда — `codelab-agent`;
+- аргументы — `serve --stdio`;
+- env — `CODELAB_LOG_LEVEL=DEBUG`.
 
-#### Scenario: Показан профиль по умолчанию
-- **WHEN** пользователь открывает настройку соединения
-- **THEN** CodeLab предлагает `Codelab Agent` с командой `codelab`, аргументами `serve --stdio` и env `CODELAB_LOG_LEVEL=DEBUG`
+Описание SHALL быть единственным источником значений по умолчанию команды и аргументов stdio-черновика профиля подключения (`ProfileDraft`, `codelab_client_core`): «Command» — `codelab-agent`, «Arguments» — `serve --stdio`.
 
-#### Scenario: Профиль по умолчанию подключается
-- **WHEN** пользователь запускает профиль по умолчанию в окружении, где доступен `codelab`
-- **THEN** CodeLab запускает `codelab serve --stdio` и выполняет `initialize` ACP
+Описание НЕ SHALL сохраняться в `profiles.json` и НЕ SHALL показываться на странице «Connection» отдельной строкой. Профиль по умолчанию в app и CLI — встроенный агент (capability `app-settings` «Список профилей на странице «Connection»», capability `codelab-cli` «Профили подключения CLI»).
+
+Ни встроенное описание, ни значение по умолчанию какого-либо черновика профиля НЕ SHALL содержать команду `codelab` с аргументом `serve`: после переключения команда `codelab` принадлежит терминальному клиенту.
+
+#### Scenario: Описание указывает на Dart-агента
+- **WHEN** код читает `codelabAgentStdioProfile`
+- **THEN** имя — `codelab-agent (stdio)`, команда — `codelab-agent`, аргументы — `['serve', '--stdio']`, env — `{'CODELAB_LOG_LEVEL': 'DEBUG'}`, `cwd` не задан
+
+#### Scenario: Описание подключается
+- **WHEN** stdio-транспорт открывается с аргументами и env `codelabAgentStdioProfile`, а команда заменена запуском бинаря `apps/codelab_agent` из исходников (тест бинаря, сценарий `--llm-script`)
+- **THEN** процесс агента принимает аргументы `serve --stdio`, и `initialize` ACP получает ответ `protocolVersion: 1`
+
+#### Scenario: Черновик «Add profile» совпадает с описанием
+- **WHEN** создаётся stdio-черновик `ProfileDraft` без явных значений команды и аргументов
+- **THEN** его команда и аргументы равны команде и аргументам `codelabAgentStdioProfile`
+
+#### Scenario: Нет умолчаний Python-агента
+- **WHEN** проверяются `codelabAgentStdioProfile` и значения по умолчанию `ProfileDraft`
+- **THEN** ни одно из них не содержит команду `codelab` с аргументом `serve`
 
 ### Requirement: WebSocket transport
 CodeLab SHALL support remote ACP agents over WebSocket for MVP remote workflows, including user-initiated and automatic reconnect after disconnect.

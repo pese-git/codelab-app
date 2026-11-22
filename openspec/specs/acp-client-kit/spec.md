@@ -177,6 +177,7 @@
 - `IoTextFileIo`;
 - `IoTerminalProcessRunner`;
 - `IoWorkingDirectoryProvider`;
+- `IoProjectFiles` — порт `ProjectFiles`: лексическая проверка вместе со склейкой пути в стиле текущей ОС до обращения к диску (на Windows сегмент с `\` или `:` даёт `invalidPath`); realpath корня; проверка границы по realpath до перечисления и чтения; если цель не разрешается (любая ошибка разрешения), путь проходится от корня без перехода по ссылкам: ссылка, чей realpath не разрешается или разрешается вне корня, либо ближайший разрешимый предок вне корня дают `outsideRoot`, иначе — исходная ошибка (`notFound`, `unreadable`); перечисление одного уровня с лимитом записей, чтение не больше `maxBytes + 1` байт с классификацией `classifyPreview` kit; символическая ссылка с целью вне корня перечисляется как `symlinkOutside` и не раскрывается; битая ссылка, FIFO и сокет перечисляются как `other`; `list` файла и `read` папки дают `unreadable` (design.md change `add-file-preview-and-tree`, D3, Q16);
 - `ioTransportResolver` — `ConfigTransportResolver` kit с настоящими транспортами stdio и WebSocket;
 - `JsonFileProfileStore` (`$CODELAB_HOME/profiles.json`, общий файл CLI и app);
 - `JsonFileRecentProjectsStore` (`$CODELAB_HOME/recent_projects.json`, общий файл CLI и app; требование «Хранилище недавних проектов в CODELAB_HOME»).
@@ -194,6 +195,42 @@
 #### Scenario: Барель без классификатора проверки
 - **WHEN** код импортирует `package:codelab_client_io/codelab_client_io.dart`
 - **THEN** `classifyProbeFailure` не экспортируется, а `ioTransportResolver`, `JsonFileProfileStore` и `JsonFileRecentProjectsStore` доступны
+
+#### Scenario: Символическая ссылка наружу
+- **WHEN** `IoProjectFiles.list` перечисляет корень временной папки со ссылкой `out` на папку вне корня, а затем вызывается `read(root, 'out/x.txt')`
+- **THEN** `out` перечислен как `symlinkOutside`, а чтение даёт `ProjectFilesFailure` вида `outsideRoot`, и файл вне корня не открывается
+
+#### Scenario: Несуществующий файл за ссылкой наружу
+- **WHEN** в корне ссылка `out` на папку вне корня, и `IoProjectFiles.read` читает `out/missing.txt`, которого нет
+- **THEN** результат — `ProjectFilesFailure` вида `outsideRoot`, а не `notFound`
+
+#### Scenario: Битая и рабочая ссылки наружу неразличимы
+- **WHEN** в корне ссылка `gone` на несуществующий путь вне корня и ссылка `real` на существующий файл вне корня, и `IoProjectFiles.read` читает обе
+- **THEN** оба результата — `ProjectFilesFailure` вида `outsideRoot`
+
+#### Scenario: Ошибка разрешения за ссылкой наружу
+- **WHEN** за ссылкой `out` на папку вне корня путь `out/file.txt/x` даёт ENOTDIR, путь `out/locked/x` — EACCES, а путь `out/loop/x` — ELOOP
+- **THEN** все три чтения дают `ProjectFilesFailure` вида `outsideRoot`
+
+#### Scenario: Ошибка разрешения внутри корня
+- **WHEN** внутри корня читаются `lib/missing.dart` (нет файла) и `locked/x` (папка `locked` внутри корня без прав)
+- **THEN** результаты — `notFound` и `unreadable` соответственно
+
+#### Scenario: Windows-сегмент отклоняется адаптером
+- **WHEN** `IoProjectFiles` со стилем путей Windows получает относительный путь `lib\a.dart` или `C:x`
+- **THEN** результат — `ProjectFilesFailure` вида `invalidPath` до обращения к диску
+
+#### Scenario: Перечисление файла и чтение папки
+- **WHEN** `IoProjectFiles.list` вызывается для файла `a.txt`, а `IoProjectFiles.read` — для папки `lib`
+- **THEN** оба результата — `ProjectFilesFailure` вида `unreadable`
+
+#### Scenario: FIFO в перечислении
+- **WHEN** в корне лежит именованный канал `pipe`
+- **THEN** `pipe` перечислен с видом `other`, и чтение его не открывает
+
+#### Scenario: Большой файл читается не целиком
+- **WHEN** `IoProjectFiles.read` читает файл 3 МиБ с `maxBytes` 1 МиБ
+- **THEN** результат — `TooLargePreview` с размером 3 МиБ, а прочитано не больше 1 МиБ + 1 байта
 
 ### Requirement: Список и загрузка сессий проекта
 `WorkspaceState.sessions` SHALL быть списком сессий проекта: сначала сессии, открытые в этом запуске, затем ещё не открытые сессии агента из `session/list` в порядке агента; сессия SHALL входить в список один раз. После каждого успешного `connect` и `reconnect` kit SHALL запрашивать первую страницу `session/list` с `cwd` проекта, если агент объявил `sessionCapabilities.list`. Неоткрытая сессия SHALL иметь статус `notLoaded`, заголовок и время изменения из ответа агента. `WorkspaceState.hasMoreSessions` SHALL показывать наличие следующей страницы; `ClientWorkspace.loadMoreSessions()` SHALL запрашивать её, а курсор kit НЕ SHALL отдавать хостам. `ClientWorkspace.loadSession(id, cwd)` SHALL открывать сессию через `session/load` и строить её транскрипт из реплея с нуля; повторный вызов для той же сессии во время загрузки SHALL не отправлять второй `session/load`. Без `loadSession` у агента `loadSession` SHALL завершаться ошибкой рабочего пространства без запроса к агенту.
@@ -1204,4 +1241,37 @@ Kit SHALL предоставлять `formatUsageMoneyExact(Money)` — точн
 #### Scenario: Повторное слияние ничего не меняет
 - **WHEN** `merge` с одним и тем же списком вызывается на хранилище дважды
 - **THEN** после второго вызова файл читается тем же списком, что после первого
+
+### Requirement: Чтение папки проекта в границах рабочей папки
+`codelab_client_core` SHALL объявлять порт `ProjectFiles` (`canonicalRoot`, `list`, `read`) с моделями `ProjectEntry`, `DirectoryListing`, `FilePreview` (`TextPreview`, `BinaryPreview`, `TooLargePreview`) и типизированной ошибкой `ProjectFilesFailure` вида `outsideRoot | notFound | unreadable | invalidPath` в `lib/src/files/`, без `dart:io` и без новых зависимостей. Правила SHALL быть чистыми функциями kit, общими для всех реализаций порта:
+- `normalizeRelativePath` — POSIX-путь от корня, проверка лексическая, до обращения к диску и не зависящая от платформы; `\0`, абсолютный путь или `..`, поднимающийся выше корня, дают `invalidPath`, а `..` внутри пути вычисляется (`a/../b` → `b`);
+- `classifyPreview` — байт NUL в первых 8 КиБ даёт `BinaryPreview`, размер больше `maxBytes` (по умолчанию 1 МиБ) — `TooLargePreview`, иначе `TextPreview` в UTF-8 с заменой неверных байт;
+- `isMaybeSecretFileName` — имена `.env*`, `*.pem`, `*.key`, `id_*` без учёта регистра; одно правило для браузера файлов и вложений;
+- `relativeToRoot` — абсолютный путь места вызова относительно `cwd` сессии или канонического корня; путь вне обоих — `null`.
+
+Записи `DirectoryListing` SHALL идти папками, затем файлами, по имени без учёта регистра; `.git` в них НЕ SHALL попадать (design.md change `add-file-preview-and-tree`, D1–D5, D8).
+
+#### Scenario: Выход из корня через `..`
+- **WHEN** `normalizeRelativePath` получает `lib/../../etc/passwd`
+- **THEN** результат — ошибка `invalidPath`
+
+#### Scenario: `..` внутри пути вычисляется
+- **WHEN** `normalizeRelativePath` получает `lib/../README.md`
+- **THEN** результат — `README.md`
+
+#### Scenario: Двоичный файл по содержимому, а не по расширению
+- **WHEN** `classifyPreview` получает файл `notes.txt`, в первых 8 КиБ которого есть байт NUL
+- **THEN** результат — `BinaryPreview` с размером файла
+
+#### Scenario: Имя файла с секретами
+- **WHEN** `isMaybeSecretFileName` проверяет `.env.local`, `server.pem`, `id_ed25519` и `env.dart`
+- **THEN** первые три — `true`, `env.dart` — `false`
+
+#### Scenario: Имя секрета без учёта регистра
+- **WHEN** `isMaybeSecretFileName` проверяет `.ENV`, `Server.PEM` и `ID_RSA`
+- **THEN** все три — `true`
+
+#### Scenario: Место вызова через другой путь к той же папке
+- **WHEN** `relativeToRoot` получает `/private/tmp/w/lib/a.dart` при `cwd` сессии `/tmp/w` и каноническом корне `/private/tmp/w`
+- **THEN** результат — `lib/a.dart`
 

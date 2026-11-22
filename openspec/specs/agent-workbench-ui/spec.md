@@ -767,7 +767,7 @@ The sessions sidebar SHALL show, from top to bottom, "New session" with its shor
 - **THEN** "Open folder…" is listed right after the last project group inside the "Projects" section, and `No recent projects yet.` is not shown
 
 ### Requirement: Tool dock with closable pane tabs
-CodeLab SHALL host tool panes in a dock on the right, with one closable tab per open pane. Each available pane SHALL have a toggle in the app bar that opens it, makes it active, or closes it when it is already active. With no open panes the dock SHALL NOT be shown. The open panes, the active pane and the dock width SHALL persist across restarts. This change SHALL provide the Plan pane (the full plan checklist) and the Protocol pane; a pane without data SHALL NOT be offered.
+CodeLab SHALL host tool panes in a dock on the right, with one closable tab per open pane. Each available pane SHALL have a toggle in the app bar that opens it, makes it active, or closes it when it is already active. With no open panes the dock SHALL NOT be shown. The open panes, the active pane and the dock width SHALL persist across restarts. Whether a pane is available SHALL be decided by that pane's own predicate (its data source exists in this window and for the current connection); a pane without data SHALL NOT be offered. An unavailable pane SHALL have no toggle and no tab, but SHALL stay in the saved layout and SHALL reappear when its predicate becomes true again. The Plan and Protocol panes are always available; the Files pane follows `workspace-file-browser` (design.md change `add-file-preview-and-tree`, D7).
 
 #### Scenario: Opening and closing a pane
 - **WHEN** the user clicks the Plan toggle, then closes the Plan tab
@@ -780,6 +780,10 @@ CodeLab SHALL host tool panes in a dock on the right, with one closable tab per 
 #### Scenario: Open panes survive a restart
 - **WHEN** Plan and Protocol are open with Protocol active, and CodeLab is restarted
 - **THEN** the dock opens with both tabs and Protocol active
+
+#### Scenario: Unavailable pane is hidden but kept in the layout
+- **WHEN** Files and Plan are open with an embedded-agent connection, and the window switches to a WebSocket profile, then back to the embedded agent
+- **THEN** while on the WebSocket profile the dock shows only Plan and there is no Files toggle, and after switching back the Files tab is shown again
 
 ### Requirement: Session pane header
 The session pane SHALL have a header with the session title, a project chip named after the folder of the session's `cwd` with the full path as a tooltip, and a mode chip when the agent publishes a mode config option. While the session is busy, the header SHALL show a turn state chip: "Turn running" with a progress indicator while a turn runs, "Waiting for approval" while the turn waits for a pending approval, and "Cancelling…" while a cancellation awaits the agent's answer. An idle, failed or detached session SHALL show no turn state chip.

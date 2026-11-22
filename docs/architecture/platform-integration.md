@@ -437,7 +437,7 @@ Application lifecycle должен определять, когда исполь
 
 Shutdown flow должен включать cleanup process resources.
 
-Терминал пользователя (панель Terminal, change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D4) закрывает свои shell при выходе из app явно: `SIGHUP`, затем принудительное завершение по таймауту. Страховка на случай краха или убийства app — сам PTY: при закрытии PTY-мастера ядро шлёт `SIGHUP` сеансу shell. При штатном выходе страховка не срабатывает: `pty2` ждёт код выхода каждого shell блокирующим `waitpid` в отдельном isolate, Dart VM при остановке ждёт этот isolate, а shell ждёт закрытия мастера, который живёт вместе с процессом app. Поэтому явное закрытие при выходе обязательно, без него app зависает (решение пользователя 2026-11-12; D4, D15 п. 9 change). Сиротами остаются только задания, которые пользователь намеренно отвязал (`nohup`, `disown`) — это intentional behavior пользователя.
+Терминал пользователя (панель Terminal, change [`add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D4) закрывает свои shell при выходе из app явно: `SIGHUP`, затем принудительное завершение по таймауту. Страховка на случай краха или убийства app — сам PTY: при закрытии PTY-мастера ядро шлёт `SIGHUP` сеансу shell. При штатном выходе страховка не срабатывает: `pty2` ждёт код выхода каждого shell блокирующим `waitpid` в отдельном isolate, Dart VM при остановке ждёт этот isolate, а shell ждёт закрытия мастера, который живёт вместе с процессом app. Поэтому явное закрытие при выходе обязательно, без него app зависает (решение пользователя 2026-11-12; D4, D15 п. 9 change). Сиротами остаются только задания, которые пользователь намеренно отвязал (`nohup`, `disown`) — это intentional behavior пользователя.
 
 Остальные дочерние процессы клиента — ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента — закрываются тем же обработчиком выхода через `CodeLabRootLifecycle.dispose()`, параллельно с терминалом, с общим пределом 5 с (`concurrency.md` §45–§46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md)). На EOF stdin при смерти app опираться нельзя: `terminal/*` stdin не читает, команды `exec` и внуки обёрток (`npx`) его не видят. Остаточный риск — потомки `terminal/*` и stdio-агента: сигнал получает только корень (design.md change, Q2), и аварийное завершение app, при котором обработчик не вызывается.
 
@@ -886,7 +886,7 @@ Shell execution — high-risk capability.
 
 Не следует выполнять shell command напрямую из BLoC/Widget.
 
-**Исключение: терминал пользователя.** Интерактивный shell панели Terminal десктопа (D-28; change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D8) — действие пользователя, а не агента. Permission policy к нему не применяется (`permissions.md` §2, «Терминал пользователя — не действие агента»), рабочая папка его не ограничивает. Остальные требования раздела действуют: запуск централизован в одном порту (`UserShellLauncher`, `lib/core/platform/` app), журнал содержит только метаданные (без ввода, вывода, аргументов и окружения), время жизни процессов ограничено вкладкой и запуском app.
+**Исключение: терминал пользователя.** Интерактивный shell панели Terminal десктопа (D-28; change [`add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D8) — действие пользователя, а не агента. Permission policy к нему не применяется (`permissions.md` §2, «Терминал пользователя — не действие агента»), рабочая папка его не ограничивает. Остальные требования раздела действуют: запуск централизован в одном порту (`UserShellLauncher`, `lib/core/platform/` app), журнал содержит только метаданные (без ввода, вывода, аргументов и окружения), время жизни процессов ограничено вкладкой и запуском app.
 
 ---
 
@@ -898,7 +898,7 @@ Sensitive environment variables не должны попадать в logs.
 
 Не следует автоматически наследовать весь environment, если это создаёт security risk и продукт этого не требует.
 
-**Исключение: терминал пользователя.** Shell панели Terminal получает окружение процесса app целиком плюс `TERM=xterm-256color` и `COLORTERM=truecolor` и запускается как login shell (`$SHELL -l`) (решение пользователя Q9, change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D5). Продукт этого требует: это собственный shell пользователя, урезанное окружение сломало бы его инструменты, а app из Finder (macOS) получает минимальное окружение, и `PATH` восстанавливает login shell. Окружение по-прежнему не логируется (§65).
+**Исключение: терминал пользователя.** Shell панели Terminal получает окружение процесса app целиком плюс `TERM=xterm-256color` и `COLORTERM=truecolor` и запускается как login shell (`$SHELL -l`) (решение пользователя Q9, change [`add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D5). Продукт этого требует: это собственный shell пользователя, урезанное окружение сломало бы его инструменты, а app из Finder (macOS) получает минимальное окружение, и `PATH` восстанавливает login shell. Окружение по-прежнему не логируется (§65).
 
 ---
 

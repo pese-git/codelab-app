@@ -1050,7 +1050,7 @@ sequenceDiagram
 «General» в app дополнительно показывает клиентские настройки `codelab.file_browser.show_ignored`
 (`shared_preferences`, §12.6.8) и `codelab.workspace.reopen_last_project` (D9); `SettingsRegistry`
 их не содержит. Строка `show_ignored` появится вместе с фильтром `.gitignore` панели Files
-(итерация 3 change `add-file-preview-and-tree`), до этого она скрыта (D10, SETUP-17).
+(итерация 3; выделена из `add-file-preview-and-tree` в change `add-file-tree-ignore-watch-follow`), до этого она скрыта (D10, SETUP-17).
 
 Решения change `add-provider-setup-ui` (D17; решения пользователя Q6, Q8):
 * **в построчном REPL** `/settings` — `PickerSpec` со строками `key value source`; `/settings <key>` —

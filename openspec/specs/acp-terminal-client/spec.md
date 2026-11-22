@@ -82,7 +82,7 @@ CodeLab SHALL завершать (kill) все активные terminal-про�
 - **THEN** закрытие транспорта начинается, не дожидаясь завершения terminal-процесса, а `dispose` завершается после того, как завершены оба
 
 ### Requirement: Изоляция process execution за platform-boundary
-Реализация запуска и управления процессами SHALL находиться в infrastructure-слое приложения и SHALL NOT быть доступна напрямую из `domain`, `application` или `presentation`, и SHALL оставаться независимой от `TerminalProcessFactory`, используемого локальной интерактивной terminal-панелью.
+Реализация запуска и управления процессами SHALL находиться в infrastructure-слое приложения и SHALL NOT быть доступна напрямую из `domain`, `application` или `presentation`, и SHALL оставаться независимой от порта `UserShellLauncher` и владельца вкладок панели Terminal (`integrated-terminal`, «Терминал пользователя независим от ACP terminal/*»).
 
 #### Scenario: Domain/application не содержат прямых вызовов dart:io Process
 - **WHEN** запускается статический анализ `packages/dart/codelab_client_acp`

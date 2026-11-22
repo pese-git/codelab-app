@@ -1,3 +1,5 @@
+> **Разделение 2026-11-23.** Change описывает только влитый в `develop` объём — итерации 0–2 (панель Files v1). Итерации 3–5 (`.gitignore` и «Show ignored files», наблюдение, «Open file» и Following, `ToolCallView.locations`) и их требования, включая всю дельту `app-settings`, перенесены в change `add-file-tree-ignore-watch-follow` с прежними номерами задач.
+
 ## Why
 
 В CodeLab нельзя посмотреть файлы проекта, не уходя из приложения. В строке вызова инструмента (`Read lib/a.dart:10-29`) виден только путь, а в панели Files дока инструментов справа пока ничего нет: в `ToolPane` значение `files` есть, но app предлагает только Plan и Protocol (`apps/codelab_desktop/lib/features/workbench/presentation/workbench_shell.dart`, `_availablePanes`).
@@ -25,7 +27,7 @@
   - пометки «Binary file» и «File too large to preview» (лимиты §12.6.8);
   - для файлов с именами `.env*`, `*.pem`, `*.key`, `id_*` — показ как есть с предупреждением; содержимое не попадает в логи и диагностику (Q3).
   - над просмотром — относительный путь файла от корня и «Copy path», который копирует только этот путь (Q14).
-- **Следующие итерации того же change:**
+- **Следующие итерации — change `add-file-tree-ignore-watch-follow`** (разделение 2026-11-23):
   - правила `.gitignore` и `.git/info/exclude` с переключателем «Show ignored files» (Q4);
   - наблюдение за раскрытыми папками (Q9);
   - «Open file» из строки вызова инструмента: файл с диска в Files у строки `line` (Q6);
@@ -33,9 +35,9 @@
 - **Общий клиентский слой** (`acp-client-kit`, ADDED и MODIFIED):
   - порт `ProjectFiles`, модели и чистые правила (проверка относительного пути, классификация превью, имена файлов с секретами) — в `codelab_client_core`;
   - `IoProjectFiles` — в `codelab_client_io`;
-  - места вызова с номером строки `ToolCallView.locations`.
+  - места вызова с номером строки `ToolCallView.locations` — change `add-file-tree-ignore-watch-follow`.
 - **Док** (`agent-workbench-ui`, MODIFIED «Tool dock with closable pane tabs»): доступность панели определяет её предикат; панель без данных не предлагается; недоступная панель скрывается, но остаётся в сохранённой раскладке.
-- **Строка «Show ignored files» на странице «General»** (`app-settings`): MODIFIED «Страница «General»: состав и порядок» — строка `settings-general-show-ignored` в блоке «Startup and files»; ADDED «Показ игнорируемых файлов на странице «General»» — та же настройка `codelab.file_browser.show_ignored` и тот же владелец `ShowIgnoredFilesCubit`, что у переключателя панели. Перенесено из change `add-app-general-page` (его задачи 4.1–4.2) решением пользователя 2026-11-20 при его архивации (design.md, D14).
+- **Строка «Show ignored files» на странице «General»** (`app-settings`; перенесено в change `add-file-tree-ignore-watch-follow`): MODIFIED «Страница «General»: состав и порядок» — строка `settings-general-show-ignored` в блоке «Startup and files»; ADDED «Показ игнорируемых файлов на странице «General»» — та же настройка `codelab.file_browser.show_ignored` и тот же владелец `ShowIgnoredFilesCubit`, что у переключателя панели. Перенесено из change `add-app-general-page` (его задачи 4.1–4.2) решением пользователя 2026-11-20 при его архивации (design.md, D14).
 - **Документы:** §12.6.8, §12.3 (таблица компонентов), §12.4.9, `agent-parity-goals.md` D-13 и `delivery-roadmap.md` §10.1 приводятся к доку и к решениям пользователя.
 - **BREAKING:** нет. ACP не меняется.
 
@@ -61,9 +63,9 @@
 - `agent-workbench-ui`: требование «Tool dock with closable pane tabs» — доступность панели по её предикату вместо перечня панелей одного change.
 - `acp-client-kit`:
   - ADDED «Чтение папки проекта в границах рабочей папки» — порт и чистые правила kit;
-  - ADDED «Места вызова с номером строки»;
+  - ADDED «Места вызова с номером строки» — перенесено в change `add-file-tree-ignore-watch-follow`;
   - MODIFIED «IO-адаптеры клиента» — `IoProjectFiles`.
-- `app-settings`:
+- `app-settings` — перенесено в change `add-file-tree-ignore-watch-follow`:
   - MODIFIED «Страница «General»: состав и порядок» — строка «Show ignored files» в блоке «Startup and files»;
   - ADDED «Показ игнорируемых файлов на странице «General»».
 

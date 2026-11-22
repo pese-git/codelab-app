@@ -209,7 +209,7 @@ Date: 2026-10-26
 
 * `openspec/specs/workspace-architecture/spec.md`
 * `openspec/specs/acp-client-kit/spec.md`
-* `openspec/changes/add-file-preview-and-tree/`, `openspec/changes/add-integrated-terminal/` — обновляются при переименовании
+* `openspec/changes/archive/2026-11-22-add-file-preview-and-tree/`, `openspec/changes/archive/2026-11-22-add-integrated-terminal/` — обновляются при переименовании
 
 ### ADR
 

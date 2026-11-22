@@ -667,9 +667,10 @@ SIGKILL; поздние события старого поколения отб�
 не ACP `fs/*`: одобрений не требует, но подчиняется границе рабочей папки (AGENTS.md §10), причём
 более строгой, чем лексическая проверка `fs/*` в app: по realpath и до чтения. Поведение и
 итерации задаёт OpenSpec change
-[`add-file-preview-and-tree`](../../../../openspec/changes/add-file-preview-and-tree/)
+[`add-file-preview-and-tree`](../../../../openspec/changes/archive/2026-11-22-add-file-preview-and-tree/)
 (требования — `specs/workspace-file-browser/spec.md`, решения пользователя 2026-11-11 Q1–Q16 и
-D1–D13 — `design.md`).
+D1–D13 — `design.md`). Итерации 3–5 выделены 2026-11-23 в change
+[`add-file-tree-ignore-watch-follow`](../../../../openspec/changes/add-file-tree-ignore-watch-follow/).
 
 **Где панель есть.** Только когда папка сессии на этой машине: встроенный агент и stdio-профиль
 (`sessionFolderIsLocal`, `apps/codelab_desktop/lib/features/workbench/application/`; тот же

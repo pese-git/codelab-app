@@ -97,7 +97,7 @@ AI-agent НЕ ДОЛЖЕН придумывать новую classification са
 
 ### Терминал пользователя — не действие агента
 
-Панель Terminal десктопного клиента (D-28; change [`add-integrated-terminal`](../../openspec/changes/add-integrated-terminal/design.md), D8) запускает интерактивный shell **пользователя**. Формально это «shell/process execution» из списка выше, но permission policy охраняет действия агента, а не человека: policy не решает, можно ли человеку набрать команду в собственном shell.
+Панель Terminal десктопного клиента (D-28; change [`add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D8) запускает интерактивный shell **пользователя**. Формально это «shell/process execution» из списка выше, но permission policy охраняет действия агента, а не человека: policy не решает, можно ли человеку набрать команду в собственном shell.
 
 Поэтому:
 
