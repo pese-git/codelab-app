@@ -1,5 +1,6 @@
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
-import 'package:codelab_client_acp/codelab_client_acp.dart' show SecretRedactor;
+import 'package:codelab_client_acp/codelab_client_acp.dart'
+    show SecretRedactor, redactedSecret;
 
 import 'subagent_views.dart';
 import 'transcript_item.dart';
@@ -51,13 +52,18 @@ final class ToolRowView {
   /// `summaryShort ?? runningCounter`.
   final String? runningCounter;
 
-  /// Метка по виду вызова: `Read`, `Edit`, `Run`… или `title` у `other`.
+  /// Метка по виду вызова: `Read`, `Edit`, `Run`… или `title` у `other`;
+  /// у `other` очищена и замаскирована, как деталь (D2 change
+  /// `redact-tool-row-text`).
   final String label;
 
   /// Короткая деталь: путь, команда, шаблон поиска, адрес без query.
   final String detail;
 
-  /// Причина ошибки у вызова в статусе `failed`; иначе `null`.
+  /// Причина ошибки у вызова в статусе `failed`; иначе `null`. Очищена,
+  /// замаскирована и усечена до [ToolRowFormatter.maxDetailLength], как
+  /// деталь (D1 change `redact-tool-row-text`); полный вывод — через
+  /// [ToolRowFormatter.outputTail].
   final String? secondary;
 
   @override
@@ -107,6 +113,130 @@ abstract final class ToolRowFormatter {
 
   static const _redactor = SecretRedactor();
 
+  /// Хвост вывода вызова для раскрытой строки клиента: последние [maxLines]
+  /// строк текстового вывода, замаскированные [SecretRedactor].
+  ///
+  /// Почему: хвост показывается под второй строкой ([ToolRowView.secondary])
+  /// и раньше шёл сырым `textOutput`, то есть мимо маскировки (design.md
+  /// change `redact-tool-row-text`, D7, VIEW-9). Решение о повторе со второй
+  /// строкой принимается по очищенным значениям, а правило очистки `_clean`
+  /// приватно в этом файле, поэтому и хвост строится здесь, а не в маппере
+  /// или виджете.
+  ///
+  /// Для чего: число строк — параметр клиента (раскладка десктопа), поэтому
+  /// это функция, а не поле [ToolRowView]; `format` за хвост не платит.
+  /// Работа зависит от размера хвоста, а не от объёма вывода (D3: десктоп
+  /// перестраивает ленту на каждый кадр): элементы обходятся с конца,
+  /// внутри элемента строки ищутся `lastIndexOf('\n')` назад, и только
+  /// хвост копируется `substring`. Переводы строк и пробелы сохраняются,
+  /// меняются только маски.
+  ///
+  /// Граница хвоста и многострочные секреты: маскируется окно на одну строку
+  /// больше хвоста ([maxLines] + 1), и только потом берутся последние
+  /// [maxLines] строк результата. Так `Bearer` в конце строки границы и токен
+  /// на следующей, или `password:` и значение под ним маскируются вместе.
+  /// Маска может схлопнуть строки (PEM-блок целиком), поэтому строки
+  /// отрезаются от уже замаскированного текста. Если в окне остался
+  /// `-----END … PRIVATE KEY-----` без своего BEGIN (начало ключа выше окна),
+  /// маскируется всё от начала окна до этой строки включительно; а если
+  /// остался `BEGIN` без `END` (вывод оборван или ещё идёт), маскируется всё
+  /// от него до конца окна, строки до него видны.
+  ///
+  /// Как использовать: `ToolRowFormatter.outputTail(call, maxLines: 20)`.
+  /// `null` — показывать нечего: вывод пуст, это вызов `agent` (его тело —
+  /// уже замаскированный `report`) либо весь вывод — одна строка, равная
+  /// `secondary` и не усечённая до 160 символов; иначе вывод повторял бы её.
+  /// Дедуп опирается на «одна строка в окне ⇒ весь вывод — эта строка».
+  static String? outputTail(ToolCallItem item, {required int maxLines}) {
+    final view = item.details;
+    if (view == null || view.subagentCall != null || maxLines <= 0) {
+      return null;
+    }
+    final window = _tailWindow(view.textOutput, maxLines + 1);
+    if (window.isEmpty) {
+      return null;
+    }
+    if (window.length == 1) {
+      final secondary = _secondaryOf(view);
+      if (secondary != null &&
+          _cleanFull(window.single).length <= maxDetailLength &&
+          _cleanFull(window.single) == secondary) {
+        return null;
+      }
+    }
+    var masked = _redactor.redactText(window.reversed.join('\n'));
+    // Остаток `END` после `redactText` — осиротевший: полные пары уже
+    // заменены. Прячем всё от начала окна до него (D7, остаток PEM).
+    Match? orphan;
+    for (final match in _privateKeyEnd.allMatches(masked)) {
+      orphan = match;
+    }
+    if (orphan != null) {
+      masked = '$redactedSecret${masked.substring(orphan.end)}';
+    }
+    // Остаток `BEGIN` — ключ без конца (`head -n 10 id_rsa`, поток ещё идёт):
+    // всё от него до конца окна — тело ключа, строки до него остаются.
+    final begin = _privateKeyBegin.firstMatch(masked);
+    if (begin != null) {
+      masked = '${masked.substring(0, begin.start)}$redactedSecret';
+    }
+    final lines = masked.split('\n');
+    return lines.length <= maxLines
+        ? masked
+        : lines.sublist(lines.length - maxLines).join('\n');
+  }
+
+  static final _privateKeyBegin = RegExp(r'-----BEGIN [A-Z ]*PRIVATE KEY-----');
+  static final _privateKeyEnd = RegExp(r'-----END [A-Z ]*PRIVATE KEY-----');
+
+  /// До [limit] последних строк вывода в обратном порядке (последняя —
+  /// первой); хвостовые пробельные символы всего вывода срезаны.
+  ///
+  /// Как у плитки десктопа: элементы склеены `\n`, пустой элемент посреди —
+  /// пустая строка. Копируются только строки окна (D7).
+  static List<String> _tailWindow(List<String> texts, int limit) {
+    final lines = <String>[];
+    for (var i = texts.length - 1; i >= 0; i--) {
+      final text = texts[i];
+      var end = text.length;
+      if (lines.isEmpty) {
+        while (end > 0 && _isTrimmedSpace(text.codeUnitAt(end - 1))) {
+          end--;
+        }
+        if (end == 0) {
+          continue;
+        }
+      }
+      while (true) {
+        final newline = end == 0 ? -1 : text.lastIndexOf('\n', end - 1);
+        lines.add(text.substring(newline + 1, end));
+        if (lines.length == limit) {
+          return lines;
+        }
+        if (newline < 0) {
+          break;
+        }
+        end = newline;
+      }
+    }
+    return lines;
+  }
+
+  /// Пробельные символы `String.trimRight` (Unicode White_Space и BOM).
+  static bool _isTrimmedSpace(int c) =>
+      (c >= 0x09 && c <= 0x0D) ||
+      c == 0x20 ||
+      c == 0x85 ||
+      c == 0xA0 ||
+      c == 0x1680 ||
+      (c >= 0x2000 && c <= 0x200A) ||
+      c == 0x2028 ||
+      c == 0x2029 ||
+      c == 0x202F ||
+      c == 0x205F ||
+      c == 0x3000 ||
+      c == 0xFEFF;
+
   static ToolRowView format(ToolCallItem item, {required String cwd}) {
     final view = item.details;
     if (view?.subagentCall case final call?) {
@@ -117,7 +247,8 @@ abstract final class ToolRowFormatter {
     var detail = _clean(_detailOf(kind, view, item.title, cwd: cwd));
     // Пустая или повторяющая метку деталь заменяется заголовком агента —
     // без повторного слова метки (§12.1.6, шаг 3).
-    if ((detail.isEmpty || detail == label) && item.title.trim() != label) {
+    // Сравниваются очищенные значения (D2): метка `other` уже очищена.
+    if ((detail.isEmpty || detail == label) && _clean(item.title) != label) {
       detail = _clean(_withoutLeadingWord(item.title, label));
     }
     if (detail == label) {
@@ -126,9 +257,7 @@ abstract final class ToolRowFormatter {
     return ToolRowView(
       label: label,
       detail: detail,
-      secondary: view?.status == ToolCallStatusView.failed
-          ? _firstLine(view!.textOutput)
-          : null,
+      secondary: view == null ? null : _secondaryOf(view),
     );
   }
 
@@ -161,9 +290,7 @@ abstract final class ToolRowFormatter {
           : _clean(
               description == null ? call.type : '${call.type}: $description',
             ),
-      secondary: view.status == ToolCallStatusView.failed
-          ? _firstLine(view.textOutput)
-          : null,
+      secondary: _secondaryOf(view),
       progress: running && texts.isNotEmpty ? _clean(texts.last) : null,
       report: !running && texts.isNotEmpty
           ? _redactor.redactText(texts.join('\n').trim())
@@ -174,6 +301,11 @@ abstract final class ToolRowFormatter {
           ? subagentCallsText(item.subtreeCalls)
           : null,
     );
+  }
+
+  static String _otherLabel(String title) {
+    final cleaned = _clean(title);
+    return cleaned.isEmpty ? 'Tool' : cleaned;
   }
 
   static String _labelOf(ToolKind kind, String title) => switch (kind) {
@@ -188,7 +320,9 @@ abstract final class ToolRowFormatter {
     // Смена режима сессии (`switch_mode`, ACP `17-Schema.md`); wire-имя в
     // строку не попадает (D7 change `tolerate-unknown-tool-kind`).
     ToolKind.switchMode => 'Mode',
-    ToolKind.other => title.trim().isEmpty ? 'Tool' : title.trim(),
+    // Заголовок вызова `other` — свободный текст агента (MCP, сторонний
+    // агент, неизвестный вид), поэтому очищается как деталь (D2).
+    ToolKind.other => _otherLabel(title),
   };
 
   static String _detailOf(
@@ -351,28 +485,55 @@ abstract final class ToolRowFormatter {
         : trimmed;
   }
 
-  /// Управляющие символы и ESC-последовательности — пробел, пробелы
-  /// схлопываются, секреты маскируются, длина — не больше
-  /// [maxDetailLength].
+  /// Очищает текст агента для строки вызова: управляющие символы и
+  /// ESC-последовательности — пробел, пробелы схлопываются, секреты
+  /// маскируются, длина — не больше [maxDetailLength].
+  ///
+  /// Почему: одно правило для всех текстовых полей [ToolRowView] — детали,
+  /// метки `other` и второй строки (design.md change `redact-tool-row-text`,
+  /// D1, D2). Маскирование идёт до усечения: иначе усечение отрежет `@` у
+  /// `https://user:pass@…` или `=` у присваивания, и видимая часть секрета
+  /// пройдёт мимо шаблона.
   static String _clean(String value) {
-    final plain = value
-        .replaceAll(RegExp(r'\x1B\[[0-9;?]*[ -/]*[@-~]'), ' ')
-        .replaceAll(RegExp(r'[\x00-\x1F\x7F]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    final redacted = _redactor.redactText(plain);
+    final redacted = _cleanFull(value);
     return redacted.length <= maxDetailLength
         ? redacted
         : '${redacted.substring(0, maxDetailLength - 1)}…';
   }
 
+  /// [_clean] без усечения: нужен [outputTail], чтобы узнать, была ли строка
+  /// длиннее предела (усечённая вторая строка от вывода отличается, D7).
+  static String _cleanFull(String value) {
+    final plain = value
+        .replaceAll(RegExp(r'\x1B\[[0-9;?]*[ -/]*[@-~]'), ' ')
+        .replaceAll(RegExp(r'[\x00-\x1F\x7F]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return _redactor.redactText(plain);
+  }
+
+  /// Вторая строка вызова: только у упавшего, иначе `null`. Единое правило
+  /// для [format], строки `agent` и дедупа [outputTail] (§14).
+  static String? _secondaryOf(ToolCallView view) =>
+      view.status == ToolCallStatusView.failed
+      ? _firstLine(view.textOutput)
+      : null;
+
+  /// Вторая строка: первая строка первого текстового элемента, непустая
+  /// **после** очистки; `null`, если такой нет (D3).
+  ///
+  /// Почему выбор до очистки, а очистка одной строки: `format` вызывается на
+  /// каждый кадр, и маскировать весь вывод каждого упавшего вызова — работа
+  /// O(объём вывода) в UI isolate (§12). Строка из одних ESC-последовательностей
+  /// пропускается, а не даёт пустую вторую строку.
   static String? _firstLine(List<String> texts) {
     if (texts.isEmpty) {
       return null;
     }
     for (final line in texts.first.split('\n')) {
-      if (line.trim().isNotEmpty) {
-        return line.trim();
+      final cleaned = _clean(line);
+      if (cleaned.isNotEmpty) {
+        return cleaned;
       }
     }
     return null;

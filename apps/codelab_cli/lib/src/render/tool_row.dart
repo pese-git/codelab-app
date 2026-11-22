@@ -1,6 +1,24 @@
+import 'package:codelab_client_acp/codelab_client_acp.dart' show SecretRedactor;
 import 'package:codelab_client_core/codelab_client_core.dart';
 
 import 'sanitize.dart';
+
+/// Маскирует секреты в тексте агента строки вызова (D4 change
+/// `redact-tool-row-text`); те же правила, что у клиентского слоя, а не своя
+/// копия (§14).
+const _redactor = SecretRedactor();
+
+/// CSI-последовательность целиком (как в `_clean` kit): заменяется пробелом
+/// до санитизации (D4, шаг 0).
+final _csi = RegExp(r'\x1B\[[0-9;?]*[ -/]*[@-~]');
+
+/// Текст агента для строки: CSI — пробел, остальное управляющее вырезано,
+/// секреты замаскированы. Порядок D4: без шага 0 `sanitizeTerminalText`
+/// вырезал бы только ESC и оставил `[0m` в тексте, а `Bearer\u001b[0m t0k3n`
+/// превращался бы в `Bearer[0m t0k3n`, на который шаблон заголовка не
+/// срабатывает и токен остаётся виден.
+String _safe(String text) =>
+    _redactor.redactText(sanitizeTerminalText(text.replaceAll(_csi, ' ')));
 
 /// Строка вызова инструмента: `<значок> <название> <команда?> <время?>`.
 ///
@@ -12,15 +30,21 @@ import 'sanitize.dart';
 /// Как использовать: рендер вызывает функцию, когда вызов появился и когда
 /// получил итоговый статус; [elapsed] — время от появления до итога по
 /// часам рендера, только для итоговой строки. [unicode] `false` — ASCII-
-/// значки для терминала без UTF-8. Текст агента проходит
-/// `sanitizeTerminalText`.
+/// значки для терминала без UTF-8. Текст агента (название и команда)
+/// проходит `sanitizeTerminalText` и `SecretRedactor` (design.md change
+/// `redact-tool-row-text`, D4, VIEW-9).
+///
+/// Порядок: CSI-последовательности заменяются пробелом, затем санитизация,
+/// маскирование всего значения и только потом первая строка — многострочная
+/// команда с `Authorization:` на второй строке маскируется до обрезки, и
+/// результат не зависит от того, где лежит секрет. Проверка повтора
+/// `title.contains(detail)` идёт по замаскированным значениям: одинаковый
+/// секрет маскируется одинаково, повтор по-прежнему опознаётся.
 String toolRow(ToolCallItem item, {bool unicode = true, Duration? elapsed}) {
   final icon = _icon(_stateOf(item), unicode);
-  final title = _firstLine(sanitizeTerminalText(item.title));
+  final title = _firstLine(_safe(item.title));
   final command = item.details?.command;
-  final detail = command == null
-      ? null
-      : _firstLine(sanitizeTerminalText(command));
+  final detail = command == null ? null : _firstLine(_safe(command));
   // Итог субагента (D24) — в скобках сразу за заголовком и без слова «Done»;
   // у бегущего вызова и у стороннего агента без `summary` скобок нет.
   final summary = isFinalToolCall(item) && item.details?.subagentCall != null

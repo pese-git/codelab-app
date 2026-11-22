@@ -345,7 +345,17 @@ CodeLabToolCallRow _toolCallRowOf(
     secondary: view.secondary,
     output: isSubagent
         ? [if (view.report case final report?) ...report.split('\n')]
-        : details?.textOutput ?? const [],
+        // Хвост вывода строит kit: он маскирует секреты и сам решает, что
+        // вывод повторяет вторую строку (`null`). Не виджет и не маппер:
+        // правило очистки `_clean` приватно в kit, виджет без политики
+        // (D7 change `redact-tool-row-text`, VIEW-9). Сырой `textOutput`
+        // в строку не попадает.
+        : [
+            ?ToolRowFormatter.outputTail(
+              call,
+              maxLines: CodeLabToolCallTile.outputTailLines,
+            ),
+          ],
     subagent: isSubagent
         ? CodeLabSubagentCall(
             stats: view.summaryShort ?? view.runningCounter,
