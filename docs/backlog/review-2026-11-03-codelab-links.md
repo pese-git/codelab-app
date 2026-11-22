@@ -13,7 +13,7 @@
 
 | ID | P | Тип | Область | Кратко | OpenSpec | Issue |
 |---|---|---|---|---|---|---|
-| REV-1 | P2 | security | agent | Другие чтения `.codelab/**` (agents, prompts, skills, `cli.yaml`) без проверки ссылок по `.codelab` **Частично** | да | — |
+| REV-1 | P2 | security | agent | Другие чтения `.codelab/**` (agents, prompts, skills, `cli.yaml`) без проверки ссылок по `.codelab` **Частично** | да | [#432](https://github.com/pese-git/codelab-app/issues/432) |
 
 ## Карточки
 
