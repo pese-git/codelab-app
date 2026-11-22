@@ -275,6 +275,9 @@ void main() {
       'a:// + b x 262140': 'a://${'b' * 262140}',
       'x= x 131072': 'x=' * 131072,
       'OPENAI_KEY=v...': 'OPENAI_KEY=${'v' * 262133}',
+      // D8: много `BEGIN` без `END` не должны сканировать текст до конца
+      // каждое.
+      'BEGIN x 8192': '-----BEGIN RSA PRIVATE KEY-----' * 8192,
     };
     for (final entry in inputs.entries) {
       test(entry.key, () {
@@ -291,5 +294,37 @@ void main() {
         }
       });
     }
+  });
+
+  group('a private key block is redacted', () {
+    // D8 change `extend-secret-name-redaction`: блок без строки `END`
+    // (вывод оборван или усечён) скрывается до конца текста.
+    test('an unterminated block hides everything after BEGIN', () {
+      expect(
+        redactor.redactText(
+          'out: -----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\nabc',
+        ),
+        'out: $redactedSecret',
+      );
+    });
+
+    test('a closed block is replaced and the tail stays visible', () {
+      expect(
+        redactor.redactText(
+          'a -----BEGIN PRIVATE KEY-----\nMII\n-----END PRIVATE KEY----- b',
+        ),
+        'a $redactedSecret b',
+      );
+    });
+
+    test('a closed block followed by an unterminated one', () {
+      expect(
+        redactor.redactText(
+          '-----BEGIN PRIVATE KEY-----x-----END PRIVATE KEY----- mid '
+          '-----BEGIN EC PRIVATE KEY-----\nleak',
+        ),
+        '$redactedSecret mid $redactedSecret',
+      );
+    });
   });
 }
