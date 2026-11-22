@@ -525,25 +525,50 @@ class _TableState extends State<_Table> {
   /// Ширина колонки: `null` — гибкая (по умолчанию колонка тега), иначе
   /// фиксированная.
   double? _width(int column) {
+    final base = _baseWidth(column);
+    return base == null ? null : base * _scale;
+  }
+
+  double? _baseWidth(int column) {
     final widths = pane.columnWidths;
     if (widths != null) return column < widths.length ? widths[column] : 72;
     if (column == pane.tagColumn) return null;
     return pane.columns[column].isEmpty ? 28 : 72;
   }
 
+  /// Во сколько раз ужаты фиксированные колонки, чтобы гибкой осталось не
+  /// меньше [_minFlexible] (крупный шрифт, узкий док).
+  double _scale = 1;
+  static const double _minFlexible = 88;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      var fixed = 0.0;
+      for (var c = 0; c < pane.columns.length; c++) {
+        fixed += _baseWidth(c) ?? 0;
+      }
+      final room = constraints.maxWidth - _minFlexible;
+      _scale = fixed > room && fixed > 0 ? math.max(0.0, room) / fixed : 1;
+      return _buildTable(context);
+    },
+  );
+
+  Widget _buildTable(BuildContext context) {
     final theme = FluentTheme.of(context);
     final resources = theme.resources;
     final palette = CodeLabPalette.of(theme);
     final secondary = resources.textFillColorSecondary;
 
     Widget cell(int column, Widget child) {
+      final width = _width(column);
+      // У ужатой колонки отступы тоже уменьшаются, иначе они одни шире её.
       final padded = Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: width == null ? 10 : math.min(10, width / 4),
+        ),
         child: child,
       );
-      final width = _width(column);
       return width == null
           ? Expanded(child: padded)
           : SizedBox(width: width, child: padded);

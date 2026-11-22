@@ -232,4 +232,108 @@ void main() {
       );
     });
   });
+
+  // Ручной смок на macOS: строка действий вытесняла вкладки, активная
+  // «Протокол» обрезалась до «Прото». Правило: вкладки получают всё, кроме
+  // минимальной ширины действий, и прокручиваются; активная вкладка
+  // прокручивается в видимую область; действия — остаток справа.
+  group('активная вкладка читаема при действиях на 360 px', () {
+    Widget dock(ToolPane active) => FluentApp(
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: 360,
+          height: 300,
+          child: CodeLabToolDock(
+            active: active,
+            tabs: [
+              const CodeLabDockTab(
+                pane: ToolPane.files,
+                content: Text('files body'),
+              ),
+              CodeLabDockTab(
+                pane: ToolPane.protocol,
+                content: const Text('protocol body'),
+                actions: [
+                  for (final label in const [
+                    'Трассировка',
+                    'Приостановить',
+                    'Очистить',
+                    'Экспорт…',
+                  ])
+                    Button(onPressed: () {}, child: Text(label)),
+                ],
+              ),
+              const CodeLabDockTab(
+                pane: ToolPane.usage,
+                content: Text('usage body'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    /// Вкладка целиком внутри области прокрутки вкладок: не правее границы,
+    /// за которой остаётся минимум для действий.
+    void expectFullyVisible(WidgetTester tester, ToolPane pane) {
+      final tab = tester.getRect(find.byKey(CodeLabToolDock.tabKey(pane)));
+      expect(tab.left, greaterThanOrEqualTo(0), reason: '$pane слева');
+      expect(
+        tab.right,
+        lessThanOrEqualTo(360 - 100),
+        reason: '$pane целиком левее зоны действий',
+      );
+    }
+
+    testWidgets('активная вкладка Protocol не обрезана действиями', (
+      tester,
+    ) async {
+      await tester.pumpWidget(dock(ToolPane.protocol));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expectFullyVisible(tester, ToolPane.protocol);
+    });
+
+    testWidgets('активная вкладка далеко справа прокручивается в видимую '
+        'область', (tester) async {
+      // Активной делается Protocol, но в списке вкладок она стоит третьей.
+      await tester.pumpWidget(
+        FluentApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 360,
+              height: 300,
+              child: CodeLabToolDock(
+                active: ToolPane.protocol,
+                tabs: [
+                  const CodeLabDockTab(
+                    pane: ToolPane.files,
+                    content: Text('files body'),
+                  ),
+                  const CodeLabDockTab(
+                    pane: ToolPane.usage,
+                    content: Text('usage body'),
+                  ),
+                  CodeLabDockTab(
+                    pane: ToolPane.protocol,
+                    content: const Text('protocol body'),
+                    actions: [
+                      for (final label in const ['Очистить', 'Экспорт…'])
+                        Button(onPressed: () {}, child: Text(label)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expectFullyVisible(tester, ToolPane.protocol);
+    });
+  });
 }

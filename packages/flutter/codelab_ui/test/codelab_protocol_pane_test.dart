@@ -367,6 +367,35 @@ void main() {
       );
     });
 
+    testWidgets('замаскированный сегмент внутри строки JSON стоит между '
+        'соседним текстом в одном тексте', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          _pane(
+            detail: _detail(
+              segments: const [
+                CodeLabMaskedSegment(
+                  '{\n  "text": "1| API_TOKEN=',
+                  masked: false,
+                ),
+                CodeLabMaskedSegment('<redacted>', masked: true),
+                CodeLabMaskedSegment('"\n}', masked: false),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.textContaining('API_TOKEN=••••••• (masked)"', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('<redacted>', findRichText: true),
+        findsNothing,
+      );
+    });
+
     testWidgets('поля ключ — значение и заметка вместо JSON', (tester) async {
       await tester.pumpWidget(
         _host(
@@ -1216,6 +1245,27 @@ void main() {
       final event = tester.getRect(find.text('prompt_sent'));
       final time = tester.getRect(find.text('12:00:01.234'));
       expect(event.left - time.left, lessThan(360 * 0.67));
+    });
+
+    testWidgets('фиксированные колонки шире панели ужимаются, а не '
+        'переполняют строку (крупный шрифт, узкий док)', (tester) async {
+      await tester.pumpWidget(
+        narrow(
+          _pane(
+            columnWidths: const [60, null, 200, 200],
+            rows: const [
+              CodeLabProtocolTableRow(
+                id: 'f1',
+                cells: ['→', 'session/new', '1', '12:00:01'],
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      // Гибкой колонке остаётся место.
+      expect(tester.getSize(find.text('session/new')).width, greaterThan(0));
     });
 
     testWidgets('columnWidths задают ширины колонок, null — гибкая', (

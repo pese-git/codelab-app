@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
@@ -39,7 +41,7 @@ class CodeLabDockTab {
 /// своего состояния; [onSelected] делает вкладку активной, [onClosed]
 /// закрывает панель. Без вкладок хост не показывает док вовсе. Содержимое
 /// активной панели помечено ключом `tool-pane-<pane>` (A13, шаг 8).
-class CodeLabToolDock extends StatelessWidget {
+class CodeLabToolDock extends StatefulWidget {
   const CodeLabToolDock({
     required this.tabs,
     required this.active,
@@ -63,15 +65,44 @@ class CodeLabToolDock extends StatelessWidget {
   final ValueChanged<ToolPane>? onSelected;
   final ValueChanged<ToolPane>? onClosed;
 
+  /// Минимальная ширина зоны действий справа: вкладки получают остальное и
+  /// прокручиваются, поэтому действия не вытесняют заголовок активной
+  /// вкладки (ручной смок change `redesign-protocol-pane`, док 360 px).
+  static const double minActionsWidth = 112;
+
+  @override
+  State<CodeLabToolDock> createState() => _CodeLabToolDockState();
+}
+
+class _CodeLabToolDockState extends State<CodeLabToolDock> {
+  /// Ключ активной вкладки: по нему она прокручивается в видимую область.
+  final _activeKey = GlobalKey();
+  ToolPane? _revealed;
+
+  List<CodeLabDockTab> get tabs => widget.tabs;
+  ValueChanged<ToolPane>? get onSelected => widget.onSelected;
+  ValueChanged<ToolPane>? get onClosed => widget.onClosed;
+
   @override
   Widget build(BuildContext context) {
     final theme = FluentTheme.of(context);
+    final active = widget.active;
     // Активная панель может пропасть из вкладок раньше, чем хост обновит
     // [active]; тогда показывается первая вкладка, а не пустой док.
     final shown = tabs.firstWhere(
       (tab) => tab.pane == active,
       orElse: () => tabs.first,
     );
+
+    if (_revealed != shown.pane) {
+      _revealed = shown.pane;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = _activeKey.currentContext;
+        if (mounted && context != null) {
+          Scrollable.ensureVisible(context, alignment: 0);
+        }
+      });
+    }
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -82,51 +113,80 @@ class CodeLabToolDock extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Действия стоят справа и сжимаются: не больше 70 % ширины дока, всё
-          // остальное прокручивается по горизонтали (док 360 px, длинные
-          // подписи русского интерфейса); вкладки получают остаток.
+          // Вкладки идут слева и прокручиваются (не шире, чем ширина дока
+          // минус [CodeLabToolDock.minActionsWidth]); действия активной
+          // вкладки получают остаток и тоже прокручиваются. Активная вкладка
+          // прокручивается в видимую область, поэтому её заголовок не
+          // обрезается (док 360 px, русские подписи).
           LayoutBuilder(
-            builder: (context, constraints) => Row(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
-                    child: Row(
-                      children: [
-                        for (final tab in tabs)
-                          _DockTabButton(
-                            pane: tab.pane,
-                            selected: tab.pane == shown.pane,
-                            onSelected: onSelected,
-                            onClosed: onClosed,
-                          ),
-                      ],
-                    ),
-                  ),
+            builder: (context, constraints) {
+              final hasActions = shown.actions?.isNotEmpty ?? false;
+              final tabsRow = SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
+                child: Row(
+                  children: [
+                    for (final tab in tabs)
+                      tab.pane == shown.pane
+                          ? KeyedSubtree(
+                              key: _activeKey,
+                              child: _DockTabButton(
+                                pane: tab.pane,
+                                selected: true,
+                                onSelected: onSelected,
+                                onClosed: onClosed,
+                              ),
+                            )
+                          : _DockTabButton(
+                              pane: tab.pane,
+                              selected: false,
+                              onSelected: onSelected,
+                              onClosed: onClosed,
+                            ),
+                  ],
                 ),
-                // Действия — только у активной вкладки (D1).
-                if (shown.actions case final actions? when actions.isNotEmpty)
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: constraints.maxWidth * 0.7,
-                    ),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        spacing: 6,
-                        children: actions,
+              );
+              return Row(
+                children: [
+                  if (hasActions)
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: math.max(
+                          0,
+                          constraints.maxWidth -
+                              CodeLabToolDock.minActionsWidth,
+                        ),
+                      ),
+                      child: tabsRow,
+                    )
+                  else
+                    Expanded(child: tabsRow),
+                  // Действия — только у активной вкладки (D1).
+                  if (hasActions)
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            spacing: 6,
+                            children: shown.actions!,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            ),
+                ],
+              );
+            },
           ),
           Container(height: 1, color: theme.resources.cardStrokeColorDefault),
           Expanded(
-            child: KeyedSubtree(key: paneKey(shown.pane), child: shown.content),
+            child: KeyedSubtree(
+              key: CodeLabToolDock.paneKey(shown.pane),
+              child: shown.content,
+            ),
           ),
         ],
       ),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -185,11 +186,28 @@ class _WorkbenchProtocolPaneState extends State<WorkbenchProtocolPane> {
       filters: frames
           ? _FrameFilters(state: state, cubit: cubit)
           : _LogFilters(state: state, cubit: cubit),
-      // Узкие фиксированные колонки по содержимому, гибкая — метод или
-      // событие: в доке 360 px ей должно остаться место (D12).
+      // Узкие фиксированные колонки по содержимому (измеряются шрифтом темы
+      // и масштабом текста), гибкая — метод или событие: в доке 360 px ей
+      // должно остаться место (D12), а время и заголовки не обрезаются.
       columnWidths: frames
-          ? const [28, null, 56, 72]
-          : const [84, 76, 84, null],
+          ? [
+              28,
+              null,
+              _columnWidth(context, [l10n.protocolColumnId], sample: '0000'),
+              _columnWidth(context, [
+                l10n.protocolColumnTime,
+              ], sample: '00:00:00'),
+            ]
+          : [
+              _columnWidth(context, [
+                l10n.protocolColumnTime,
+              ], sample: '00:00:00.000'),
+              _columnWidth(context, [
+                l10n.protocolColumnLevel,
+              ], sample: 'CRITICAL'),
+              _columnWidth(context, [l10n.protocolColumnCategory]),
+              null,
+            ],
       columns: frames
           ? [
               '',
@@ -264,6 +282,35 @@ class _WorkbenchProtocolPaneState extends State<WorkbenchProtocolPane> {
 
 /// Поле поиска строки фильтров: текст берётся из состояния Cubit, чтобы
 /// фильтр пережил закрытие вкладки и смену вида.
+/// Ширина фиксированной колонки: самый широкий из заголовков [headers]
+/// (жирным) и образца [sample] (обычным кеглем таблицы), плюс отступы ячейки
+/// (по 10 px) и запас. Измерение — шрифтом темы и масштабом текста, поэтому
+/// время и заголовки en и ru не обрезаются в доке 360 px (ручной смок change
+/// `redesign-protocol-pane`).
+double _columnWidth(
+  BuildContext context,
+  List<String> headers, {
+  String? sample,
+}) {
+  double measure(String text, CodeLabTextRole role) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: CodeLabText.styleOf(context, role)),
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  var widest = sample == null ? 0.0 : measure(sample, CodeLabTextRole.caption);
+  for (final header in headers) {
+    widest = math.max(widest, measure(header, CodeLabTextRole.strong));
+  }
+  return (widest + 20 + 6).ceilToDouble();
+}
+
 class _SearchBox extends StatefulWidget {
   const _SearchBox({
     required this.text,
@@ -378,6 +425,9 @@ class _LogFilters extends StatelessWidget {
           children: [
             ComboBox<String?>(
               value: filter.category,
+              // Для значения `null` («все») ComboBox не находит пункт меню и
+              // показал бы пустое поле: подпись задаёт `placeholder`.
+              placeholder: Text(l10n.protocolAllCategories),
               items: [
                 ComboBoxItem<String?>(
                   value: null,
@@ -390,6 +440,7 @@ class _LogFilters extends StatelessWidget {
             ),
             ComboBox<LogLevel?>(
               value: filter.minLevel,
+              placeholder: Text(l10n.protocolAllLevels),
               items: [
                 ComboBoxItem<LogLevel?>(
                   value: null,
@@ -430,10 +481,6 @@ const _compactPadding = WidgetStatePropertyAll(
   EdgeInsets.symmetric(horizontal: 8, vertical: 4),
 );
 const _compactButton = ButtonStyle(padding: _compactPadding);
-const _compactToggle = ToggleButtonThemeData(
-  checkedButtonStyle: _compactButton,
-  uncheckedButtonStyle: _compactButton,
-);
 
 /// Действия вкладки Protocol в строке вкладок дока: `Trace` (только в
 /// release-сборке), `Pause`/`Resume`, `Clear`, `Export…` (design.md change
@@ -487,12 +534,18 @@ class WorkbenchProtocolActions extends StatelessWidget {
           spacing: 6,
           children: [
             if (state.traceAvailable)
-              ToggleButton(
-                key: const ValueKey('protocol-trace'),
-                style: _compactToggle,
-                checked: state.traceEnabled,
-                onChanged: cubit.setTrace,
-                child: Text(l10n.protocolTrace),
+              // Родной стиль `ToggleButton`: у нажатой кнопки акцентный фон, как
+              // у фильтров. Свой `style` стёр бы его; состояние читает и
+              // скринридер (`toggled`).
+              Semantics(
+                toggled: state.traceEnabled,
+                container: true,
+                child: ToggleButton(
+                  key: const ValueKey('protocol-trace'),
+                  checked: state.traceEnabled,
+                  onChanged: cubit.setTrace,
+                  child: Text(l10n.protocolTrace),
+                ),
               ),
             Button(
               style: _compactButton,

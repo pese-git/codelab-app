@@ -19,7 +19,7 @@ import 'package:codelab_ui/codelab_ui.dart';
 
 import '../../../l10n/app_localizations.dart';
 
-const _redacted = '"<redacted>"';
+const _redacted = '<redacted>';
 const _indent = JsonEncoder.withIndent('  ');
 
 String _two(int value) => value.toString().padLeft(2, '0');
@@ -113,11 +113,14 @@ Map<String, Object?> _frameFields(ProtocolFrame frame) => {
   'error_code': frame.errorCode,
   'detail': frame.detail,
   'size': frame.size,
-  'time': frame.time.toUtc().toIso8601String(),
+  // Местное время, как поле `time` записи журнала (D8) и таблица.
+  'time': _dateTimeMillis(frame.time),
 }..removeWhere((_, value) => value == null);
 
-/// Сегменты отформатированного JSON: значение `"<redacted>"` — отдельный
-/// замаскированный сегмент (D12). Склейка текстов даёт исходный JSON.
+/// Сегменты отформатированного JSON: маркер `<redacted>` — отдельный
+/// замаскированный сегмент (D12), в том числе внутри строки
+/// (`"1| API_TOKEN=<redacted>"`); кавычки остаются обычным текстом. Склейка
+/// текстов даёт исходный JSON.
 List<CodeLabMaskedSegment> protocolJsonSegments(Map<String, Object?> payload) {
   final pieces = _indent.convert(payload).split(_redacted);
   return [
@@ -251,6 +254,19 @@ CodeLabProtocolTableRow protocolRecordRow(
 String protocolRecordCopyText(Map<String, Object?> record) =>
     _indent.convert(record);
 
+/// Значение поля записи: вложенные структуры (например, `payload` в debug) —
+/// JSON, а не `Map.toString`; при сбое кодирования — `toString`.
+String _fieldText(Object? value) {
+  if (value is Map || value is List) {
+    try {
+      return jsonEncode(value);
+    } on Object {
+      return '$value';
+    }
+  }
+  return '$value';
+}
+
 /// Панель выбранной записи (D8): поля, InfoBar буфера и ссылка `request_id`.
 ///
 /// [frameAvailable] — кадр с этим `request_id` есть в области; без него ссылка
@@ -293,7 +309,10 @@ CodeLabProtocolDetail protocolRecordDetail(
                   : l10n.protocolFrameGone,
             )
           else
-            CodeLabProtocolField(label: entry.key, value: '${entry.value}'),
+            CodeLabProtocolField(
+              label: entry.key,
+              value: _fieldText(entry.value),
+            ),
     ],
     onCopy: onCopy,
   );

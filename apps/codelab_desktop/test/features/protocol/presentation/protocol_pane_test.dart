@@ -39,6 +39,7 @@ import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart'
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:structured_log_fluent/structured_log_fluent.dart'
     show FluentLogViewerPage;
@@ -61,10 +62,14 @@ Finder _inPane(Finder matching) =>
 
 /// Окружение теста: приложение, сценарный агент и порты.
 final class _Env {
-  _Env({required this.debug, FakeProtocolExportSaver? saver})
-    : saver = saver ?? FakeProtocolExportSaver();
+  _Env({
+    required this.debug,
+    FakeProtocolExportSaver? saver,
+    this.locale = const Locale('en'),
+  }) : saver = saver ?? FakeProtocolExportSaver();
 
   final bool debug;
+  final Locale locale;
   final FakeProtocolExportSaver saver;
   final FakeAcpTransport agent = FakeAcpTransport();
   late final CodeLabTestBinding binding;
@@ -76,6 +81,11 @@ final class _Env {
   Future<void> pump(WidgetTester tester, {bool connect = true}) async {
     tester.view.physicalSize = const Size(1440, 1000);
     tester.view.devicePixelRatio = 1;
+    // Тестовый шрифт Ahem вдвое шире настоящих: масштаб 0.5 даёт размеры,
+    // близкие к реальным, и колонки дока 360 px измеряются на правдоподобных
+    // метриках (ручной смок change `redesign-protocol-pane`).
+    tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     binding = CodeLabTestBinding(
@@ -83,6 +93,7 @@ final class _Env {
       transport: FakeAcpTransport(),
       stdioTransportFactory: (_) => agent,
       debugBuild: debug,
+      locale: locale,
       protocolExportSaver: saver,
     );
     await tester.pumpWidget(
@@ -815,6 +826,139 @@ void main() {
         );
         await env.tearDown(tester);
       }
+    });
+  });
+
+  // Ручной смок на macOS (ревью change `redesign-protocol-pane`): в доке по
+  // умолчанию 360 px обрезались время и заголовки колонок, у фильтров Log в
+  // закрытом виде не было подписи, Trace не выглядел нажатым.
+  group('док 360 px: ширины колонок, фильтры Log, Trace', () {
+    /// Настоящие шрифты уже тестового Ahem в два раза и больше; масштаб 0.5
+    /// приближает метрики Ahem к настоящим, и измерение колонок проверяется на
+    /// реалистичных размерах.
+    void realisticTextScale(WidgetTester tester) {
+      tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    }
+
+    bool truncated(WidgetTester tester, Finder finder) =>
+        tester.renderObject<RenderParagraph>(finder).didExceedMaxLines;
+
+    testWidgets('Frames (ru): время и заголовки колонок не обрезаны', (
+      tester,
+    ) async {
+      realisticTextScale(tester);
+      final env = _Env(debug: false, locale: const Locale('ru'));
+      await env.pump(tester);
+      await env.createSession(tester, 's_7f3a');
+      await env.openPane(tester);
+
+      final times = _inPane(find.textContaining(RegExp(r'^\d\d:\d\d:\d\d$')));
+      expect(times, findsWidgets);
+      for (final time in times.evaluate()) {
+        expect(
+          (time.renderObject! as RenderParagraph).didExceedMaxLines,
+          isFalse,
+          reason: 'время кадра обрезано',
+        );
+      }
+      for (final header in ['Id', 'Время']) {
+        expect(
+          truncated(tester, _inPane(find.text(header))),
+          isFalse,
+          reason: header,
+        );
+      }
+      await env.tearDown(tester);
+    });
+
+    testWidgets('Log (ru): время и заголовки Время/Уровень/Категория не '
+        'обрезаны', (tester) async {
+      realisticTextScale(tester);
+      final env = _Env(debug: false, locale: const Locale('ru'));
+      await env.pump(tester);
+      await env.createSession(tester, 's_7f3a');
+      env.cubit.openLog();
+      await env.openPane(tester);
+
+      final times = _inPane(
+        find.textContaining(RegExp(r'^\d\d:\d\d:\d\d\.\d\d\d$')),
+      );
+      expect(times, findsWidgets);
+      for (final time in times.evaluate()) {
+        expect(
+          (time.renderObject! as RenderParagraph).didExceedMaxLines,
+          isFalse,
+          reason: 'время записи обрезано',
+        );
+      }
+      for (final header in ['Время', 'Уровень', 'Категория']) {
+        expect(
+          truncated(tester, _inPane(find.text(header))),
+          isFalse,
+          reason: header,
+        );
+      }
+      await env.tearDown(tester);
+    });
+
+    testWidgets('Log: закрытые выпадающие списки показывают «All categories» '
+        'и «All levels»', (tester) async {
+      final env = _Env(debug: false);
+      await env.pump(tester);
+      env.cubit.openLog();
+      await env.openPane(tester);
+
+      expect(
+        find.descendant(
+          of: find.byType(ComboBox<String?>),
+          matching: find.text('All categories'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ComboBox<LogLevel?>),
+          matching: find.text('All levels'),
+        ),
+        findsOneWidget,
+      );
+      await env.tearDown(tester);
+    });
+
+    testWidgets('Trace: включённая кнопка — ToggleButton с родным стилем '
+        'нажатого состояния и отметкой toggled в семантике', (tester) async {
+      final env = _Env(debug: false);
+      await env.pump(tester);
+      await env.createSession(tester, 's_7f3a');
+      await env.openPane(tester);
+      final trace = _key('protocol-trace');
+      // Отметка `toggled` стоит на обёртке кнопки.
+      final toggled = find
+          .ancestor(
+            of: trace,
+            matching: find.byWidgetPredicate(
+              (w) => w is Semantics && w.properties.toggled != null,
+            ),
+          )
+          .first;
+
+      // Стиль не переопределён: у нажатой кнопки родной акцентный фон Fluent.
+      expect(tester.widget<ToggleButton>(trace).style, isNull);
+      expect(
+        tester.getSemantics(toggled).flagsCollection.isToggled.toBoolOrNull(),
+        isNot(true),
+      );
+
+      tester.widget<ToggleButton>(trace).onChanged!(true);
+      await env.settle(tester);
+
+      expect(tester.widget<ToggleButton>(trace).checked, isTrue);
+      expect(
+        tester.getSemantics(toggled).flagsCollection.isToggled.toBoolOrNull(),
+        isTrue,
+      );
+      await env.tearDown(tester);
     });
   });
 }

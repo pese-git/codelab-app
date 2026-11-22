@@ -247,7 +247,7 @@ void main() {
 
       final masked = segments.where((s) => s.masked).toList();
       expect(masked, hasLength(1));
-      expect(masked.single.text, '"<redacted>"');
+      expect(masked.single.text, '<redacted>');
       expect(
         segments.where((s) => !s.masked).map((s) => s.text).join(),
         isNot(contains('<redacted>')),
@@ -702,6 +702,77 @@ void main() {
 
         expect(jsonDecode(text), record);
       });
+    });
+  });
+
+  group('ревью после ручного смока', () {
+    test('<redacted> внутри строки JSON — замаскированный сегмент', () {
+      final payload = <String, Object?>{
+        'text': '1| API_TOKEN=<redacted>',
+        'value': '<redacted>',
+      };
+
+      final segments = protocolJsonSegments(payload);
+
+      expect(segments.where((s) => s.masked), hasLength(2));
+      expect(
+        segments.map((s) => s.text).join(),
+        const JsonEncoder.withIndent('  ').convert(payload),
+      );
+      // Текст до маркера внутри строки остаётся обычным сегментом.
+      expect(
+        segments.where((s) => !s.masked).map((s) => s.text).join(),
+        contains('1| API_TOKEN='),
+      );
+      expect(
+        segments.where((s) => !s.masked).map((s) => s.text).join(),
+        isNot(contains('<redacted>')),
+      );
+    });
+
+    test('поле time кадра — местное время «yyyy-MM-dd HH:mm:ss.SSS», как у '
+        'записи журнала', () {
+      final frame = protocolFrame(
+        method: 'session/new',
+        id: 1,
+        omitted: ProtocolPayloadOmitted.policy,
+        time: DateTime(2026, 11, 22, 12, 0, 4, 7),
+      );
+
+      final detail = protocolFrameDetail(
+        frame,
+        basePolicy: ProtocolPayloadPolicy.metadataOnly,
+        traceEnabled: false,
+        l10n: _l10n,
+      );
+
+      final time = detail.fields!.firstWhere((f) => f.label == 'time');
+      expect(time.value, '2026-11-22 12:00:04.007');
+      expect(
+        (jsonDecode(protocolFrameCopyText(frame))
+            as Map<String, Object?>)['time'],
+        '2026-11-22 12:00:04.007',
+      );
+    });
+
+    test('поле payload записи журнала — JSON, а не Map.toString', () {
+      final record = logRecord(
+        'protocol_message',
+        level: 'trace',
+        extra: {
+          'payload': {'jsonrpc': '2.0', 'id': 7},
+        },
+      );
+
+      final detail = protocolRecordDetail(
+        record,
+        l10n: _l10n,
+        frameAvailable: false,
+      );
+
+      final payload = detail.fields!.firstWhere((f) => f.label == 'payload');
+      expect(jsonDecode(payload.value), {'jsonrpc': '2.0', 'id': 7});
+      expect(payload.value, startsWith('{"jsonrpc"'));
     });
   });
 }
