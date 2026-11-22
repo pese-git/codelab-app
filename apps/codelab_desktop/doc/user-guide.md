@@ -81,7 +81,9 @@ CodeLab app — окно для работы с AI-агентом над пап�
 
    «Back» с шага 5 возвращает на «Privacy». ⌘N на этом экране не привязан.
 
-<!-- screenshot (перенос: снимки приложения снимаются отдельным прогоном, пока маркер): шаги onboarding (светлая тема) — doc/images/onboarding-welcome.png, onboarding-permissions.png, onboarding-model.png, onboarding-privacy.png, onboarding-project.png -->
+   ![Шаг 5 «Open a project» на новой установке: кнопка «Open folder…» с ⌘O, зона «Drop a folder here to open it», карточка встроенного агента, три недавних проекта, внизу «Back» и «Skip for now»](images/onboarding-project.png)
+
+<!-- screenshot (перенос: снимки приложения снимаются отдельным прогоном, пока маркер): шаги onboarding (светлая тема) — doc/images/onboarding-welcome.png, onboarding-permissions.png, onboarding-model.png, onboarding-privacy.png -->
 
 **Когда экран показывается.** Пока в настройках окна нет флага `codelab.app.onboarding_done`: на новой установке и после обновления с версии без onboarding — один раз, даже если провайдер уже настроен. Флаг записывается в конце шага 5: когда принята папка, по «Continue in …» или по «Skip for now». Если выйти из приложения раньше, в том числе не закончив шаг 5, экран появится при следующем запуске снова. Если флаг нельзя прочитать или в нём неожиданное значение, экран не показывается, чтобы не загораживать рабочее место; значение при этом не перезаписывается.
 
