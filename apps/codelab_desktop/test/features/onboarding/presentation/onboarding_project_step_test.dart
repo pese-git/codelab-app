@@ -231,7 +231,26 @@ void main() {
       expect(_key('onboarding-project-skip'), findsNothing);
       expect(inKey('onboarding-project-recents', '/work/b'), findsOneWidget);
       expect(inKey('onboarding-project-recents', '/work/app'), findsNothing);
+      // Кадр 07d.2: основная кнопка — «Continue in …», «Open folder…»
+      // вторичная (tasks.md 3.7, сверка 7.1).
+      expect(
+        tester.widget<CodeLabButton>(_key('start-open-project')).emphasis,
+        CodeLabButtonEmphasis.secondary,
+      );
       expect(embeddedCalls, isEmpty);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('без восстановленного проекта «Open folder…» — основная', (
+      tester,
+    ) async {
+      await pumpApp(tester, binding());
+      await toProject(tester);
+
+      expect(
+        tester.widget<CodeLabButton>(_key('start-open-project')).emphasis,
+        CodeLabButtonEmphasis.primary,
+      );
       await tearDownApp(tester);
     });
 
