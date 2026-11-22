@@ -36,7 +36,7 @@ flowchart LR
 - По умолчанию работает один процесс: встроенный агент выполняется внутри приложения.
 - Агент-процесс появляется, только если выбран профиль `stdio`. Приложение запускает его и завершает при выходе.
 - Терминал пользователя запускает оболочку входа (`-l`) через PTY (псевдотерминал) в папке сессии: `SHELL`, если это абсолютный путь к исполняемому файлу, иначе `/bin/zsh`, `/bin/bash` или `/bin/sh`. При выходе приложение посылает ей сигнал завершения, а через 3 секунды завершает принудительно.
-- Приложение не открывает портов на приём. Исходящие соединения: к провайдеру модели, к MCP-серверам типа `http`, к агенту по WebSocket и загрузка изображения из ответа агента — только `https` и только после нажатия «Show image» (до 32 МБ). Ссылки `http`/`https` из ленты и терминала открывает браузер, а `mailto:` из ленты — почтовый клиент; само приложение по ним не ходит.
+- Приложение не открывает портов на приём. Исходящие соединения: к провайдеру модели, к MCP-серверам типа `http`, к агенту по WebSocket и загрузка изображения из ответа агента — только `https` и только после нажатия «Show image» (до 32 МБ). Ссылки `http`/`https` из ленты, терминала, страницы «Legal» и раздела «About» («Release notes») открывает браузер, а `mailto:` из ленты — почтовый клиент; само приложение по ним не ходит. Документы страницы «Legal» читаются из ресурсов сборки, без сети.
 
 ## Сборка
 
@@ -57,6 +57,16 @@ fvm flutter build macos
 | идентификатор бандла | `com.example.codelabApp` — значение шаблона Flutter | `macos/Runner/Configs/AppInfo.xcconfig` |
 | версия | `0.1.0` | `pubspec.yaml` |
 | минимальная macOS | 12.0 | `macos/Podfile`, `macos/Runner.xcodeproj` |
+
+### Платформы
+
+Собирается и проверяется только macOS. Каталоги `linux/`, `windows/`, `android/`, `ios/` и `web/` в `apps/codelab_desktop` созданы командой `flutter create`, в них лежат иконки CodeLab, а для Linux — ещё иконка окна GTK и ярлык `linux/packaging/*.desktop`. Сборки и проверки для этих платформ в проекте нет, поддержка не заявлена.
+
+### Ресурсы сборки
+
+В бандл входят шесть правовых документов из `assets/legal/`: `LICENSE`, `THIRD_PARTY_NOTICES.md`, `PRIVACY.md`, `PRIVACY.ru.md`, `TERMS.md`, `TERMS.ru.md` (объявлены в `pubspec.yaml`). Это побайтные копии одноимённых файлов корня репозитория: Flutter не берёт ресурсы вне каталога пакета. Тест `test/app/legal_assets_test.dart` называет разошедшийся или необъявленный файл, поэтому после правки корневого документа копию обновляют вместе с ним. Приложение читает их при показе страницы «Legal», раздела «About» и шага «Privacy» приветственных шагов; список лицензий пакетов Flutter собирает при сборке по `package_config.json` — в pub workspace он включает все пакеты рабочего пространства, в том числе инструменты разработки.
+
+Язык меню macOS задаёт `CFBundleLocalizations` (`en`, `ru`) в `macos/Runner/Info.plist` и `macos/Runner/ru.lproj/MainMenu.strings`: меню следует языку системы, а не выбору в приложении. Пункт «Preferences…» (⌘,) меню приложения открывает настройки через канал `codelab/app_menu` (`macos/Runner/AppDelegate.swift`).
 
 ### Подпись и entitlements
 
@@ -91,7 +101,7 @@ CODELAB_HOME="$HOME/.codelab-test" \
 
 | Где | Что |
 |---|---|
-| `~/Library/Preferences/com.example.codelabApp.plist` | настройки окна через `shared_preferences` (ключи с префиксом `flutter.`): снимок рабочего места `codelab.workspace.snapshot` (проект и активная сессия), профиль по умолчанию `codelab.connection.default_profile`, раскладка панелей `codelab.dock.*`, последняя страница настроек `codelab.settings.last_page`, язык интерфейса `codelab.app.language` (`en` или `ru`; для «System» ключа нет), оформление `codelab.app.appearance` (JSON: `version`, `mode` — `light`, `dark` или `system`, `light_theme`, `dark_theme`, `system_accent`; ключа нет, пока оформление не меняли), флаг «приветственные шаги пройдены» `codelab.app.onboarding_done` (только `true`; ключа нет, пока шаги не пройдены) |
+| `~/Library/Preferences/com.example.codelabApp.plist` | настройки окна через `shared_preferences` (ключи с префиксом `flutter.`): снимок рабочего места `codelab.workspace.snapshot` (проект и активная сессия), профиль по умолчанию `codelab.connection.default_profile`, раскладка панелей `codelab.dock.*`, последняя страница настроек `codelab.settings.last_page`, язык интерфейса `codelab.app.language` (`en` или `ru`; для «System» ключа нет), оформление `codelab.app.appearance` (JSON: `version`, `mode` — `light`, `dark` или `system`, `light_theme`, `dark_theme`, `system_accent`; ключа нет, пока оформление не меняли), флаг «приветственные шаги пройдены» `codelab.app.onboarding_done` (только `true`; ключа нет, пока шаги не пройдены), переключатель «Reopen the last project and its tabs» `codelab.workspace.reopen_last_project` (включено — ключа нет; записывается только значение `false`) |
 | `~/Library/Application Support/com.example.codelabApp/logs/` | логи приложения — [ниже](#логи-и-диагностика) |
 
 Имя файла настроек и каталога берётся из идентификатора бандла: другая сборка с другим идентификатором получит отдельные настройки.
@@ -165,6 +175,38 @@ defaults delete com.example.codelabApp
   | `appearance.stored_value_invalid`, `appearance.read_failed` | warning | `error_class` (у второго) | при старте: сохранённое значение незнакомо или хранилище не прочиталось |
   | `appearance.save_failed` | warning | `error_class` | запись выбора не удалась |
   | `appearance.save_timeout` | warning | `timeout_ms` | при выходе запись не завершилась в срок; выбор мог не сохраниться |
+
+- Приветственные шаги, экран «Open a project», страница «Legal» и запуск без прошлого проекта пишут события (пути, имена секретов и переменных, адреса, id моделей, текст запроса поиска и тексты исключений в них не попадают; для сбоев — только имя типа в `error_type` или `error_class`):
+
+  | Событие | Компонент, уровень | Поля | Когда |
+  |---|---|---|---|
+  | `onboarding.shown` | `onboarding`, info | нет | при сборке приложения: флага «шаги пройдены» нет |
+  | `onboarding.flag_invalid` | `onboarding`, warning | нет | в флаге неожиданное значение: шаги не показываются, значение не перезаписывается |
+  | `onboarding.flag_unreadable` | `onboarding`, warning | `error_type` | хранилище настроек не прочиталось: шаги не показываются |
+  | `onboarding.step_shown` | `onboarding`, debug | `step` | показан шаг |
+  | `onboarding.facts_loaded` | `onboarding`, debug | `access` (`editable` или `external`), `readiness`, `backend`, `duration_ms` | настройки агента для шагов «Permissions» и «Choose a model» прочитаны |
+  | `onboarding.facts_unavailable` | `onboarding`, warning | `error_type` или данные таймаута | настройки не прочитались или не уложились в 5 с |
+  | `onboarding.facts_late` | `onboarding`, debug | `duration_ms` | настройки пришли после таймаута; шаги их не применяют |
+  | `onboarding.model_step_skipped` | `onboarding`, info | `reason` | шаг модели пропущен: провайдер готов или агент внешний |
+  | `onboarding.model_saved` | `onboarding`, info | нет | мастер на шаге модели сохранил провайдера |
+  | `onboarding.document_opened`, `onboarding.document_closed` | `onboarding`, info и debug | `tab` (`privacy_policy` или `terms_of_use`) | открыт и закрыт документ на шаге «Privacy» |
+  | `onboarding.project_pick_cancelled` | `onboarding`, debug | нет | окно выбора папки закрыто без выбора |
+  | `onboarding.project_port_failed`, `onboarding.save_failed` | `onboarding`, warning | `error_type` | не открылся выбор папки; не записался флаг (шаги всё равно завершаются) |
+  | `onboarding.completed` | `onboarding`, info | `model_step` (`skipped`, `saved` или `later`), `project` (`picker`, `drop`, `recent`, `restored` или `skipped`) | шаги пройдены |
+  | `project.drop` | `app`, info | `outcome` (`opened` или `rejected`), `reason` (при отказе), `count` | папка брошена на экран «Open a project» или на шаг «Open a project» |
+  | `project.picker_failed` | `app`, warning | `error_class` | не открылось окно выбора папки |
+  | `project.start_held` | `app`, debug | нет | папка выбрана на шаге «Open a project»: агент стартует после завершения шагов |
+  | `app.reopen_last_project_skipped` | `app`, info | нет | переключатель «Reopen the last project and its tabs» выключен: проект не восстанавливается |
+  | `app.reopen_last_project_unreadable` | `app`, warning | `error_class` (только при сбое хранилища) | значение переключателя не прочиталось; приложение читает его как «включено» |
+  | `settings.reopen_last_project_changed` | `settings`, info | `enabled` | пользователь переключил настройку |
+  | `settings.reopen_last_project_save_failed` | `settings`, warning | `error_type` | запись настройки не удалась |
+  | `legal.tab_selected` | `settings`, debug | `tab`, `source` (`open`, `tab` или `link`) | на странице «Legal» (и в документе шага «Privacy», где работает та же страница) выбрана вкладка |
+  | `legal.link_opened` | `settings`, info | `target` (`tab` или `external`), `outcome` | нажата ссылка в документе (в том числе на шаге «Privacy») |
+  | `legal.licenses_collected` | `settings`, info | `packages`, `failed` | собран список лицензий пакетов |
+  | `legal.document_load_failed` | `settings`, warning | `tab`, `error_type` | документ не прочитался |
+  | `settings.legal_link` | `settings`, info | `from` (`privacy_block` или `about`), `tab` | переход на «Legal» со страницы «General» |
+  | `settings.about_action` | `settings`, info | `action`, `outcome` | действие раздела «About» |
+  | `settings.about_load_failed` | `settings`, warning | `error_type` | раздел «About» не загрузился |
 
 - До выпуска 1.0 тексты сообщений и вывод инструментов в журналах сессий не редактируются — [что попадает в логи и журналы](../../../docs/user/configuration.md#что-попадает-в-логи-и-журналы).
 - Отправка событий на сервер логов включается только при сборке разработчиком через `--dart-define=CODELAB_LOG_SERVER_URL=…` и `--dart-define=CODELAB_LOG_SERVER_KEY=…`. В обычной сборке её нет.

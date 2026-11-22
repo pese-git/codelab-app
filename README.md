@@ -15,8 +15,8 @@ Monorepo CodeLab на Dart и Flutter: desktop-клиент (`apps/codelab_deskt
 | [`packages/dart/codelab_acp_transports`](packages/dart/codelab_acp_transports/README.md) | транспорты ACP; `io.dart` — stdio и WebSocket |
 | [`packages/dart/codelab_acp_testing`](packages/dart/codelab_acp_testing/README.md) | fake-транспорты, фикстуры и помощники conformance-тестов |
 | [`packages/dart/codelab_client_acp`](packages/dart/codelab_client_acp/README.md) | протокольный клиент `AcpClientApplication`: domain, состояние и use cases |
-| [`packages/dart/codelab_client_core`](packages/dart/codelab_client_core/README.md) | общий клиентский слой без UI и IO для desktop и CLI, web-безопасный: рабочее пространство, соединение, сессии, транскрипт, очередь промптов, одобрения, инспектор |
-| [`packages/dart/codelab_client_io`](packages/dart/codelab_client_io/README.md) | `dart:io`-адаптеры клиента: файлы, процессы, транспорты, хранилища профилей |
+| [`packages/dart/codelab_client_core`](packages/dart/codelab_client_core/README.md) | общий клиентский слой без UI и IO для desktop и CLI, web-безопасный: рабочее пространство, соединение, сессии, транскрипт, очередь промптов, одобрения, инспектор, формат пользовательских тем |
+| [`packages/dart/codelab_client_io`](packages/dart/codelab_client_io/README.md) | `dart:io`-адаптеры клиента: файлы, процессы, транспорты, хранилища профилей и недавних проектов, каталог тем |
 | [`packages/dart/codelab_agent_core`](packages/dart/codelab_agent_core/README.md) | встраиваемое ядро Dart-агента на чистом Dart: LLM, цикл, инструменты, разрешения, сессии |
 | [`packages/dart/codelab_agent_io`](packages/dart/codelab_agent_io/README.md) | `dart:io`-реализации портов ядра агента: файлы, процессы, журналы сессий, загрузка конфигурации (`ConfigLoader`), файлы проекта (`AGENTS.md`, шаблоны команд, определения агентов), общие подкоманды `config` |
 | [`packages/dart/codelab_agent_acp`](packages/dart/codelab_agent_acp/README.md) | ACP-сервер агента: проекция `AgentRuntime` в протокол |

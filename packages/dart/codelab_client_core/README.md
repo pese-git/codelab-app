@@ -41,6 +41,7 @@ flowchart LR
 | Файлы проекта | `ProjectFiles`, `ProjectEntry`, `DirectoryListing`, `FilePreview`, `normalizeRelativePath`, `classifyPreview`, `isMaybeSecretFileName`, `sortProjectEntries` | порт чтения папки проекта и чистые правила превью |
 | Восстановление | `WorkspaceSnapshot`, `WorkspaceSnapshotStore`, `InMemoryWorkspaceSnapshotStore` | снимок «проект, активная сессия, открытые сессии» после перезапуска хоста |
 | Хранилища | `ProfileStore`, `RecentProjectsStore`, `RecentProject`, `mergeRecentProjects` | порты постоянных данных клиента и правило слияния недавних проектов |
+| Темы | `ThemeFile`, `ThemeLoaded`, `ThemeRejected`, `ThemeRole`, `ThemeColorValue`, `ThemeIssue`, `ThemeIssueCode`, `ThemeLibrary`, `ThemeBase`, `ThemeEntry`, `ThemeReadError`, `ThemeCatalogException`, `ThemeCatalogFailure`, `ThemeImportResult` (`ThemeImportImported`, `ThemeImportReplaced`, `ThemeImportUnchanged`, `ThemeImportNeedsReplace`, `ThemeImportInvalid`, `ThemeImportSourceChanged`, `ThemeImportFailed`), `InMemoryThemeLibrary`, `themeFileMaxBytes`, `isValidThemeName` | формат пользовательской темы `$CODELAB_HOME/themes/<имя>.json`, нестрогий разбор (предупреждения не отменяют тему, ошибки отменяют) и порт каталога тем. Замечание разбора — код и позиция в файле без текста: текст строит клиент. Файлов пакет не читает |
 
 `TranscriptProjector` и `WorkspaceRestorer` — внутренние: барель их не экспортирует.
 
@@ -86,6 +87,7 @@ await workspace.dispose(); // бэкенд закрывает его владе�
 | `RecentProjectsStore` | `JsonFileRecentProjectsStore` (`codelab_client_io`); в app — `MigratingRecentProjectsStore` над ним (одноразовый перенос ключа `shared_preferences`, живёт до первого `stable`), при недопустимом `CODELAB_HOME` — `UnavailableRecentProjectsStore` |
 | `WorkspaceSnapshotStore` | `SharedPreferencesWorkspaceSnapshotStore` в app; `InMemoryWorkspaceSnapshotStore` в пакете — для тестов |
 | `ProjectFiles` | `IoProjectFiles` (`codelab_client_io`) |
+| `ThemeLibrary` | `IoThemeLibrary` (`codelab_client_io`); `InMemoryThemeLibrary` в пакете — для тестов |
 | `ProfileSecrets` | реализации composition root app и CLI поверх хранилища секретов |
 | `SecretSource` | `ProfileSecretSource` (общий для app и CLI), `InMemorySecretSource` |
 | `AgentBackend` | `AcpClientBackend` |
