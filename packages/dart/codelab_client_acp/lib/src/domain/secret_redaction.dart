@@ -45,13 +45,46 @@ final _authorizationPattern = RegExp(
   r'\b(Basic|Bearer|Digest|Token)\s+[A-Za-z0-9._~+/=-]+',
   caseSensitive: false,
 );
+// Начало совпадения — само секретное слово, без ведущего `[A-Za-z0-9_.-]*`:
+// ведущий префикс не влияет на результат (замена сохраняет `group(1)` как есть,
+// а текст перед совпадением остаётся нетронутым), но заставлял движок на
+// каждой позиции длинной строки без разделителей (base64, содержимое файла)
+// сканировать её до конца — минуты на 40 тыс. символов (design.md change
+// `redesign-protocol-pane`, D3: payload кадров маскируется до 256 KiB).
 final _assignmentSecretPattern = RegExp(
-  r'([A-Za-z0-9_.-]*(?:api[_-]?key|cookie|credential|jwt|pass(?:word)?|private[_-]?key|secret|session[_-]?(?:token|cookie|secret|key)|token)[A-Za-z0-9_.-]*\s*[:=]\s*)([^\s,;]+)',
+  r'((?:api[_-]?key|cookie|credential|jwt|pass(?:word)?|private[_-]?key|secret|session[_-]?(?:token|cookie|secret|key)|token)[A-Za-z0-9_.-]{0,64}\s*[:=]\s*)([^\s,;]+)',
   caseSensitive: false,
 );
-final _privateKeyPattern = RegExp(
-  r'-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----',
-);
+// Границы блока ключа ищутся двумя отдельными шаблонами, а не одним с ленивым
+// `[\s\S]*?`: на повторах `-----BEGIN … PRIVATE KEY-----` без `END` один
+// шаблон перебирал хвост от каждого BEGIN — квадратичное время (ревью change
+// `redesign-protocol-pane`). Хвост имени после секретного слова выше ограничен
+// 64 символами по той же причине.
+final _privateKeyBegin = RegExp(r'-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----');
+final _privateKeyEnd = RegExp(r'-----END [A-Z ]{0,40}PRIVATE KEY-----');
+
+/// Заменяет блоки `BEGIN … END PRIVATE KEY` на [redactedSecret] за линейное
+/// время; BEGIN без END остаётся как есть (как и у прежнего одного шаблона).
+String _redactPrivateKeyBlocks(String text) {
+  final out = StringBuffer();
+  var cursor = 0;
+  for (final begin in _privateKeyBegin.allMatches(text)) {
+    if (begin.start < cursor) continue;
+    // Поиск от позиции без копирования хвоста: `substring` на каждом BEGIN
+    // давал квадратичное копирование на тексте из множества блоков.
+    final end = _privateKeyEnd.allMatches(text, begin.end).firstOrNull;
+    if (end == null) {
+      // Дальше END нет ни у одного BEGIN: перебирать остальные не нужно.
+      break;
+    }
+    out
+      ..write(text.substring(cursor, begin.start))
+      ..write(redactedSecret);
+    cursor = end.end;
+  }
+  out.write(text.substring(cursor));
+  return out.toString();
+}
 
 final class SecretRedactor {
   const SecretRedactor();
@@ -71,12 +104,37 @@ final class SecretRedactor {
     return switch (value) {
       null || num() || bool() => value,
       String() => redactText(value),
-      Map() => {
-        for (final entry in value.entries)
-          entry.key.toString(): redact(entry.value, key: entry.key.toString()),
-      },
+      Map() => _redactMap(value),
       Iterable() => [for (final item in value) redact(item)],
       _ => redactText(value.toString()),
+    };
+  }
+
+  /// Маскирует объект; пара `{name, value}` с секретным `name` теряет `value`.
+  ///
+  /// Почему: `HttpHeader` и `EnvVariable` ACP (`17-Schema.md`) несут секрет
+  /// не под ключом, а в значении `value` при секретном `name`
+  /// (`Authorization`, `GITHUB_TOKEN`); правило по ключу этого не видит
+  /// (design.md change `redesign-protocol-pane`, D4; approval-safety «Секрет в
+  /// паре name/value»).
+  ///
+  /// Как работает: расширение того же правила имён (`_sensitiveKeyPattern` с
+  /// исключением счётчиков токенов), отдельного набора правил нет. `name`
+  /// остаётся как есть, прочие поля объекта обрабатываются прежними правилами.
+  Map<String, Object?> _redactMap(Map<Object?, Object?> value) {
+    final name = value['name'];
+    final secretPair =
+        name is String &&
+        value.containsKey('value') &&
+        _isSensitiveKey(name) &&
+        // Исключение счётчиков токенов то же, что у правила по ключу: числовое
+        // значение под именем-счётчиком — статистика.
+        !(value['value'] is num && _isTokenCounterKey(name));
+    return {
+      for (final entry in value.entries)
+        entry.key.toString(): secretPair && entry.key == 'value'
+            ? redactedSecret
+            : redact(entry.value, key: entry.key.toString()),
     };
   }
 
@@ -88,8 +146,7 @@ final class SecretRedactor {
   }
 
   String redactText(String value) {
-    return value
-        .replaceAll(_privateKeyPattern, redactedSecret)
+    return _redactPrivateKeyBlocks(value)
         .replaceAllMapped(_authorizationPattern, (match) {
           return '${match.group(1)} $redactedSecret';
         })

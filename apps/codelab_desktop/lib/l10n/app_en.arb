@@ -620,51 +620,6 @@
       }
     }
   },
-  "workbenchInspectorTitle": "Inspector",
-  "@workbenchInspectorTitle": {
-    "description": "Заголовок панели инспектора в панели Protocol. Содержимое инспектора не переводится."
-  },
-  "workbenchInspectorCategoryApproval": "Approval",
-  "@workbenchInspectorCategoryApproval": {
-    "description": "Тег записи инспектора: одобрение."
-  },
-  "workbenchInspectorCategoryTool": "Tool",
-  "@workbenchInspectorCategoryTool": {
-    "description": "Тег записи инспектора: вызов инструмента."
-  },
-  "workbenchInspectorCategoryProtocol": "Protocol",
-  "@workbenchInspectorCategoryProtocol": {
-    "description": "Тег записи инспектора: протокол."
-  },
-  "workbenchInspectorCategoryDiagnostic": "Diagnostic",
-  "@workbenchInspectorCategoryDiagnostic": {
-    "description": "Тег записи инспектора: диагностика."
-  },
-  "workbenchInspectorRisk": "Risk {risk}",
-  "@workbenchInspectorRisk": {
-    "description": "Бейдж риска записи инспектора. Плейсхолдер risk — значение риска из ядра клиента, не переводить.",
-    "placeholders": {
-      "risk": {
-        "type": "String"
-      }
-    }
-  },
-  "workbenchInspectorRawInput": "Raw input",
-  "@workbenchInspectorRawInput": {
-    "description": "Подпись блока исходных параметров записи инспектора."
-  },
-  "workbenchInspectorRawOutput": "Raw output",
-  "@workbenchInspectorRawOutput": {
-    "description": "Подпись блока исходного вывода записи инспектора."
-  },
-  "workbenchDebugLogTitle": "Debug log",
-  "@workbenchDebugLogTitle": {
-    "description": "Заголовок панели журнала отладки. Содержимое журнала не переводится."
-  },
-  "workbenchDebugLogExpand": "Expand",
-  "@workbenchDebugLogExpand": {
-    "description": "Подсказка кнопки, которая открывает журнал отладки на весь экран."
-  },
   "paletteNewLabel": "New session",
   "@paletteNewLabel": {
     "description": "Подпись команды палитры /new."
@@ -5826,5 +5781,228 @@
   "onboardingDocumentBack": "Back to setup",
   "@onboardingDocumentBack": {
     "description": "Кнопка панели документа: закрывает просмотр и возвращает на шаг «Privacy» (D10)."
+  },
+  "protocolColumnMethod": "Method",
+  "@protocolColumnMethod": {
+    "description": "Заголовок колонки подписи метода в таблице кадров панели Protocol."
+  },
+  "protocolColumnId": "Id",
+  "@protocolColumnId": {
+    "description": "Заголовок колонки id в таблице кадров; не переводится."
+  },
+  "protocolColumnTime": "Time",
+  "@protocolColumnTime": {
+    "description": "Заголовок колонки времени в таблицах панели Protocol."
+  },
+  "protocolColumnLevel": "Level",
+  "@protocolColumnLevel": {
+    "description": "Заголовок колонки уровня в таблице журнала панели Protocol."
+  },
+  "protocolColumnCategory": "Category",
+  "@protocolColumnCategory": {
+    "description": "Заголовок колонки категории в таблице журнала."
+  },
+  "protocolColumnEvent": "Event",
+  "@protocolColumnEvent": {
+    "description": "Заголовок колонки события в таблице журнала."
+  },
+  "protocolHintFrames": "{keys} previous / next frame",
+  "@protocolHintFrames": {
+    "description": "Подсказка сочетаний вида Frames справа от переключателя видов; keys — обозначение сочетания на платформе.",
+    "placeholders": {
+      "keys": {
+        "type": "String"
+      }
+    }
+  },
+  "protocolHintRecords": "{keys} previous / next record",
+  "@protocolHintRecords": {
+    "description": "Подсказка сочетаний вида Log; keys — обозначение сочетания на платформе.",
+    "placeholders": {
+      "keys": {
+        "type": "String"
+      }
+    }
+  },
+  "protocolFooter": "Panes follow the focused session · {shortcut}",
+  "@protocolFooter": {
+    "description": "Подвал панели Protocol; shortcut — обозначение Cmd/Ctrl+Shift+I на платформе.",
+    "placeholders": {
+      "shortcut": {
+        "type": "String"
+      }
+    }
+  },
+  "protocolSearchFramesHint": "Filter by method, id or text",
+  "@protocolSearchFramesHint": {
+    "description": "Подсказка поля поиска вида Frames."
+  },
+  "protocolSearchLogHint": "Search events and fields",
+  "@protocolSearchLogHint": {
+    "description": "Подсказка поля поиска вида Log."
+  },
+  "protocolFilterRequests": "Requests",
+  "@protocolFilterRequests": {
+    "description": "Переключатель фильтра Frames: запросы и ответы на них."
+  },
+  "protocolFilterNotifications": "Notifications",
+  "@protocolFilterNotifications": {
+    "description": "Переключатель фильтра Frames: уведомления."
+  },
+  "protocolFilterErrorsOnly": "Errors only",
+  "@protocolFilterErrorsOnly": {
+    "description": "Переключатель фильтра Frames: только ошибки."
+  },
+  "protocolAllCategories": "All categories",
+  "@protocolAllCategories": {
+    "description": "Пункт выбора категории вида Log: без фильтра."
+  },
+  "protocolAllLevels": "All levels",
+  "@protocolAllLevels": {
+    "description": "Пункт выбора минимального уровня вида Log: без фильтра."
+  },
+  "protocolExpand": "Expand",
+  "@protocolExpand": {
+    "description": "Подсказка кнопки вида Log, которая открывает полноэкранный просмотр журнала."
+  },
+  "protocolEmptyFrames": "No frames yet.",
+  "@protocolEmptyFrames": {
+    "description": "Таблица кадров пуста: в области панели ещё нет кадров."
+  },
+  "protocolNoFramesMatch": "No frames match the filters.",
+  "@protocolNoFramesMatch": {
+    "description": "Фильтры скрыли все кадры области."
+  },
+  "protocolEmptyRecords": "No records yet.",
+  "@protocolEmptyRecords": {
+    "description": "Таблица журнала пуста: в области панели ещё нет записей."
+  },
+  "protocolNoRecordsMatch": "No records match the filters.",
+  "@protocolNoRecordsMatch": {
+    "description": "Фильтры скрыли все записи области."
+  },
+  "protocolNoFocusFrames": "No session in focus. Showing connection frames only.",
+  "@protocolNoFocusFrames": {
+    "description": "Заметка над таблицей кадров, когда сессии в фокусе нет."
+  },
+  "protocolNoFocusRecords": "No session in focus. Showing connection records only.",
+  "@protocolNoFocusRecords": {
+    "description": "Заметка над таблицей журнала, когда сессии в фокусе нет."
+  },
+  "protocolConnectionTag": "connection",
+  "@protocolConnectionTag": {
+    "description": "Тег элемента соединения без сессии в таблицах панели Protocol."
+  },
+  "protocolTrace": "Trace",
+  "@protocolTrace": {
+    "description": "Переключатель режима Trace (полные данные кадров) в release-сборке."
+  },
+  "protocolPause": "Pause",
+  "@protocolPause": {
+    "description": "Кнопка шапки дока: заморозить таблицу активного вида."
+  },
+  "protocolResume": "Resume",
+  "@protocolResume": {
+    "description": "Кнопка шапки дока, пока вид на паузе."
+  },
+  "protocolClear": "Clear",
+  "@protocolClear": {
+    "description": "Кнопка шапки дока: очистить буфер активного вида."
+  },
+  "protocolExport": "Export…",
+  "@protocolExport": {
+    "description": "Кнопка шапки дока: сохранить видимое в файл JSON Lines."
+  },
+  "protocolSaveFailed": "Couldn't save the file.",
+  "@protocolSaveFailed": {
+    "description": "Заметка панели Protocol: запись файла экспорта не удалась."
+  },
+  "protocolExportConfirmTitle": "Export full payloads?",
+  "@protocolExportConfirmTitle": {
+    "description": "Заголовок подтверждения экспорта кадров с payload. Метка security (D14): перевод не смягчает смысл."
+  },
+  "protocolExportConfirmBody": "The file will contain prompts, file contents and tool output from these frames. Secrets are masked.",
+  "@protocolExportConfirmBody": {
+    "description": "Текст подтверждения экспорта. Метка security (D14): перевод не смягчает смысл."
+  },
+  "protocolExportConfirmAction": "Export",
+  "@protocolExportConfirmAction": {
+    "description": "Кнопка подтверждения экспорта."
+  },
+  "protocolInfoDebugTitle": "Debug build: full payloads.",
+  "@protocolInfoDebugTitle": {
+    "description": "InfoBar выбранного кадра в debug-сборке. Метка security (D14): перевод не смягчает смысл."
+  },
+  "protocolInfoDebugMessage": "Release builds keep metadata only. Secrets are masked before a frame is stored.",
+  "@protocolInfoDebugMessage": {
+    "description": "Текст InfoBar debug-сборки. Метка security (D14): перевод не смягчает смысл."
+  },
+  "protocolInfoReleaseTitle": "Release build: metadata only.",
+  "@protocolInfoReleaseTitle": {
+    "description": "InfoBar выбранного кадра в release-сборке без Trace. Метка security (D14): перевод не смягчает смысл."
+  },
+  "protocolInfoReleaseMessage": "Payloads are not stored. Secrets are masked before a frame is stored.",
+  "@protocolInfoReleaseMessage": {
+    "description": "Текст InfoBar release-сборки. Метка security (D14): перевод не смягчает смысл."
+  },
+  "protocolInfoTraceTitle": "Trace on: full payloads.",
+  "@protocolInfoTraceTitle": {
+    "description": "InfoBar выбранного кадра при включённом Trace. Метка security (D14): перевод не смягчает смысл."
+  },
+  "protocolInfoTraceMessage": "Prompts, file contents and tool output are kept in memory until Trace is turned off. Secrets are masked.",
+  "@protocolInfoTraceMessage": {
+    "description": "Текст InfoBar режима Trace. Метка security (D14): перевод не смягчает смысл."
+  },
+  "protocolInfoLogTitle": "Same buffer as /logs and Expand.",
+  "@protocolInfoLogTitle": {
+    "description": "InfoBar выбранной записи журнала."
+  },
+  "protocolInfoLogMessage": "Secrets are masked before a record is stored; protocol_message records carry the full frame only in debug builds.",
+  "@protocolInfoLogMessage": {
+    "description": "Текст InfoBar записи журнала; protocol_message — имя события, не переводится."
+  },
+  "protocolNoteBeforeTrace": "Recorded before Trace was turned on: metadata only.",
+  "@protocolNoteBeforeTrace": {
+    "description": "Строка панели выбранного кадра, записанного до включения Trace."
+  },
+  "protocolNoteTooLarge": "The payload is larger than 256 KB and was not stored.",
+  "@protocolNoteTooLarge": {
+    "description": "Строка панели выбранного кадра, чей payload не сохранён из-за размера."
+  },
+  "protocolDirectionOut": "client → agent",
+  "@protocolDirectionOut": {
+    "description": "Тег направления исходящего кадра."
+  },
+  "protocolDirectionIn": "agent → client",
+  "@protocolDirectionIn": {
+    "description": "Тег направления входящего кадра."
+  },
+  "protocolShowFrame": "Show frame in Frames",
+  "@protocolShowFrame": {
+    "description": "Ссылка поля request_id записи журнала: перейти к кадру в виде Frames."
+  },
+  "protocolFrameGone": "The frame is no longer in the buffer.",
+  "@protocolFrameGone": {
+    "description": "Подсказка недоступной ссылки «Показать кадр»."
+  },
+  "settingsKeyboardActionToggleProtocol": "Show or hide the Protocol pane",
+  "@settingsKeyboardActionToggleProtocol": {
+    "description": "Действие сочетания Cmd/Ctrl+Shift+I."
+  },
+  "settingsKeyboardActionProtocolFrameMove": "Previous or next frame",
+  "@settingsKeyboardActionProtocolFrameMove": {
+    "description": "Действие сочетания Alt+←/→ панели Protocol."
+  },
+  "settingsKeyboardActionProtocolRecordMove": "Previous or next log record",
+  "@settingsKeyboardActionProtocolRecordMove": {
+    "description": "Действие сочетания Alt+↑/↓ панели Protocol."
+  },
+  "settingsKeyboardWhereProtocolFrames": "Protocol pane, Frames view",
+  "@settingsKeyboardWhereProtocolFrames": {
+    "description": "Колонка «Где»: вид Frames панели Protocol."
+  },
+  "settingsKeyboardWhereProtocolLog": "Protocol pane, Log view",
+  "@settingsKeyboardWhereProtocolLog": {
+    "description": "Колонка «Где»: вид Log панели Protocol."
   }
 }

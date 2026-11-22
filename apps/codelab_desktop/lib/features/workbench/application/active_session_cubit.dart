@@ -8,7 +8,6 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         ClientWorkspace,
         ClientWorkspaceException,
         Connected,
-        InspectorProjection,
         PendingApprovalView,
         PromptOutcome,
         PromptQueued,
@@ -34,12 +33,11 @@ import 'shell_part.dart';
 import 'approval_shortcut_decision.dart';
 import 'ui_mappers.dart';
 
-/// Показываемая сессия: лента, инспектор, очередь, одобрения, опции, план.
+/// Показываемая сессия: лента, очередь, одобрения, опции, план.
 final class ActiveSessionState {
   const ActiveSessionState({
     this.sessionId,
     this.transcriptRows = const [],
-    this.inspectorEntries = const [_emptyInspectorEntry],
     this.agentCommands = const [],
     this.agentCommandViews = const [],
     this.configOptions = const [],
@@ -58,18 +56,10 @@ final class ActiveSessionState {
     this.usage = UsagePaneData.empty,
   });
 
-  static const _emptyInspectorEntry = CodeLabInspectorEntry(
-    id: 'inspector-empty',
-    category: CodeLabInspectorCategory.protocol,
-    title: 'Protocol log',
-    summary: 'Start a session to inspect ACP activity.',
-  );
-
   /// Сессия, которую сейчас показывает рабочее место; совпадает с
   /// `SessionsState.activeSessionId`: обе части меняются одним пакетом.
   final String? sessionId;
   final List<CodeLabTranscriptRow> transcriptRows;
-  final List<CodeLabInspectorEntry> inspectorEntries;
 
   /// Команды агента из последнего `available_commands_update`.
   final List<CodeLabCommandAction> agentCommands;
@@ -129,7 +119,6 @@ final class ActiveSessionState {
   ActiveSessionState _copyWith({
     String? sessionId,
     List<CodeLabTranscriptRow>? transcriptRows,
-    List<CodeLabInspectorEntry>? inspectorEntries,
     List<CodeLabCommandAction>? agentCommands,
     List<AgentCommandView>? agentCommandViews,
     List<CodeLabConfigOption>? configOptions,
@@ -149,7 +138,6 @@ final class ActiveSessionState {
   }) => ActiveSessionState(
     sessionId: sessionId ?? this.sessionId,
     transcriptRows: transcriptRows ?? this.transcriptRows,
-    inspectorEntries: inspectorEntries ?? this.inspectorEntries,
     agentCommands: agentCommands ?? this.agentCommands,
     agentCommandViews: agentCommandViews ?? this.agentCommandViews,
     configOptions: configOptions ?? this.configOptions,
@@ -282,7 +270,6 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       state._copyWith(
         sessionId: id,
         transcriptRows: _rowsOf(session, view),
-        inspectorEntries: const InspectorProjection().project(session),
         agentCommands: agentCommandsOf(view?.agentCommands ?? const []),
         agentCommandViews: view?.agentCommands ?? const [],
         configOptions: configOptionsOf(view?.configOptions ?? const []),
@@ -313,7 +300,6 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       state._copyWith(
         sessionId: id,
         transcriptRows: const [],
-        inspectorEntries: const InspectorProjection().project(session),
         agentCommands: agentCommandsOf(view?.agentCommands ?? const []),
         agentCommandViews: view?.agentCommands ?? const [],
         configOptions: configOptionsOf(view?.configOptions ?? const []),
@@ -394,7 +380,6 @@ final class ActiveSessionCubit extends ShellPartCubit<ActiveSessionState> {
       state._copyWith(
         sessionId: sessionId,
         transcriptRows: const [],
-        inspectorEntries: const [],
         agentCommands: const [],
         agentCommandViews: const [],
         configOptions: const [],

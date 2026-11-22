@@ -146,7 +146,20 @@ void main() {
       setProtocolTracingEnabled(true);
       addTearDown(() => setProtocolTracingEnabled(false));
 
-      await _createSession(client, transport);
+      // Политика payload по умолчанию — `metadataOnly` (D3 change
+      // `redesign-protocol-pane`): тест, проверяющий `payload`, просит
+      // `full` явно.
+      final fullTransport = FakeAcpTransport();
+      await fullTransport.start();
+      final fullClient = AcpClientApplication(
+        transport: fullTransport,
+        protocolPayloads: ProtocolPayloadPolicy.full,
+      );
+      addTearDown(() async {
+        await fullClient.dispose();
+        await fullTransport.close();
+      });
+      await _createSession(fullClient, fullTransport);
 
       final traceEntries = captured
           .where((e) => e['category'] == 'protocol')
@@ -207,6 +220,133 @@ void main() {
       expect(captured.any((e) => e['category'] == 'protocol'), isFalse);
     },
   );
+
+  group('protocol_message и политика payload (D3 change '
+      '`redesign-protocol-pane`)', () {
+    // Задача 1.5 `[client]`. Красные тесты: сейчас запись всегда несёт
+    // `payload`, у неё нет `kind`, `method`, `request_id`, `size`; файл не
+    // компилируется до добавления `protocolPayloads` (задача 1.4).
+    const promptText = 'my secret prompt text';
+
+    setUp(() => setProtocolTracingEnabled(true));
+    tearDown(() => setProtocolTracingEnabled(false));
+
+    Future<void> sendPromptVia(
+      AcpClientApplication app,
+      FakeAcpTransport fake,
+    ) async {
+      await _createSession(app, fake);
+      fake.drainSentMessages();
+      captured.clear();
+      app
+          .sendPrompt(
+            const SendPromptCommand(
+              sessionId: SessionId('session-1'),
+              prompt: [ContentBlock.text(text: promptText)],
+            ),
+          )
+          .then<void>((_) {}, onError: (_) {});
+      await _pump();
+    }
+
+    Future<(AcpClientApplication, FakeAcpTransport)> build(
+      ProtocolPayloadPolicy? policy,
+    ) async {
+      final fake = FakeAcpTransport();
+      await fake.start();
+      final app = AcpClientApplication(
+        transport: fake,
+        protocolPayloads: policy ?? ProtocolPayloadPolicy.metadataOnly,
+      );
+      addTearDown(() async {
+        await app.dispose();
+        await fake.close();
+      });
+      return (app, fake);
+    }
+
+    test('metadataOnly: запись без payload, с direction, kind, method, '
+        'request_id и size', () async {
+      final (app, fake) = await build(null);
+      await sendPromptVia(app, fake);
+
+      final entry = captured.singleWhere(
+        (e) => e['event'] == 'protocol_message' && e['direction'] == 'outbound',
+      );
+      expect(entry.containsKey('payload'), isFalse);
+      expect(entry['kind'], 'request');
+      expect(entry['method'], sessionPromptMethod);
+      final sent = fake.sentMessages.single as JsonRpcRequest;
+      expect(entry['request_id'], isA<String>());
+      expect(entry['request_id'], sent.id.toJsonValue().toString());
+      expect(entry['size'], isA<int>());
+      expect(entry['size'], greaterThan(0));
+      expect(entry['connection_generation'], 0);
+      expect(entry.toString(), isNot(contains(promptText)));
+    });
+
+    test('metadataOnly: входящая запись тоже без payload', () async {
+      final (app, fake) = await build(null);
+      await sendPromptVia(app, fake);
+      fake.emitInbound(
+        JsonRpcMessage.response(
+          id: (fake.sentMessages.single as JsonRpcRequest).id,
+          result: const {'stopReason': 'end_turn'},
+        ),
+      );
+      await _pump();
+
+      final entry = captured.singleWhere(
+        (e) => e['event'] == 'protocol_message' && e['direction'] == 'inbound',
+      );
+      expect(entry.containsKey('payload'), isFalse);
+      expect(entry['kind'], 'result');
+      expect(entry['method'], sessionPromptMethod);
+    });
+
+    test('full: запись с замаскированным payload', () async {
+      final (app, fake) = await build(ProtocolPayloadPolicy.full);
+      await sendPromptVia(app, fake);
+      captured.clear();
+      app
+          .createSession(
+            const CreateSessionCommand(
+              cwd: '/workspace',
+              mcpServers: [
+                McpServer.http(
+                  name: 'github',
+                  url: 'https://example.test/mcp',
+                  headers: [
+                    HttpHeader(name: 'Authorization', value: 'ghp_abc123'),
+                  ],
+                ),
+              ],
+            ),
+          )
+          .then<void>((_) {}, onError: (_) {});
+      await _pump();
+
+      final entry = captured.singleWhere(
+        (e) => e['event'] == 'protocol_message' && e['direction'] == 'outbound',
+      );
+      expect(entry['payload'], isA<Map>());
+      expect((entry['payload'] as Map)['method'], sessionNewMethod);
+      expect(entry.toString(), contains(redactedSecret));
+      expect(entry.toString(), isNot(contains('ghp_abc123')));
+    });
+
+    test('Trace при базовой metadataOnly не пишет payload в журнал', () async {
+      final (app, fake) = await build(null);
+      app.setFrameTrace(true);
+      await sendPromptVia(app, fake);
+
+      final entry = captured.singleWhere(
+        (e) => e['event'] == 'protocol_message' && e['direction'] == 'outbound',
+      );
+      expect(entry.containsKey('payload'), isFalse);
+      expect(entry['method'], sessionPromptMethod);
+    });
+  });
 
   test('httpOutput sink (local-dev-only structured_log_remote_sync) receives '
       'application events like the console/file sink, and is absent when '

@@ -18,6 +18,7 @@
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_testing/codelab_acp_testing.dart';
+import 'package:codelab_desktop/features/protocol/application/protocol_pane_cubit.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -424,22 +425,30 @@ void main() {
   });
 
   group('панель Protocol: диагностика не переводится (D7)', () {
-    testWidgets('заголовки «Журнал отладки» и «Инспектор» переведены, '
-        'содержимое Inspector как есть', (tester) async {
+    testWidgets('подписи панели «Протокол» переведены, содержимое кадров и '
+        'журнала как есть', (tester) async {
       final scene = await LiveScene.open(tester, locale: _ru, connect: false);
       scene.cubit.openPane(ToolPane.protocol);
       await scene.flush();
 
-      final pane = scene.textOf(
-        find.byKey(CodeLabToolDock.paneKey(ToolPane.protocol)),
+      Finder pane() => find.byKey(CodeLabToolDock.paneKey(ToolPane.protocol));
+      var text = scene.textOf(pane());
+      // Вкладки видов и заметка области — по глоссарию (§4, «Панель
+      // «Протокол»»).
+      expect(text, contains('Кадры'));
+      expect(text, contains('Журнал'));
+      expect(
+        text,
+        contains('Нет сессии в фокусе. Показаны только кадры подключения.'),
       );
-      // Заголовки вкладок — по глоссарию (Q3 (а)).
-      expect(pane, contains('Журнал отладки'));
-      expect(pane, contains('Инспектор'));
-      // Содержимое строит ядро клиента и журнал: оно совпадает с тем, что
-      // пользователь пришлёт в отчёте об ошибке.
-      expect(pane, contains('Protocol log'));
-      expect(pane, contains('Start a session to inspect ACP activity.'));
+
+      // Содержимое журнала строит app и ядро клиента: оно совпадает с тем,
+      // что пользователь пришлёт в отчёте об ошибке, и не переводится.
+      scene.binding.scope.resolve<ProtocolPaneCubit>().openLog();
+      await scene.flush();
+      text = scene.textOf(pane());
+      expect(text, contains('Событие'));
+      expect(text, contains('app.locale_resolved'));
 
       await scene.close();
     });

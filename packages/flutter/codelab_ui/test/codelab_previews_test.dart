@@ -182,6 +182,12 @@ void main() {
     expect(find.byType(CodeLabUsagePane), findsOneWidget);
     expect(find.text('This session'), findsOneWidget);
 
+    // Панель Protocol (change `redesign-protocol-pane`, D12).
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(codelabProtocolPanePreview());
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CodeLabProtocolPane), findsOneWidget);
+
     // Сброс дерева: `Overlay` превью берёт записи только при создании.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpWidget(codelabApprovalPromptPreview());

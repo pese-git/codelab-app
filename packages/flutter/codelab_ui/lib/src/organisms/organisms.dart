@@ -12,6 +12,7 @@ export 'codelab_file_preview.dart';
 export 'codelab_file_tree.dart';
 export 'codelab_open_project_screen.dart';
 export 'codelab_progress_checklist.dart';
+export 'codelab_protocol_pane.dart';
 export 'codelab_prompt_queue_panel.dart';
 export 'codelab_session_pane_header.dart';
 export 'codelab_session_sidebar.dart';

@@ -26,6 +26,19 @@ abstract interface class AgentBackend {
   /// транспорта реализация отбрасывает сама, как и для остальных потоков.
   Stream<UsageNotification> get usageNotifications;
 
+  /// Кадры ACP текущих соединений (change `redesign-protocol-pane`, D2, D5);
+  /// кадры прежнего транспорта реализация отбрасывает сама. Поток закрывается
+  /// владельцем ядра.
+  Stream<ProtocolFrame> get protocolFrames;
+
+  /// Режим Trace кадров возможен: базовая политика ядра — `metadataOnly`
+  /// (D17).
+  bool get traceAvailable;
+
+  /// Включает или выключает режим Trace кадров (D17); при
+  /// `traceAvailable == false` — без эффекта.
+  void setFrameTrace(bool enabled);
+
   /// Поколение текущего соединения (растёт при замене транспорта): по нему
   /// kit отличает ответ запроса старого соединения (`AGENTS.md` §9).
   int get generation;
@@ -88,6 +101,15 @@ final class AcpClientBackend implements AgentBackend {
   @override
   Stream<UsageNotification> get usageNotifications =>
       _application.usageNotifications;
+
+  @override
+  Stream<ProtocolFrame> get protocolFrames => _application.protocolFrames;
+
+  @override
+  bool get traceAvailable => _application.traceAvailable;
+
+  @override
+  void setFrameTrace(bool enabled) => _application.setFrameTrace(enabled);
 
   @override
   int get generation => _application.generation;

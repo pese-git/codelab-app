@@ -24,6 +24,8 @@ import 'package:codelab_desktop/core/platform/shared_preferences_workspace_snaps
     show kWorkspaceSnapshotPrefsKey;
 import 'package:codelab_desktop/app/navigation/settings_page.dart';
 import 'package:codelab_desktop/core/platform/external_link_opener.dart';
+import 'package:codelab_desktop/core/platform/protocol_export_saver.dart'
+    show ProtocolExportSaver;
 import 'package:codelab_desktop/core/platform/usage_csv_saver.dart'
     show UsageCsvSaver;
 import 'package:codelab_desktop/core/platform/user_shell_launcher.dart'
@@ -137,6 +139,10 @@ final class CodeLabTestBinding {
     String? project,
     ProjectFolderPicker? projectFolderPicker,
     UsageCsvSaver? usageCsvSaver,
+    // Режим сборки и порт экспорта панели Protocol (`redesign-protocol-pane`,
+    // D3, D10): без швов — `kDebugMode` и диалог `file_selector`.
+    bool? debugBuild,
+    ProtocolExportSaver? protocolExportSaver,
     // Язык первого кадра (D9): по умолчанию `en`, поэтому существующие
     // проверки текстов на английском не меняются.
     Locale locale = const Locale('en'),
@@ -258,6 +264,8 @@ final class CodeLabTestBinding {
       // умолчанию app (без вкладок он ничего не делает), тесты терминала
       // передают `FakeUserShellLauncher`.
       userShellLauncher: userShellLauncher,
+      debugBuild: debugBuild,
+      protocolExportSaver: protocolExportSaver,
       // Настоящий `url_launcher` открывал бы браузер: тесты ссылок терминала
       // передают `FakeExternalLinkOpener`.
       externalLinkOpener: externalLinkOpener,

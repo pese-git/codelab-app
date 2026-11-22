@@ -46,9 +46,14 @@ String keyboardShortcutActionOf(
   CodeLabShortcut.leaveSettings => l10n.settingsKeyboardActionLeaveSettings,
   CodeLabShortcut.toggleSidebar => l10n.settingsKeyboardActionToggleSidebar,
   CodeLabShortcut.toggleFiles => l10n.settingsKeyboardActionToggleFiles,
+  CodeLabShortcut.toggleProtocol => l10n.settingsKeyboardActionToggleProtocol,
   CodeLabShortcut.fileTreeMove => l10n.settingsKeyboardActionFileTreeMove,
   CodeLabShortcut.fileTreeFold => l10n.settingsKeyboardActionFileTreeFold,
   CodeLabShortcut.fileTreeOpen => l10n.settingsKeyboardActionFileTreeOpen,
+  CodeLabShortcut.protocolFrameMove =>
+    l10n.settingsKeyboardActionProtocolFrameMove,
+  CodeLabShortcut.protocolRecordMove =>
+    l10n.settingsKeyboardActionProtocolRecordMove,
   CodeLabShortcut.cancelTurn => l10n.settingsKeyboardActionCancelTurn,
   CodeLabShortcut.send => l10n.settingsKeyboardActionSend,
   CodeLabShortcut.commandMenuMove => l10n.settingsKeyboardActionCommandMenuMove,
@@ -76,9 +81,12 @@ String keyboardShortcutWhereOf(
   CodeLabShortcut.closeOverlay => l10n.settingsKeyboardWhereOverlay,
   CodeLabShortcut.leaveSettings => l10n.settingsKeyboardWhereSettings,
   CodeLabShortcut.toggleFiles => l10n.settingsKeyboardWhereWorkbenchFiles,
+  CodeLabShortcut.toggleProtocol => l10n.settingsKeyboardWhereWorkbench,
   CodeLabShortcut.fileTreeMove ||
   CodeLabShortcut.fileTreeOpen => l10n.settingsKeyboardWhereFilesTree,
   CodeLabShortcut.fileTreeFold => l10n.settingsKeyboardWhereFilesTreeFolder,
+  CodeLabShortcut.protocolFrameMove => l10n.settingsKeyboardWhereProtocolFrames,
+  CodeLabShortcut.protocolRecordMove => l10n.settingsKeyboardWhereProtocolLog,
   CodeLabShortcut.cancelTurn => l10n.settingsKeyboardWhereTurnRunning,
   CodeLabShortcut.send => l10n.settingsKeyboardWhereComposer,
   CodeLabShortcut.commandMenuMove ||

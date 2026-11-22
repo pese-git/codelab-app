@@ -27,7 +27,7 @@ final class FakeSessionHandle extends Fake implements SessionHandle {
 /// соединения или смену профиля при прежнем `activeSessionId`, как делает
 /// настоящий `ClientWorkspace`, D5). Поток доставляется синхронно, как у
 /// настоящего.
-final class FakeClientWorkspace extends Fake implements ClientWorkspace {
+class FakeClientWorkspace extends Fake implements ClientWorkspace {
   FakeClientWorkspace([WorkspaceState initial = const WorkspaceState()])
     : _current = initial;
 

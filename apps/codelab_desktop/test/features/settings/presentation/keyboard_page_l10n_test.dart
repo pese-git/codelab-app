@@ -134,7 +134,7 @@ void main() {
       findsOneWidget,
     );
 
-    expect(_rowIds(tester), hasLength(21));
+    expect(_rowIds(tester), hasLength(24));
     for (final row in keyboardRows) {
       final texts = _texts(tester, _row(row.id));
       expect(texts, hasLength(2), reason: '${row.id}: действие и место');
@@ -207,7 +207,7 @@ void main() {
   testWidgets('«zzz» при русском интерфейсе: строка пустого результата и '
       'footer', (tester) async {
     await _pump(tester, _ru);
-    expect(_rowIds(tester), hasLength(21));
+    expect(_rowIds(tester), hasLength(24));
 
     await _type(tester, 'zzz');
 

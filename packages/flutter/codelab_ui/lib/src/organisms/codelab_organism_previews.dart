@@ -15,6 +15,7 @@ import 'codelab_file_preview.dart';
 import 'codelab_file_tree.dart';
 import 'codelab_open_project_screen.dart';
 import 'codelab_progress_checklist.dart';
+import 'codelab_protocol_pane.dart';
 import 'codelab_session_pane_header.dart';
 import 'codelab_session_sidebar.dart';
 import 'codelab_shortcut_table.dart';
@@ -1047,6 +1048,63 @@ Widget codelabSettingsNavigationPreview() {
         padding: EdgeInsets.all(24),
         child: CodeLabText('Page body', role: CodeLabTextRole.title),
       ),
+    ),
+  );
+}
+
+@Preview(
+  name: 'Protocol pane',
+  group: codelabOrganismPreviewGroup,
+  size: Size(440, 640),
+)
+Widget codelabProtocolPanePreview() {
+  return _AcpOrganismPreviewSurface(
+    child: CodeLabProtocolPane(
+      view: CodeLabProtocolView.frames,
+      onViewChanged: (_) {},
+      framesCount: 412,
+      logCount: 1284,
+      viewHint: 'Alt+← / Alt+→ previous / next frame',
+      columns: const ['', 'Method', 'Id', 'Time'],
+      rows: const [
+        CodeLabProtocolTableRow(
+          id: '1',
+          cells: ['→', 'session/new', '1', '12:00:01'],
+          tag: 'connection',
+        ),
+        CodeLabProtocolTableRow(
+          id: '2',
+          cells: ['←', 'session/update · tool_call', '—', '12:00:02'],
+          selected: true,
+        ),
+        CodeLabProtocolTableRow(
+          id: '3',
+          cells: ['←', 'error -32603 · Internal error', '5', '12:00:03'],
+          tone: CodeLabTone.danger,
+        ),
+      ],
+      onRowSelected: (_) {},
+      detail: CodeLabProtocolDetail(
+        title: '← session/update · tool_call',
+        tags: const [
+          CodeLabProtocolTag(label: 'agent → client'),
+          CodeLabProtocolTag(label: '2.0 KB', tone: CodeLabTone.accent),
+        ],
+        info: const CodeLabProtocolInfo(
+          title: 'Debug build: full payloads.',
+          message:
+              'Release builds keep metadata only. Secrets are masked before '
+              'a frame is stored.',
+          tone: CodeLabTone.warning,
+        ),
+        segments: const [
+          CodeLabMaskedSegment('{\n  "apiKey": "', masked: false),
+          CodeLabMaskedSegment('<redacted>', masked: true),
+          CodeLabMaskedSegment('"\n}', masked: false),
+        ],
+        onCopy: codelabPreviewCancel,
+      ),
+      footer: 'Panes follow the focused session · ⇧⌘I',
     ),
   );
 }
