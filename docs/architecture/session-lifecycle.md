@@ -77,6 +77,8 @@ ACP-сессия — логический контекст взаимодейс�
 * имели понятные переходы;
 * не допускали невозможных сочетаний.
 
+В коде: статус ядра клиента `SessionLifecycleStatus` (`idle`, `active`, `runningTurn`, `awaitingApproval`, `cancellingTurn`, `failed`) и статус представления `SessionStatusView` в `codelab_client_core` (`idle`, `running`, `cancelling`, `failed`, `notLoaded`, `detached`). `notLoaded` — сессия есть у агента (`session/list`), но в этом запуске не открыта; `detached` — открытая сессия, которую новое соединение после переподключения не восстановило (§17).
+
 ---
 
 ## 5. Жизненный цикл запроса
@@ -84,6 +86,8 @@ ACP-сессия — логический контекст взаимодейс�
 У хода (запроса) тоже ДОЛЖЕН быть отдельный жизненный цикл.
 
 Пример: `idle`, `starting`, `streaming`, `waitingForPermission`, `cancelling`, `completed`, `cancelled`, `failed`.
+
+В коде: `PromptTurnStatus` (`pending`, `running`, `awaitingApproval`, `cancelling`, `completed`, `failed`, `refused`, `maxed`, `cancelled`); переходы — `PromptTurnStateMachine`.
 
 Состояние сессии и состояние запроса не обязаны быть одним типом. Сочетание «сессия `ready`, запрос `completed`» — нормальное.
 
@@ -111,14 +115,17 @@ sealed class SessionState {
 Состояние транспорта
     → codelab_acp_transports
 
-Семантика соединения и сессии
-    → codelab_client_acp
+Семантика соединения, сессии и хода (автоматы §45)
+    → codelab_client_acp (AcpClientApplication)
 
-Состояние представления
-    → BLoC/Cubit
+Клиентское состояние для app и CLI
+    → codelab_client_core (ClientWorkspace → WorkspaceState, ConnectionView, SessionView)
+
+Отображение
+    → Cubit-ы apps/codelab_desktop, экраны apps/codelab_cli
 ```
 
-BLoC НЕ ДОЛЖЕН быть единственным владельцем низкоуровневого жизненного цикла, если тот переиспользуем и относится к семантике ACP-клиента.
+`codelab_client_core` — владелец клиентского состояния (корневой `AGENTS.md` §5): он переводит протокольные состояния ядра клиента в `WorkspaceState`, а Cubit-ы и CLI только отображают его и передают намерения. Cubit НЕ ДОЛЖЕН быть владельцем жизненного цикла соединения или сессии.
 
 ---
 
@@ -149,7 +156,7 @@ Running
     └──► Failed ──────► SessionReady / Failed
 ```
 
-Это концептуальная модель, а не обязательные имена классов.
+Это концептуальная модель, а не обязательные имена классов. Соединение в коде — `ClientConnectionState` и `ConnectionView` (§3), сессия — `SessionLifecycleStatus` и `SessionStatusView` (§4), ход — `PromptTurnStatus` (§5).
 
 ---
 
@@ -163,13 +170,26 @@ Running
 
 ## 10. Повторное подключение во время подключения
 
-Если `connect()` вызван в состоянии `connecting`, допустимы стратегии:
+Если `connect()` вызван в состоянии `connecting`, в общем случае допустимы стратегии:
 
 * вернуть существующий `Future`;
 * проигнорировать повторное намерение;
-* вернуть типизированную ошибку состояния.
+* вернуть типизированную ошибку состояния;
+* сделать прежнюю попытку устаревшей и начать новую.
 
-НЕ СЛЕДУЕТ создавать второе транспортное соединение.
+Два транспортных соединения одного клиента НЕ ДОЛЖНЫ жить одновременно.
+
+В CodeLab выбрано так (`acp-client-kit`, «Явный автомат соединения»; design.md change `add-embedded-agent-mode`, D6):
+
+* явные `ClientWorkspace.connect()` и `reconnect()` — «последняя попытка побеждает». Новый вызов делает устаревшей любую незавершённую попытку того же `ClientWorkspace`. Её исход — успех или ошибка — не меняет `WorkspaceState.connection`, не загружает сессии и не запускает `session/list`. Её `Future` завершается без ошибки. Прежний транспорт закрывается при замене (`AcpClientApplication._replaceTransport`, рост поколения §15);
+* `ClientWorkspace.ensureAgent()` — триггер хоста (выбор проекта, новая сессия, фокус на `notLoaded` или `detached`) — single-flight: во время идущей попытки возвращает её `Future` (design.md change `require-project-folder`, D15; `concurrency.md` §29–§30).
+
+Известное отступление кода от этих норм: гарантии выше держатся, пока устаревшая попытка не передала транспорт ядру клиента (`resolver.open`). Если вытеснение приходится на время `AcpClientApplication.connect()` или `reconnect()`, то:
+
+* два вызова `_replaceTransport` не сериализованы. Они ждут закрытия одного прежнего транспорта, и транспорт проигравшей попытки может остаться незакрытым;
+* состояние ядра устаревшей попытки (`ready` или `fail`) публикуется в `WorkspaceState.connection` без проверки попытки.
+
+Это нарушение спецификации `acp-client-kit` и корневого `AGENTS.md` §9; исправление — отдельная задача. Новый код НЕ ДОЛЖЕН опираться на это поведение.
 
 ---
 
@@ -195,17 +215,20 @@ Running
 
 ## 13. Неожиданное отключение
 
-Неожиданное отключение ДОЛЖНО переводить в сценарий восстановления, который определяет приложение. В зависимости от политики:
+Неожиданное отключение ДОЛЖНО переводить в сценарий восстановления, который определяет приложение. Политика выбирает, начинается ли переподключение само или по намерению пользователя, либо соединение сразу окончательно отказывает.
+
+В CodeLab обрыв установленного соединения (выход процесса агента, закрытие сокета) переводит представление в `ConnectionLost`. Переподключение само не начинается: новую попытку запускает действие пользователя: `reconnect()` (Reconnect, «Restart agent», `/reconnect` в CLI) или `ensureAgent()` («Retry» в app, триггеры хоста; §37) (`acp-client-kit`, «Явный автомат соединения», сценарий «Сбой транспорта»):
 
 ```text
-Connected → ConnectionLost → Reconnecting
+Connected ──transport lost──► ConnectionLost ──reconnect()────► Reconnecting(attempt: 1)
+                                    │                              ├──► Connected
+                                    │                              └──► ConnectionFailed
+                                    └─────────ensureAgent()──► Connecting
+                                                                   ├──► Connected
+                                                                   └──► ConnectionFailed
 ```
 
-или:
-
-```text
-Connected → Failed
-```
+`ConnectionLost` значит «установленное соединение оборвалось»; `ConnectionFailed` — «не удалась попытка `connect()` или `reconnect()`». Из обоих состояний доступен `reconnect()`.
 
 ---
 
@@ -214,6 +237,8 @@ Connected → Failed
 Переподключение — отдельный жизненный цикл. Оно НЕ ДОЛЖНО быть скрытым побочным эффектом без наблюдаемого состояния.
 
 UI ДОЛЖЕН иметь возможность отличить первое подключение от переподключения после потери, если это влияет на UX.
+
+В CodeLab это различают варианты `ConnectionView`: `Connecting` — попытка `connect()` или `ensureAgent()`, в том числе восстановление после `ConnectionLost` по «Retry» в app; `Reconnecting(attempt)` — только `reconnect()`. После успешного переподключения открытые сессии загружаются заново через `session/load`, начиная с активной. Сессия агента без `loadSession` или с ошибкой загрузки становится `detached` с уведомлением в транскрипте (`acp-client-kit`, «Сессии после переподключения»).
 
 ---
 
@@ -468,7 +493,15 @@ UI ДОЛЖЕН получать причину уровня приложени�
 * когда остановиться;
 * как обрабатывается ручное отключение.
 
-Если политика ещё не утверждена, НЕ СЛЕДУЕТ придумывать её в feature-коде. Утверждённая сейчас политика — одна попытка переподключения без повторов (`acp-client-kit`, «Явный автомат соединения»).
+Если политика ещё не утверждена, НЕ СЛЕДУЕТ придумывать её в feature-коде.
+
+Утверждённая политика CodeLab (`acp-client-kit`, «Явный автомат соединения»):
+
+* одна попытка `reconnect()` с транспортом текущего профиля, `Reconnecting(attempt: 1)`;
+* повторов и пауз нет: неудачная попытка даёт `ConnectionFailed`, сценарий «Неудачное переподключение не повторяется»;
+* новую попытку начинает только действие пользователя или триггер хоста — `connect()`, `reconnect()` или `ensureAgent()` (§37) (design.md change `require-project-folder`, D13). Сам kit попытки не повторяет.
+
+Автоматические повторы с паузами — изменение поведения продукта; они требуют OpenSpec change (корневой `AGENTS.md` §17). Нормы §36 и §38 действуют, когда такая политика появится.
 
 ---
 
@@ -484,6 +517,8 @@ UI ДОЛЖЕН получать причину уровня приложени�
 
 UI МОЖЕТ выражать намерение `RetryConnection`. Семантика повтора принадлежит слою приложения и клиента.
 
+В CodeLab это намерение — вызов `ClientWorkspace`. Reconnect и «Restart agent» в app и команда `/reconnect` в CLI вызывают `reconnect()`. «Retry» и другие триггеры хоста (design.md change `require-project-folder`, D13) вызывают `ensureAgent()`.
+
 ---
 
 ## 38. Автоматическое переподключение
@@ -495,6 +530,8 @@ UI МОЖЕТ выражать намерение `RetryConnection`. Семан�
 * число попыток, если оно нужно;
 * окончательный отказ.
 
+В CodeLab автоматического переподключения нет (§35). Ручное переподключение наблюдаемо так же: `ConnectionLost`, `Reconnecting(attempt)` и `ConnectionFailed` с причиной и сообщением.
+
 ---
 
 ## 39. Владелец переподключения
@@ -503,6 +540,8 @@ UI МОЖЕТ выражать намерение `RetryConnection`. Семан�
 
 Запускать переподключение одновременно из транспорта, ядра клиента, BLoC и виджета ЗАПРЕЩЕНО: так возникают дублирующие соединения.
 
+В CodeLab владелец — `ClientWorkspace` (`codelab_client_core`): Cubit-ы и CLI вызывают его `reconnect()` или `ensureAgent()`, а транспорт и `AcpClientApplication` переподключение сами не начинают.
+
 ---
 
 ## 40. Жизненный цикл подписки
@@ -510,8 +549,9 @@ UI МОЖЕТ выражать намерение `RetryConnection`. Семан�
 У каждой подписки ДОЛЖЕН быть владелец (корневой `AGENTS.md` §9). Например:
 
 ```text
-подписка на ACP-транспорт   → codelab_client_acp
-подписка на события клиента → BLoC
+подписка на ACP-транспорт         → codelab_client_acp (AcpClientApplication)
+подписка на потоки ядра клиента   → codelab_client_core (ClientWorkspace)
+подписка на WorkspaceState        → Cubit-ы app, экраны CLI
 ```
 
 Владелец ОБЯЗАН отменить подписку (cancel/dispose).
@@ -602,23 +642,39 @@ not allowed:
 
 ## 46. Таблица переходов
 
-Для сложных жизненных циклов СЛЕДУЕТ вести таблицу переходов. Пример:
+Для сложных жизненных циклов СЛЕДУЕТ вести таблицу переходов. Таблица ДОЛЖНА соответствовать действующему OpenSpec и коду. Ниже — таблицы соединения CodeLab.
 
-| Current state   | Event          | Next state       |
-| --------------- | -------------- | ---------------- |
-| disconnected    | connect        | connecting       |
-| connecting      | connected      | connected        |
-| connected       | createSession  | creatingSession  |
-| creatingSession | sessionCreated | ready            |
-| ready           | sendPrompt     | running          |
-| running         | cancel         | cancelling       |
-| running         | completed      | ready            |
-| cancelling      | cancelled      | ready            |
-| connected       | transportLost  | reconnecting     |
-| reconnecting    | connected      | recovering/ready |
-| reconnecting    | exhausted      | failed           |
+Протокольный автомат `ConnectionStateMachine` (`codelab_client_acp`):
 
-Таблица ДОЛЖНА соответствовать действующему OpenSpec.
+| Текущее состояние            | Событие      | Следующее состояние | Итог         |
+| ---------------------------- | ------------ | ------------------- | ------------ |
+| `disconnected`, `failed`     | `connect`    | `connecting`        | `applied`    |
+| `connecting`                 | `initialize` | `initializing`      | `applied`    |
+| `initializing`               | `ready`      | `ready`             | `applied`    |
+| любое, кроме `disconnected`  | `fail`       | `failed`            | `applied`    |
+| любое, кроме `disconnected`  | `disconnect` | `disconnected`      | `applied`    |
+| `disconnected`               | `disconnect` | `disconnected`      | `ignored`    |
+| остальные сочетания          | —            | без изменений       | `rejected`   |
+
+Отдельного состояния переподключения у автомата нет: `reconnect()` заменяет транспорт (`_replaceTransport`, новое поколение §15) и проходит путь `disconnected → connecting → initializing → ready`: `_establishConnection` сначала применяет `disconnect` к прежнему состоянию.
+
+Представление `ConnectionView` (`codelab_client_core`, `acp-client-kit` «Явный автомат соединения»):
+
+| Текущее состояние                       | Событие                                  | Следующее состояние       |
+| --------------------------------------- | ---------------------------------------- | ------------------------- |
+| любое                                   | `connect()`                              | `Connecting`; профиль без резолвера — сразу `ConnectionFailed` |
+| `Disconnected`, `ConnectionFailed`, `ConnectionLost` | `ensureAgent()`             | `Connecting`              |
+| `Connecting`                            | ядро `ready`                             | `Connected`               |
+| `Connecting`                            | сбой попытки                             | `ConnectionFailed`        |
+| `Connected`                             | неожиданный обрыв транспорта             | `ConnectionLost`          |
+| любое после первого `connect()` (потеря, сбой, «Restart agent» из `Connected`) | `reconnect()` | `Reconnecting(attempt: 1)`; профиль без резолвера — сразу `ConnectionFailed`; до первого `connect()` — `ClientWorkspaceException`, состояние не меняется |
+| `Reconnecting`                          | ядро `ready`                             | `Connected`, затем `session/load` открытых сессий (§14) |
+| `Reconnecting`                          | сбой попытки, без повтора                | `ConnectionFailed`        |
+| `Connecting`, `Reconnecting`            | новый `connect()` или `reconnect()`      | попытка нового вызова; прежняя устаревает (§10) |
+| `Connecting`, `Reconnecting`            | `ensureAgent()`                          | без изменений, `Future` идущей попытки (§10) |
+| `Connected`                             | `ensureAgent()`                          | без изменений (no-op)     |
+
+Переходы хода и сессии — `PromptTurnStateMachine` и `SessionStateMachine`; их нормы — требования «Отмена prompt turn» и смежные в `acp-protocol-client`.
 
 ---
 
@@ -697,6 +753,16 @@ reconnecting
 * ход (запрос) завершается отказом.
 
 Автоматически применять старое решение к новому вызову инструмента ЗАПРЕЩЕНО (корневой `AGENTS.md` §10).
+
+В CodeLab выбран первый исход: одобрение привязано к соединению, в котором пришёл запрос (`acp-client-kit`, требование о `SessionView.pendingApprovals`; design.md change `require-project-folder`, D22). При замене транспорта (`reconnect()`, повторный `connect()`) и при неожиданной потере соединения `AcpClientApplication._dropPendingApprovals` снимает каждое ждущее одобрение каждой сессии:
+
+* одобрение получает статус `cancelled`, уходит из `pendingApprovals` и карточки вызова, ход выходит из `awaitingApproval`;
+* в диагностику пишется предупреждение с id сессии, одобрения и вызова, без аргументов вызова;
+* поздний ответ пользователя по снятому одобрению завершается ошибкой и не уходит ни в одно соединение;
+* очередь промптов сессии сохраняется;
+* запрос нового соединения с тем же JSON-RPC id обрабатывается как новый.
+
+При замене транспорта одобрения снимаются синхронно, до первого `await` в `_replaceTransport`, чтобы ответ пользователя не успел уйти в старый транспорт. Пока фабрика или резолвер открывает новый транспорт, одобрение принадлежит прежнему, ещё живому соединению, и ответ уходит туда. Ход пересобирается из реплея следующего `session/load` (§30).
 
 ---
 
@@ -787,7 +853,9 @@ generation: 7
 * гонка завершения и отмены;
 * отключение во время выполнения;
 * успешное переподключение;
-* исчерпанное переподключение;
+* неудачное переподключение без повтора (`ConnectionFailed` после одной попытки);
+* вытеснение незавершённой попытки новым `connect()` или `reconnect()`;
+* снятие ждущих одобрений при замене транспорта и потере соединения;
 * устаревшее событие;
 * повторное завершение;
 * `dispose` во время асинхронной операции.
@@ -818,7 +886,7 @@ generation: 7
 
 Тесты BLoC ДОЛЖНЫ проверять отображение состояния и намерения, а не повторять весь автомат жизненного цикла ACP.
 
-Основной жизненный цикл СЛЕДУЕТ тестировать в `codelab_client_acp`.
+Основной жизненный цикл СЛЕДУЕТ тестировать там, где он принадлежит (§7): автоматы соединения, сессии и хода — в `codelab_client_acp`; `ConnectionView`, вытеснение попыток, `ensureAgent()` и загрузку сессий после переподключения — в `codelab_client_core`. Тесты Cubit-ов app и экранов CLI проверяют только отображение `WorkspaceState` и передачу намерений.
 
 ---
 
