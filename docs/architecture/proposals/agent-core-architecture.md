@@ -6,9 +6,16 @@ Date: 2026-10-21
 
 Решение: [ADR-0001](../adr/0001-embed-dart-agent-core-behind-acp.md)
 
-> Это **предложение**. Документ описывает целевое устройство пакета `codelab_agent_core` и его
-> адаптеров, которых в репозитории ещё нет. Общая картина миграции, клиенты и план этапов —
-> в [`dart-agent-and-clients.md`](dart-agent-and-clients.md); здесь — только ядро агента.
+> **Статус реализации (сверено 2026-11-23).** Принято и реализовано: ядро `codelab_agent_core` и
+> его адаптеры (`codelab_agent_io`, `codelab_agent_acp`, `codelab_agent_mcp`), хосты
+> `apps/codelab_agent` и `codelab_embedded` — этапы 0–8 плана миграции, их changes в
+> `openspec/changes/archive/`. Утверждённое поведение — `openspec/specs/agent-*` и
+> `openspec/specs/embedded-agent/`; при расхождении верны они. Спецификации после MVP (§17)
+> реализованы частично — статусы строк в [`agent-parity-goals.md`](agent-parity-goals.md) §3, что входит
+> в 1.0 — [`delivery-roadmap.md`](delivery-roadmap.md) §6.
+> Документ остаётся обоснованием решений и описанием контрактов. Общая картина миграции, клиенты
+> и план этапов — в [`dart-agent-and-clients.md`](dart-agent-and-clients.md); здесь — только
+> ядро агента.
 >
 > Документ (это оглавление и файлы каталога `agent-core/`) — **единственный источник** для реализации ядра. В нём описаны все решения, контракты,
 > алгоритмы, форматы и способы проверки; другие материалы для реализации не нужны. Если чего-то

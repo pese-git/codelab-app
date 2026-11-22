@@ -6,6 +6,13 @@ Date: 2026-10-21
 
 Решение: [ADR-0001](../adr/0001-embed-dart-agent-core-behind-acp.md)
 
+> **Статус реализации (сверено 2026-11-23).** Этапы 0–8 реализованы, их changes в
+> `openspec/changes/archive/`. Этап 9: профиль по умолчанию в app и CLI — встроенный Dart-агент,
+> Python-агент заморожен и вне monorepo (change `retire-python-agent`); ворота MVP (веха M3,
+> [`delivery-roadmap.md`](delivery-roadmap.md) §4.4) закрывает change
+> `switch-default-agent-to-dart`, он ещё открыт. Этап 10 и часть спецификаций §12 — план.
+> Утверждённое поведение — `openspec/specs/`. Факты §2 — снимок кода на момент предложения.
+>
 > Это **предложение и руководство к действию**, а не описание текущей архитектуры. Текущее
 > устройство ACP Client описано в остальных документах `docs/architecture/`. После принятия
 > ADR-0001 эти документы обновляются по чек-листу `docs/architecture/adr/README.md`.
