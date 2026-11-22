@@ -1006,6 +1006,36 @@ abstract class CodeLabLocalizations {
   /// In en, this message translates to:
   /// **'Step {index} of {total}'**
   String codeLabSetupStepPosition(int index, int total);
+
+  /// Подпись вида Frames в переключателе панели Protocol; число кадров добавляет хост (redesign-protocol-pane, D12).
+  ///
+  /// In en, this message translates to:
+  /// **'Frames'**
+  String get codeLabProtocolViewFrames;
+
+  /// Подпись вида Log в переключателе панели Protocol; число записей добавляет хост.
+  ///
+  /// In en, this message translates to:
+  /// **'Log'**
+  String get codeLabProtocolViewLog;
+
+  /// Подсказка панели выбранного вида Frames, пока кадр не выбран.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a frame to see its details.'**
+  String get codeLabProtocolSelectFrame;
+
+  /// Подсказка панели выбранного вида Log, пока запись не выбрана.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a record to see its fields.'**
+  String get codeLabProtocolSelectRecord;
+
+  /// Подпись замаскированного значения в JSON кадра; тон предупреждения. Маскирование — метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'••••••• (masked)'**
+  String get codeLabProtocolMasked;
 }
 
 class _CodeLabLocalizationsDelegate

@@ -61,6 +61,7 @@ CodeLabProtocolPane _pane({
   String? emptyRowsText,
   CodeLabProtocolDetail? detail,
   List<String> columns = const ['', 'Method', 'Id', 'Time'],
+  List<double?>? columnWidths,
   bool followTail = true,
   Object? tailScope,
   int toneColumn = 1,
@@ -77,6 +78,7 @@ CodeLabProtocolPane _pane({
   viewHint: 'Alt+← / Alt+→ previous / next frame',
   filters: const Text('filters-slot'),
   columns: columns,
+  columnWidths: columnWidths,
   followTail: followTail,
   tailScope: tailScope,
   toneColumn: toneColumn,
@@ -1112,6 +1114,133 @@ void main() {
       await show(tester, 115, selectedId: 'r99');
 
       expect(atBottom(tester), isTrue);
+    });
+  });
+
+  // Док по умолчанию в app — 360 px: тег `connection` (в русском интерфейсе
+  // «подключение») и фиксированные колонки не должны переполнять строку
+  // таблицы; тег сжимается с многоточием, а колонки, кроме колонки тега,
+  // узкие и по содержимому (change `redesign-protocol-pane`, D12).
+  group('панель шириной 360 px', () {
+    Widget narrow(CodeLabProtocolPane pane) => FluentApp(
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(width: 360, height: 600, child: pane),
+      ),
+    );
+
+    testWidgets('Frames: тег «подключение» без переполнения', (tester) async {
+      await tester.pumpWidget(
+        narrow(
+          _pane(
+            rows: const [
+              CodeLabProtocolTableRow(
+                id: 'f1',
+                cells: [
+                  '→',
+                  'session/update · agent_message_chunk',
+                  '12',
+                  '12:00:01',
+                ],
+                tag: 'подключение',
+              ),
+              CodeLabProtocolTableRow(
+                id: 'f2',
+                cells: ['←', 'initialize', '0', '12:00:00'],
+                tone: CodeLabTone.danger,
+                tag: 'подключение',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('подключение'), findsNWidgets(2));
+      // Строка таблицы помещается в ширину панели.
+      expect(
+        tester.getRect(find.byKey(const ValueKey('protocol-row-f1'))).right,
+        lessThanOrEqualTo(360),
+      );
+    });
+
+    testWidgets('Log: тег «подключение» в колонке Event без переполнения', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        narrow(
+          _pane(
+            view: CodeLabProtocolView.log,
+            columns: const ['Время', 'Уровень', 'Категория', 'Событие'],
+            tagColumn: 3,
+            rows: const [
+              CodeLabProtocolTableRow(
+                id: '0',
+                cells: [
+                  '12:00:01.234',
+                  'CRITICAL',
+                  'connection',
+                  'connection_state_changed',
+                ],
+                tone: CodeLabTone.danger,
+                tag: 'подключение',
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('подключение'), findsOneWidget);
+    });
+
+    testWidgets('колонка тега получает не меньше трети ширины панели', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        narrow(
+          _pane(
+            view: CodeLabProtocolView.log,
+            columns: const ['Time', 'Level', 'Category', 'Event'],
+            tagColumn: 3,
+            rows: const [
+              CodeLabProtocolTableRow(
+                id: '0',
+                cells: ['12:00:01.234', 'INFO', 'session', 'prompt_sent'],
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final event = tester.getRect(find.text('prompt_sent'));
+      final time = tester.getRect(find.text('12:00:01.234'));
+      expect(event.left - time.left, lessThan(360 * 0.67));
+    });
+
+    testWidgets('columnWidths задают ширины колонок, null — гибкая', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        narrow(
+          _pane(
+            columnWidths: const [24, null, 40, 60],
+            rows: const [
+              CodeLabProtocolTableRow(
+                id: 'f1',
+                cells: ['→', 'session/new', '1', '12:00:01'],
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      final id = tester.getRect(find.text('1'));
+      final time = tester.getRect(find.text('12:00:01'));
+      // Колонка Id шириной 40 (с отступами 10+10): время начинается на
+      // 40 px правее её начала.
+      expect(time.left - id.left, closeTo(40, 1));
     });
   });
 }

@@ -1812,14 +1812,10 @@ void main() {
   );
 
   // Application панели Protocol не знает Flutter, `dart:io` и пакеты
-  // отображения журнала (design.md change `redesign-protocol-pane`, D15;
-  // задача 6.1): область, фильтры, маппер и сборка JSON Lines остаются
-  // чистыми, запись файла — только порт `lib/core/platform/`, а буфер журнала
-  // `LogBuffer` приходит портом `LogRecordSource` из `lib/app/`. Красный тест:
-  // правила в `rules.dart` ещё нет (`singleWhere` не находит элемент), оно
-  // появится вместе с каталогом `lib/features/protocol/application/` в
-  // задаче 4.2, потому что общий цикл выше требует, чтобы каталог правила
-  // существовал.
+  // отображения журнала (design.md change `redesign-protocol-pane`, D15):
+  // область, фильтры, маппер и сборка JSON Lines остаются чистыми, запись
+  // файла — только порт `lib/core/platform/`, а буфер журнала `LogBuffer`
+  // приходит портом `LogRecordSource` из `lib/app/`.
   test('reports Flutter, dart:io and the log packages imported by the protocol '
       'pane application', () {
     final tmp = Directory.systemTemp.createTempSync('guard_protocol_app_');

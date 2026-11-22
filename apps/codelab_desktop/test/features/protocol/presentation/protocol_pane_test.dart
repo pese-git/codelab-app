@@ -148,6 +148,15 @@ final class _Env {
   }
 }
 
+/// Нажатие кнопки действий в строке вкладок дока. Строка действий в доке
+/// 360 px прокручивается (в тестовом шрифте Ahem кнопки шире настоящих), поэтому
+/// кнопка сначала прокручивается в видимую область, как сделал бы пользователь.
+Future<void> _tapAction(WidgetTester tester, String label) async {
+  await tester.ensureVisible(find.text(label));
+  await tester.pump();
+  await tester.tap(find.text(label));
+}
+
 /// Нажатие по строке таблицы по тексту ячейки метода.
 Future<void> _tapRow(WidgetTester tester, String label) async {
   await tester.tap(_inPane(find.text(label)));
@@ -237,7 +246,7 @@ void main() {
       await env.createSession(tester, 's_7f3a');
       await env.openPane(tester);
 
-      await tester.tap(find.text('Export…'));
+      await _tapAction(tester, 'Export…');
       await tester.pumpAndSettle();
       expect(find.text('Export full payloads?'), findsOneWidget);
       expect(
@@ -252,7 +261,7 @@ void main() {
       expect(env.saver.saved, isEmpty);
       expect(find.text('Export full payloads?'), findsNothing);
 
-      await tester.tap(find.text('Export…'));
+      await _tapAction(tester, 'Export…');
       await tester.pumpAndSettle();
       await tester.tap(_key('protocol-export-confirm'));
       await tester.pumpAndSettle();
@@ -282,7 +291,7 @@ void main() {
       await env.createSession(tester, 's_7f3a');
       await env.openPane(tester);
 
-      await tester.tap(find.text('Export…'));
+      await _tapAction(tester, 'Export…');
       await tester.pumpAndSettle();
       await tester.tap(_key('protocol-export-confirm'));
       await tester.pumpAndSettle();
@@ -421,7 +430,7 @@ void main() {
       await env.createSession(tester, 's_7f3a');
       await env.openPane(tester);
 
-      await tester.tap(find.text('Export…'));
+      await _tapAction(tester, 'Export…');
       await tester.pumpAndSettle();
       expect(find.text('Export full payloads?'), findsNothing);
       expect(env.saver.saved, hasLength(1));
@@ -430,7 +439,7 @@ void main() {
       await env.settle(tester);
       env.emitSecretUpdate('s_7f3a');
       await env.settle(tester);
-      await tester.tap(find.text('Export…'));
+      await _tapAction(tester, 'Export…');
       await tester.pumpAndSettle();
 
       expect(find.text('Export full payloads?'), findsOneWidget);
@@ -581,7 +590,7 @@ void main() {
         await env.settle(tester);
         final frames = env.cubit.state.framesCount;
 
-        await tester.tap(find.text('Clear'));
+        await _tapAction(tester, 'Clear');
         await env.settle(tester);
 
         expect(
@@ -630,7 +639,7 @@ void main() {
       );
       expect(pane().followTail, isTrue);
 
-      await tester.tap(find.text('Pause'));
+      await _tapAction(tester, 'Pause');
       await env.settle(tester);
 
       expect(find.text('Resume'), findsOneWidget);
@@ -638,7 +647,7 @@ void main() {
       expect(env.cubit.state.framesPaused, isTrue);
       expect(pane().followTail, isFalse);
 
-      await tester.tap(find.text('Resume'));
+      await _tapAction(tester, 'Resume');
       await env.settle(tester);
       expect(find.text('Pause'), findsOneWidget);
       expect(pane().followTail, isTrue);
@@ -653,7 +662,7 @@ void main() {
       await env.createSession(tester, 's_7f3a');
       await env.openPane(tester);
 
-      await tester.tap(find.text('Clear'));
+      await _tapAction(tester, 'Clear');
       await env.settle(tester);
 
       expect(env.cubit.state.framesCount, 0);
@@ -666,7 +675,7 @@ void main() {
       await env.pump(tester);
       await env.createSession(tester, 's_7f3a');
       await env.openPane(tester);
-      await tester.tap(find.text('Clear'));
+      await _tapAction(tester, 'Clear');
       await env.settle(tester);
 
       final export = find.ancestor(
@@ -706,7 +715,14 @@ void main() {
         'session/new',
       );
       expect(_inPane(find.text('initialize')), findsNothing);
-      expect(_inPane(find.text('session/new')), findsOneWidget);
+      // Только таблица: тот же текст стоит и в самом поле поиска.
+      expect(
+        find.descendant(
+          of: _key('protocol-table'),
+          matching: find.text('session/new'),
+        ),
+        findsOneWidget,
+      );
       await env.tearDown(tester);
     });
 
@@ -742,7 +758,10 @@ void main() {
       await env.openPane(tester);
       await _tapRow(tester, 'session/new');
 
-      await tester.drag(find.byType(CodeLabResizeHandle), const Offset(0, 60));
+      await tester.drag(
+        _inPane(find.byType(CodeLabResizeHandle)),
+        const Offset(0, 60),
+      );
       await env.settle(tester);
       final dragged = env.cubit.state.framesSplit;
       expect(dragged, isNotNull);

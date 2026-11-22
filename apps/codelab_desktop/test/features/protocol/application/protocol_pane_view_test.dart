@@ -36,7 +36,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/protocol_fixtures.dart';
 
-const _out = ProtocolFrameDirection.outbound;
 const _in = ProtocolFrameDirection.inbound;
 final _l10n = AppLocalizationsEn();
 
@@ -60,6 +59,20 @@ void main() {
           ),
         ),
         'session/update · tool_call',
+      );
+    });
+
+    test('запрос или уведомление без метода — подпись по виду кадра', () {
+      expect(protocolMethodLabel(protocolFrame(id: 1)), 'request');
+      expect(
+        protocolMethodLabel(
+          protocolFrame(
+            kind: ProtocolFrameKind.notification,
+            direction: _in,
+            detail: 'plan',
+          ),
+        ),
+        'notification · plan',
       );
     });
 

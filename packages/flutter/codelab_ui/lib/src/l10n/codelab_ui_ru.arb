@@ -150,5 +150,10 @@
   "codeLabMarkdownImage": "Изображение",
   "codeLabMarkdownShowImage": "Показать изображение",
   "codeLabShortcutAlternatives": "{first} или {second}",
-  "codeLabSetupStepPosition": "Шаг {index} из {total}"
+  "codeLabSetupStepPosition": "Шаг {index} из {total}",
+  "codeLabProtocolViewFrames": "Кадры",
+  "codeLabProtocolViewLog": "Журнал",
+  "codeLabProtocolSelectFrame": "Выберите кадр, чтобы увидеть подробности.",
+  "codeLabProtocolSelectRecord": "Выберите запись, чтобы увидеть её поля.",
+  "codeLabProtocolMasked": "••••••• (замаскировано)"
 }

@@ -140,10 +140,96 @@ void main() {
       );
 
       await tester.tap(find.byKey(const ValueKey('pause')));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(pressed, 1);
       expect(selected, isEmpty);
+    });
+  });
+
+  // Док по умолчанию в app — 360 px (`kDockDefaultWidth`): действия вкладки
+  // Protocol (четыре кнопки, в русском интерфейсе длинные подписи) должны
+  // помещаться без переполнения строки вкладок — сжиматься и прокручиваться
+  // (change `redesign-protocol-pane`, D1, D12). Переполнение `RenderFlex`
+  // тест Flutter считает ошибкой, поэтому отдельных проверок не нужно.
+  group('действия в доке шириной 360 px', () {
+    Widget narrowDock(List<String> labels) => FluentApp(
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: 360,
+          height: 300,
+          child: CodeLabToolDock(
+            active: ToolPane.protocol,
+            tabs: [
+              CodeLabDockTab(
+                pane: ToolPane.protocol,
+                content: const Text('protocol body'),
+                actions: [
+                  for (final label in labels)
+                    Button(onPressed: () {}, child: Text(label)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('английские подписи: без переполнения', (tester) async {
+      await tester.pumpWidget(
+        narrowDock(const ['Trace', 'Pause', 'Clear', 'Export…']),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Export…'), findsOneWidget);
+    });
+
+    testWidgets('длинные русские подписи: без переполнения, все кнопки в '
+        'дереве и доступны прокруткой', (tester) async {
+      await tester.pumpWidget(
+        narrowDock(const [
+          'Трассировка',
+          'Приостановить',
+          'Очистить',
+          'Экспорт…',
+        ]),
+      );
+
+      expect(tester.takeException(), isNull);
+      for (final label in ['Трассировка', 'Приостановить', 'Очистить']) {
+        expect(find.text(label), findsOneWidget, reason: label);
+      }
+      // Вкладка остаётся видимой в пределах дока.
+      final tab = tester.getRect(
+        find.byKey(CodeLabToolDock.tabKey(ToolPane.protocol)),
+      );
+      expect(tab.right, lessThanOrEqualTo(360));
+      // Строка вкладок не шире дока, а действия не вылезают за его правый край.
+      final actions = tester.getRect(find.text('Трассировка'));
+      expect(actions.left, lessThan(360));
+    });
+
+    testWidgets('последняя кнопка достижима прокруткой строки действий', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        narrowDock(const [
+          'Трассировка',
+          'Приостановить',
+          'Очистить',
+          'Экспорт…',
+        ]),
+      );
+
+      await tester.ensureVisible(find.text('Экспорт…'));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getRect(find.text('Экспорт…')).right,
+        lessThanOrEqualTo(360),
+      );
     });
   });
 }

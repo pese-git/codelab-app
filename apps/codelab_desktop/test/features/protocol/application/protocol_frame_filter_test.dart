@@ -23,7 +23,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../../support/protocol_fixtures.dart';
 
-const _out = ProtocolFrameDirection.outbound;
 const _in = ProtocolFrameDirection.inbound;
 
 void main() {

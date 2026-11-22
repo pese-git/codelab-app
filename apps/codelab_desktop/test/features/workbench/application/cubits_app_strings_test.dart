@@ -360,12 +360,10 @@ void main() {
       );
     });
 
-    test('ответ агента, заголовок инспектора и данные не меняются при смене '
-        'языка', () async {
+    test('ответ агента и данные не меняются при смене языка', () async {
       final scene = _Scene(strings);
       await scene.createSession('s1');
       await scene.stoppedTurn();
-      final inspector = scene.parts.activeSession.state.inspectorEntries.length;
       final prompts = [
         for (final row in scene.parts.activeSession.state.transcriptRows)
           if (row is CodeLabUserRow) row.text,
@@ -379,11 +377,6 @@ void main() {
         for (final row in scene.parts.activeSession.state.transcriptRows)
           if (row is CodeLabUserRow) row.text,
       ], prompts);
-      // Содержимое Inspector не переводится (D7).
-      expect(
-        scene.parts.activeSession.state.inspectorEntries.length,
-        inspector,
-      );
     });
   });
 }

@@ -46,8 +46,9 @@ const keyboardGroups = [
 const _approvalWhere =
     'Workbench, earliest pending approval, if it offers this option';
 
-/// 21 строка в порядке спецификации (`open-folder` — change
-/// `add-empty-project-screen`, D7).
+/// 24 строки в порядке спецификации (`open-folder` — change
+/// `add-empty-project-screen`, D7; `toggle-protocol`, `protocol-frame-move`,
+/// `protocol-record-move` — change `redesign-protocol-pane`, D11).
 final keyboardRows = <KeyboardRow>[
   _r(
     'command-palette',
@@ -114,6 +115,14 @@ final keyboardRows = <KeyboardRow>[
     'Workbench, when the Files pane is available',
   ),
   _r(
+    'toggle-protocol',
+    'navigation',
+    'Show or hide the Protocol pane',
+    ['Ctrl', 'Shift', 'I'],
+    ['⇧', '⌘', 'I'],
+    'Workbench',
+  ),
+  _r(
     'file-tree-move',
     'navigation',
     'Move through files',
@@ -136,6 +145,22 @@ final keyboardRows = <KeyboardRow>[
     ['Enter'],
     ['⏎'],
     'Files tree',
+  ),
+  _r(
+    'protocol-frame-move',
+    'navigation',
+    'Previous or next frame',
+    ['Alt', '←', 'Alt', '→'],
+    ['⌥', '←', '⌥', '→'],
+    'Protocol pane, Frames view',
+  ),
+  _r(
+    'protocol-record-move',
+    'navigation',
+    'Previous or next log record',
+    ['Alt', '↑', 'Alt', '↓'],
+    ['⌥', '↑', '⌥', '↓'],
+    'Protocol pane, Log view',
   ),
   _r(
     'cancel-turn',

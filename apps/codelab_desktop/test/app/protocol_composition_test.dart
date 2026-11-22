@@ -17,8 +17,6 @@
 // * `ProtocolPaneCubit` и `ProtocolExportSaver` — в root scope; закрытие —
 //   в `CodeLabRootLifecycle`.
 
-import 'dart:async';
-
 import 'package:codelab_client_acp/codelab_client_acp.dart'
     show AcpClientApplication;
 import 'package:codelab_desktop/app/app_scope.dart';

@@ -23,12 +23,6 @@ import '../../../l10n/app_localizations.dart';
 import '../../../l10n/app_localizations_en.dart';
 import 'agents_pane_data.dart';
 
-/// Модели инспектора — модели kit (`InspectorProjection`, design D9);
-/// прежние имена остаются для виджетов и тестов.
-typedef CodeLabInspectorCategory = InspectorCategory;
-typedef CodeLabInspectorEntry = InspectorEntry;
-typedef CodeLabInspectorDetail = InspectorDetail;
-
 /// Выбор варианта ожидающего одобрения [approval] в ленте.
 ///
 /// Обработчик получает само одобрение, а не «текущее» одобрение окна: так

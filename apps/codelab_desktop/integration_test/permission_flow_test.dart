@@ -4,7 +4,7 @@ import 'package:codelab_acp_testing/codelab_acp_testing.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
-import 'package:codelab_desktop/features/workbench/presentation/widgets/inspector_pane.dart';
+import 'package:codelab_desktop/features/protocol/presentation/protocol_pane.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -128,7 +128,10 @@ void main() {
       // Не `pumpAndSettle()`: ход всё ещё ждёт одобрения, и спиннер кнопки
       // отправки не даёт кадрам успокоиться (см. выше).
       await tester.pump(const Duration(milliseconds: 300));
-      expect(rawInputIn(WorkbenchInspectorPane), findsWidgets);
+      // Карточек Inspector больше нет (change `redesign-protocol-pane`, D9):
+      // панель Protocol показывает кадры, а полный payload — только после
+      // выбора кадра, поэтому здесь проверяется сама панель.
+      expect(find.byType(WorkbenchProtocolPane), findsOneWidget);
 
       // При ширине окна меньше 1280 px (окно e2e на macOS — 800×600) док
       // выдвигается поверх ленты с затемнением, и клик мимо только закрывает

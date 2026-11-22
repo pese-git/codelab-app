@@ -13,7 +13,6 @@
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _handle({
@@ -25,13 +24,17 @@ Widget _handle({
     child: SizedBox(
       width: 200,
       height: 200,
-      child: axis == null
-          ? CodeLabResizeHandle(onDelta: onDelta, onDragEnd: onDragEnd)
-          : CodeLabResizeHandle(
-              axis: axis,
-              onDelta: onDelta,
-              onDragEnd: onDragEnd,
-            ),
+      // `Align` ослабляет жёсткие ограничения `SizedBox`: иначе размер
+      // разделителя нельзя измерить.
+      child: Align(
+        child: axis == null
+            ? CodeLabResizeHandle(onDelta: onDelta, onDragEnd: onDragEnd)
+            : CodeLabResizeHandle(
+                axis: axis,
+                onDelta: onDelta,
+                onDragEnd: onDragEnd,
+              ),
+      ),
     ),
   ),
 );

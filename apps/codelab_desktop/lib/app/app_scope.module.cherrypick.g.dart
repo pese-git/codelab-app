@@ -32,6 +32,7 @@ final class $CodeLabProtocolApplicationModuleContract
             currentScope.resolve<TextFileReader>(),
             currentScope.resolve<TextFileWriter>(),
             currentScope.resolve<TerminalProcessRunner>(),
+            currentScope.resolve<ProtocolPayloadPolicy>(),
           ),
         )
         .singleton();
@@ -57,6 +58,7 @@ final class $CodeLabRootLifecycleModuleContract
             currentScope.resolve<TerminalTabsCubit>(),
             currentScope.resolve<AppLanguageCubit>(),
             currentScope.resolve<AppAppearanceCubit>(),
+            currentScope.resolve<ProtocolPaneCubit>(),
           ),
         )
         .singleton();

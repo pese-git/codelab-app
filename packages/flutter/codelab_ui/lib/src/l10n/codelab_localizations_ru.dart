@@ -529,4 +529,21 @@ class CodeLabLocalizationsRu extends CodeLabLocalizations {
   String codeLabSetupStepPosition(int index, int total) {
     return 'Шаг $index из $total';
   }
+
+  @override
+  String get codeLabProtocolViewFrames => 'Кадры';
+
+  @override
+  String get codeLabProtocolViewLog => 'Журнал';
+
+  @override
+  String get codeLabProtocolSelectFrame =>
+      'Выберите кадр, чтобы увидеть подробности.';
+
+  @override
+  String get codeLabProtocolSelectRecord =>
+      'Выберите запись, чтобы увидеть её поля.';
+
+  @override
+  String get codeLabProtocolMasked => '••••••• (замаскировано)';
 }

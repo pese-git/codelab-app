@@ -725,9 +725,9 @@ void main() {
       protocol().openLog();
       await settle(tester);
       expect(protocol().state.selectedRecord, isNull);
-      // Фокус внутри панели: щелчок по области таблицы (записей пока нет
-      // в выборе).
-      await tester.tap(find.byKey(const ValueKey('protocol-table')));
+      // Фокус внутри панели без выбора записи: щелчок по подвалу (щелчок по
+      // таблице выбрал бы строку, как только записи перестали теряться).
+      await tester.tap(find.textContaining('Panes follow the focused session'));
       await tester.pump();
 
       await pressShortcut(tester, CodeLabShortcut.protocolRecordMove, combo: 1);
@@ -738,6 +738,20 @@ void main() {
         protocol().state.visibleRecords.first,
       );
       expect(protocol().state.view, ProtocolView.log);
+
+      // Alt+↓ и обратно Alt+↑: записи журнала приходят и во время теста, но
+      // выбор остаётся на той же записи (адаптер отдаёт записи без копий).
+      final first = protocol().state.selectedRecord;
+      await pressShortcut(tester, CodeLabShortcut.protocolRecordMove, combo: 1);
+      await settle(tester);
+      expect(
+        identical(protocol().state.selectedRecord, first),
+        isFalse,
+        reason: 'Alt+↓ перешёл к следующей записи',
+      );
+      await pressShortcut(tester, CodeLabShortcut.protocolRecordMove);
+      await settle(tester);
+      expect(identical(protocol().state.selectedRecord, first), isTrue);
       await tearDownApp(tester);
     });
   });

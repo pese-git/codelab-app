@@ -250,14 +250,14 @@ void main() {
       }
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-    testWidgets('полный список на Linux: пять групп и 21 строка по порядку, '
+    testWidgets('полный список на Linux: пять групп и 24 строки по порядку, '
         'тексты символ в символ', (tester) async {
       await _pumpPage(tester);
 
       expect(_rowKeysOnScreen(tester).toSet(), {
         for (final row in keyboardRows) row.id,
       });
-      expect(_rowKeysOnScreen(tester), hasLength(21));
+      expect(_rowKeysOnScreen(tester), hasLength(24));
       for (final group in keyboardGroups) {
         expect(_group(group.slug), findsOneWidget, reason: group.slug);
         expect(
@@ -343,16 +343,21 @@ void main() {
     testWidgets('сочетаний без поведения нет', (tester) async {
       await _pumpPage(tester);
 
-      expect(_rowKeysOnScreen(tester), hasLength(21));
+      expect(_rowKeysOnScreen(tester), hasLength(24));
       for (final id in _rowKeysOnScreen(tester)) {
         final caps = _caps(tester, _row(id));
-        for (final forbidden in const ['/', 'I', 'F', r'\', 'D', '`']) {
+        for (final forbidden in const ['/', 'F', r'\', 'D', '`']) {
           expect(caps, isNot(contains(forbidden)), reason: '$id: $forbidden');
         }
-        // Alt+←/→ зарезервированы за инспектором, но не привязаны (DSK-18).
+        // `I` — только у `toggle-protocol` (Ctrl+Shift+I, D11).
+        if (id != 'toggle-protocol') {
+          expect(caps, isNot(contains('I')), reason: id);
+        }
+        // Alt+←/→ — навигация кадров панели Protocol (DSK-18, change
+        // `redesign-protocol-pane`, D11); в других строках их нет.
         expect(
           caps.contains('Alt') && (caps.contains('←') || caps.contains('→')),
-          isFalse,
+          id == 'protocol-frame-move',
           reason: id,
         );
       }
@@ -535,7 +540,7 @@ void main() {
     testWidgets('«zzz»: ни таблицы, ни групп, строка пустого результата, '
         'footer на месте', (tester) async {
       await _pumpPage(tester);
-      expect(_rowKeysOnScreen(tester), hasLength(21));
+      expect(_rowKeysOnScreen(tester), hasLength(24));
 
       await _type(tester, 'zzz');
 
@@ -550,7 +555,7 @@ void main() {
 
     testWidgets('«Where» в поиске не участвует: «files tree»', (tester) async {
       await _pumpPage(tester);
-      expect(_rowKeysOnScreen(tester), hasLength(21));
+      expect(_rowKeysOnScreen(tester), hasLength(24));
 
       await _type(tester, 'files tree');
 
@@ -567,7 +572,7 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await _pumpPage(tester);
 
-      expect(_rowKeysOnScreen(tester), hasLength(21));
+      expect(_rowKeysOnScreen(tester), hasLength(24));
     }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
   });
 
@@ -626,9 +631,14 @@ void main() {
 
       final area = tester.getRect(find.byKey(_body));
       final windowRight = tester.view.physicalSize.width;
+      // Самое длинное «Where» таблицы: колонка клавиш растёт по самой
+      // широкой строке (Alt-стрелки панели Protocol, change
+      // `redesign-protocol-pane`), и короткое «Workbench» уже не переносится.
       final where = find.descendant(
-        of: _row('new-session'),
-        matching: find.text('Workbench'),
+        of: _row('allow-once'),
+        matching: find.text(
+          keyboardRows.firstWhere((r) => r.id == 'allow-once').where,
+        ),
       );
       expect(where, findsOneWidget);
       for (final finder in [find.text('Where'), where]) {

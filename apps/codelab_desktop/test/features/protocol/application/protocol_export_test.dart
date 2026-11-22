@@ -170,7 +170,8 @@ void main() {
     test('payload, не сохранённый из-за размера, помечен', () {
       final big = protocolFrame(omitted: ProtocolPayloadOmitted.tooLarge);
 
-      expect(_lines(frames([big])).last['payload_omitted'], isNotNull);
+      // Значение — имя enum (design.md D10).
+      expect(_lines(frames([big])).last['payload_omitted'], 'tooLarge');
     });
 
     test('строковый id остаётся строкой', () {
@@ -271,13 +272,25 @@ void main() {
       errorCode: errorCode,
     );
 
-    setUp(() {
+    // Cubit создаётся в теле `testWidgets` (см. `protocol_pane_cubit_test`):
+    // таймеры склейки должны идти по поддельным часам `tester.pump`.
+    void bootstrap() {
       workspace = FakeProtocolWorkspace();
       logs = FakeLogRecordSource();
       saver = FakeProtocolExportSaver();
       logger = RecordingLogger();
       cubit = makeCubit(ProtocolPayloadPolicy.metadataOnly);
       workspace.focus('s1');
+    }
+
+    void testCubit(
+      String description,
+      Future<void> Function(WidgetTester tester) body,
+    ) => testWidgets(description, (tester) async {
+      bootstrap();
+      await body(tester);
+      // Отложенная публикация — таймер: в конце теста Cubit закрывается.
+      await tester.runAsync(cubit.close);
     });
 
     tearDown(() async {
@@ -292,7 +305,7 @@ void main() {
     Map<String, Object?> exportEvent() =>
         logger.entries.singleWhere((e) => e['event'] == 'protocol_pane.export');
 
-    testWidgets('release: три видимые ошибки — без подтверждения, файл без '
+    testCubit('release: три видимые ошибки — без подтверждения, файл без '
         'payload, событие saved с числом 3', (tester) async {
       workspace.pushAll([
         frame(omitted: ProtocolPayloadOmitted.policy),
@@ -336,7 +349,7 @@ void main() {
       expect(event['level'], 'info');
     });
 
-    testWidgets('экспортируется видимое: область сессии и фильтры, а не весь '
+    testCubit('экспортируется видимое: область сессии и фильтры, а не весь '
         'буфер', (tester) async {
       workspace.pushAll([
         frame(session: 's1'),
@@ -352,7 +365,7 @@ void main() {
       expect(lines.skip(1).map((l) => l['session_id']), ['s1', null]);
     });
 
-    testWidgets('без фокуса session_id заголовка — null', (tester) async {
+    testCubit('без фокуса session_id заголовка — null', (tester) async {
       workspace.pushAll([frame(session: null)]);
       workspace.focus(null);
       await settle(tester);
@@ -363,7 +376,7 @@ void main() {
       expect(header['session_id'], isNull);
     });
 
-    testWidgets('вид на паузе: экспортируется замороженный список', (
+    testCubit('вид на паузе: экспортируется замороженный список', (
       tester,
     ) async {
       workspace.pushAll([frame(), frame()]);
@@ -377,11 +390,14 @@ void main() {
       expect(_lines(saver.saved.single.text).first['count'], 2);
     });
 
-    testWidgets('debug: кадры с payload — подтверждение; отказ ничего не '
+    testCubit('debug: кадры с payload — подтверждение; отказ ничего не '
         'пишет, диалог сохранения не открывается, исход cancelled', (
       tester,
     ) async {
-      await cubit.close();
+      await tester.runAsync(cubit.close);
+      // Базовая `full`: у ядра Trace недоступен, payload хранится всегда.
+      await tester.runAsync(workspace.dispose);
+      workspace = FakeProtocolWorkspace(traceAvailable: false)..focus('s1');
       cubit = makeCubit(ProtocolPayloadPolicy.full);
       workspace.pushAll([
         frame(payload: {'method': 'session/prompt'}),
@@ -398,10 +414,13 @@ void main() {
       expect(event['view'], 'frames');
     });
 
-    testWidgets('debug: подтверждение даёт запись с payload в строках', (
+    testCubit('debug: подтверждение даёт запись с payload в строках', (
       tester,
     ) async {
-      await cubit.close();
+      await tester.runAsync(cubit.close);
+      // Базовая `full`: у ядра Trace недоступен, payload хранится всегда.
+      await tester.runAsync(workspace.dispose);
+      workspace = FakeProtocolWorkspace(traceAvailable: false)..focus('s1');
       cubit = makeCubit(ProtocolPayloadPolicy.full);
       workspace.pushAll([
         frame(
@@ -422,7 +441,7 @@ void main() {
       expect(saver.saved.single.text, isNot(contains('ghp_')));
     });
 
-    testWidgets('release в режиме Trace: кадры с payload — подтверждение '
+    testCubit('release в режиме Trace: кадры с payload — подтверждение '
         '(сценарий «Экспорт в режиме Trace»)', (tester) async {
       cubit.setTrace(true);
       workspace.pushAll([
@@ -443,7 +462,7 @@ void main() {
       expect(saver.saved, hasLength(1));
     });
 
-    testWidgets('Trace включён, но кадры без payload — подтверждения нет', (
+    testCubit('Trace включён, но кадры без payload — подтверждения нет', (
       tester,
     ) async {
       cubit.setTrace(true);
@@ -453,10 +472,10 @@ void main() {
       expect(cubit.exportNeedsConfirmation, isFalse);
     });
 
-    testWidgets('текст строится в момент подтверждения: выключение Trace '
+    testCubit('текст строится в момент подтверждения: выключение Trace '
         'во время диалога сохранения набор не меняет', (tester) async {
       final hook = _TraceOffDuringSave(() => cubit.setTrace(false));
-      await cubit.close();
+      await tester.runAsync(cubit.close);
       cubit = makeCubit(ProtocolPayloadPolicy.metadataOnly, exportSaver: hook);
       cubit.setTrace(true);
       workspace.pushAll([
@@ -470,10 +489,13 @@ void main() {
       expect(_lines(hook.text!)[1]['payload'], {'method': 'session/prompt'});
     });
 
-    testWidgets('вид Log: подтверждения нет даже в debug, строки record', (
+    testCubit('вид Log: подтверждения нет даже в debug, строки record', (
       tester,
     ) async {
-      await cubit.close();
+      await tester.runAsync(cubit.close);
+      // Базовая `full`: у ядра Trace недоступен, payload хранится всегда.
+      await tester.runAsync(workspace.dispose);
+      workspace = FakeProtocolWorkspace(traceAvailable: false)..focus('s1');
       cubit = makeCubit(ProtocolPayloadPolicy.full);
       logs.add(logRecord('a', sessionId: 's1'));
       logs.add(logRecord('b', sessionId: 's2'));
@@ -500,7 +522,7 @@ void main() {
       expect(lines.skip(1).every((l) => l['type'] == 'record'), isTrue);
     });
 
-    testWidgets('отказ в диалоге сохранения: без заметки, исход cancelled', (
+    testCubit('отказ в диалоге сохранения: без заметки, исход cancelled', (
       tester,
     ) async {
       saver.result = const ProtocolExportCancelled();
@@ -513,7 +535,7 @@ void main() {
       expect(exportEvent()['outcome'], 'cancelled');
     });
 
-    testWidgets('сбой записи: заметка в состоянии, исход failed с '
+    testCubit('сбой записи: заметка в состоянии, исход failed с '
         'error_class, без путей и текста', (tester) async {
       saver.result = const ProtocolExportFailed('FileSystemException');
       workspace.pushAll([frame(omitted: ProtocolPayloadOmitted.policy)]);
@@ -535,9 +557,7 @@ void main() {
       });
     });
 
-    testWidgets('заметка сбоя сбрасывается следующим действием', (
-      tester,
-    ) async {
+    testCubit('заметка сбоя сбрасывается следующим действием', (tester) async {
       saver.result = const ProtocolExportFailed('FileSystemException');
       workspace.pushAll([frame(omitted: ProtocolPayloadOmitted.policy)]);
       await settle(tester);
@@ -549,10 +569,10 @@ void main() {
       expect(cubit.state.saveFailed, isFalse);
     });
 
-    testWidgets('событие экспорта не содержит имени файла, payload и '
+    testCubit('событие экспорта не содержит имени файла, payload и '
         'фильтров', (tester) async {
       workspace.pushAll([frame(omitted: ProtocolPayloadOmitted.policy)]);
-      cubit.setFrameQuery('needle');
+      cubit.setFrameQuery('prompt');
       await settle(tester);
       workspace.push(frame(omitted: ProtocolPayloadOmitted.policy));
 
@@ -568,7 +588,7 @@ void main() {
       });
     });
 
-    testWidgets('пустой вид: экспорт ничего не делает', (tester) async {
+    testCubit('пустой вид: экспорт ничего не делает', (tester) async {
       var asked = 0;
 
       await cubit.exportActive(

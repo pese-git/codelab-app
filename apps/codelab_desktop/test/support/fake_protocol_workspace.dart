@@ -57,6 +57,7 @@ final class FakeProtocolWorkspace extends FakeClientWorkspace {
     current.copyWith(activeSessionId: id == null ? null : SessionId(id)),
   );
 
+  @override
   Future<void> dispose() async {
     await protocolFrames.dispose();
     await backend.frames.close();

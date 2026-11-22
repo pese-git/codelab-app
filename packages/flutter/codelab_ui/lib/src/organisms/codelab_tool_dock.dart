@@ -4,11 +4,25 @@ import '../atomics/atomics.dart';
 import '../molecules/molecules.dart';
 
 /// Вкладка дока: панель и её содержимое.
+///
+/// [actions] — действия панели (например, `Pause`, `Clear`, `Export…` у
+/// Protocol): док показывает их справа в строке вкладок, только пока вкладка
+/// активна; строка действий занимает не больше 70 % ширины дока и
+/// прокручивается по горизонтали. Почему в доке, а не в теле панели: так устроен макет, а поле
+/// нужно и будущим панелям Terminal и Diff (change `redesign-protocol-pane`,
+/// D1, D12). Виджеты строит хост; док ничего о них не знает.
 class CodeLabDockTab {
-  const CodeLabDockTab({required this.pane, required this.content});
+  const CodeLabDockTab({
+    required this.pane,
+    required this.content,
+    this.actions,
+  });
 
   final ToolPane pane;
   final Widget content;
+
+  /// Действия активной вкладки; `null` или пусто — вид дока прежний.
+  final List<Widget>? actions;
 }
 
 /// Док панелей инструментов справа от панели сессии.
@@ -68,17 +82,44 @@ class CodeLabToolDock extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
-            child: Row(
+          // Действия стоят справа и сжимаются: не больше 70 % ширины дока, всё
+          // остальное прокручивается по горизонтали (док 360 px, длинные
+          // подписи русского интерфейса); вкладки получают остаток.
+          LayoutBuilder(
+            builder: (context, constraints) => Row(
               children: [
-                for (final tab in tabs)
-                  _DockTabButton(
-                    pane: tab.pane,
-                    selected: tab.pane == shown.pane,
-                    onSelected: onSelected,
-                    onClosed: onClosed,
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
+                    child: Row(
+                      children: [
+                        for (final tab in tabs)
+                          _DockTabButton(
+                            pane: tab.pane,
+                            selected: tab.pane == shown.pane,
+                            onSelected: onSelected,
+                            onClosed: onClosed,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Действия — только у активной вкладки (D1).
+                if (shown.actions case final actions? when actions.isNotEmpty)
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth * 0.7,
+                    ),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: 6,
+                        children: actions,
+                      ),
+                    ),
                   ),
               ],
             ),

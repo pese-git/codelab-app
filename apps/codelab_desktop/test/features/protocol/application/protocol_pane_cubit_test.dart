@@ -35,7 +35,6 @@
 
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_desktop/features/protocol/application/log_record_filter.dart';
-import 'package:codelab_desktop/features/protocol/application/log_record_source.dart';
 import 'package:codelab_desktop/features/protocol/application/protocol_frame_filter.dart';
 import 'package:codelab_desktop/features/protocol/application/protocol_pane_cubit.dart';
 import 'package:codelab_desktop/features/protocol/application/protocol_pane_state.dart';
@@ -69,12 +68,27 @@ void main() {
     logger: logger,
   );
 
-  setUp(() {
+  // Cubit создаётся в теле `testWidgets`, а не в `setUp`: подписки на потоки
+  // выполняют обработчики в зоне, где вызван `listen`, и таймер склейки
+  // публикаций, созданный из `setUp`, жил бы по настоящему времени, а не по
+  // поддельным часам `tester.pump(Duration)` (design.md change
+  // `redesign-protocol-pane`, D7).
+  void bootstrap() {
     workspace = FakeProtocolWorkspace();
     logs = FakeLogRecordSource();
     saver = FakeProtocolExportSaver();
     logger = RecordingLogger();
     cubit = makeCubit();
+  }
+
+  void testCubit(
+    String description,
+    Future<void> Function(WidgetTester tester) body,
+  ) => testWidgets(description, (tester) async {
+    bootstrap();
+    await body(tester);
+    // Отложенная публикация — таймер: в конце теста Cubit закрывается.
+    await tester.runAsync(cubit.close);
   });
 
   tearDown(() async {
@@ -116,29 +130,28 @@ void main() {
   ];
 
   group('начальное состояние', () {
-    testWidgets(
-      'вид Frames, фокуса нет, Trace выключен, фильтры по умолчанию',
-      (tester) async {
-        final state = cubit.state;
+    testCubit('вид Frames, фокуса нет, Trace выключен, фильтры по умолчанию', (
+      tester,
+    ) async {
+      final state = cubit.state;
 
-        expect(state.view, ProtocolView.frames);
-        expect(state.focusedSessionId, isNull);
-        expect(state.frameFilter, const ProtocolFrameFilter());
-        expect(state.logFilter, const LogRecordFilter());
-        expect(state.framesPaused, isFalse);
-        expect(state.logPaused, isFalse);
-        expect(state.selectedFrame, isNull);
-        expect(state.selectedRecord, isNull);
-        expect(state.framesSplit, isNull);
-        expect(state.logSplit, isNull);
-        expect(state.traceEnabled, isFalse);
-        expect(state.traceAvailable, isTrue);
-        expect(state.saveFailed, isFalse);
-      },
-    );
+      expect(state.view, ProtocolView.frames);
+      expect(state.focusedSessionId, isNull);
+      expect(state.frameFilter, const ProtocolFrameFilter());
+      expect(state.logFilter, const LogRecordFilter());
+      expect(state.framesPaused, isFalse);
+      expect(state.logPaused, isFalse);
+      expect(state.selectedFrame, isNull);
+      expect(state.selectedRecord, isNull);
+      expect(state.framesSplit, isNull);
+      expect(state.logSplit, isNull);
+      expect(state.traceEnabled, isFalse);
+      expect(state.traceAvailable, isTrue);
+      expect(state.saveFailed, isFalse);
+    });
 
-    testWidgets('кадры, пришедшие до создания Cubit, видны', (tester) async {
-      await cubit.close();
+    testCubit('кадры, пришедшие до создания Cubit, видны', (tester) async {
+      await tester.runAsync(cubit.close);
       workspace.push(frame(method: 'initialize', id: 0));
       workspace.push(frame(method: 'session/list', id: 1));
       cubit = makeCubit();
@@ -147,17 +160,17 @@ void main() {
       expect(cubit.state.visibleFrames, hasLength(2));
     });
 
-    testWidgets('сессия в фокусе берётся из WorkspaceState', (tester) async {
-      await cubit.close();
+    testCubit('сессия в фокусе берётся из WorkspaceState', (tester) async {
+      await tester.runAsync(cubit.close);
       workspace.focus('s1');
       cubit = makeCubit();
 
       expect(cubit.state.focusedSessionId, 's1');
     });
 
-    testWidgets('traceAvailable повторяет возможность буфера', (tester) async {
-      await cubit.close();
-      await workspace.dispose();
+    testCubit('traceAvailable повторяет возможность буфера', (tester) async {
+      await tester.runAsync(cubit.close);
+      await tester.runAsync(workspace.dispose);
       workspace = FakeProtocolWorkspace(traceAvailable: false);
       cubit = makeCubit(base: ProtocolPayloadPolicy.full);
 
@@ -166,7 +179,7 @@ void main() {
   });
 
   group('виды', () {
-    testWidgets('openLog (/logs) делает активным вид Log, Frames — обратно', (
+    testCubit('openLog (/logs) делает активным вид Log, Frames — обратно', (
       tester,
     ) async {
       cubit.openLog();
@@ -176,7 +189,7 @@ void main() {
       expect(cubit.state.view, ProtocolView.frames);
     });
 
-    testWidgets('смена вида — событие protocol_pane.view без значений', (
+    testCubit('смена вида — событие protocol_pane.view без значений', (
       tester,
     ) async {
       cubit.selectView(ProtocolView.log);
@@ -189,9 +202,7 @@ void main() {
       expect(events.single['level'], 'debug');
     });
 
-    testWidgets('повторный выбор того же вида события не пишет', (
-      tester,
-    ) async {
+    testCubit('повторный выбор того же вида события не пишет', (tester) async {
       cubit.selectView(ProtocolView.frames);
 
       expect(
@@ -200,7 +211,7 @@ void main() {
       );
     });
 
-    testWidgets('фильтры и выбор переживают смену вида и обратно '
+    testCubit('фильтры и выбор переживают смену вида и обратно '
         '(закрытие вкладки — только показ, состояние в Cubit)', (tester) async {
       final selected = frame(method: 'session/prompt', id: 1, session: 's1');
       workspace.focus('s1');
@@ -218,7 +229,7 @@ void main() {
       expect(seqs(cubit.state.visibleFrames), [selected.seq]);
     });
 
-    testWidgets('доля разделителя хранится отдельно у каждого вида', (
+    testCubit('доля разделителя хранится отдельно у каждого вида', (
       tester,
     ) async {
       cubit.setSplit(0.4);
@@ -245,9 +256,7 @@ void main() {
       b1 = frame(method: 'session/prompt', id: 2, session: 's_91c0');
     });
 
-    testWidgets('сессия в фокусе и соединение; чужих кадров нет', (
-      tester,
-    ) async {
+    testCubit('сессия в фокусе и соединение; чужих кадров нет', (tester) async {
       workspace.pushAll([init, a1, b1]);
       workspace.focus('s_7f3a');
       await settle(tester);
@@ -255,7 +264,7 @@ void main() {
       expect(seqs(cubit.state.visibleFrames), [init.seq, a1.seq]);
     });
 
-    testWidgets('панель следует за фокусом: поиск сохранён, выбор снят', (
+    testCubit('панель следует за фокусом: поиск сохранён, выбор снят', (
       tester,
     ) async {
       workspace.pushAll([init, a1, b1]);
@@ -273,7 +282,7 @@ void main() {
       expect(cubit.state.selectedFrame, isNull);
     });
 
-    testWidgets('выбранный элемент соединения переживает смену фокуса', (
+    testCubit('выбранный элемент соединения переживает смену фокуса', (
       tester,
     ) async {
       workspace.pushAll([init, a1, b1]);
@@ -287,7 +296,7 @@ void main() {
       expect(cubit.state.selectedFrame, init);
     });
 
-    testWidgets('без фокуса — только элементы соединения', (tester) async {
+    testCubit('без фокуса — только элементы соединения', (tester) async {
       workspace.pushAll([init, a1, b1]);
       workspace.focus('s_7f3a');
       await settle(tester);
@@ -300,7 +309,7 @@ void main() {
       expect(cubit.state.framesCount, 1);
     });
 
-    testWidgets('запрос session/new относится к своей сессии', (tester) async {
+    testCubit('запрос session/new относится к своей сессии', (tester) async {
       final request = frame(method: 'session/new', id: 1);
       workspace.push(request);
       workspace.focus('s_7f3a');
@@ -329,7 +338,7 @@ void main() {
       );
     });
 
-    testWidgets('счётчики считают область без фильтров', (tester) async {
+    testCubit('счётчики считают область без фильтров', (tester) async {
       workspace.pushAll([init, a1, b1]);
       workspace.focus('s_7f3a');
       logs.add(logRecord('a', sessionId: 's_7f3a'));
@@ -345,7 +354,7 @@ void main() {
       expect(cubit.state.visibleRecords, isEmpty);
     });
 
-    testWidgets('записи журнала: область по session_id', (tester) async {
+    testCubit('записи журнала: область по session_id', (tester) async {
       logs.add(logRecord('a', sessionId: 's_7f3a'));
       logs.add(logRecord('b', sessionId: 's_91c0'));
       logs.add(logRecord('c'));
@@ -355,7 +364,7 @@ void main() {
       expect(cubit.state.visibleRecords.map((r) => r['event']), ['b', 'c']);
     });
 
-    testWidgets('фильтры Log: категория и уровень', (tester) async {
+    testCubit('фильтры Log: категория и уровень', (tester) async {
       logs.add(logRecord('a', category: 'x', level: 'debug'));
       logs.add(logRecord('b', category: 'x', level: 'error'));
       logs.add(logRecord('c', category: 'y', level: 'error'));
@@ -366,8 +375,11 @@ void main() {
       expect(cubit.state.visibleRecords.map((r) => r['event']), ['b']);
     });
 
-    testWidgets('переключатели Frames', (tester) async {
-      final note = frame(method: 'session/update');
+    testCubit('переключатели Frames', (tester) async {
+      final note = frame(
+        method: 'session/update',
+        kind: ProtocolFrameKind.notification,
+      );
       final request = frame(method: 'session/prompt', id: 1);
       final error = frame(
         method: 'session/prompt',
@@ -393,7 +405,7 @@ void main() {
   });
 
   group('пауза', () {
-    testWidgets('пауза замораживает список, счётчик растёт, Resume показывает '
+    testCubit('пауза замораживает список, счётчик растёт, Resume показывает '
         'накопленное', (tester) async {
       workspace.pushAll([for (var i = 0; i < 3; i++) frame()]);
       await settle(tester);
@@ -413,7 +425,7 @@ void main() {
       expect(cubit.state.visibleFrames, hasLength(23));
     });
 
-    testWidgets('пауза вида Log не затрагивает Frames', (tester) async {
+    testCubit('пауза вида Log не затрагивает Frames', (tester) async {
       cubit.selectView(ProtocolView.log);
       cubit.togglePause();
       workspace.push(frame());
@@ -427,7 +439,7 @@ void main() {
       expect(cubit.state.visibleFrames, hasLength(1));
     });
 
-    testWidgets('смена фокуса на паузе: пауза сохранена, снимок получает '
+    testCubit('смена фокуса на паузе: пауза сохранена, снимок получает '
         'новую область', (tester) async {
       final init = frame(method: 'initialize', id: 0);
       final a = frame(method: 'session/prompt', id: 1, session: 'a');
@@ -449,7 +461,7 @@ void main() {
   });
 
   group('выбранный кадр', () {
-    testWidgets('остаётся в панели после вытеснения из буфера', (tester) async {
+    testCubit('остаётся в панели после вытеснения из буфера', (tester) async {
       final f = frame(method: 'session/prompt', id: 1, session: 's1');
       workspace.focus('s1');
       workspace.push(f);
@@ -463,7 +475,7 @@ void main() {
       expect(cubit.state.selectedFrame, f);
     });
 
-    testWidgets('Alt+→ без выбора выбирает первый видимый, Alt+← — '
+    testCubit('Alt+→ без выбора выбирает первый видимый, Alt+← — '
         'последний', (tester) async {
       final frames = [for (var i = 0; i < 3; i++) frame(session: 's1')];
       workspace.focus('s1');
@@ -478,7 +490,7 @@ void main() {
       expect(cubit.state.selectedFrame, frames.last);
     });
 
-    testWidgets('навигация идёт по видимым элементам и стоит на краю', (
+    testCubit('навигация идёт по видимым элементам и стоит на краю', (
       tester,
     ) async {
       final frames = [for (var i = 0; i < 4; i++) frame(session: 's1')];
@@ -497,7 +509,7 @@ void main() {
       expect(cubit.state.selectedFrame, frames[0]);
     });
 
-    testWidgets('навигация пропускает то, что скрыл фильтр', (tester) async {
+    testCubit('навигация пропускает то, что скрыл фильтр', (tester) async {
       final a = frame(method: 'session/prompt', id: 1, session: 's1');
       final hidden = frame(method: 'session/update', session: 's1');
       final b = frame(method: 'session/prompt', id: 2, session: 's1');
@@ -512,7 +524,7 @@ void main() {
       expect(cubit.state.selectedFrame, b);
     });
 
-    testWidgets('в виде Log навигация идёт по записям', (tester) async {
+    testCubit('в виде Log навигация идёт по записям', (tester) async {
       logs.add(logRecord('first'));
       logs.add(logRecord('second'));
       cubit.selectView(ProtocolView.log);
@@ -528,9 +540,7 @@ void main() {
       expect(cubit.state.selectedRecord!['event'], 'first');
     });
 
-    testWidgets('в пустой области навигация ничего не выбирает', (
-      tester,
-    ) async {
+    testCubit('в пустой области навигация ничего не выбирает', (tester) async {
       cubit.selectNext();
       cubit.selectPrevious();
 
@@ -539,7 +549,7 @@ void main() {
   });
 
   group('Clear', () {
-    testWidgets('Frames: очищает буфер кадров целиком, снимает выбор и '
+    testCubit('Frames: очищает буфер кадров целиком, снимает выбор и '
         'паузу, пишет protocol_pane.clear', (tester) async {
       final a = frame(session: 'a');
       workspace.pushAll([a, frame(session: 'b'), frame()]);
@@ -563,7 +573,7 @@ void main() {
       expect(event['level'], 'info');
     });
 
-    testWidgets('Log: чистит журнал, буфер кадров не меняется', (tester) async {
+    testCubit('Log: чистит журнал, буфер кадров не меняется', (tester) async {
       workspace.push(frame());
       logs.add(logRecord('a'));
       logs.add(logRecord('b'));
@@ -587,7 +597,7 @@ void main() {
       expect(event['count'], 2);
     });
 
-    testWidgets('записи protocol_pane.clear не содержат payload и фильтров', (
+    testCubit('записи protocol_pane.clear не содержат payload и фильтров', (
       tester,
     ) async {
       workspace.push(frame(payload: {'secret': 'x'}));
@@ -615,7 +625,7 @@ void main() {
       );
     });
 
-    testWidgets('кадр с тем же id и поколением выбирается, вид Frames', (
+    testCubit('кадр с тем же id и поколением выбирается, вид Frames', (
       tester,
     ) async {
       workspace.focus('s1');
@@ -636,9 +646,7 @@ void main() {
       expect(cubit.state.selectedFrame, gen2);
     });
 
-    testWidgets('без поколения в записи — последний такой кадр', (
-      tester,
-    ) async {
+    testCubit('без поколения в записи — последний такой кадр', (tester) async {
       workspace.focus('s1');
       workspace.pushAll([gen1, gen2]);
       await settle(tester);
@@ -648,7 +656,7 @@ void main() {
       expect(cubit.frameOfRecord(record), gen2);
     });
 
-    testWidgets('скрывающие фильтры Frames сбрасываются к умолчанию', (
+    testCubit('скрывающие фильтры Frames сбрасываются к умолчанию', (
       tester,
     ) async {
       workspace.focus('s1');
@@ -667,9 +675,7 @@ void main() {
       expect(cubit.state.visibleFrames, contains(gen1));
     });
 
-    testWidgets('фильтры, которые кадр не скрывают, сохраняются', (
-      tester,
-    ) async {
+    testCubit('фильтры, которые кадр не скрывают, сохраняются', (tester) async {
       workspace.focus('s1');
       workspace.pushAll([gen1]);
       cubit.setFrameQuery('prompt');
@@ -682,7 +688,7 @@ void main() {
       expect(cubit.state.frameFilter.query, 'prompt');
     });
 
-    testWidgets('кадра нет в буфере — frameOfRecord пуст, переход недоступен', (
+    testCubit('кадра нет в буфере — frameOfRecord пуст, переход недоступен', (
       tester,
     ) async {
       workspace.focus('s1');
@@ -700,7 +706,7 @@ void main() {
       expect(cubit.state.selectedFrame, isNull);
     });
 
-    testWidgets('кадр другой сессии не находится (область D6)', (tester) async {
+    testCubit('кадр другой сессии не находится (область D6)', (tester) async {
       workspace.focus('s2');
       workspace.pushAll([gen1]);
       await settle(tester);
@@ -711,7 +717,7 @@ void main() {
       );
     });
 
-    testWidgets('запись без request_id — перехода нет', (tester) async {
+    testCubit('запись без request_id — перехода нет', (tester) async {
       workspace.pushAll([gen1]);
       await settle(tester);
 
@@ -719,8 +725,77 @@ void main() {
     });
   });
 
+  group('данные панели, которые раньше считал build()', () {
+    testCubit('категории Log — по области без фильтров, а не по видимому', (
+      tester,
+    ) async {
+      logs.add(logRecord('a', category: 'session', sessionId: 's1'));
+      logs.add(logRecord('b', category: 'connection'));
+      logs.add(logRecord('c', category: 'other', sessionId: 's2'));
+      workspace.focus('s1');
+      await settle(tester);
+      expect(cubit.state.logCategories, ['connection', 'session']);
+
+      cubit.setLogCategory('session');
+      cubit.setLogQuery('zzz');
+      await settle(tester);
+
+      // Список для выпадающего выбора не сужается выбором категории.
+      expect(cubit.state.visibleRecords, isEmpty);
+      expect(cubit.state.logCategories, ['connection', 'session']);
+    });
+
+    testCubit('доступность кадра выбранной записи считает Cubit', (
+      tester,
+    ) async {
+      final frame1 = frame(method: 'session/prompt', id: 5, session: 's1');
+      workspace.focus('s1');
+      workspace.push(frame1);
+      logs.add(logRecord('x', sessionId: 's1', requestId: 5, generation: 1));
+      await settle(tester);
+      expect(cubit.state.selectedRecordHasFrame, isFalse);
+
+      cubit.selectRecord(cubit.state.visibleRecords.single);
+      expect(cubit.state.selectedRecordHasFrame, isTrue);
+
+      workspace.protocolFrames.clear();
+      await settle(tester);
+      expect(cubit.state.selectedRecordHasFrame, isFalse);
+    });
+  });
+
+  group('ошибки действий панели не теряются (§12)', () {
+    testCubit('сбой действия пишется событием с классом ошибки, без '
+        'исключения наружу', (tester) async {
+      await cubit.guarded(
+        'copy',
+        () async => throw StateError('clipboard secret path /tmp/x'),
+      );
+
+      final event = logger.entries.singleWhere(
+        (e) => e['event'] == 'protocol_pane.action_failed',
+      );
+      expect(event['action'], 'copy');
+      expect(event['error_class'], 'StateError');
+      expect(event['level'], 'error');
+      // Ни текста ошибки, ни путей в записи нет.
+      expect(event.keys.toSet(), {'event', 'level', 'action', 'error_class'});
+    });
+
+    testCubit('успешное действие событий не пишет', (tester) async {
+      await cubit.guarded('copy', () async {});
+
+      expect(
+        logger.entries.where(
+          (e) => e['event'] == 'protocol_pane.action_failed',
+        ),
+        isEmpty,
+      );
+    });
+  });
+
   group('Trace (D17)', () {
-    testWidgets('включение и выключение идут через буфер кадров, пишется '
+    testCubit('включение и выключение идут через буфер кадров, пишется '
         'protocol_pane.trace', (tester) async {
       cubit.setTrace(true);
       expect(cubit.state.traceEnabled, isTrue);
@@ -742,7 +817,7 @@ void main() {
       );
     });
 
-    testWidgets('повторное значение — без события и без вызова ядра', (
+    testCubit('повторное значение — без события и без вызова ядра', (
       tester,
     ) async {
       cubit.setTrace(false);
@@ -754,11 +829,11 @@ void main() {
       );
     });
 
-    testWidgets('Trace недоступен (базовая full) — переключение без эффекта', (
+    testCubit('Trace недоступен (базовая full) — переключение без эффекта', (
       tester,
     ) async {
-      await cubit.close();
-      await workspace.dispose();
+      await tester.runAsync(cubit.close);
+      await tester.runAsync(workspace.dispose);
       workspace = FakeProtocolWorkspace(traceAvailable: false);
       cubit = makeCubit(base: ProtocolPayloadPolicy.full);
 
@@ -768,7 +843,7 @@ void main() {
       expect(workspace.backend.traceCalls, isEmpty);
     });
 
-    testWidgets('выключение снимает payload с выбранного кадра и со снимка '
+    testCubit('выключение снимает payload с выбранного кадра и со снимка '
         'паузы', (tester) async {
       cubit.setTrace(true);
       final f = frame(
@@ -796,11 +871,95 @@ void main() {
       expect(cubit.state.visibleFrames.every((f) => f.payload == null), isTrue);
     });
 
-    testWidgets('после перезапуска (новый Cubit над новым рабочим '
+    testCubit('выбранный кадр после выключения Trace — тот же, что хранит '
+        'буфер (его правила снятия payload)', (tester) async {
+      cubit.setTrace(true);
+      final f = frame(
+        method: 'session/prompt',
+        id: 1,
+        session: 's1',
+        payload: {'method': 'session/prompt'},
+      );
+      workspace.focus('s1');
+      workspace.push(f);
+      await settle(tester);
+      cubit.selectFrame(f);
+
+      cubit.setTrace(false);
+
+      final inBuffer = workspace.protocolFrames.frames.singleWhere(
+        (b) => b.seq == f.seq,
+      );
+      expect(cubit.state.selectedFrame, inBuffer);
+    });
+
+    testCubit('вытесненный кадр-ошибка: после выключения Trace текст ошибки '
+        'заменён стандартным именем кода у выбранного и у снимка паузы', (
+      tester,
+    ) async {
+      cubit.setTrace(true);
+      final error = frame(
+        method: 'session/prompt',
+        id: 5,
+        session: 's1',
+        kind: ProtocolFrameKind.error,
+        direction: _in,
+        errorCode: -32603,
+        detail: 'secret path /tmp/user/key',
+        payload: {'error': 'secret path /tmp/user/key'},
+      );
+      workspace.focus('s1');
+      workspace.push(error);
+      await settle(tester);
+      cubit.selectFrame(error);
+      cubit.togglePause();
+      // Кадр вытеснен из буфера: заменить его там уже некому, кроме Cubit.
+      workspace.protocolFrames.clear();
+
+      cubit.setTrace(false);
+      await settle(tester);
+
+      final selected = cubit.state.selectedFrame!;
+      expect(selected.payload, isNull);
+      expect(selected.detail, 'Internal error');
+      expect(selected.payloadOmitted, ProtocolPayloadOmitted.policy);
+      final frozen = cubit.state.visibleFrames.single;
+      expect(frozen.payload, isNull);
+      expect(frozen.detail, 'Internal error');
+      expect(frozen.seq, error.seq);
+    });
+
+    testCubit('кадр-ошибка с payload, не сохранённым из-за размера: текст '
+        'ошибки заменяется и у вытесненного кадра', (tester) async {
+      cubit.setTrace(true);
+      final error = frame(
+        method: 'session/prompt',
+        id: 6,
+        session: 's1',
+        kind: ProtocolFrameKind.error,
+        direction: _in,
+        errorCode: -32603,
+        detail: 'secret path /tmp/user/key',
+        omitted: ProtocolPayloadOmitted.tooLarge,
+      );
+      workspace.focus('s1');
+      workspace.push(error);
+      await settle(tester);
+      cubit.selectFrame(error);
+      workspace.protocolFrames.clear();
+
+      cubit.setTrace(false);
+
+      final selected = cubit.state.selectedFrame!;
+      expect(selected.detail, 'Internal error');
+      expect(selected.payloadOmitted, ProtocolPayloadOmitted.tooLarge);
+    });
+
+    testCubit('после перезапуска (новый Cubit над новым рабочим '
         'пространством) Trace выключен', (tester) async {
       cubit.setTrace(true);
-      await cubit.close();
-      await workspace.dispose();
+      await tester.runAsync(cubit.close);
+      await tester.runAsync(workspace.dispose);
 
       workspace = FakeProtocolWorkspace();
       cubit = makeCubit();
@@ -811,7 +970,7 @@ void main() {
   });
 
   group('публикация и жизненный цикл (D7)', () {
-    testWidgets('500 кадров в секунду — не больше 10 публикаций за секунду, '
+    testCubit('500 кадров в секунду — не больше 10 публикаций за секунду, '
         'последний кадр виден после последней', (tester) async {
       final states = <ProtocolPaneState>[];
       final sub = cubit.stream.listen(states.add);
@@ -831,12 +990,12 @@ void main() {
       expect(cubit.state.visibleFrames, hasLength(500));
     });
 
-    testWidgets('после close() таймер отменён, подписки сняты', (tester) async {
+    testCubit('после close() таймер отменён, подписки сняты', (tester) async {
       workspace.focus('s1');
       workspace.push(frame());
       logs.add(logRecord('x'));
       // Публикация ещё отложена таймером склейки.
-      await cubit.close();
+      await tester.runAsync(cubit.close);
 
       expect(workspace.hasStateListeners, isFalse);
       expect(logs.hasListener, isFalse);
@@ -848,10 +1007,10 @@ void main() {
       // Тест не завершится, если в зоне остался активный таймер.
     });
 
-    testWidgets('close() не закрывает буфер и порт — их владельцы другие', (
+    testCubit('close() не закрывает буфер и порт — их владельцы другие', (
       tester,
     ) async {
-      await cubit.close();
+      await tester.runAsync(cubit.close);
 
       workspace.push(frame());
       expect(workspace.protocolFrames.frames, hasLength(1));

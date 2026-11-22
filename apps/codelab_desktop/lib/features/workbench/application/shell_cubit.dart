@@ -61,11 +61,6 @@ export 'layout_cubit.dart'
         kSessionsPaneMaxWidth,
         kSessionsPaneMinWidth;
 export 'shell_state.dart';
-export 'ui_mappers.dart'
-    show
-        CodeLabInspectorCategory,
-        CodeLabInspectorDetail,
-        CodeLabInspectorEntry;
 
 /// Пять частей рабочего места и их общие пакет изменений и журнал.
 ///
@@ -280,6 +275,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     bool projectFilesBound = false,
     UsageCsvSaver? usageCsvSaver,
     AppStrings? strings,
+    void Function()? onShowLogs,
   }) {
     // Без графа токена из окружения нет: ссылки `env:` дают подключение без
     // токена (тесты передают свой источник).
@@ -304,6 +300,7 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       imageProviderFor: imageProviderFor ?? defaultImageProviderFor,
       eventLogger: eventLogger ?? logger,
       projectFilesBound: projectFilesBound,
+      onShowLogs: onShowLogs,
       parts:
           parts ??
           CodeLabShellParts.build(
@@ -341,7 +338,9 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
     required ImageProviderFor imageProviderFor,
     Logger? eventLogger,
     required bool projectFilesBound,
+    void Function()? onShowLogs,
   }) : _workspace = workspace,
+       _onShowLogs = onShowLogs,
        _ownsWorkspace = ownsWorkspace,
        _parts = parts,
        _externalLinkOpener = externalLinkOpener,
@@ -374,6 +373,12 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
   }
 
   final ClientWorkspace _workspace;
+
+  /// `/logs` в палитре: переключает панель Protocol на вид Log (design.md
+  /// change `redesign-protocol-pane`, D8). Состояние панели живёт в
+  /// `ProtocolPaneCubit` root scope, а фасад рабочего места его не знает,
+  /// поэтому вид переключает колбэк composition root.
+  final void Function()? _onShowLogs;
 
   /// Рабочее пространство создал сам Cubit (без графа cherrypick) — тогда он
   /// и закрывает его в [close].
@@ -918,8 +923,10 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
         // Тот же единственный перезапуск с подтверждением D22 (Q24).
         unawaited(restartAgent());
       case 'logs':
-        // Протокол и debug log теперь — панель Protocol дока (change
-        // `redesign-workbench-shell`, D5).
+        // Протокол и журнал — панель Protocol дока (change
+        // `redesign-workbench-shell`, D5); `/logs` открывает вид Log
+        // (`redesign-protocol-pane`, D8).
+        _onShowLogs?.call();
         _layout.openPane(ToolPane.protocol);
       case 'agents':
         // Пункт «Agents» палитры: открывает панель, пока у сессии есть
@@ -1012,7 +1019,6 @@ final class CodeLabShellCubit extends Cubit<CodeLabShellState> {
       shownImages: transcriptView.shownImagesFor(active.sessionId),
       linkNote: linkNote,
       turnState: active.turnState,
-      inspectorEntries: active.inspectorEntries,
       viewMode: CodeLabViewMode.normal,
       isPromptEnabled: true,
       isPromptSubmitting: active.isPromptSubmitting,

@@ -88,7 +88,9 @@ void main() {
       expect(result, isA<ProtocolExportFailed>());
       final failed = result as ProtocolExportFailed;
       expect(failed.errorClass, isNot(contains(dir.path)));
-      expect(failed.errorClass, contains('FileSystemException'));
+      // Класс ошибки, а не её текст: имя исключения без пути (на Dart VM запись
+      // в несуществующий каталог — `PathNotFoundException`).
+      expect(failed.errorClass, 'PathNotFoundException');
     },
   );
 

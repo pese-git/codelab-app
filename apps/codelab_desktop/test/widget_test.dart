@@ -10,7 +10,9 @@ import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
-import 'package:codelab_desktop/features/workbench/presentation/widgets/debug_log_pane.dart';
+import 'package:codelab_desktop/features/protocol/application/protocol_pane_state.dart';
+import 'package:codelab_desktop/features/protocol/application/protocol_pane_cubit.dart';
+import 'package:codelab_desktop/features/protocol/presentation/protocol_pane.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/debug_log_viewer_dialog.dart';
 import 'package:codelab_desktop/features/workbench/presentation/widgets/main_pane.dart';
 import 'package:codelab_desktop/features/workbench/presentation/workbench_shell.dart'
@@ -18,12 +20,10 @@ import 'package:codelab_desktop/features/workbench/presentation/workbench_shell.
 import 'package:codelab_desktop/l10n/app_localizations.dart';
 import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_ui/codelab_ui.dart';
-import 'package:fluent_ui/fluent_ui.dart' show ComboBox, FluentApp, FluentIcons;
+import 'package:fluent_ui/fluent_ui.dart' show FluentApp;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:structured_log_fluent/structured_log_fluent.dart'
-    show FluentLogViewerPage;
 import 'package:structured_log_flutter/structured_log_flutter.dart'
     show LogBuffer;
 
@@ -109,7 +109,7 @@ void main() {
     expect(find.text('Projects'), findsOneWidget);
     expect(find.byType(CodeLabSessionPaneHeader), findsOneWidget);
     expect(find.byKey(CodeLabWorkbenchLayout.dockKey), findsNothing);
-    expect(find.byType(WorkbenchDebugLogPane), findsNothing);
+    expect(find.byType(WorkbenchProtocolPane), findsNothing);
     // D10 (switch-default-agent-to-dart): имя описания stdio-агента теперь
     // `codelab-agent (stdio)`; значение проверяется явно, не ослабляется.
     // Профиль виден в состоянии фасада (на экране его показывает только
@@ -1191,142 +1191,6 @@ void main() {
     await application.dispose();
   });
 
-  test(
-    'inspector tracks tool calls approvals raw details and protocol',
-    () async {
-      final initialTransport = FakeAcpTransport();
-      final agentTransport = FakeAcpTransport();
-      final binding = CodeLabTestBinding(
-        project: '/workspace',
-        transport: initialTransport,
-        stdioTransportFactory: (_) => agentTransport,
-      );
-      final application = binding.scope.resolve<AcpClientApplication>();
-      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
-
-      await shellCubit.startWith();
-
-      final createRequestFuture = agentTransport.sent.first;
-      final createFuture = shellCubit.createSession();
-      final createRequest = await createRequestFuture as dynamic;
-      agentTransport.emitInbound(
-        JsonRpcMessage.response(
-          id: createRequest.id as JsonRpcId,
-          result: const {'sessionId': 'session-1'},
-        ),
-      );
-      await createFuture;
-
-      final promptRequestFuture = agentTransport.sent.first;
-      final submitFuture = shellCubit.submitPrompt('inspect tool');
-      final promptRequest = await promptRequestFuture as dynamic;
-
-      agentTransport.emitInbound(
-        JsonRpcMessage.notification(
-          method: sessionUpdateMethod,
-          params: SessionNotification(
-            sessionId: const SessionId('session-1'),
-            update: SessionUpdate.toolCallUpdate(
-              toolCallUpdate: ToolCallUpdate(
-                toolCallId: const ToolCallId('tool-1'),
-                title: 'Patch file',
-                kind: ToolKind.edit,
-                status: ToolCallStatus.inProgress,
-                content: const [
-                  ToolCallContent.diff(
-                    diff: Diff(
-                      path: '/workspace/lib/app.dart',
-                      newText: 'next',
-                    ),
-                  ),
-                ],
-                rawInput: const {'path': '/workspace/lib/app.dart'},
-              ),
-            ),
-          ).toJson(),
-        ),
-      );
-      agentTransport.emitInbound(
-        JsonRpcMessage.request(
-          id: const JsonRpcId.integer(42),
-          method: sessionRequestPermissionMethod,
-          params: RequestPermissionRequest(
-            sessionId: const SessionId('session-1'),
-            toolCall: ToolCallUpdate(
-              toolCallId: const ToolCallId('tool-1'),
-              title: 'Patch file',
-              kind: ToolKind.edit,
-              status: ToolCallStatus.inProgress,
-              rawInput: const {'path': '/workspace/lib/app.dart'},
-            ),
-            options: const [
-              PermissionOption(
-                optionId: PermissionOptionId('allow-once'),
-                name: 'Allow once',
-                kind: PermissionOptionKind.allowOnce,
-              ),
-              PermissionOption(
-                optionId: PermissionOptionId('reject-once'),
-                name: 'Reject',
-                kind: PermissionOptionKind.rejectOnce,
-              ),
-            ],
-          ).toJson(),
-        ),
-      );
-
-      final inspectorEntries = shellCubit.state.inspectorEntries;
-      expect(
-        inspectorEntries.any(
-          (entry) => entry.category == CodeLabInspectorCategory.approval,
-        ),
-        isTrue,
-      );
-      expect(
-        inspectorEntries.any(
-          (entry) =>
-              entry.category == CodeLabInspectorCategory.toolCall &&
-              entry.title == 'Patch file',
-        ),
-        isTrue,
-      );
-      expect(
-        inspectorEntries.any(
-          (entry) =>
-              entry.category == CodeLabInspectorCategory.protocol &&
-              entry.title == 'session/update tool_call_update',
-        ),
-        isTrue,
-      );
-      expect(
-        inspectorEntries
-            .expand((entry) => entry.details)
-            .map((detail) => detail.value),
-        contains('/workspace/lib/app.dart (new)'),
-      );
-      expect(
-        inspectorEntries.map((entry) => entry.rawInput).whereType<String>(),
-        anyElement(contains('/workspace/lib/app.dart')),
-      );
-
-      await application.respondToPermission(
-        const RespondToPermissionCommand.cancelled(
-          sessionId: SessionId('session-1'),
-          approvalId: ApprovalRequestId('permission-42'),
-        ),
-      );
-      agentTransport.emitInbound(
-        JsonRpcMessage.response(
-          id: promptRequest.id as JsonRpcId,
-          result: const {'stopReason': 'end_turn'},
-        ),
-      );
-      await submitFuture.timeout(const Duration(seconds: 2));
-
-      await closeCodeLabRootScopeInTest();
-    },
-  );
-
   test('respondToApproval maps a pending approval and resolves it via the use '
       'case', () async {
     final initialTransport = FakeAcpTransport();
@@ -1652,12 +1516,6 @@ void main() {
     expect(shellCubit.state.canCancel, isFalse);
     expect(shellCubit.state.isPromptSubmitting, isTrue);
     expect(logger.entries.last['event'], contains('Cancelled prompt turn'));
-    expect(
-      shellCubit.state.inspectorEntries
-          .firstWhere((entry) => entry.title.startsWith('Prompt turn'))
-          .status,
-      PromptTurnStatus.cancelling.name,
-    );
     expect(
       shellCubit.state.transcriptRows
           .whereType<CodeLabToolCallRow>()
@@ -2166,86 +2024,6 @@ void main() {
     await application.dispose();
   });
 
-  test('inspector raw input redacts sensitive tool call fields', () async {
-    final initialTransport = FakeAcpTransport();
-    final agentTransport = FakeAcpTransport();
-    final application = AcpClientApplication(transport: initialTransport);
-    final shellCubit = CodeLabShellCubit(
-      strings: FixedAppStrings(AppLocalizationsEn()),
-      profile: codelabAgentStdioProfile,
-      application: application,
-      createSessionUseCase: CreateSession(application),
-      sendPromptUseCase: SendPrompt(application),
-      cancelTurnUseCase: CancelTurn(application),
-      reconnectUseCase: Reconnect(application),
-      respondToPermissionUseCase: RespondToPermission(application),
-      setSessionConfigOptionUseCase: SetSessionConfigOption(application),
-      stdioTransportFactory: (_) => agentTransport,
-      webSocketTransportFactory: (_) => FakeAcpTransport(),
-      projectFolderPicker: _FakeProjectFolderPicker(),
-      recentProjectsStore: FakeRecentProjectsStore(),
-    );
-    // Проект выбран явно: неявной папки нет (require-project-folder D1).
-    await shellCubit.selectProject('/workspace');
-
-    await shellCubit.startWith();
-    final createRequestFuture = agentTransport.sent.first;
-    final createFuture = shellCubit.createSession();
-    final createRequest = await createRequestFuture as dynamic;
-    agentTransport.emitInbound(
-      JsonRpcMessage.response(
-        id: createRequest.id as JsonRpcId,
-        result: const {'sessionId': 'session-1'},
-      ),
-    );
-    await createFuture;
-
-    final promptRequestFuture = agentTransport.sent.first;
-    final submitFuture = shellCubit.submitPrompt('call the api');
-    final promptRequest = await promptRequestFuture as dynamic;
-
-    agentTransport.emitInbound(
-      JsonRpcMessage.notification(
-        method: sessionUpdateMethod,
-        params: SessionNotification(
-          sessionId: const SessionId('session-1'),
-          update: SessionUpdate.toolCallUpdate(
-            toolCallUpdate: ToolCallUpdate(
-              toolCallId: const ToolCallId('tool-1'),
-              title: 'Call API',
-              kind: ToolKind.fetch,
-              status: ToolCallStatus.inProgress,
-              rawInput: const {
-                'url': 'https://api.example.test',
-                'apiKey': 'sk-super-secret-value',
-              },
-            ),
-          ),
-        ).toJson(),
-      ),
-    );
-
-    final rawInputs = shellCubit.state.inspectorEntries
-        .map((entry) => entry.rawInput)
-        .whereType<String>();
-    expect(rawInputs, isNotEmpty);
-    for (final rawInput in rawInputs) {
-      expect(rawInput, isNot(contains('sk-super-secret-value')));
-    }
-    expect(rawInputs, anyElement(contains(redactedSecret)));
-
-    agentTransport.emitInbound(
-      JsonRpcMessage.response(
-        id: promptRequest.id as JsonRpcId,
-        result: const {'stopReason': 'end_turn'},
-      ),
-    );
-    await submitFuture.timeout(const Duration(seconds: 2));
-
-    await shellCubit.close();
-    await application.dispose();
-  });
-
   test(
     'connect redacts secrets leaked through transport factory failures',
     () async {
@@ -2524,113 +2302,23 @@ void main() {
     await tester.tap(find.text('/logs'));
     await tester.pumpAndSettle();
 
-    // Протокол и debug log — панель Protocol дока (change
-    // `redesign-workbench-shell`, D5); полноэкранный просмотр — Expand.
+    // Протокол и журнал — панель Protocol дока (`redesign-workbench-shell`,
+    // D5); `/logs` открывает вид Log, а полноэкранный просмотр — только
+    // `Expand` (`redesign-protocol-pane`, D8).
     expect(shellCubit.state.openPanes, [ToolPane.protocol]);
     expect(shellCubit.state.activePane, ToolPane.protocol);
     expect(shellCubit.state.isCommandPaletteOpen, isFalse);
     expect(find.byType(DebugLogViewerDialog), findsNothing);
-    expect(find.byType(WorkbenchDebugLogPane), findsOneWidget);
+    expect(find.byType(WorkbenchProtocolPane), findsOneWidget);
+    expect(
+      binding.scope.resolve<ProtocolPaneCubit>().state.view,
+      ProtocolView.log,
+    );
     expect(shellCubit.state.activeSessionId, isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await closeCodeLabRootScopeInTest();
   });
-
-  testWidgets('the docked Debug log panel\'s Expand button opens the same '
-      'full-screen log viewer as /logs', (tester) async {
-    final binding = CodeLabTestBinding(project: '/workspace');
-    await tester.pumpWidget(
-      binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
-    );
-    final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
-    shellCubit.togglePane(ToolPane.protocol);
-    await tester.pump();
-
-    expect(find.byType(DebugLogViewerDialog), findsNothing);
-
-    await tester.tap(
-      find.descendant(
-        of: find.byType(WorkbenchDebugLogPane),
-        matching: find.byIcon(FluentIcons.full_screen),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byType(DebugLogViewerDialog), findsOneWidget);
-    expect(find.byType(FluentLogViewerPage), findsOneWidget);
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(find.byType(DebugLogViewerDialog), findsNothing);
-    expect(find.byType(WorkbenchDebugLogPane), findsOneWidget);
-    expect(shellCubit.state.activeSessionId, isNull);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    await closeCodeLabRootScopeInTest();
-  });
-
-  testWidgets(
-    'the docked Debug log panel is structured_log_fluent\'s FluentLogViewer '
-    '— its category selector appears once protocol-trace events start '
-    'arriving alongside application ones, filtering is a view concern, not '
-    'a capture toggle',
-    (tester) async {
-      final initialTransport = FakeAcpTransport();
-      final agentTransport = FakeAcpTransport();
-      final binding = CodeLabTestBinding(
-        project: '/workspace',
-        transport: initialTransport,
-        stdioTransportFactory: (_) => agentTransport,
-      );
-      await tester.pumpWidget(
-        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
-      );
-      final shellCubit = binding.scope.resolve<CodeLabShellCubit>();
-      shellCubit.togglePane(ToolPane.protocol);
-      await tester.pump();
-
-      // LogCategoryComboBox hides itself below 2 distinct categories — the
-      // buffer is empty at this point, so no selector yet.
-      expect(find.text('All types'), findsNothing);
-
-      final logBuffer = binding.scope.resolve<LogBuffer>();
-
-      await tester.runAsync(() => shellCubit.startWith());
-      await tester.pump();
-      final createRequestFuture = agentTransport.sent.first;
-      final createFuture = shellCubit.createSession();
-      final createRequest =
-          await tester.runAsync(() => createRequestFuture) as dynamic;
-      agentTransport.emitInbound(
-        JsonRpcMessage.response(
-          id: createRequest.id as JsonRpcId,
-          result: const {'sessionId': 'session-1'},
-        ),
-      );
-      await tester.runAsync(() => createFuture);
-      await tester.pump();
-
-      // Session creation always traces its protocol request/response — the
-      // in-app viewer captures it unconditionally now (no capture toggle).
-      expect(
-        logBuffer.entries.value.any((e) => e['category'] == 'protocol'),
-        isTrue,
-      );
-      expect(
-        logBuffer.entries.value.any((e) => e['category'] == 'application'),
-        isTrue,
-      );
-
-      // Two distinct categories are now present — the docked panel's
-      // FluentLogViewer shows its category selector.
-      expect(find.text('All types'), findsWidgets);
-      expect(find.byType(ComboBox<String?>), findsWidgets);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await closeCodeLabRootScopeInTest();
-    },
-  );
 
   testWidgets(
     'selecting an unavailable command keeps the palette open without a '
