@@ -1222,7 +1222,7 @@ Without a session in focus, the session pane SHALL show a start screen instead o
 
 ### Requirement: Агент стартует сам
 Отдельного шага подключения в рабочем месте НЕ SHALL быть. Агент профиля окна SHALL стартовать, если он не работает (в том числе после сбоя старта), на одном из триггеров (design.md change `require-project-folder`, D11–D17):
-1. выбор проекта — «Open folder…» (и Cmd/Ctrl+O), недавний проект, папка, перетащенная на экран без проекта (требование «Открытие папки перетаскиванием»; design.md change `add-empty-project-screen`, D4), проект, восстановленный при запуске; если при запуске показан onboarding (spec app-onboarding «Показ onboarding при первом запуске»), восстановленный проект становится триггером только после «Start using CodeLab», а до этого агент окна НЕ SHALL стартовать (design.md change `add-app-onboarding`, D5);
+1. выбор проекта — «Open folder…» (и Cmd/Ctrl+O), недавний проект, папка, перетащенная на экран без проекта (требование «Открытие папки перетаскиванием»; design.md change `add-empty-project-screen`, D4), проект, восстановленный при запуске, папка, выбранная на шаге onboarding «Open a project» (spec app-onboarding «Шаг «Open a project»»). Если при запуске показан onboarding (spec app-onboarding «Показ onboarding при первом запуске»), выбор проекта и восстановленный проект становятся триггером только после завершения onboarding (spec app-onboarding «Завершение onboarding и старт рабочего места»), а до этого агент окна НЕ SHALL стартовать: выбор на шаге делает папку выбранным проектом сразу, а старт агента откладывается до перехода на рабочее место, где триггер старта при запуске стартует агента в выбранном проекте ровно один раз (design.md change `add-app-onboarding`, D5; design.md change `add-onboarding-project-step`, D5);
 2. «New session» в выбранном проекте;
 3. фокус на сессии `notLoaded` или `detached`;
 4. «Retry» экрана или баннера сбоя.
@@ -1287,7 +1287,15 @@ Without a session in focus, the session pane SHALL show a start screen instead o
 
 #### Scenario: Восстановленный проект при первом показе onboarding
 - **WHEN** снимок прошлого запуска содержит проект `/work/app`, флага `codelab.app.onboarding_done` нет, и app запускается
-- **THEN** пока показан onboarding, открыватель встроенного агента не вызывается; после «Start using CodeLab» он вызван ровно один раз с папкой `/work/app`
+- **THEN** пока показан onboarding, открыватель встроенного агента не вызывается; после `Continue in app` на шаге «Open a project» он вызван ровно один раз с папкой `/work/app`
+
+#### Scenario: Папка, выбранная на шаге onboarding
+- **WHEN** флага `codelab.app.onboarding_done` нет, агент не запущен, профиль окна — встроенный агент, и пользователь выбирает на шаге «Open a project» папку `/work/app`
+- **THEN** до перехода на рабочее место открыватель встроенного агента не вызывается, журнал app содержит `project.start_held`; после перехода он вызван ровно один раз с папкой `/work/app`, отправлен `session/list`, `session/new` не отправлен, `/work/app` первый в недавних проектах
+
+#### Scenario: Выбор после onboarding — обычный триггер
+- **WHEN** onboarding завершён через `Skip for now`, проекта нет, и пользователь выбирает на экране без проекта папку `/work/app`
+- **THEN** встроенный агент открыт ровно один раз с папкой `/work/app` сразу после выбора, события `project.start_held` нет
 
 #### Scenario: Перетащенная папка запускает агента без сессии
 - **WHEN** агент не запущен, проект не выбран, профиль окна — встроенный агент, и пользователь перетаскивает папку `/work/app` на экран без проекта
@@ -2254,7 +2262,7 @@ CodeLab SHALL предлагать в доке панель Usage (`ToolPane.usa
 - **THEN** выбран проект `/Applications/Foo.app`, текста отказа нет, журнал содержит `project.drop` с `outcome: opened`
 
 ### Requirement: Cmd/Ctrl+O открывает выбор папки
-На рабочем месте сочетание Cmd/Ctrl+O (запись каталога `CodeLabShortcut.openFolder`; основной модификатор привязан и к Ctrl, и к ⌘ на всех платформах) SHALL открывать системный выбор папки, как «Open folder…» сайдбара (design.md change `add-empty-project-screen`, D7). Сочетание работает при любом состоянии соединения, с проектом и без него. Выбранная папка — выбор проекта (триггер 1 требования «Агент стартует сам»), закрытый без выбора диалог ничего не меняет. В настройках и в onboarding сочетание ничего не делает.
+На рабочем месте сочетание Cmd/Ctrl+O (запись каталога `CodeLabShortcut.openFolder`; основной модификатор привязан и к Ctrl, и к ⌘ на всех платформах) SHALL открывать системный выбор папки, как «Open folder…» сайдбара (design.md change `add-empty-project-screen`, D7). Сочетание работает при любом состоянии соединения, с проектом и без него. Выбранная папка — выбор проекта (триггер 1 требования «Агент стартует сам»), закрытый без выбора диалог ничего не меняет. На шаге onboarding «Open a project» сочетание SHALL открывать тот же системный выбор папки по правилам spec app-onboarding «Шаг «Open a project»»; на остальных шагах onboarding и в настройках сочетание ничего не делает (design.md change `add-onboarding-project-step`, D7).
 
 Пока открыт выбор папки, запрошенный app, повторный запрос («Open folder…», Cmd/Ctrl+O, «New session» без проекта) НЕ SHALL открывать второй диалог. Подсказки сочетания у «Open folder…» на экране без проекта и в сайдбаре SHALL браться из той же записи каталога для платформы.
 
@@ -2272,5 +2280,13 @@ CodeLab SHALL предлагать в доке панель Usage (`ToolPane.usa
 
 #### Scenario: Сочетание в настройках
 - **WHEN** открыты настройки, и пользователь нажимает Ctrl+O
+- **THEN** выбор папки не открывается, проект не меняется
+
+#### Scenario: Ctrl+O на шаге onboarding «Open a project»
+- **WHEN** показан шаг onboarding «Open a project», платформа — Linux, и пользователь нажимает Ctrl+O и выбирает `/work/app`
+- **THEN** открылся системный выбор папки; `/work/app` — выбранный проект, onboarding завершён, агент стартовал в `/work/app` только после перехода на рабочее место
+
+#### Scenario: Ctrl+O на другом шаге onboarding
+- **WHEN** показан шаг onboarding «Privacy», и пользователь нажимает Ctrl+O
 - **THEN** выбор папки не открывается, проект не меняется
 
