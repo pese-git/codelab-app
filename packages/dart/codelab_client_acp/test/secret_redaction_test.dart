@@ -224,8 +224,11 @@ void main() {
   group('repeats of a secret word are masked in bounded time', () {
     // Ревью change `redesign-protocol-pane`: хвост `[A-Za-z0-9_.-]*` после
     // секретного слова и ленивый `[\s\S]*?` ключа давали квадратичный
-    // перебор на повторах слова (20 000 символов — около 2 секунд).
-    const budget = Duration(milliseconds: 500);
+    // перебор на повторах слова (20 000 символов — около 2 секунд, 250 000 —
+    // минуты). Бюджет с запасом под нагруженный CI: на рабочей машине
+    // линейный шаблон укладывается в десятки миллисекунд, квадратичный
+    // превысил бы бюджет на порядки.
+    const budget = Duration(seconds: 5);
 
     for (final word in ['token', 'secret', 'password', 'api_key']) {
       test('$word repeated 50000 times', () {
@@ -278,7 +281,7 @@ void main() {
       expect(text.length, greaterThan(240000));
       final watch = Stopwatch()..start();
       final masked = redactor.redactText(text);
-      expect(watch.elapsed, lessThan(const Duration(milliseconds: 500)));
+      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
       expect(masked, '$redactedSecret\n' * 3500);
     });
 

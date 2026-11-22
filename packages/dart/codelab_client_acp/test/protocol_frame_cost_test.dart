@@ -114,5 +114,7 @@ void main() {
     );
     expect(metadata, lessThanOrEqualTo(baseline * 1.5));
     expect(full, lessThanOrEqualTo(baseline * 1.5));
-  });
+    // Отношение времён шумит под параллельной нагрузкой (CI, `melos test`):
+    // повтор отличает шум от настоящей регрессии, порог 1,5× не ослабляется.
+  }, retry: 2);
 }

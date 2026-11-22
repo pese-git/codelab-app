@@ -134,7 +134,7 @@
 - хвост имени после секретного слова (`api_key_prod_eu` до `:`/`=`) ограничен `{0,64}` символами: без предела строка из повторов секретных слов (`token` × 50 000) давала квадратичный перебор — каждое вхождение заново сканировало остаток строки;
 - `_privateKeyPattern` (ленивое `[\s\S]*?` между `BEGIN … PRIVATE KEY` и `END …`) заменён линейным поиском: найти `BEGIN`, затем ближайший `END` после него; блок без `END` не маскируется, как и раньше.
 
-Регрессионные тесты (`secret_redaction_test.dart`): строка 250 000 символов без разделителей, повторы секретных слов (`token`, `secret`, `password`, `api_key` × 50 000) и повторы `BEGIN … PRIVATE KEY` без `END` маскируются не дольше 500 мс каждая.
+Регрессионные тесты (`secret_redaction_test.dart`): строка 250 000 символов без разделителей, повторы секретных слов (`token`, `secret`, `password`, `api_key` × 50 000) и повторы `BEGIN … PRIVATE KEY` без `END` маскируются не дольше 5 с каждая (бюджет с запасом под нагруженный CI: линейный шаблон укладывается в десятки миллисекунд, квадратичный превысил бы его на порядки).
 
 **Цена предела 64.** У идентификатора, где между **последним** секретным словом и `:`/`=` больше 64 символов (`token_used_by_the_nightly_reporting_job_of_the_eu_west_cluster_primary=…`), значение больше не маскируется шаблоном присваивания; раньше маскировалось. Оценка — приемлемо:
 - имена переменных и ключей конфигурации длиннее 64 символов после секретного слова редки; у переменных окружения, ключей YAML и заголовков HTTP типичная длина — до 40 символов;
@@ -405,9 +405,10 @@ PackageRule(
 
 ### D16. Пересечения с активными changes
 
-- `add-file-preview-and-tree` изменяет требование «Tool dock with closable pane tabs». Этот change его **не** изменяет: панель Protocol остаётся всегда доступной, `CodeLabDockTab.actions` — аддитивное поле. Порядок архивации не важен.
-- `add-integrated-terminal` добавляет ветку `ToolPane.terminal` в `switch` содержимого дока и убирает ветку `_`. Здесь `_ProtocolPane` заменяется виджетом feature `protocol`; при слиянии ветки `switch` — конфликт текста, не смысла.
-- `add-onboarding-project-step`, `remove-recent-projects-migration`, `switch-default-agent-to-dart`, `add-agent-os-secret-backends` — пересечений нет.
+- `add-file-preview-and-tree`, `add-integrated-terminal` и `add-onboarding-project-step` заархивированы в `develop` до слияния этого change (ветка обновлена от `develop` 2026-11-23). Требование «Tool dock with closable pane tabs» этот change не изменяет: `CodeLabDockTab.actions` — аддитивное поле; ветка `ToolPane.terminal` в `switch` дока сохранена.
+- `add-terminal-keys-and-isolate` может добавить записи в каталог `CodeLabShortcut` и строки страницы «Keyboard»: при слиянии — конфликт текста (число строк таблицы и порядок группы), не смысла; требование «Страница «Keyboard»: строки таблицы» второй change не меняет.
+- `add-file-tree-ignore-watch-follow` меняет другие требования `app-settings` и `acp-client-kit` («Страница «General»…», «Места вызова с номером строки») — пересечений по требованиям нет.
+- `remove-recent-projects-migration`, `switch-default-agent-to-dart`, `add-agent-os-secret-backends` — пересечений нет.
 
 ### D17. Режим Trace: полные payload кадров в release по явному включению
 
