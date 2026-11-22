@@ -1530,7 +1530,8 @@ Composition root SHALL делать видимой страницу «Keyboard»
 | Группа | id | Action | macOS | Windows, Linux | Where |
 |---|---|---|---|---|---|
 | Global | `command-palette` | Open the command palette | ⌘ K | Ctrl K | Workbench |
-| Global | `new-session` | New session | ⌘ N | Ctrl N | Workbench, when a project is selected |
+| Global | `new-session` | New session | ⌘ N | Ctrl N | Workbench |
+| Global | `open-folder` | Open a folder as the project | ⌘ O | Ctrl O | Workbench |
 | Global | `open-settings` | Open settings | ⌘ , | Ctrl , | Workbench |
 | Global | `close-overlay` | Close the command palette, a dialog or a sliding panel | Esc | Esc | Command palette, dialog or sliding panel |
 | Global | `leave-settings` | Back to the workbench | Esc | Esc | Settings |
@@ -1550,15 +1551,15 @@ Composition root SHALL делать видимой страницу «Keyboard»
 | Approvals | `reject-once` | Reject once | ⌥ ⌘ Z | Alt Shift X | Workbench, earliest pending approval, if it offers this option |
 | Approvals | `reject-always` | Reject always | ⌥ ⇧ ⌘ Z | Alt Shift W | Workbench, earliest pending approval, if it offers this option |
 
-Сочетаний, которых нет среди привязок сборки, на странице НЕ SHALL быть. В этой сборке это Cmd/Ctrl+/, Cmd/Ctrl+Shift+I, Cmd/Ctrl+Shift+F, Cmd/Ctrl+\\, Cmd/Ctrl+Shift+D, Cmd/Ctrl+O, Cmd/Ctrl+Shift+Enter, Alt+Enter, Ctrl+\` и Ctrl+Shift+\`; Alt+←/→ тоже не привязаны. Alt+←/→ зарезервированы за навигацией инспектора (DSK-18) и строкой НЕ SHALL быть, пока не привязаны (решение пользователя Q2, 2026-11-19). Навигация дерева Files и меню команд после `/` — привязки app и показываются строками (решение пользователя Q3). Строка `go-to-approval` — привязка рабочего места, которая ставит клавиатурный фокус на полосу решения активного одобрения (spec agent-workbench-ui «Переход к ожидающему одобрению с клавиатуры»). Строки `allow-once`, `allow-always`, `reject-once`, `reject-always` — сочетания ответа, которые действуют с любого места рабочего места и отвечают самому раннему ожидающему одобрению активной сессии (spec agent-workbench-ui «Ответ на одобрение сочетанием с любого места рабочего места»); их клавиши различаются по платформам не только обозначениями. Стандартное поведение элементов управления строками НЕ SHALL показываться: Tab, Space и Enter на кнопке, правка и копирование текста в полях.
+Сочетаний, которых нет среди привязок сборки, на странице НЕ SHALL быть. В этой сборке это Cmd/Ctrl+/, Cmd/Ctrl+Shift+I, Cmd/Ctrl+Shift+F, Cmd/Ctrl+\\, Cmd/Ctrl+Shift+D, Cmd/Ctrl+Shift+Enter, Alt+Enter, Ctrl+\` и Ctrl+Shift+\`; Alt+←/→ тоже не привязаны. Alt+←/→ зарезервированы за навигацией инспектора (DSK-18) и строкой НЕ SHALL быть, пока не привязаны (решение пользователя Q2, 2026-11-19). Навигация дерева Files и меню команд после `/` — привязки app и показываются строками (решение пользователя Q3). Строка `go-to-approval` — привязка рабочего места, которая ставит клавиатурный фокус на полосу решения активного одобрения (spec agent-workbench-ui «Переход к ожидающему одобрению с клавиатуры»). Строки `allow-once`, `allow-always`, `reject-once`, `reject-always` — сочетания ответа, которые действуют с любого места рабочего места и отвечают самому раннему ожидающему одобрению активной сессии (spec agent-workbench-ui «Ответ на одобрение сочетанием с любого места рабочего места»); их клавиши различаются по платформам не только обозначениями. Стандартное поведение элементов управления строками НЕ SHALL показываться: Tab, Space и Enter на кнопке, правка и копирование текста в полях.
 
 #### Scenario: Полный список на Linux
 - **WHEN** платформа — Linux, и пользователь открывает «Keyboard» без запроса поиска
-- **THEN** таблица показывает пять групп и 20 строк таблицы выше в том же порядке, с клавишами из колонки «Windows, Linux»
+- **THEN** таблица показывает пять групп и 21 строку таблицы выше в том же порядке, с клавишами из колонки «Windows, Linux»
 
 #### Scenario: Сочетаний без поведения нет
 - **WHEN** пользователь открывает «Keyboard»
-- **THEN** на странице нет строк с клавишами `/`, `I`, `F`, `\`, `D`, `O`, `` ` `` и строки steering, а также строки Alt+← и Alt+→
+- **THEN** на странице нет строк с клавишами `/`, `I`, `F`, `\`, `D`, `` ` `` и строки steering, а также строки Alt+← и Alt+→
 
 #### Scenario: Строка «Agent commands»
 - **WHEN** пользователь открывает «Keyboard»
@@ -1575,6 +1576,14 @@ Composition root SHALL делать видимой страницу «Keyboard»
 #### Scenario: Поиск сочетания ответа в чужой нотации
 - **WHEN** платформа — macOS, и пользователь вводит `alt shift y`
 - **THEN** видна только строка `allow-once` с кейкапами `⌘` и `Y`
+
+#### Scenario: Строка «Open folder»
+- **WHEN** платформа — macOS, и пользователь открывает «Keyboard»
+- **THEN** в группе `Global` сразу после `new-session` стоит строка `open-folder` с действием `Open a folder as the project`, кейкапами `⌘` и `O` и местом `Workbench` (design.md change `add-empty-project-screen`, D7)
+
+#### Scenario: Поиск строки «Open folder»
+- **WHEN** пользователь вводит `ctrl o`
+- **THEN** видна только группа `Global` со строкой `open-folder`
 
 ### Requirement: Страница «Keyboard»: обозначения клавиш
 Клавиши SHALL показываться кейкапами: каждая клавиша — отдельная плашка с рамкой, текст моноширинным шрифтом (`CodeLabTextRole.mono`). Обозначения выбираются по платформе app:

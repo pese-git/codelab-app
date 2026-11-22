@@ -665,7 +665,7 @@ Dropped files следует преобразовывать в normalized applic
 
 ### 37а. Перетаскивание из ОС в app: `OsDropRegion` и `LocalPathKindOf`
 
-Источник — change [`add-empty-project-screen`](../../openspec/changes/add-empty-project-screen/design.md), D3, D4; spec `agent-workbench-ui` «Открытие папки перетаскиванием», spec `workspace-architecture` «Плагин перетаскивания из ОС только в адаптере платформы».
+Источник — change [`add-empty-project-screen`](../../openspec/changes/archive/2026-11-22-add-empty-project-screen/design.md), D3, D4; spec `agent-workbench-ui` «Открытие папки перетаскиванием», spec `workspace-architecture` «Плагин перетаскивания из ОС только в адаптере платформы».
 
 Flutter не отдаёт на десктопе события перетаскивания внешних файлов: `DragTarget` и `Draggable` работают только внутри дерева виджетов. Приём из Finder, Проводника и файлового менеджера Linux идёт через плагин `desktop_drop` по схеме §8:
 

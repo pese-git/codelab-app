@@ -297,7 +297,7 @@ macOS и Linux, ручная проверка Windows откладывается
   задача 9.11 по модели угроз (§6.3), итог — ADR;
 * пути Windows: достаточно ли приведения `C:\proj` к `/c/proj` — до выпуска Windows-целей;
 * новые зависимости десктопа: `desktop_drop` решён change
-  [`add-empty-project-screen`](../../../openspec/changes/add-empty-project-screen/design.md) (D3;
+  [`add-empty-project-screen`](../../../openspec/changes/archive/2026-11-22-add-empty-project-screen/design.md) (D3;
   после проверки его задачи 1.1 — §20и `technology-stack.md`), D-12 переиспользует адаптер
   `OsDropRegion`; `pasteboard` — архитектурное решение и проверка лицензии до D-12; для D-06
   решено 2026-11-11 (change
