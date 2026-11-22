@@ -32,10 +32,10 @@ flowchart LR
 
 | Слой (`lib/src/`) | Для чего | Примеры |
 |---|---|---|
-| `atomics/` | базовые элементы без составных частей кита | `CodeLabText` (роли `title`…`mono`), `CodeLabBadge`, `CodeLabButton`, `CodeLabIconButton`, `CodeLabIcon`, `CodeLabMonospaceBlock`, `CodeLabStatusIndicator`, `CodeLabResizeHandle`, `CodeLabDialogTitle`, `CodeLabProgressIndicator`, `CodeLabTone`, `CodeLabShortcut` (каталог сочетаний), `CodeLabKeycaps` |
-| `molecules/` | составные из атомов | `CodeLabKeyValueList`, `CodeLabStepBreadcrumb`, `CodeLabSetupSteps`, `CodeLabThoughtBlock`, `CodeLabToolCallSummary`, `CodeLabPromptComposer`, `CodeLabApprovalOptionGroup`, `CodeLabSessionStatusBar`, `CodeLabConnectionBanner`, `CodeLabForm`, `CodeLabSettingsRow`, `CodeLabSettingsSection`, `CodeLabExpanderCard`, `CodeLabSelectorBar` |
-| `rendering/` | отрисовка ответа агента как markdown | `CodeLabMarkdown`, `CodeLabMarkdownConfig`, `CodeLabMarkdownScope`, `CodeLabCodeBlock`, `CodeLabCodeTheme`, `CodeLabCodeHighlighter`, `CodeLabMarkdownStats` |
-| `organisms/` | ленты, плитки, панели, экраны | `CodeLabTranscriptPanel`, `CodeLabToolCallTile`, `CodeLabApprovalPrompt`, `CodeLabStatusTable`, `CodeLabUsagePane`, `CodeLabTerminalPane`, `CodeLabAgentsPane`, `CodeLabToolDock`, `CodeLabSessionSidebar`, `CodeLabFileTree`, `CodeLabFilePreview`, `CodeLabProgressChecklist`, `CodeLabPromptQueuePanel`, `CodeLabSettingsNavigation`, `CodeLabConnectionScreen`, `CodeLabStartScreen`, `CodeLabWorkbenchLayout`, `CodeLabWorkbenchShortcuts`, `CodeLabShortcutTable` |
+| `atomics/` | базовые элементы без составных частей кита | `CodeLabText` (роли `title`…`mono`), `CodeLabBadge`, `CodeLabButton`, `CodeLabIconButton`, `CodeLabIcon`, `CodeLabMonospaceBlock`, `CodeLabStatusIndicator`, `CodeLabResizeHandle`, `CodeLabDialogTitle`, `CodeLabProgressIndicator`, `CodeLabTone`, `CodeLabShortcut` (каталог сочетаний), `CodeLabKeycaps`, `CodeLabPalette` (цвета тонов из темы) |
+| `molecules/` | составные из атомов | `CodeLabKeyValueList`, `CodeLabStepBreadcrumb`, `CodeLabSetupSteps`, `CodeLabThoughtBlock`, `CodeLabToolCallSummary`, `CodeLabPromptComposer`, `CodeLabApprovalOptionGroup`, `CodeLabSessionStatusBar`, `CodeLabConnectionBanner`, `CodeLabForm`, `CodeLabSettingsRow`, `CodeLabSettingsSection`, `CodeLabExpanderCard`, `CodeLabSelectorBar`, `CodeLabTextDisclosure`, `CodeLabConnectionStatusRow`, `CodeLabToolPane` |
+| `rendering/` | отрисовка ответа агента как markdown | `CodeLabMarkdown`, `CodeLabMarkdownConfig`, `CodeLabMarkdownScope`, `CodeLabCodeBlock`, `CodeLabCodeTheme`, `CodeLabCodeHighlighter`, `CodeLabMarkdownStats`, `escapeForDisplay` (экранирование недоверенного текста) |
+| `organisms/` | ленты, плитки, панели, экраны | `CodeLabTranscriptPanel`, `CodeLabToolCallTile`, `CodeLabApprovalPrompt`, `CodeLabStatusTable`, `CodeLabUsagePane`, `CodeLabTerminalPane`, `CodeLabAgentsPane`, `CodeLabToolDock`, `CodeLabSessionSidebar`, `CodeLabFileTree`, `CodeLabFilePreview`, `CodeLabProgressChecklist`, `CodeLabPromptQueuePanel`, `CodeLabSettingsNavigation`, `CodeLabConnectionScreen`, `CodeLabStartScreen`, `CodeLabOpenProjectScreen`, `CodeLabOpenProjectBody`, `CodeLabAppBar`, `CodeLabActivityBar`, `CodeLabSessionPaneHeader`, `CodeLabWorkbenchLayout`, `CodeLabWorkbenchShortcuts`, `CodeLabShortcutTable` |
 
 Публичное API экспортирует `lib/codelab_ui.dart` через четыре барели слоёв: `atomics.dart`, `molecules.dart`, `organisms.dart`, `rendering.dart`. Полный список — в этих файлах. `CodeLabPressable` (нажимаемая область без таймеров кнопки Fluent) — внутренняя деталь, барель его не экспортирует.
 
@@ -46,6 +46,7 @@ flowchart LR
 - `CodeLabSettingsRow.footer` рисует элемент под заголовком и описанием внутри той же карточки (переключатель с длинной подписью в узкой области); без него вёрстка прежняя.
 - `CodeLabSelectorBar<T>` — полоса вкладок с подчёркиванием выбранной: `items` (`CodeLabSelectorItem` со значением, подписью и ключом теста), `value`, `onChanged`, `semanticLabel`. Подписи не обрезаются, а при нехватке места ряд прокручивается по горизонтали; выбранную вкладку держит вызывающий, повторное нажатие на неё `onChanged` не вызывает. Ширина родителя должна быть ограниченной.
 - `CodeLabMarkdown(wrapTables: true)` — таблицы переносят текст ячеек по ширине вместо горизонтальной прокрутки (правовые документы Legal); по умолчанию `false`, лента агента прокручивает широкие таблицы.
+- `CodeLabOpenProjectScreen` — экран панели сессии, когда проект не выбран: «Open folder…», зона перетаскивания, карточка агента окна. Строки и колбэки даёт приложение; файлы из ОС кит не принимает, ему передают только состояние `dropActive` и текст отказа `dropMessage`. `CodeLabOpenProjectBody` — то же тело без героя, заголовка, прокрутки и InfoBar (шаг «Open a project» первого запуска); ссылка в настройки задаётся парой `settingsLinkLabel` и `onOpenSettings`, виджет над кнопкой — `beforeOpen`, а `onOpen: null` делает кнопку «Open folder…» неактивной.
 - `CodeLabStatusTable` рисует готовые строки и ячейки; действие строки — колбэк.
 - `CodeLabUsagePane` показывает уже отформатированные значения (`CodeLabUsageCard`, `CodeLabUsageRow`, `CodeLabUsageNote`); кит ничего не считает.
 
@@ -67,6 +68,8 @@ flowchart LR
 ## Тема и тоны
 
 Своей темы у пакета нет: виджеты берут цвета и типографику из `FluentTheme.of(context)`, поэтому ими управляет `FluentApp` приложения (`apps/codelab_desktop/lib/app/codelab_app_widget.dart`). Светлую и тёмную тему проверяют превью.
+
+Цвета тонов `success`, `warning`, `danger`, `accent`, ссылок, фонов diff и выделения виджеты берут из расширения темы `CodeLabPalette` (`CodeLabPalette.of(FluentTheme.of(context))`). Приложение собирает палитру из пользовательской темы и кладёт в `FluentThemeData.extensions`; кит файлы тем не читает. Без расширения палитра выводится из Fluent.
 
 Смысл виджета задают два перечисления:
 
@@ -156,7 +159,7 @@ fvm dart format --set-exit-if-changed lib test
 fvm dart analyze
 ```
 
-Тесты лежат в `test/`. Golden-тестов (`matchesGoldenFile`) в пакете нет, поэтому эталонных изображений виджетов в репозитории тоже нет. Набор `test/codelab_previews_test.dart` собирает превью и проверяет, что они не бросают исключений.
+Тесты лежат в `test/`. Сторож `test/shortcut_catalog_guard_test.dart` запрещает вне каталога сочетаний литералы активаторов и чтение клавиш события в обход каталога; каталог локализации проверяет `test/l10n_catalogs_test.dart`, переводы виджетов — `test/codelab_l10n_test.dart`. Golden-тестов (`matchesGoldenFile`) в пакете нет, поэтому эталонных изображений виджетов в репозитории тоже нет. Набор `test/codelab_previews_test.dart` собирает превью и проверяет, что они не бросают исключений.
 
 Превью (`@Preview`) можно открыть в IDE, которая поддерживает Flutter Widget Previewer. Пакет требует Flutter `>=3.35.0` (`pubspec.yaml`).
 

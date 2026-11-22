@@ -31,7 +31,8 @@ flowchart LR
 | `ioTransportResolver` | профиль подключения превращается в stdio- или WebSocket-транспорт | `TransportResolver` (`codelab_client_core`) |
 | `IoProjectFiles` | дерево и просмотр файлов проекта | `ProjectFiles` (`codelab_client_core`) |
 | `JsonFileProfileStore` | профили подключения в `profiles.json` | `ProfileStore` (`codelab_client_core`) |
-| `JsonFileRecentProjectsStore` | недавние проекты в JSON-файле | `RecentProjectsStore` (`codelab_client_core`) |
+| `JsonFileRecentProjectsStore` | недавние проекты в `recent_projects.json`, общий у CLI и app | `RecentProjectsStore` (`codelab_client_core`) |
+| `IoThemeLibrary` | пользовательские темы: каталог `themes/*.json` и импорт файла темы | `ThemeLibrary` (`codelab_client_core`) |
 | `WorkingDirectoryProvider`, `IoWorkingDirectoryProvider` | рабочая папка процесса клиента (`Directory.current`) | — |
 | `DirectoryExists`, `ioDirectoryExists` | проверка, что папка проекта ещё существует | — |
 | `resolveCodelabHome`, `CodelabHomeException` | единое правило вычисления `$CODELAB_HOME` | — |
@@ -83,6 +84,7 @@ final resolver = ioTransportResolver(secrets: mySecretSource);
 
 - `JsonFileProfileStore` пишет `{"version": 1, "profiles": [...]}`. Секреты в файл не попадают: у WebSocket-профиля только ссылка `tokenRef`. Нет файла — пустой список; битый файл, другая версия или неизвестный тип профиля — `FormatException`.
 - `JsonFileRecentProjectsStore` пишет `{"version": 1, "projects": [{"path", "lastOpenedAt"}]}`: правило списка (одна запись на путь, последний открытый первым, не больше `recentProjectsLimit`) берёт у `mergeRecentProjects` из `codelab_client_core`. Нет файла — пустой список; нечитаемый файл, другая версия или запись неверного вида — `FormatException`, и `record` с `merge` файл при этом не меняют. Операции одного экземпляра идут по очереди; между процессами порядок не гарантирован, при одновременной записи может потеряться одна запись. Файл `$CODELAB_HOME/recent_projects.json` использует и CLI, и CodeLab app.
+- `IoThemeLibrary` читает `<home>/themes/*.json` (подкаталоги не обходятся, а подкаталог с именем вида `x.json` даёт запись с ошибкой `unreadable`; не больше 64 КиБ на файл; нет каталога — пустой список, не каталог или нечитаем — `ThemeCatalogException`; сбой чтения одного файла — запись с ошибкой, а не исключение). Импорт копирует файл байт в байт под именем из его поля `name`, а не из имени источника; файл с тем же содержимым не перезаписывается, существующую тему без `replace` не заменяет.
 - Запись идёт во временный файл в том же каталоге с `flush: true`, затем `rename`. После сбоя питания остаётся целый старый или целый новый файл.
 
 Где лежат эти файлы и кто их пишет — в [каталоге `CODELAB_HOME`](../../../docs/ops/codelab-home.md), в [эксплуатации `codelab`](../../../apps/codelab_cli/doc/operations.md) и в [эксплуатации CodeLab app](../../../apps/codelab_desktop/doc/operations.md).
