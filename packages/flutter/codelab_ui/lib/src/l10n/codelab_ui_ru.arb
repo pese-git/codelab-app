@@ -155,5 +155,6 @@
   "codeLabProtocolViewLog": "Журнал",
   "codeLabProtocolSelectFrame": "Выберите кадр, чтобы увидеть подробности.",
   "codeLabProtocolSelectRecord": "Выберите запись, чтобы увидеть её поля.",
-  "codeLabProtocolMasked": "••••••• (замаскировано)"
+  "codeLabProtocolMasked": "••••••• (замаскировано)",
+  "codeLabDockMoreActions": "Ещё действия"
 }

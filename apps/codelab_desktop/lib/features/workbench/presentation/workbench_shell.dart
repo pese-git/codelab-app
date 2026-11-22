@@ -11,6 +11,8 @@ import '../../../app/navigation/settings_page.dart';
 import 'workbench_focus.dart';
 import '../../../l10n/l10n.dart';
 import '../../project_files/presentation/project_files_pane.dart';
+import '../../protocol/application/protocol_pane_cubit.dart';
+import '../../protocol/application/protocol_pane_state.dart';
 import '../../protocol/presentation/protocol_pane.dart';
 import '../../terminal/application/terminal_tabs_cubit.dart';
 import '../../terminal/presentation/terminal_pane.dart';
@@ -236,36 +238,44 @@ class CodeLabShell extends StatelessWidget {
                   ),
                   dock: openPanes.isEmpty
                       ? null
-                      : CodeLabToolDock(
-                          active: state.activePane ?? openPanes.last,
-                          onSelected: cubit.selectPane,
-                          onClosed: cubit.closePane,
-                          tabs: [
-                            for (final pane in openPanes)
-                              CodeLabDockTab(
-                                pane: pane,
-                                content: switch (pane) {
-                                  ToolPane.files => const ProjectFilesPane(),
-                                  ToolPane.agents =>
-                                    const WorkbenchAgentsPane(),
-                                  ToolPane.usage => const WorkbenchUsagePane(),
-                                  ToolPane.plan =>
-                                    CodeLabProgressChecklist.list(
-                                      entries: state.currentPlan ?? const [],
-                                    ),
-                                  ToolPane.terminal =>
-                                    const WorkbenchTerminalPane(),
-                                  ToolPane.protocol =>
-                                    const WorkbenchProtocolPane(),
-                                  _ => const SizedBox.shrink(),
-                                },
-                                // Действия вкладки Protocol — в строке
-                                // вкладок дока (D1).
-                                actions: pane == ToolPane.protocol
-                                    ? const [WorkbenchProtocolActions()]
-                                    : null,
-                              ),
-                          ],
+                      : BlocBuilder<ProtocolPaneCubit, ProtocolPaneState>(
+                          buildWhen: protocolActionsChanged,
+                          builder: (context, protocol) => CodeLabToolDock(
+                            active: state.activePane ?? openPanes.last,
+                            onSelected: cubit.selectPane,
+                            onClosed: cubit.closePane,
+                            tabs: [
+                              for (final pane in openPanes)
+                                CodeLabDockTab(
+                                  pane: pane,
+                                  content: switch (pane) {
+                                    ToolPane.files => const ProjectFilesPane(),
+                                    ToolPane.agents =>
+                                      const WorkbenchAgentsPane(),
+                                    ToolPane.usage =>
+                                      const WorkbenchUsagePane(),
+                                    ToolPane.plan =>
+                                      CodeLabProgressChecklist.list(
+                                        entries: state.currentPlan ?? const [],
+                                      ),
+                                    ToolPane.terminal =>
+                                      const WorkbenchTerminalPane(),
+                                    ToolPane.protocol =>
+                                      const WorkbenchProtocolPane(),
+                                    _ => const SizedBox.shrink(),
+                                  },
+                                  // Действия вкладки Protocol — в строке
+                                  // вкладок дока (D1).
+                                  actions: pane == ToolPane.protocol
+                                      ? protocolDockActionsOf(
+                                          context,
+                                          context.read<ProtocolPaneCubit>(),
+                                          protocol,
+                                        )
+                                      : null,
+                                ),
+                            ],
+                          ),
                         ),
                 ),
                 if (state.isCommandPaletteOpen)

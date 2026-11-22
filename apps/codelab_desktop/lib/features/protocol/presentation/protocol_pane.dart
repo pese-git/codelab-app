@@ -24,7 +24,7 @@ import '../application/protocol_pane_view.dart';
 /// элементов управления и держит сочетания Alt-навигации.
 ///
 /// Для чего: единственное тело вкладки Protocol. Действия шапки (`Trace`,
-/// `Pause`, `Clear`, `Export…`) строит [WorkbenchProtocolActions] и передаёт в
+/// `Pause`, `Clear`, `Export…`) описывает [protocolDockActionsOf] и передаёт в
 /// `CodeLabDockTab.actions`, потому что они живут в строке вкладок.
 ///
 /// Как использовать: `const WorkbenchProtocolPane()` внутри дока; Cubit берётся
@@ -477,103 +477,92 @@ class _LogFilters extends StatelessWidget {
   }
 }
 
-const _compactPadding = WidgetStatePropertyAll(
-  EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-);
-const _compactButton = ButtonStyle(padding: _compactPadding);
+/// Состояние, от которого зависят действия шапки дока: вид, пауза, Trace и
+/// «есть ли что экспортировать». Остальные публикации (кадры, счётчики) их
+/// не меняют, поэтому док перестраивается редко.
+bool protocolActionsChanged(ProtocolPaneState a, ProtocolPaneState b) =>
+    a.view != b.view ||
+    a.framesPaused != b.framesPaused ||
+    a.logPaused != b.logPaused ||
+    a.traceEnabled != b.traceEnabled ||
+    a.traceAvailable != b.traceAvailable ||
+    a.visibleFrames.isEmpty != b.visibleFrames.isEmpty ||
+    a.visibleRecords.isEmpty != b.visibleRecords.isEmpty;
 
-/// Действия вкладки Protocol в строке вкладок дока: `Trace` (только в
-/// release-сборке), `Pause`/`Resume`, `Clear`, `Export…` (design.md change
-/// `redesign-protocol-pane`, D1, D10, D17).
+Future<bool> _confirmExport(BuildContext context) async {
+  final l10n = context.l10n;
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialog) => ContentDialog(
+      title: Text(l10n.protocolExportConfirmTitle),
+      content: Text(l10n.protocolExportConfirmBody),
+      actions: [
+        Button(
+          key: const ValueKey('protocol-export-cancel'),
+          onPressed: () => Navigator.of(dialog).pop(false),
+          child: Text(l10n.commonCancel),
+        ),
+        FilledButton(
+          key: const ValueKey('protocol-export-confirm'),
+          onPressed: () => Navigator.of(dialog).pop(true),
+          child: Text(l10n.protocolExportConfirmAction),
+        ),
+      ],
+    ),
+  );
+  return confirmed ?? false;
+}
+
+/// Действия вкладки Protocol для `CodeLabDockTab.actions` (design.md change
+/// `redesign-protocol-pane`, D1, D10, D17): `Trace` (только в release-сборке,
+/// закреплён: индикатор режима хранения полных данных), `Pause`/`Resume`,
+/// `Clear`, `Export…` — последние три кит уносит в меню «⋯», когда они не
+/// помещаются в строку вкладок.
 ///
-/// Почему отдельный виджет: действия стоят в шапке дока, а не в теле панели,
-/// и читают то же состояние Cubit; `CodeLabDockTab.actions` показывает их
-/// только у активной вкладки. Как использовать: передать
-/// `actions: const [WorkbenchProtocolActions()]` вкладке Protocol.
-class WorkbenchProtocolActions extends StatelessWidget {
-  const WorkbenchProtocolActions({super.key});
-
-  Future<bool> _confirmExport(BuildContext context) async {
-    final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => ContentDialog(
-        title: Text(l10n.protocolExportConfirmTitle),
-        content: Text(l10n.protocolExportConfirmBody),
-        actions: [
-          Button(
-            key: const ValueKey('protocol-export-cancel'),
-            onPressed: () => Navigator.of(dialog).pop(false),
-            child: Text(l10n.commonCancel),
-          ),
-          FilledButton(
-            key: const ValueKey('protocol-export-confirm'),
-            onPressed: () => Navigator.of(dialog).pop(true),
-            child: Text(l10n.protocolExportConfirmAction),
-          ),
-        ],
+/// Почему описания, а не виджеты: решение о «⋯» принимает кит, который видит
+/// ширину дока; пункты меню несут те же подписи и доступность (`Export…`
+/// недоступен при пустом виде). [context] нужен для диалога подтверждения
+/// экспорта.
+List<CodeLabDockAction> protocolDockActionsOf(
+  BuildContext context,
+  ProtocolPaneCubit cubit,
+  ProtocolPaneState state,
+) {
+  final l10n = context.l10n;
+  final frames = state.view == ProtocolView.frames;
+  final paused = frames ? state.framesPaused : state.logPaused;
+  final empty = (frames ? state.visibleFrames : state.visibleRecords).isEmpty;
+  return [
+    if (state.traceAvailable)
+      CodeLabDockAction(
+        key: const ValueKey('protocol-trace'),
+        label: l10n.protocolTrace,
+        pinned: true,
+        checked: state.traceEnabled,
+        onPressed: () => cubit.setTrace(!state.traceEnabled),
       ),
-    );
-    return confirmed ?? false;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cubit = context.read<ProtocolPaneCubit>();
-    final l10n = context.l10n;
-    return BlocBuilder<ProtocolPaneCubit, ProtocolPaneState>(
-      builder: (context, state) {
-        final frames = state.view == ProtocolView.frames;
-        final paused = frames ? state.framesPaused : state.logPaused;
-        final empty =
-            (frames ? state.visibleFrames : state.visibleRecords).isEmpty;
-        // Компактные кнопки: четыре действия с вкладкой должны помещаться в
-        // док 360 px (остаток прокручивает кит).
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 6,
-          children: [
-            if (state.traceAvailable)
-              // Родной стиль `ToggleButton`: у нажатой кнопки акцентный фон, как
-              // у фильтров. Свой `style` стёр бы его; состояние читает и
-              // скринридер (`toggled`).
-              Semantics(
-                toggled: state.traceEnabled,
-                container: true,
-                child: ToggleButton(
-                  key: const ValueKey('protocol-trace'),
-                  checked: state.traceEnabled,
-                  onChanged: cubit.setTrace,
-                  child: Text(l10n.protocolTrace),
-                ),
+    CodeLabDockAction(
+      key: const ValueKey('protocol-pause'),
+      label: paused ? l10n.protocolResume : l10n.protocolPause,
+      onPressed: cubit.togglePause,
+    ),
+    CodeLabDockAction(
+      key: const ValueKey('protocol-clear'),
+      label: l10n.protocolClear,
+      onPressed: cubit.clear,
+    ),
+    CodeLabDockAction(
+      key: const ValueKey('protocol-export'),
+      label: l10n.protocolExport,
+      onPressed: empty
+          ? null
+          : () => unawaited(
+              cubit.guarded(
+                'export',
+                () =>
+                    cubit.exportActive(confirm: () => _confirmExport(context)),
               ),
-            Button(
-              style: _compactButton,
-              onPressed: cubit.togglePause,
-              child: Text(paused ? l10n.protocolResume : l10n.protocolPause),
             ),
-            Button(
-              style: _compactButton,
-              onPressed: cubit.clear,
-              child: Text(l10n.protocolClear),
-            ),
-            Button(
-              style: _compactButton,
-              onPressed: empty
-                  ? null
-                  : () => unawaited(
-                      cubit.guarded(
-                        'export',
-                        () => cubit.exportActive(
-                          confirm: () => _confirmExport(context),
-                        ),
-                      ),
-                    ),
-              child: Text(l10n.protocolExport),
-            ),
-          ],
-        );
-      },
-    );
-  }
+    ),
+  ];
 }

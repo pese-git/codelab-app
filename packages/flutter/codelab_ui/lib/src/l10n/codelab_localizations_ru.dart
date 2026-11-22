@@ -546,4 +546,7 @@ class CodeLabLocalizationsRu extends CodeLabLocalizations {
 
   @override
   String get codeLabProtocolMasked => '••••••• (замаскировано)';
+
+  @override
+  String get codeLabDockMoreActions => 'Ещё действия';
 }

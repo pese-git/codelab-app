@@ -1,137 +1,231 @@
-// Красные тесты задачи 3.1 change `redesign-protocol-pane`: поле
-// `CodeLabDockTab.actions` дока (design.md D1, D12; spec agent-workbench-ui
-// «Панель Protocol: виды Frames и Log», сценарий «Действия только у активной
-// вкладки Protocol»).
+// Действия вкладки дока (change `redesign-protocol-pane`, D1, D12, D17): на
+// узком доке (360 px) непомещающиеся действия уходят в меню «⋯», закреплённый
+// переключатель (Trace) остаётся на виду, а активная вкладка не обрезается.
 //
-// Красный до задачи 3.2: у `CodeLabDockTab` ещё нет параметра `actions`
-// (ошибка компиляции — допустимый красный).
+// Красный до правки кита: `CodeLabDockTab.actions` принимает готовые виджеты,
+// модели `CodeLabDockAction` нет (ошибка компиляции — допустимый красный).
 //
-// Границы (`codelab_ui/AGENTS.md` §2): док ничего не знает о действиях —
-// хост передаёт готовые виджеты, кит только решает, где и когда их показать.
+// Тестовый шрифт Ahem вдвое шире настоящих; масштаб текста 0.5 приближает
+// метрики к реальным (как в тестах панели Protocol в app).
 
 import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _protocolActions = ValueKey('protocol-actions');
-const _planActions = ValueKey('plan-actions');
+const _moreHint = 'More actions';
 
-Widget _dock({required ToolPane active, bool withActions = true}) => FluentApp(
-  home: SizedBox(
-    width: 600,
-    height: 300,
-    child: CodeLabToolDock(
-      active: active,
-      tabs: [
-        CodeLabDockTab(
-          pane: ToolPane.plan,
-          content: const Text('plan body'),
-          actions: withActions
-              ? const [SizedBox(key: _planActions, width: 20, height: 20)]
-              : null,
+void _realisticText(WidgetTester tester) {
+  tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+  addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+}
+
+/// Док шириной [width] с вкладками [panes] (активна `protocol`) и четырьмя
+/// действиями: закреплённый переключатель и три обычных.
+Widget _dock({
+  required double width,
+  List<ToolPane> panes = const [
+    ToolPane.plan,
+    ToolPane.protocol,
+    ToolPane.usage,
+    ToolPane.files,
+  ],
+  List<String> log = const [],
+  bool exportEnabled = true,
+  bool ru = true,
+}) {
+  final labels = ru
+      ? const ['Трассировка', 'Приостановить', 'Очистить', 'Экспорт…']
+      : const ['Trace', 'Pause', 'Clear', 'Export…'];
+  void note(String name) => log.add(name);
+  return FluentApp(
+    home: Align(
+      alignment: Alignment.topLeft,
+      child: SizedBox(
+        width: width,
+        height: 300,
+        child: CodeLabToolDock(
+          active: ToolPane.protocol,
+          tabs: [
+            for (final pane in panes)
+              CodeLabDockTab(
+                pane: pane,
+                content: Text('${pane.name} body'),
+                actions: pane == ToolPane.protocol
+                    ? [
+                        CodeLabDockAction(
+                          label: labels[0],
+                          pinned: true,
+                          checked: false,
+                          onPressed: () => note('trace'),
+                        ),
+                        CodeLabDockAction(
+                          label: labels[1],
+                          onPressed: () => note('pause'),
+                        ),
+                        CodeLabDockAction(
+                          label: labels[2],
+                          onPressed: () => note('clear'),
+                        ),
+                        CodeLabDockAction(
+                          label: labels[3],
+                          onPressed: exportEnabled
+                              ? () => note('export')
+                              : null,
+                        ),
+                      ]
+                    : null,
+              ),
+          ],
         ),
-        CodeLabDockTab(
-          pane: ToolPane.protocol,
-          content: const Text('protocol body'),
-          actions: withActions
-              ? const [
-                  Text('Pause'),
-                  Text('Clear'),
-                  SizedBox(key: _protocolActions, width: 20, height: 20),
-                ]
-              : null,
-        ),
-      ],
+      ),
     ),
-  ),
-);
+  );
+}
+
+Finder get _moreIcons => find.byIcon(FluentIcons.more);
+
+/// «⋯» в строке вкладок: Fluent держит построенную, но невидимую кнопку и вне
+/// строки (под ней), пока всё помещается, поэтому «видимая» — внутри строки
+/// вкладок (верхние 60 px дока).
+Finder _moreVisible(WidgetTester tester) {
+  final visible = _moreIcons.evaluate().where(
+    (e) => tester.getRect(find.byWidget(e.widget)).top < 60,
+  );
+  return visible.isEmpty
+      ? find.byWidget(const SizedBox.shrink(key: ValueKey('none')))
+      : find.byWidget(visible.first.widget);
+}
+
+Future<void> _openMenu(WidgetTester tester) async {
+  await tester.tap(_moreVisible(tester));
+  await tester.pumpAndSettle();
+}
 
 void main() {
-  group('CodeLabDockTab.actions', () {
-    testWidgets('действия активной вкладки видны', (tester) async {
-      await tester.pumpWidget(_dock(active: ToolPane.protocol));
+  group('действия на узком доке (360 px, русские подписи)', () {
+    testWidgets('нет переполнения при 4 вкладках', (tester) async {
+      _realisticText(tester);
+      await tester.pumpWidget(_dock(width: 360));
+      await tester.pumpAndSettle();
 
-      expect(find.text('Pause'), findsOneWidget);
-      expect(find.text('Clear'), findsOneWidget);
-      expect(find.byKey(_protocolActions), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
-    testWidgets('действия стоят в строке вкладок справа от вкладок', (
+    testWidgets('закреплённый переключатель виден и нажимается', (
       tester,
     ) async {
-      await tester.pumpWidget(_dock(active: ToolPane.protocol));
+      _realisticText(tester);
+      final log = <String>[];
+      await tester.pumpWidget(_dock(width: 360, log: log));
+      await tester.pumpAndSettle();
 
-      final lastTab = tester.getRect(
-        find.byKey(CodeLabToolDock.tabKey(ToolPane.protocol)),
-      );
-      final action = tester.getRect(find.byKey(_protocolActions));
-      final content = tester.getRect(find.text('protocol body'));
+      await tester.tap(find.text('Трассировка'));
+      await tester.pumpAndSettle();
 
-      expect(action.left, greaterThanOrEqualTo(lastTab.right));
-      // Строка вкладок над содержимым панели, а не внутри него.
-      expect(action.bottom, lessThanOrEqualTo(content.top));
-      // Действия прижаты к правому краю дока (док шириной 600).
-      expect(action.right, greaterThan(500));
-    });
-
-    testWidgets('у неактивной вкладки действий нет', (tester) async {
-      await tester.pumpWidget(_dock(active: ToolPane.plan));
-
-      expect(find.byKey(_planActions), findsOneWidget);
-      expect(find.byKey(_protocolActions), findsNothing);
-      expect(find.text('Pause'), findsNothing);
-      expect(find.text('Clear'), findsNothing);
-    });
-
-    testWidgets('переключение вкладки меняет набор действий', (tester) async {
-      await tester.pumpWidget(_dock(active: ToolPane.protocol));
-      expect(find.byKey(_protocolActions), findsOneWidget);
-
-      await tester.pumpWidget(_dock(active: ToolPane.plan));
-      expect(find.byKey(_protocolActions), findsNothing);
-      expect(find.byKey(_planActions), findsOneWidget);
-    });
-
-    testWidgets('без actions вид дока прежний: вкладки и содержимое', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _dock(active: ToolPane.protocol, withActions: false),
-      );
-
-      expect(find.byKey(CodeLabToolDock.tabKey(ToolPane.plan)), findsOneWidget);
+      expect(log, ['trace']);
       expect(
-        find.byKey(CodeLabToolDock.tabKey(ToolPane.protocol)),
+        tester.widget<ToggleButton>(find.byType(ToggleButton)).checked,
+        isFalse,
+      );
+    });
+
+    testWidgets('остальные действия доступны через «⋯», у кнопки есть '
+        'подсказка', (tester) async {
+      _realisticText(tester);
+      final log = <String>[];
+      await tester.pumpWidget(_dock(width: 360, log: log));
+      await tester.pumpAndSettle();
+
+      expect(_moreVisible(tester), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is Tooltip && w.message == _moreHint),
         findsOneWidget,
       );
-      expect(find.text('protocol body'), findsOneWidget);
-      expect(find.byKey(_protocolActions), findsNothing);
+      await _openMenu(tester);
+      for (final label in ['Приостановить', 'Очистить', 'Экспорт…']) {
+        expect(find.text(label), findsWidgets, reason: label);
+      }
+      await tester.tap(find.text('Экспорт…').last);
+      await tester.pumpAndSettle();
+
+      expect(log, ['export']);
     });
 
-    testWidgets('кнопки действий нажимаются, не переключая вкладку', (
+    testWidgets('недоступное действие (onPressed: null) в меню не '
+        'срабатывает', (tester) async {
+      _realisticText(tester);
+      final log = <String>[];
+      await tester.pumpWidget(
+        _dock(width: 360, log: log, exportEnabled: false),
+      );
+      await tester.pumpAndSettle();
+
+      await _openMenu(tester);
+      await tester.tap(find.text('Экспорт…').last);
+      await tester.pumpAndSettle();
+
+      expect(log, isEmpty);
+    });
+
+    testWidgets('активная вкладка не обрезана действиями', (tester) async {
+      _realisticText(tester);
+      await tester.pumpWidget(_dock(width: 360));
+      await tester.pumpAndSettle();
+
+      final tab = tester.getRect(
+        find.byKey(CodeLabToolDock.tabKey(ToolPane.protocol)),
+      );
+      expect(tab.left, greaterThanOrEqualTo(0));
+      expect(tab.right, lessThanOrEqualTo(360 - 100));
+    });
+
+    testWidgets('горизонтальной прокрутки у строки действий нет', (
       tester,
     ) async {
-      var pressed = 0;
-      final selected = <ToolPane>[];
+      _realisticText(tester);
+      await tester.pumpWidget(_dock(width: 360));
+      await tester.pumpAndSettle();
+
+      // Единственная горизонтальная прокрутка в строке — у вкладок.
+      final horizontal = tester
+          .widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView))
+          .where((w) => w.scrollDirection == Axis.horizontal);
+      expect(horizontal, hasLength(1));
+    });
+  });
+
+  group('широкий док: все действия на виду без «⋯»', () {
+    testWidgets('900 px, английские подписи', (tester) async {
+      _realisticText(tester);
+      await tester.pumpWidget(
+        _dock(width: 900, ru: false, panes: const [ToolPane.protocol]),
+      );
+      await tester.pumpAndSettle();
+
+      for (final label in ['Trace', 'Pause', 'Clear', 'Export…']) {
+        expect(find.text(label), findsOneWidget, reason: label);
+      }
+      expect(_moreVisible(tester), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('вкладки без действий', () {
+    testWidgets('у неактивной вкладки действий нет, у активной без actions '
+        'вид прежний', (tester) async {
       await tester.pumpWidget(
         FluentApp(
           home: SizedBox(
-            width: 600,
-            height: 300,
+            width: 400,
+            height: 200,
             child: CodeLabToolDock(
-              active: ToolPane.protocol,
-              onSelected: selected.add,
-              tabs: [
+              active: ToolPane.plan,
+              tabs: const [
+                CodeLabDockTab(pane: ToolPane.plan, content: Text('plan')),
                 CodeLabDockTab(
                   pane: ToolPane.protocol,
-                  content: const Text('protocol body'),
-                  actions: [
-                    Button(
-                      key: const ValueKey('pause'),
-                      onPressed: () => pressed++,
-                      child: const Text('Pause'),
-                    ),
-                  ],
+                  content: Text('protocol'),
+                  actions: [CodeLabDockAction(label: 'Clear')],
                 ),
               ],
             ),
@@ -139,201 +233,8 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byKey(const ValueKey('pause')));
-      await tester.pumpAndSettle();
-
-      expect(pressed, 1);
-      expect(selected, isEmpty);
-    });
-  });
-
-  // Док по умолчанию в app — 360 px (`kDockDefaultWidth`): действия вкладки
-  // Protocol (четыре кнопки, в русском интерфейсе длинные подписи) должны
-  // помещаться без переполнения строки вкладок — сжиматься и прокручиваться
-  // (change `redesign-protocol-pane`, D1, D12). Переполнение `RenderFlex`
-  // тест Flutter считает ошибкой, поэтому отдельных проверок не нужно.
-  group('действия в доке шириной 360 px', () {
-    Widget narrowDock(List<String> labels) => FluentApp(
-      home: Align(
-        alignment: Alignment.topLeft,
-        child: SizedBox(
-          width: 360,
-          height: 300,
-          child: CodeLabToolDock(
-            active: ToolPane.protocol,
-            tabs: [
-              CodeLabDockTab(
-                pane: ToolPane.protocol,
-                content: const Text('protocol body'),
-                actions: [
-                  for (final label in labels)
-                    Button(onPressed: () {}, child: Text(label)),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    testWidgets('английские подписи: без переполнения', (tester) async {
-      await tester.pumpWidget(
-        narrowDock(const ['Trace', 'Pause', 'Clear', 'Export…']),
-      );
-
-      expect(tester.takeException(), isNull);
-      expect(find.text('Export…'), findsOneWidget);
-    });
-
-    testWidgets('длинные русские подписи: без переполнения, все кнопки в '
-        'дереве и доступны прокруткой', (tester) async {
-      await tester.pumpWidget(
-        narrowDock(const [
-          'Трассировка',
-          'Приостановить',
-          'Очистить',
-          'Экспорт…',
-        ]),
-      );
-
-      expect(tester.takeException(), isNull);
-      for (final label in ['Трассировка', 'Приостановить', 'Очистить']) {
-        expect(find.text(label), findsOneWidget, reason: label);
-      }
-      // Вкладка остаётся видимой в пределах дока.
-      final tab = tester.getRect(
-        find.byKey(CodeLabToolDock.tabKey(ToolPane.protocol)),
-      );
-      expect(tab.right, lessThanOrEqualTo(360));
-      // Строка вкладок не шире дока, а действия не вылезают за его правый край.
-      final actions = tester.getRect(find.text('Трассировка'));
-      expect(actions.left, lessThan(360));
-    });
-
-    testWidgets('последняя кнопка достижима прокруткой строки действий', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        narrowDock(const [
-          'Трассировка',
-          'Приостановить',
-          'Очистить',
-          'Экспорт…',
-        ]),
-      );
-
-      await tester.ensureVisible(find.text('Экспорт…'));
-      await tester.pump();
-
-      expect(tester.takeException(), isNull);
-      expect(
-        tester.getRect(find.text('Экспорт…')).right,
-        lessThanOrEqualTo(360),
-      );
-    });
-  });
-
-  // Ручной смок на macOS: строка действий вытесняла вкладки, активная
-  // «Протокол» обрезалась до «Прото». Правило: вкладки получают всё, кроме
-  // минимальной ширины действий, и прокручиваются; активная вкладка
-  // прокручивается в видимую область; действия — остаток справа.
-  group('активная вкладка читаема при действиях на 360 px', () {
-    Widget dock(ToolPane active) => FluentApp(
-      home: Align(
-        alignment: Alignment.topLeft,
-        child: SizedBox(
-          width: 360,
-          height: 300,
-          child: CodeLabToolDock(
-            active: active,
-            tabs: [
-              const CodeLabDockTab(
-                pane: ToolPane.files,
-                content: Text('files body'),
-              ),
-              CodeLabDockTab(
-                pane: ToolPane.protocol,
-                content: const Text('protocol body'),
-                actions: [
-                  for (final label in const [
-                    'Трассировка',
-                    'Приостановить',
-                    'Очистить',
-                    'Экспорт…',
-                  ])
-                    Button(onPressed: () {}, child: Text(label)),
-                ],
-              ),
-              const CodeLabDockTab(
-                pane: ToolPane.usage,
-                content: Text('usage body'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    /// Вкладка целиком внутри области прокрутки вкладок: не правее границы,
-    /// за которой остаётся минимум для действий.
-    void expectFullyVisible(WidgetTester tester, ToolPane pane) {
-      final tab = tester.getRect(find.byKey(CodeLabToolDock.tabKey(pane)));
-      expect(tab.left, greaterThanOrEqualTo(0), reason: '$pane слева');
-      expect(
-        tab.right,
-        lessThanOrEqualTo(360 - 100),
-        reason: '$pane целиком левее зоны действий',
-      );
-    }
-
-    testWidgets('активная вкладка Protocol не обрезана действиями', (
-      tester,
-    ) async {
-      await tester.pumpWidget(dock(ToolPane.protocol));
-      await tester.pump();
-
-      expect(tester.takeException(), isNull);
-      expectFullyVisible(tester, ToolPane.protocol);
-    });
-
-    testWidgets('активная вкладка далеко справа прокручивается в видимую '
-        'область', (tester) async {
-      // Активной делается Protocol, но в списке вкладок она стоит третьей.
-      await tester.pumpWidget(
-        FluentApp(
-          home: Align(
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: 360,
-              height: 300,
-              child: CodeLabToolDock(
-                active: ToolPane.protocol,
-                tabs: [
-                  const CodeLabDockTab(
-                    pane: ToolPane.files,
-                    content: Text('files body'),
-                  ),
-                  const CodeLabDockTab(
-                    pane: ToolPane.usage,
-                    content: Text('usage body'),
-                  ),
-                  CodeLabDockTab(
-                    pane: ToolPane.protocol,
-                    content: const Text('protocol body'),
-                    actions: [
-                      for (final label in const ['Очистить', 'Экспорт…'])
-                        Button(onPressed: () {}, child: Text(label)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expectFullyVisible(tester, ToolPane.protocol);
+      expect(find.text('Clear'), findsNothing);
+      expect(_moreVisible(tester), findsNothing);
     });
   });
 }

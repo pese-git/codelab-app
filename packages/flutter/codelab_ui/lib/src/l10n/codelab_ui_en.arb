@@ -714,5 +714,9 @@
   "codeLabProtocolMasked": "••••••• (masked)",
   "@codeLabProtocolMasked": {
     "description": "Подпись замаскированного значения в JSON кадра; тон предупреждения. Маскирование — метка security (D14): перевод не смягчает смысл."
+  },
+  "codeLabDockMoreActions": "More actions",
+  "@codeLabDockMoreActions": {
+    "description": "Подсказка и подпись для скринридера кнопки «⋯» в строке вкладок дока: действия вкладки, которым не хватило места (change redesign-protocol-pane, D12)."
   }
 }

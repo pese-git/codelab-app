@@ -1036,6 +1036,12 @@ abstract class CodeLabLocalizations {
   /// In en, this message translates to:
   /// **'••••••• (masked)'**
   String get codeLabProtocolMasked;
+
+  /// Подсказка и подпись для скринридера кнопки «⋯» в строке вкладок дока: действия вкладки, которым не хватило места (change redesign-protocol-pane, D12).
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get codeLabDockMoreActions;
 }
 
 class _CodeLabLocalizationsDelegate

@@ -159,13 +159,62 @@ final class _Env {
   }
 }
 
-/// Нажатие кнопки действий в строке вкладок дока. Строка действий в доке
-/// 360 px прокручивается (в тестовом шрифте Ahem кнопки шире настоящих), поэтому
-/// кнопка сначала прокручивается в видимую область, как сделал бы пользователь.
+/// Действие дока на виду в строке вкладок (не спрятанное в «⋯»): Fluent держит
+/// невместившиеся кнопки построенными, но невидимыми, поэтому смотрим на
+/// попадаемость.
+Finder _inlineAction(String label) => find.text(label).hitTestable();
+
+Finder get _moreButton => find.byIcon(FluentIcons.more).hitTestable();
+
+/// Открывает «⋯», если действие [label] не на виду; возвращает, нашлось ли
+/// оно. Меню остаётся открытым.
+Future<bool> _revealAction(WidgetTester tester, String label) async {
+  if (_inlineAction(label).evaluate().isNotEmpty) return true;
+  if (_moreButton.evaluate().isEmpty) return false;
+  await tester.tap(_moreButton);
+  await tester.pumpAndSettle();
+  return find.text(label).hitTestable().evaluate().isNotEmpty;
+}
+
+/// Закрывает открытое меню «⋯».
+Future<void> _closeMenu(WidgetTester tester) async {
+  await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+  await tester.pumpAndSettle();
+}
+
+/// Действие дока доступно пользователю: на виду или в меню «⋯».
+Future<bool> _actionReachable(WidgetTester tester, String label) async {
+  final inline = _inlineAction(label).evaluate().isNotEmpty;
+  final found = await _revealAction(tester, label);
+  if (!inline && found) await _closeMenu(tester);
+  return found;
+}
+
+/// Нажатие действия дока: на виду — по кнопке, иначе через меню «⋯».
 Future<void> _tapAction(WidgetTester tester, String label) async {
-  await tester.ensureVisible(find.text(label));
-  await tester.pump();
-  await tester.tap(find.text(label));
+  final found = await _revealAction(tester, label);
+  expect(found, isTrue, reason: 'действие «$label» недоступно');
+  await tester.tap(find.text(label).hitTestable().last);
+  await tester.pumpAndSettle();
+}
+
+/// Действие доступно и включено (в меню — не отключённый пункт).
+Future<bool> _actionEnabled(WidgetTester tester, String label) async {
+  final inline = _inlineAction(label).evaluate().isNotEmpty;
+  final found = await _revealAction(tester, label);
+  if (!found) return false;
+  final target = find.text(label).hitTestable().last;
+  final item = find.ancestor(
+    of: target,
+    matching: find.byWidgetPredicate((w) => w is HoverButton),
+  );
+  final widget = tester.widget(item.first);
+  final enabled = switch (widget) {
+    final HoverButton button => button.onPressed != null,
+    _ => false,
+  };
+  if (!inline) await _closeMenu(tester);
+  return enabled;
 }
 
 /// Нажатие по строке таблицы по тексту ячейки метода.
@@ -209,9 +258,9 @@ void main() {
       expect(_inPane(find.text('Frames $frames')), findsOneWidget);
       expect(_inPane(find.textContaining('Log ')), findsOneWidget);
       // Действия — в строке вкладок дока, а не в теле панели.
-      expect(find.text('Pause'), findsOneWidget);
-      expect(find.text('Clear'), findsOneWidget);
-      expect(find.text('Export…'), findsOneWidget);
+      for (final label in ['Pause', 'Clear', 'Export…']) {
+        expect(await _actionReachable(tester, label), isTrue, reason: label);
+      }
       expect(_key('protocol-trace'), findsNothing);
       expect(find.text('Trace'), findsNothing);
       expect(find.text('Select a frame to see its details.'), findsOneWidget);
@@ -324,13 +373,10 @@ void main() {
       final trace = _key('protocol-trace');
       expect(trace, findsOneWidget);
       expect(tester.widget<ToggleButton>(trace).checked, isFalse);
-      final traceLeft = tester.getRect(trace).left;
+      // Trace закреплён и виден всегда; остальные доступны (в строке или в «⋯»).
+      expect(trace.hitTestable(), findsOneWidget);
       for (final label in ['Pause', 'Clear', 'Export…']) {
-        expect(
-          tester.getRect(find.text(label)).left,
-          greaterThan(traceLeft),
-          reason: label,
-        );
+        expect(await _actionReachable(tester, label), isTrue, reason: label);
       }
       await env.tearDown(tester);
     });
@@ -631,11 +677,12 @@ void main() {
       await env.settle(tester);
       expect(find.text('Pause'), findsNothing);
       expect(find.text('Export…'), findsNothing);
+      expect(_moreButton, findsNothing);
 
       await tester.tap(_key('tool-tab-protocol'));
       await env.settle(tester);
 
-      expect(find.text('Pause'), findsOneWidget);
+      expect(await _actionReachable(tester, 'Pause'), isTrue);
       await env.tearDown(tester);
     });
 
@@ -653,14 +700,14 @@ void main() {
       await _tapAction(tester, 'Pause');
       await env.settle(tester);
 
-      expect(find.text('Resume'), findsOneWidget);
-      expect(find.text('Pause'), findsNothing);
+      expect(await _actionReachable(tester, 'Resume'), isTrue);
+      expect(await _actionReachable(tester, 'Pause'), isFalse);
       expect(env.cubit.state.framesPaused, isTrue);
       expect(pane().followTail, isFalse);
 
       await _tapAction(tester, 'Resume');
       await env.settle(tester);
-      expect(find.text('Pause'), findsOneWidget);
+      expect(await _actionReachable(tester, 'Pause'), isTrue);
       expect(pane().followTail, isTrue);
       await env.tearDown(tester);
     });
@@ -689,22 +736,7 @@ void main() {
       await _tapAction(tester, 'Clear');
       await env.settle(tester);
 
-      final export = find.ancestor(
-        of: find.text('Export…'),
-        matching: find.byWidgetPredicate(
-          (w) => w is Button || w is FilledButton,
-        ),
-      );
-      expect(
-        tester
-            .widgetList(export)
-            .any(
-              (w) =>
-                  (w is Button && w.onPressed == null) ||
-                  (w is FilledButton && w.onPressed == null),
-            ),
-        isTrue,
-      );
+      expect(await _actionEnabled(tester, 'Export…'), isFalse);
       await env.tearDown(tester);
     });
 
@@ -923,6 +955,32 @@ void main() {
         ),
         findsOneWidget,
       );
+      await env.tearDown(tester);
+    });
+
+    testWidgets('ru, release, 4 вкладки: Trace на виду, Pause/Clear/Export… '
+        'через «⋯» работают с теми же действиями', (tester) async {
+      final env = _Env(debug: false, locale: const Locale('ru'));
+      await env.pump(tester);
+      await env.createSession(tester, 's_7f3a');
+      env.shell
+        ..togglePane(ToolPane.plan)
+        ..togglePane(ToolPane.usage)
+        ..togglePane(ToolPane.files);
+      await env.openPane(tester);
+      await env.settle(tester);
+
+      // Trace закреплён и на виду, остальное — в «⋯» (прокрутки действий нет:
+      // это проверяют тесты кита).
+      expect(_key('protocol-trace').hitTestable(), findsOneWidget);
+      expect(_moreButton, findsOneWidget);
+      await _tapAction(tester, 'Приостановить');
+      expect(env.cubit.state.framesPaused, isTrue);
+      await _tapAction(tester, 'Экспорт…');
+      expect(env.saver.saved, hasLength(1));
+      await _tapAction(tester, 'Очистить');
+      expect(env.cubit.state.framesCount, 0);
+      expect(await _actionEnabled(tester, 'Экспорт…'), isFalse);
       await env.tearDown(tester);
     });
 

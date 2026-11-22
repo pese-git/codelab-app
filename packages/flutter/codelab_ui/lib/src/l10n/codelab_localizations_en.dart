@@ -531,4 +531,7 @@ class CodeLabLocalizationsEn extends CodeLabLocalizations {
 
   @override
   String get codeLabProtocolMasked => '••••••• (masked)';
+
+  @override
+  String get codeLabDockMoreActions => 'More actions';
 }

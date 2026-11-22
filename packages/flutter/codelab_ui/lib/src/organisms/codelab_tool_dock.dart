@@ -3,16 +3,48 @@ import 'dart:math' as math;
 import 'package:fluent_ui/fluent_ui.dart';
 
 import '../atomics/atomics.dart';
+import '../l10n/strings.dart';
 import '../molecules/molecules.dart';
+
+/// Действие вкладки дока: подпись и колбэк (например, `Pause`, `Clear`,
+/// `Export…` у Protocol).
+///
+/// Почему описание, а не готовый виджет: узкому доку (360 px) не хватает
+/// места для всех кнопок, и решать, какие из них уйдут в меню «⋯», может
+/// только кит, который видит ширину (ручной смок change
+/// `redesign-protocol-pane`, D12). Прокрутка строки действий отвергнута:
+/// трекпад её находит, колесо мыши и клавиатура — нет.
+///
+/// Как использовать: [pinned] — действие всегда на виду (переключатель
+/// режима, который должен быть заметен); остальные показываются в строке,
+/// пока помещаются, а не поместившиеся — в меню «⋯» с теми же подписью и
+/// доступностью. [checked] не `null` — переключатель (нажатое состояние
+/// видно и передаётся скринридеру); [onPressed] `null` — действие
+/// недоступно (в меню — отключённый пункт).
+class CodeLabDockAction {
+  const CodeLabDockAction({
+    required this.label,
+    this.onPressed,
+    this.pinned = false,
+    this.checked,
+    this.key,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool pinned;
+  final bool? checked;
+
+  /// Ключ кнопки в строке (тесты хоста); в меню не используется.
+  final Key? key;
+}
 
 /// Вкладка дока: панель и её содержимое.
 ///
-/// [actions] — действия панели (например, `Pause`, `Clear`, `Export…` у
-/// Protocol): док показывает их справа в строке вкладок, только пока вкладка
-/// активна; строка действий занимает не больше 70 % ширины дока и
-/// прокручивается по горизонтали. Почему в доке, а не в теле панели: так устроен макет, а поле
-/// нужно и будущим панелям Terminal и Diff (change `redesign-protocol-pane`,
-/// D1, D12). Виджеты строит хост; док ничего о них не знает.
+/// [actions] — действия панели: док показывает их справа в строке вкладок,
+/// только пока вкладка активна. Почему в доке, а не в теле панели: так
+/// устроен макет, а поле нужно и будущим панелям Terminal и Diff (change
+/// `redesign-protocol-pane`, D1, D12).
 class CodeLabDockTab {
   const CodeLabDockTab({
     required this.pane,
@@ -24,7 +56,7 @@ class CodeLabDockTab {
   final Widget content;
 
   /// Действия активной вкладки; `null` или пусто — вид дока прежний.
-  final List<Widget>? actions;
+  final List<CodeLabDockAction>? actions;
 }
 
 /// Док панелей инструментов справа от панели сессии.
@@ -65,10 +97,10 @@ class CodeLabToolDock extends StatefulWidget {
   final ValueChanged<ToolPane>? onSelected;
   final ValueChanged<ToolPane>? onClosed;
 
-  /// Минимальная ширина зоны действий справа: вкладки получают остальное и
-  /// прокручиваются, поэтому действия не вытесняют заголовок активной
-  /// вкладки (ручной смок change `redesign-protocol-pane`, док 360 px).
-  static const double minActionsWidth = 112;
+  /// Минимальная ширина зоны действий справа (закреплённое действие и «⋯»):
+  /// вкладки получают остальное и прокручиваются, поэтому действия не
+  /// вытесняют заголовок активной вкладки (ручной смок change `redesign-protocol-pane`, док 360 px).
+  static const double minActionsWidth = 180;
 
   @override
   State<CodeLabToolDock> createState() => _CodeLabToolDockState();
@@ -161,20 +193,14 @@ class _CodeLabToolDockState extends State<CodeLabToolDock> {
                     )
                   else
                     Expanded(child: tabsRow),
-                  // Действия — только у активной вкладки (D1).
+                  // Действия — только у активной вкладки (D1): закреплённые
+                  // всегда на виду, остальные — в строке, пока помещаются,
+                  // иначе в меню «⋯» (никакой прокрутки строки).
                   if (hasActions)
                     Expanded(
                       child: Align(
                         alignment: Alignment.centerRight,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            spacing: 6,
-                            children: shown.actions!,
-                          ),
-                        ),
+                        child: _DockActions(actions: shown.actions!),
                       ),
                     ),
                 ],
@@ -250,6 +276,87 @@ class _DockTabButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Строка действий активной вкладки: закреплённые кнопки и командная строка
+/// Fluent с динамическим переносом в «⋯» для остальных.
+class _DockActions extends StatelessWidget {
+  const _DockActions({required this.actions});
+
+  final List<CodeLabDockAction> actions;
+
+  static const _compact = ButtonStyle(
+    padding: WidgetStatePropertyAll(
+      EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = codeLabStringsOf(context);
+    final pinned = [
+      for (final a in actions)
+        if (a.pinned) a,
+    ];
+    final rest = [
+      for (final a in actions)
+        if (!a.pinned) a,
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 6,
+        children: [
+          for (final action in pinned) _pinned(action),
+          if (rest.isNotEmpty)
+            Flexible(
+              child: CommandBar(
+                overflowBehavior: CommandBarOverflowBehavior.dynamicOverflow,
+                mainAxisAlignment: MainAxisAlignment.end,
+                primaryItems: [
+                  for (final action in rest)
+                    CommandBarButton(
+                      key: action.key,
+                      label: Text(action.label),
+                      onPressed: action.onPressed,
+                    ),
+                ],
+                overflowItemBuilder: (onPressed) => CommandBarButton(
+                  icon: const Icon(FluentIcons.more),
+                  tooltip: strings.codeLabDockMoreActions,
+                  onPressed: onPressed,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pinned(CodeLabDockAction action) {
+    final checked = action.checked;
+    if (checked == null) {
+      return Button(
+        key: action.key,
+        style: _compact,
+        onPressed: action.onPressed,
+        child: Text(action.label),
+      );
+    }
+    // Родной стиль `ToggleButton`: у нажатой кнопки акцентный фон; свой
+    // `style` стёр бы его. Состояние читает и скринридер (`toggled`).
+    return Semantics(
+      toggled: checked,
+      container: true,
+      child: ToggleButton(
+        key: action.key,
+        checked: checked,
+        onChanged: action.onPressed == null ? null : (_) => action.onPressed!(),
+        child: Text(action.label),
       ),
     );
   }
