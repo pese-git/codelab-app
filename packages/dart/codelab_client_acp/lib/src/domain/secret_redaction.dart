@@ -106,9 +106,16 @@ final _assignmentValuePattern = RegExp(r'[^\s,;]+');
 /// Совпадение начинается только с литерала `://`, поэтому время линейно (D5).
 final _urlUserinfoPattern = RegExp(r'://[^/?#\s"<>`]*@');
 
-final _privateKeyPattern = RegExp(
-  r'-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----',
-);
+/// Границы PEM-блока приватного ключа (D8 change
+/// `extend-secret-name-redaction`).
+///
+/// Почему две отдельные границы, а не одно выражение `BEGIN…END`: блок без
+/// `END` (вывод оборван или усечён) должен скрываться до конца текста, а
+/// ленивое `[\s\S]*?` с альтернативой «или конец текста» на многих `BEGIN`
+/// без `END` сканировало бы текст до конца от каждого — квадратично (D5).
+/// Поиск ведёт `_redactPrivateKeys`.
+final _privateKeyBegin = RegExp(r'-----BEGIN [A-Z ]*PRIVATE KEY-----');
+final _privateKeyEnd = RegExp(r'-----END [A-Z ]*PRIVATE KEY-----');
 
 /// Скрывает секреты в значениях, которые попадают в журналы и диагностику.
 ///
@@ -162,18 +169,50 @@ final class SecretRedactor {
 
   /// Скрывает секреты внутри текста.
   ///
-  /// Порядок важен: PEM-блок и заголовок авторизации, затем userinfo адреса
+  /// Порядок важен: PEM-блок (без `END` — до конца текста, D8) и заголовок
+  /// авторизации, затем userinfo адреса
   /// (до присваиваний, чтобы работало и под несекретным именем вроде
   /// `DATABASE_URL`, D4), затем присваивания `имя=значение` (D3). Каждое
   /// правило работает за линейное время (D5).
   String redactText(String value) {
-    final withoutUserinfo = value
-        .replaceAll(_privateKeyPattern, redactedSecret)
+    final withoutUserinfo = _redactPrivateKeys(value)
         .replaceAllMapped(_authorizationPattern, (match) {
           return '${match.group(1)} $redactedSecret';
         })
         .replaceAll(_urlUserinfoPattern, '://$redactedSecret@');
     return _redactAssignments(withoutUserinfo);
+  }
+
+  /// Заменяет PEM-блоки приватного ключа на `<redacted>` (D8).
+  ///
+  /// Блок — от `BEGIN` до ближайшего следующего `END`; без `END` скрывается
+  /// остаток текста, и поиск останавливается. `END` ищется от конца `BEGIN`,
+  /// следующий `BEGIN` — от конца `END`, поэтому каждый символ просматривается
+  /// O(1) раз.
+  String _redactPrivateKeys(String text) {
+    StringBuffer? out;
+    var copied = 0;
+    while (true) {
+      final begin = _firstMatch(_privateKeyBegin, text, copied);
+      if (begin == null) break;
+      final end = _firstMatch(_privateKeyEnd, text, begin.end);
+      (out ??= StringBuffer())
+        ..write(text.substring(copied, begin.start))
+        ..write(redactedSecret);
+      if (end == null) return out.toString();
+      copied = end.end;
+    }
+    if (out == null) return text;
+    return (out..write(text.substring(copied))).toString();
+  }
+
+  /// Первое совпадение [pattern] в [text] не раньше [start] или `null`;
+  /// `allMatches` ленивый, поэтому дальше первого совпадения поиск не идёт.
+  static RegExpMatch? _firstMatch(RegExp pattern, String text, int start) {
+    for (final match in pattern.allMatches(text, start)) {
+      return match;
+    }
+    return null;
   }
 
   /// Один проход по присваиваниям (D3).

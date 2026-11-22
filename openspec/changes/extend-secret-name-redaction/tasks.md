@@ -51,5 +51,5 @@
 ## 5. Приватный ключ без строки `END` (итерация 5, D8)
 
 - [x] 5.1 `[client]` Красный тест в `secret_redaction_test.dart` (сценарий «Приватный ключ без строки END скрыт»): `BEGIN` без `END` → всё от `BEGIN` скрыто; закрытый блок и текст после `END` — как прежде; линейное время на `'-----BEGIN RSA PRIVATE KEY-----' * N`.
-- [ ] 5.2 `[client]` Реализация в `redactText`: поиск `BEGIN`/`END` в коде вместо одного шаблона (D8).
-- [ ] 5.3 `[client]` Проверки `codelab_client_acp` и `openspec validate --strict`; `observability.md` §14 дополнить незакрытым блоком.
+- [x] 5.2 `[client]` Реализация в `redactText`: поиск `BEGIN`/`END` в коде вместо одного шаблона (D8).
+- [x] 5.3 `[client]` Проверки `codelab_client_acp` и `openspec validate --strict`; `observability.md` §14 дополнить незакрытым блоком.
