@@ -328,17 +328,14 @@ token=sk-***redacted***
 
 Если payload имеет known sensitive fields, redaction should be schema-aware.
 
-Например:
+Маскирование централизовано в `SecretRedactor` (`codelab_client_acp`); правила — требование spec `approval-safety` «Редактирование секретов», решения — design.md change `extend-secret-name-redaction` (D1–D7):
 
-```text
-authorization
-token
-api_key
-password
-secret
-```
-
-следует маскировать централизованно.
+* **Секретные слова в имени** (регистр не важен): `api_key`, `auth`, `authorization`, `bearer`, `cookie`, `credential`, `jwt`, `pass`/`password`, `private_key`, `secret`, `session_token`/`session_cookie`/`session_secret`/`session_key`, `token`. Голое `session` (`sessionId`) — корреляционный идентификатор, не секрет.
+* **Признаки `key`**: последний сегмент `_key`/`-key` (`OPENAI_KEY`, `X-Functions-Key`, `Ocp-Apim-Subscription-Key`), `access_key` в любом месте (`AWS_ACCESS_KEY_ID`, `accessKeyId`), camelCase `…Key` (`openaiKey`). Имя `key` целиком, `keyboard`, `monkey`, `key_count`, `KEY_ID` секретами не считаются; `cache_key`, `primary_key`, `public_key`, `hotKey` скрываются осознанно.
+* **Счётчики токенов**: число под именем `tokens`, `tokens_*`, `*_tokens` видно, если остаток имени не секретный и не содержит сегмента-стоп-слова (`access`, `refresh`, `id`, `csrf`, `otp`, `pin`, `session`, `key`).
+* **Текст**: PEM-блок приватного ключа, значение заголовка авторизации (`Bearer …`), userinfo адреса (`postgres://user:pass@host` → `postgres://<redacted>@host`, любая схема с `://`), значение присваивания `имя=значение` / `имя: значение` с секретным именем по тем же словам и признакам `key`.
+* Пары `{name, value}` (`HttpHeader`, `EnvVariable`) сверяют `name` с тем же правилом имён, отдельного списка нет (правило пары вводит change `redesign-protocol-pane`).
+* Все шаблоны работают за линейное время по длине текста: маскируются большие payload, и квадратичный откат на длинной строке без разделителей недопустим.
 
 ---
 
