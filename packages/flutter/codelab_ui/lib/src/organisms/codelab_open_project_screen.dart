@@ -187,6 +187,7 @@ class CodeLabOpenProjectBody extends StatelessWidget {
     this.onOpenSettings,
     this.beforeOpen,
     this.openShortcut,
+    this.openEmphasis = CodeLabButtonEmphasis.primary,
     this.dropActive = false,
     this.dropMessage,
     super.key,
@@ -204,6 +205,13 @@ class CodeLabOpenProjectBody extends StatelessWidget {
   /// Действие «Open folder…»; `null` — кнопка неактивна (выбор уже идёт: шаг
   /// «Open a project» onboarding не даёт открыть второй диалог, D6).
   final VoidCallback? onOpen;
+
+  /// Выделение «Open folder…». Основное по умолчанию; хост делает кнопку
+  /// вторичной, когда основное действие экрана другое — на шаге onboarding с
+  /// восстановленным проектом основная кнопка «Continue in …» (кадр 07d.2,
+  /// tasks.md 3.7 change `add-onboarding-project-step`), и двух основных
+  /// кнопок на экране быть не должно.
+  final CodeLabButtonEmphasis openEmphasis;
 
   final String dropLabel;
   final String dropHint;
@@ -242,7 +250,7 @@ class CodeLabOpenProjectBody extends StatelessWidget {
               key: CodeLabOpenProjectScreen.openKey,
               label: openLabel,
               icon: FluentIcons.open_folder_horizontal,
-              emphasis: CodeLabButtonEmphasis.primary,
+              emphasis: openEmphasis,
               onPressed: onOpen,
             ),
             if (openShortcut case final shortcut?) ...[
