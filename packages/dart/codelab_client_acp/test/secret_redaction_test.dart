@@ -99,4 +99,107 @@ void main() {
       );
     });
   });
+
+  // Пара `{name, value}` (задача 1.1 `[client]` change `redesign-protocol-pane`;
+  // design.md, D4; approval-safety «Секрет в паре name/value»).
+  //
+  // Красные тесты: `HttpHeader` и `EnvVariable` ACP несут секрет не под
+  // ключом, а в значении `value` при секретном `name`; сейчас редактор
+  // смотрит только на ключ `value` и значение остаётся открытым.
+  group('a name/value pair with a secret name', () {
+    Map<String, Object?> pair(String name, String value) => {
+      'name': name,
+      'value': value,
+    };
+
+    for (final name in const [
+      'Authorization',
+      'GITHUB_TOKEN',
+      'OPENAI_API_KEY',
+      'X-Api-Key',
+    ]) {
+      test('$name: value is hidden, name is kept', () {
+        expect(redactor.redact(pair(name, 'ghp_abc123')), {
+          'name': name,
+          'value': redactedSecret,
+        });
+      });
+    }
+
+    test('an ordinary variable stays visible', () {
+      expect(redactor.redact(pair('PATH', '/usr/bin')), {
+        'name': 'PATH',
+        'value': '/usr/bin',
+      });
+    });
+
+    test('a token counter name is not a secret name', () {
+      // Исключение счётчиков токенов то же, что у правила по ключу (D4).
+      expect(redactor.redact(pair('tokens_in', '900')), {
+        'name': 'tokens_in',
+        'value': '900',
+      });
+    });
+
+    test('other fields of the pair object are processed as before', () {
+      expect(
+        redactor.redact({
+          'name': 'Authorization',
+          'value': 'ghp_abc123',
+          'description': 'plain text',
+          'api_key': 'sk-1',
+        }),
+        {
+          'name': 'Authorization',
+          'value': redactedSecret,
+          'description': 'plain text',
+          'api_key': redactedSecret,
+        },
+      );
+    });
+
+    test('nested headers and env arrays of params.mcpServers', () {
+      final redacted = redactor.redactMap({
+        'method': 'session/new',
+        'params': {
+          'cwd': '/workspace',
+          'mcpServers': [
+            {
+              'type': 'http',
+              'name': 'github',
+              'url': 'https://example.test/mcp',
+              'headers': [
+                pair('Authorization', 'Bearer ghp_abc123'),
+                pair('Accept', 'application/json'),
+              ],
+            },
+            {
+              'name': 'local',
+              'command': '/usr/bin/server',
+              'args': ['--stdio'],
+              'env': [
+                pair('GITHUB_TOKEN', 'abc'),
+                pair('OPENAI_API_KEY', 'sk-1'),
+                pair('PATH', '/usr/bin'),
+              ],
+            },
+          ],
+        },
+      });
+
+      final servers = (redacted['params']! as Map)['mcpServers']! as List;
+      final http = servers[0] as Map;
+      final stdio = servers[1] as Map;
+      expect(http['name'], 'github');
+      expect(http['headers'], [
+        {'name': 'Authorization', 'value': redactedSecret},
+        {'name': 'Accept', 'value': 'application/json'},
+      ]);
+      expect(stdio['env'], [
+        {'name': 'GITHUB_TOKEN', 'value': redactedSecret},
+        {'name': 'OPENAI_API_KEY', 'value': redactedSecret},
+        {'name': 'PATH', 'value': '/usr/bin'},
+      ]);
+    });
+  });
 }
