@@ -1,9 +1,38 @@
 # Спецификация проекта CodeLab
 
-Статус: черновик
+Статус: исторический документ (MVP; последняя правка 2026-11-09), не нормативен
 Проект: CodeLab
 Домен: ACP-клиент для взаимодействия с AI agent
 Стек: Dart, Flutter, FVM, Melos, monorepo
+
+> **Исторический документ.** Это исходная спецификация MVP-клиента (change
+> [`define-codelab-mvp`](../openspec/changes/archive/2026-08-29-define-codelab-mvp/proposal.md)).
+> Она хранится как история решений MVP и не обновляется под текущее состояние; текст ниже
+> оставлен без изменений. Источники истины: поведение продукта —
+> [`openspec/specs/`](../openspec/specs/); правила и архитектура —
+> [`AGENTS.md`](../AGENTS.md) и [`docs/architecture/`](architecture/README.md). При
+> расхождении верны они, а не этот документ.
+>
+> Главные расхождения с текущим состоянием:
+>
+> * §8 и §16 требуют explicit approval для write и terminal. Сейчас для ACP-методов `fs/*` и
+>   `terminal/*` клиент своего approval-гейта не вводит, вместо него — containment рабочей
+>   директорией ([`AGENTS.md`](../AGENTS.md) §10).
+> * §1 относит выполнение агента (цикл, инструменты) к внешнему процессу. Сейчас профиль по
+>   умолчанию в app и CLI — встроенный Dart-агент в процессе клиента
+>   ([`openspec/specs/embedded-agent/`](../openspec/specs/embedded-agent/spec.md),
+>   пакет `codelab_embedded`).
+> * §10.1, §15 и §16 называют эталоном Python-агента `pese-git/codelab-agent`. Он заморожен и
+>   вне monorepo (change
+>   [`retire-python-agent`](../openspec/changes/archive/2026-11-10-retire-python-agent/proposal.md));
+>   эталон поведения — спецификация ACP и golden-фикстуры ([`AGENTS.md`](../AGENTS.md) §3.4,
+>   [`openspec/specs/acp-golden-fixtures/`](../openspec/specs/acp-golden-fixtures/spec.md)).
+> * §5 описывает одно приложение и пять пакетов, а также несуществующие `docs/acp/spec.md` и
+>   `docs/adr/`. Текущая структура monorepo и граф пакетов — [`README.md`](../README.md)
+>   «Структура» и [`AGENTS.md`](../AGENTS.md) §5; ADR — в
+>   [`docs/architecture/adr/`](architecture/adr/README.md).
+> * §16 исключает локальное хранение транскрипта. Сейчас Dart-агент ведёт журналы сессий
+>   ([`openspec/specs/agent-sessions/`](../openspec/specs/agent-sessions/spec.md)).
 
 ## 1. Назначение
 
@@ -717,6 +746,9 @@ Permission modes для MVP:
 
 ## 14. Инструменты и команды
 
+> Исторически, не нормативно: действующие команды и проверки — [`AGENTS.md`](../AGENTS.md)
+> §20–§21 и [`docs/architecture/testing.md`](architecture/testing.md).
+
 Все Dart и Flutter commands должны выполняться через FVM. Melos является
 workspace orchestrator.
 
@@ -754,6 +786,9 @@ fvm dart run melos run protocol-conformance
 ```
 
 ## 15. Definition of Done
+
+> Исторически, не нормативно: это критерии готовности MVP. Действующие требования к change —
+> [`AGENTS.md`](../AGENTS.md) §17–§21 и `tasks.md` конкретного change.
 
 Change считается complete, когда:
 

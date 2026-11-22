@@ -1,6 +1,6 @@
 # 17.16. Список задач сессии (менеджер задач)
 
-> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed (OpenSpec change `add-subagents-and-tasks`; решения пользователя 2026-11-10 и 2026-11-12 внесены). Общие соглашения, термины и порядок чтения — в оглавлении.
+> Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Proposed (OpenSpec change `add-subagents-and-tasks`; решения пользователя 2026-11-10 и 2026-11-12 внесены). Реализовано (статус предложения не пересматривался): change архивирован 2026-11-18 ([design.md](../../../../openspec/changes/archive/2026-11-18-add-subagents-and-tasks/design.md)); утверждённое поведение — `openspec/specs/agent-tools/` и `openspec/specs/agent-sessions/`. Общие соглашения, термины и порядок чтения — в оглавлении.
 
 ← [17.15. A2A](17-15-a2a.md) · [Оглавление ядра](../agent-core-architecture.md)
 
