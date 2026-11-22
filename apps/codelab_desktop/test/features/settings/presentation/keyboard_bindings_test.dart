@@ -16,6 +16,11 @@
 //   глобальные сочетания ⌘Y, Alt+Shift+Y и другие, D14);
 // - подсказки шапки и сайдбара берут клавиши из каталога.
 //
+// Панель Protocol (change `redesign-protocol-pane`, D11, задача 5.3):
+// `toggle-protocol` открывает и закрывает панель; `protocol-frame-move` и
+// `protocol-record-move` листают кадры и записи, когда фокус внутри панели и не
+// в поле поиска (привязки в виджете панели app; кит помечает записи `_InApp`).
+//
 // Клавиши берутся из `CodeLabShortcut` (`pressShortcut`). Esc диалогов
 // закрывает их без записи: хранилище профилей, секреты и конфиг агента не
 // меняются.
@@ -34,6 +39,8 @@ import 'package:codelab_desktop/features/settings/application/provider_wizard_cu
 import 'package:codelab_desktop/features/settings/presentation/add_profile_dialog.dart';
 import 'package:codelab_desktop/features/settings/presentation/agents_modes_page.dart';
 import 'package:codelab_desktop/features/settings/presentation/provider_wizard_dialog.dart';
+import 'package:codelab_desktop/features/protocol/application/protocol_pane_cubit.dart';
+import 'package:codelab_desktop/features/protocol/application/protocol_pane_state.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
 import 'package:codelab_desktop/l10n/app_localizations_en.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
@@ -575,6 +582,163 @@ void main() {
 
       expect(_key('agents-modes-bypass-confirm'), findsNothing);
       expect(cubit.calls, ['beginBypass', 'cancelBypass']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Панель Protocol (D11): сочетания каталога в собранном app.
+
+  group('панель Protocol', () {
+    late FakeAcpTransport agent;
+    late CodeLabShellCubit shell;
+    late CodeLabTestBinding binding;
+    final toggle = find.byKey(CodeLabAppBar.toggleKey(ToolPane.protocol));
+    final pane = find.byKey(CodeLabToolDock.paneKey(ToolPane.protocol));
+
+    ProtocolPaneCubit protocol() => binding.scope.resolve<ProtocolPaneCubit>();
+
+    Future<void> settle(WidgetTester tester) async {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+    }
+
+    Future<void> pumpWithSession(WidgetTester tester) async {
+      agent = FakeAcpTransport();
+      binding = CodeLabTestBinding(
+        project: '/workspace',
+        transport: FakeAcpTransport(),
+        stdioTransportFactory: (_) => agent,
+        settingsPages: const SettingsPages(
+          available: {SettingsPage.connection},
+        ),
+      );
+      await tester.pumpWidget(
+        binding.bootstrap(child: const CodeLabApp(startOnLaunch: false)),
+      );
+      await tester.pump();
+      shell = binding.scope.resolve<CodeLabShellCubit>();
+      await tester.runAsync(() => shell.startWith());
+      await tester.pump();
+      agent.drainSentMessages();
+      unawaited(shell.createSession());
+      await settle(tester);
+      final request = agent.sentMessages
+          .whereType<JsonRpcRequest>()
+          .singleWhere((r) => r.method == sessionNewMethod);
+      agent.emitInbound(
+        JsonRpcMessage.response(
+          id: request.id,
+          result: {'sessionId': 'session-1'},
+        ),
+      );
+      await settle(tester);
+    }
+
+    Future<void> tearDownApp(WidgetTester tester) async {
+      await tester.pump(const Duration(seconds: 10));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await closeCodeLabRootScopeInTest();
+    }
+
+    testWidgets('toggle-protocol: первое нажатие открывает панель, второе '
+        'закрывает', (tester) async {
+      await pumpWithSession(tester);
+      expect(pane, findsNothing);
+
+      await pressShortcut(tester, CodeLabShortcut.toggleProtocol);
+      await settle(tester);
+      expect(pane, findsOneWidget);
+      expect(toggle, findsOneWidget);
+
+      await pressShortcut(tester, CodeLabShortcut.toggleProtocol);
+      await settle(tester);
+      expect(pane, findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('toggle-protocol: Ctrl и ⌘ — оба варианта основного '
+        'модификатора', (tester) async {
+      await pumpWithSession(tester);
+
+      await pressShortcut(
+        tester,
+        CodeLabShortcut.toggleProtocol,
+        useMeta: true,
+      );
+      await settle(tester);
+
+      expect(pane, findsOneWidget);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('protocol-frame-move: Alt+→ выбирает следующий кадр, Alt+← — '
+        'предыдущий, на краю выбор не меняется', (tester) async {
+      await pumpWithSession(tester);
+      await pressShortcut(tester, CodeLabShortcut.toggleProtocol);
+      await settle(tester);
+      // Фокус внутри панели: щелчок по первой строке таблицы.
+      await tester.tap(find.text('initialize'));
+      await settle(tester);
+      final first = protocol().state.selectedFrame!;
+
+      await pressShortcut(tester, CodeLabShortcut.protocolFrameMove, combo: 1);
+      await settle(tester);
+      final second = protocol().state.selectedFrame!;
+      expect(second.seq, greaterThan(first.seq));
+
+      await pressShortcut(tester, CodeLabShortcut.protocolFrameMove);
+      await settle(tester);
+      expect(protocol().state.selectedFrame, first);
+
+      // Край списка: выбор остаётся прежним.
+      await pressShortcut(tester, CodeLabShortcut.protocolFrameMove);
+      await settle(tester);
+      expect(protocol().state.selectedFrame, first);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('protocol-frame-move не перехватывается в поле поиска', (
+      tester,
+    ) async {
+      await pumpWithSession(tester);
+      await pressShortcut(tester, CodeLabShortcut.toggleProtocol);
+      await settle(tester);
+      await tester.tap(find.text('initialize'));
+      await settle(tester);
+      final selected = protocol().state.selectedFrame;
+      await tester.tap(find.byKey(const ValueKey('protocol-search')));
+      await tester.pump();
+
+      await pressShortcut(tester, CodeLabShortcut.protocolFrameMove);
+      await pressShortcut(tester, CodeLabShortcut.protocolFrameMove, combo: 1);
+      await settle(tester);
+
+      expect(protocol().state.selectedFrame, selected);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('protocol-record-move: в виде Log без выбора Alt+↓ выбирает '
+        'первую видимую запись, Alt+↑ — предыдущую', (tester) async {
+      await pumpWithSession(tester);
+      await pressShortcut(tester, CodeLabShortcut.toggleProtocol);
+      protocol().openLog();
+      await settle(tester);
+      expect(protocol().state.selectedRecord, isNull);
+      // Фокус внутри панели: щелчок по области таблицы (записей пока нет
+      // в выборе).
+      await tester.tap(find.byKey(const ValueKey('protocol-table')));
+      await tester.pump();
+
+      await pressShortcut(tester, CodeLabShortcut.protocolRecordMove, combo: 1);
+      await settle(tester);
+
+      expect(
+        protocol().state.selectedRecord,
+        protocol().state.visibleRecords.first,
+      );
+      expect(protocol().state.view, ProtocolView.log);
+      await tearDownApp(tester);
     });
   });
 }

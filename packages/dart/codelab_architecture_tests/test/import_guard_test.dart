@@ -1811,6 +1811,57 @@ void main() {
     },
   );
 
+  // Application панели Protocol не знает Flutter, `dart:io` и пакеты
+  // отображения журнала (design.md change `redesign-protocol-pane`, D15;
+  // задача 6.1): область, фильтры, маппер и сборка JSON Lines остаются
+  // чистыми, запись файла — только порт `lib/core/platform/`, а буфер журнала
+  // `LogBuffer` приходит портом `LogRecordSource` из `lib/app/`. Красный тест:
+  // правила в `rules.dart` ещё нет (`singleWhere` не находит элемент), оно
+  // появится вместе с каталогом `lib/features/protocol/application/` в
+  // задаче 4.2, потому что общий цикл выше требует, чтобы каталог правила
+  // существовал.
+  test('reports Flutter, dart:io and the log packages imported by the protocol '
+      'pane application', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_protocol_app_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, 'lib', 'protocol_export.dart'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        "import 'dart:io';\n"
+        "import 'package:flutter/widgets.dart';\n"
+        "import 'package:structured_log_flutter/structured_log_flutter.dart';\n"
+        "import 'package:structured_log_fluent/structured_log_fluent.dart';\n"
+        "import 'package:structured_log/structured_log.dart';\n"
+        "import 'dart:convert';\n",
+      );
+    final rule = rules.singleWhere(
+      (r) => r.dir == 'apps/codelab_desktop/lib/features/protocol/application',
+    );
+
+    final violations = scan(
+      tmp.path,
+      PackageRule('.', forbidden: rule.forbidden),
+    );
+
+    // `package:structured_log/` (уровни `LogLevel`) разрешён: фильтр Log
+    // принимает `LogLevel`, как `LogViewerController`.
+    expect(
+      violations,
+      unorderedEquals([
+        endsWith('lib/protocol_export.dart:1 -> dart:io'),
+        endsWith('lib/protocol_export.dart:2 -> package:flutter/widgets.dart'),
+        endsWith(
+          'lib/protocol_export.dart:3 -> '
+          'package:structured_log_flutter/structured_log_flutter.dart',
+        ),
+        endsWith(
+          'lib/protocol_export.dart:4 -> '
+          'package:structured_log_fluent/structured_log_fluent.dart',
+        ),
+      ]),
+    );
+  });
+
   // Задача 5.5 change `add-app-general-page` (D1): архитектуру процесса даёт
   // `Abi.current()` из `dart:ffi`, и платформенный код app изолирован
   // (AGENTS.md §11): `dart:ffi` в `apps/codelab_desktop/lib` разрешён только
