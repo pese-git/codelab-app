@@ -9,6 +9,7 @@ import 'dart:async';
 
 import 'package:codelab_desktop/core/platform/onboarding_preferences.dart';
 import 'package:codelab_desktop/features/onboarding/application/onboarding_probe.dart';
+import 'package:codelab_desktop/features/onboarding/application/onboarding_project_port.dart';
 import 'package:codelab_setup/codelab_setup.dart';
 
 /// Подпись каталога логов app, которую composition root передаёт экрану
@@ -50,10 +51,29 @@ final class FakeOnboardingProbe implements OnboardingProbe {
   }
 }
 
-/// Порт флага: запись считается; [failure] имитирует сбой записи.
+/// Порт шага «Open a project» без поведения: выбор не принимается, проекта
+/// нет (change `add-onboarding-project-step`, D5). Тесты шага
+/// подменяют ответы своим двойником.
+final class FakeOnboardingProjectPort implements OnboardingProjectPort {
+  @override
+  Future<String?> pickFolder() async => null;
+
+  @override
+  Future<String?> openDropped(List<String?> paths) async => null;
+
+  @override
+  Future<String?> openRecent(String path) async => null;
+
+  @override
+  String? selectedProject;
+}
+
+/// Порт флага: запись считается; [failure] имитирует сбой записи, [gate]
+/// держит запись, пока тест не завершит затвор.
 final class FakeOnboardingPreferences implements OnboardingPreferences {
   var marked = 0;
   Object? failure;
+  Completer<void>? gate;
 
   @override
   Future<OnboardingLoad> load() async => const OnboardingLoad(false);
@@ -61,6 +81,7 @@ final class FakeOnboardingPreferences implements OnboardingPreferences {
   @override
   Future<void> markDone() async {
     marked++;
+    await gate?.future;
     if (failure != null) {
       throw failure!;
     }

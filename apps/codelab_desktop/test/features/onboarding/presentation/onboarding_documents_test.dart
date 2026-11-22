@@ -227,7 +227,7 @@ void main() {
 
     await pressShortcut(tester, CodeLabShortcut.openSettings);
     await pressShortcut(tester, CodeLabShortcut.openSettings, useMeta: true);
-    await tester.tap(_key('onboarding-finish'), warnIfMissed: false);
+    await tester.tap(_key('onboarding-next'), warnIfMissed: false);
     await tester.pumpAndSettle();
 
     expect(_key('onboarding-document'), findsOneWidget);
@@ -238,7 +238,7 @@ void main() {
     );
 
     // Фокус на «Back to setup»: Enter нажимает именно её и закрывает панель, а
-    // «Start using CodeLab» под панелью не срабатывает.
+    // «Next» под панелью не срабатывает.
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
 
@@ -263,7 +263,9 @@ void main() {
     await tester.tap(_key('onboarding-document-back'));
     await tester.pumpAndSettle();
 
-    await tester.tap(_key('onboarding-finish'));
+    await tester.tap(_key('onboarding-next'));
+    await tester.pumpAndSettle();
+    await tester.tap(_key('onboarding-project-skip'));
     await tester.pumpAndSettle();
 
     expect(preferences.marked, 1);
@@ -284,7 +286,7 @@ void main() {
 
       final panel = tester.widget<ColoredBox>(_key('onboarding-document'));
       expect(panel.color.a, 1.0, reason: 'фон панели не прозрачный');
-      expect(_key('onboarding-finish').hitTestable(), findsNothing);
+      expect(_key('onboarding-next').hitTestable(), findsNothing);
       expect(_key('onboarding-privacy-policy').hitTestable(), findsNothing);
     });
 

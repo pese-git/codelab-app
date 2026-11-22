@@ -14,6 +14,7 @@ import 'package:codelab_desktop/app/client_profile_secrets.dart';
 import 'package:codelab_desktop/app/codelab_app_widget.dart';
 import 'package:codelab_desktop/app/connection_environment.dart';
 import 'package:codelab_desktop/app/embedded_logger.dart';
+import 'package:codelab_desktop/core/platform/project_folder_picker.dart';
 import 'package:codelab_desktop/core/platform/theme_file_picker.dart';
 import 'package:codelab_desktop/core/platform/usage_csv_saver.dart';
 import 'package:codelab_desktop/features/workbench/application/shell_cubit.dart';
@@ -232,6 +233,7 @@ void main() {
     ThemeLibrary? themeLibrary,
     ThemeFilePicker? themeFilePicker,
     OnboardingStart? onboarding,
+    ProjectFolderPicker? projectFolderPicker,
   }) => _bootstrap(
     profileSecrets,
     usageCsvSaver,
@@ -239,6 +241,7 @@ void main() {
     themeLibrary,
     themeFilePicker,
     onboarding,
+    projectFolderPicker,
   );
 
   /// Окружение app теста: временный `CODELAB_HOME` и токен WebSocket-агента.
@@ -280,6 +283,7 @@ void main() {
     ThemeLibrary? themeLibrary,
     ThemeFilePicker? themeFilePicker,
     OnboardingStart? onboarding,
+    ProjectFolderPicker? projectFolderPicker,
   ) => CodeLabBootstrap(
     scope: createCodeLabRootScope(
       embeddedOpener: kind == E2eAgentKind.embedded ? _embeddedOpener : null,
@@ -292,6 +296,9 @@ void main() {
       // Onboarding первого запуска (`add-app-onboarding`, задача 4.1): без
       // шва он не показывается.
       onboarding: onboarding,
+      // Шаг «Open a project» onboarding (`add-onboarding-project-step`, 4.1):
+      // системный диалог из теста не закрыть, тест подставляет свой выбор.
+      projectFolderPicker: projectFolderPicker,
     ),
     child: const CodeLabApp(),
   );

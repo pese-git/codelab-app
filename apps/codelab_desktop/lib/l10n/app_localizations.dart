@@ -6157,11 +6157,35 @@ abstract class AppLocalizations {
   /// **'Next'**
   String get onboardingNext;
 
-  /// Последняя кнопка onboarding: записывает флаг и открывает рабочее место. CodeLab — название продукта.
+  /// Заголовок шага 5 onboarding «Open a project» (change add-onboarding-project-step, D1); совпадает с заголовком экрана без проекта.
   ///
   /// In en, this message translates to:
-  /// **'Start using CodeLab'**
-  String get onboardingFinish;
+  /// **'Open a project'**
+  String get onboardingProjectTitle;
+
+  /// Кнопка шага 5 onboarding без проекта: записывает флаг и открывает рабочее место без папки (change add-onboarding-project-step, D2).
+  ///
+  /// In en, this message translates to:
+  /// **'Skip for now'**
+  String get onboardingProjectSkip;
+
+  /// Строка шага 5 onboarding над «Open folder…», когда проект прошлого запуска восстановлен (change add-onboarding-project-step, D3, Q5). Плейсхолдер folder — имя папки, не переводить; полный путь показывается второй строкой.
+  ///
+  /// In en, this message translates to:
+  /// **'Last project: {folder}'**
+  String onboardingProjectLast(String folder);
+
+  /// Основная кнопка шага 5 onboarding при восстановленном проекте: завершает onboarding с этим проектом (change add-onboarding-project-step, D2, D3). Плейсхолдер folder — имя папки, не переводить.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue in {folder}'**
+  String onboardingProjectContinue(String folder);
+
+  /// Заголовок блока недавних проектов на шаге 5 onboarding, до пяти записей (change add-onboarding-project-step, D3, Q2).
+  ///
+  /// In en, this message translates to:
+  /// **'Recent projects'**
+  String get onboardingProjectRecents;
 
   /// Заголовок шага «What CodeLab does».
   ///
@@ -6232,7 +6256,7 @@ abstract class AppLocalizations {
   /// Подсказка под карточками шага 1.
   ///
   /// In en, this message translates to:
-  /// **'Setup takes four short steps. You can change every choice later in Settings.'**
+  /// **'Setup takes five short steps. You can change every choice later in Settings.'**
   String get onboardingWelcomeFootnote;
 
   /// Заголовок шага «Permissions». Метка security.

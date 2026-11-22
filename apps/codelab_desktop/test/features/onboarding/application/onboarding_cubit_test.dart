@@ -15,7 +15,7 @@
 // - `factsTimeout` по умолчанию `kOnboardingFactsTimeout` (5 с, D6); тесты
 //   сокращают его до нуля: пакет `fake_async` в проект не добавляется;
 // - методы: `next()`, `back()`, `setUpLater()`, `providerSaved(Done)`,
-//   `finish()`;
+//   `skip()` (шаг «Open a project», change `add-onboarding-project-step`);
 // - иерархии состояния — `Facts{Loading,Loaded,Unavailable}`,
 //   `Model{Pending,Skipped,Choose,Saved}`.
 
@@ -24,6 +24,7 @@ import 'dart:async';
 import 'package:codelab_desktop/core/platform/onboarding_preferences.dart';
 import 'package:codelab_desktop/features/onboarding/application/onboarding_cubit.dart';
 import 'package:codelab_desktop/features/onboarding/application/onboarding_probe.dart';
+import 'package:codelab_desktop/features/onboarding/application/onboarding_project_port.dart';
 import 'package:codelab_desktop/features/onboarding/application/onboarding_state.dart';
 import 'package:codelab_desktop/features/settings/application/legal_documents.dart'
     show LegalTab;
@@ -73,6 +74,22 @@ final class _FakePreferences implements OnboardingPreferences {
       throw failure!;
     }
   }
+}
+
+/// Порт шага проекта без поведения: эти тесты проверяют остальные шаги, шаг
+/// «Open a project» — в `onboarding_cubit_project_test.dart`.
+final class _NoProjectPort implements OnboardingProjectPort {
+  @override
+  Future<String?> pickFolder() async => null;
+
+  @override
+  Future<String?> openDropped(List<String?> paths) async => null;
+
+  @override
+  Future<String?> openRecent(String path) async => null;
+
+  @override
+  String? get selectedProject => null;
 }
 
 OnboardingFacts _facts(
@@ -139,6 +156,7 @@ void main() {
     final cubit = OnboardingCubit(
       probe: probe,
       preferences: preferences,
+      project: _NoProjectPort(),
       onFinished: () => finished++,
       factsTimeout: factsTimeout,
       logger: logger,
@@ -297,8 +315,8 @@ void main() {
       expect(cubit.state.step, OnboardingStep.permissions);
     });
 
-    test('«Next» на шаге model без сохранённого провайдера и на privacy '
-        'ничего не делает', () async {
+    test('«Next» на шаге model без сохранённого провайдера ничего не делает, '
+        'на privacy ведёт на project (D1)', () async {
       final cubit = build(
         _FakeProbe.value(_facts(const NoProviderConfigured())),
       );
@@ -310,7 +328,7 @@ void main() {
 
       cubit.setUpLater();
       await cubit.next();
-      expect(cubit.state.step, OnboardingStep.privacy);
+      expect(cubit.state.step, OnboardingStep.project);
     });
 
     test('setUpLater вне шага model ничего не меняет', () async {
@@ -683,20 +701,20 @@ void main() {
     });
   });
 
-  group('завершение (D5)', () {
-    Future<OnboardingCubit> atPrivacy() async {
+  group('завершение на шаге проекта (D5, D2 add-onboarding-project-step)', () {
+    Future<OnboardingCubit> atProject() async {
       final cubit = build(
         _FakeProbe.value(_facts(const ProviderReady('llm/m1'))),
       );
       await settle();
-      await walkTo(cubit, OnboardingStep.privacy);
+      await walkTo(cubit, OnboardingStep.project);
       return cubit;
     }
 
-    test('finish: markDone, затем onFinished, события completed', () async {
-      final cubit = await atPrivacy();
+    test('skip: markDone, затем onFinished, события completed', () async {
+      final cubit = await atProject();
 
-      await cubit.finish();
+      await cubit.skip();
 
       expect(preferences.marked, 1);
       expect(finished, 1);
@@ -706,11 +724,11 @@ void main() {
     });
 
     test('двойное нажатие: одна запись и один переход', () async {
-      final cubit = await atPrivacy();
+      final cubit = await atProject();
       preferences.gate = Completer<void>();
 
-      final first = cubit.finish();
-      final second = cubit.finish();
+      final first = cubit.skip();
+      final second = cubit.skip();
       await settle();
       expect(cubit.state.finishing, isTrue);
       expect(finished, 0, reason: 'переход только после записи флага');
@@ -724,10 +742,10 @@ void main() {
     });
 
     test('сбой записи флага не запирает: save_failed и переход', () async {
-      final cubit = await atPrivacy();
+      final cubit = await atProject();
       preferences.failure = StateError('нет места на /Users/x/disk');
 
-      await cubit.finish();
+      await cubit.skip();
 
       expect(finished, 1);
       final warning = events('onboarding.save_failed').single;
@@ -736,13 +754,13 @@ void main() {
       expect(logger.entries.toString(), isNot(contains('/Users/x')));
     });
 
-    test('finish вне шага privacy игнорируется', () async {
+    test('skip вне шага project игнорируется', () async {
       final cubit = build(
         _FakeProbe.value(_facts(const NoProviderConfigured())),
       );
       await settle();
 
-      await cubit.finish();
+      await cubit.skip();
 
       expect(preferences.marked, 0);
       expect(finished, 0);
@@ -756,7 +774,8 @@ void main() {
       await walkTo(saved, OnboardingStep.model);
       saved.providerSaved(_done(secret: 'codelab/llm'));
       await saved.next();
-      await saved.finish();
+      await saved.next();
+      await saved.skip();
       expect(events('onboarding.completed').single['model_step'], 'saved');
 
       logger.entries.clear();
@@ -766,7 +785,8 @@ void main() {
       await settle();
       await walkTo(later, OnboardingStep.model);
       later.setUpLater();
-      await later.finish();
+      await later.next();
+      await later.skip();
       expect(events('onboarding.completed').single['model_step'], 'later');
     });
   });
@@ -781,9 +801,9 @@ void main() {
         _FakeProbe.value(_facts(const ProviderReady('llm/m1'))),
       );
       await settle();
-      await walkTo(cubit, OnboardingStep.privacy);
+      await walkTo(cubit, OnboardingStep.project);
       preferences.gate = Completer<void>();
-      final finishing = cubit.finish();
+      final finishing = cubit.skip();
       await settle();
       expect(preferences.marked, 1);
 
@@ -801,11 +821,11 @@ void main() {
         _FakeProbe.value(_facts(const ProviderReady('llm/m1'))),
       );
       await settle();
-      await walkTo(cubit, OnboardingStep.privacy);
+      await walkTo(cubit, OnboardingStep.project);
       preferences
         ..gate = Completer<void>()
         ..failure = StateError('disk is full');
-      final finishing = cubit.finish();
+      final finishing = cubit.skip();
       await settle();
 
       await cubit.close();
@@ -913,8 +933,8 @@ void main() {
       expect(events('onboarding.document_opened'), hasLength(1));
     });
 
-    test('пока документ открыт: Back, Next, setUpLater, finish и '
-        'wizardStarted игнорируются', () async {
+    test('пока документ открыт: Back, Next, setUpLater и wizardStarted '
+        'игнорируются', () async {
       final cubit = await atPrivacy();
       cubit.openDocument(LegalTab.privacyPolicy);
       final before = cubit.state;
@@ -923,7 +943,6 @@ void main() {
       await cubit.next();
       cubit.setUpLater();
       expect(cubit.wizardStarted(), isFalse);
-      await cubit.finish();
 
       expect(cubit.state, same(before));
       expect(cubit.state.finishing, isFalse);
@@ -932,15 +951,16 @@ void main() {
       expect(events('onboarding.completed'), isEmpty);
     });
 
-    test('после closeDocument навигация и finish снова работают', () async {
+    test('после closeDocument «Next» снова ведёт на project', () async {
       final cubit = await atPrivacy();
       cubit.openDocument(LegalTab.privacyPolicy);
       cubit.closeDocument();
 
-      await cubit.finish();
+      await cubit.next();
 
-      expect(preferences.marked, 1);
-      expect(finished, 1);
+      expect(cubit.state.step, OnboardingStep.project);
+      expect(preferences.marked, 0);
+      expect(finished, 0);
     });
 
     test(
@@ -989,7 +1009,8 @@ void main() {
       _done(key: StoreSecret(SecretValue(_leak)), secret: 'codelab/llm'),
     );
     await cubit.next();
-    await cubit.finish();
+    await cubit.next();
+    await cubit.skip();
 
     const allowed = {
       'onboarding.shown',

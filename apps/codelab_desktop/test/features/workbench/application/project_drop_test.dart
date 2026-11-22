@@ -504,4 +504,136 @@ void main() {
       expect(scene.workspace.current.projectDirectory, isNull);
     });
   });
+
+  // Задача 2.2 change `add-onboarding-project-step` (design.md D5, D6):
+  // шаг onboarding завершается только по принятой папке, поэтому методы
+  // возвращают её путь, а не `void`. Красный до задачи 2.3: методы возвращают
+  // `Future<void>`, `expect(await …, path)` не проходит проверку типов.
+  group('возвращаемый результат выбора', () {
+    test('browseForProject: принятая папка — её путь', () async {
+      final scene = _Scene();
+      await scene.settings.projectRestored;
+
+      final browsing = scene.settings.browseForProject();
+      await pumpEventQueue();
+      scene.picker.complete('/work/picked');
+
+      expect(await browsing, '/work/picked');
+    });
+
+    test('browseForProject: закрытый без выбора диалог — null', () async {
+      final scene = _Scene();
+      await scene.settings.projectRestored;
+
+      final browsing = scene.settings.browseForProject();
+      await pumpEventQueue();
+      scene.picker.complete(null);
+
+      expect(await browsing, isNull);
+      expect(scene.settings.projectDirectory, isNull);
+    });
+
+    test('browseForProject: сбой порта — null', () async {
+      final scene = _Scene();
+      await scene.settings.projectRestored;
+      scene.picker.error = StateError('boom');
+
+      expect(await scene.settings.browseForProject(), isNull);
+    });
+
+    test(
+      'browseForProject: путь из пробелов — null, проект не выбран',
+      () async {
+        final scene = _Scene();
+        await scene.settings.projectRestored;
+
+        final browsing = scene.settings.browseForProject();
+        await pumpEventQueue();
+        scene.picker.complete('   ');
+
+        expect(await browsing, isNull);
+        expect(scene.settings.projectDirectory, isNull);
+      },
+    );
+
+    test('общий _picking: второй вызывающий получает тот же результат, '
+        'диалог один', () async {
+      final scene = _Scene();
+      await scene.settings.projectRestored;
+
+      final first = scene.settings.browseForProject();
+      final second = scene.settings.browseForProject();
+      await pumpEventQueue();
+      scene.picker.complete('/work/picked');
+
+      expect(await first, '/work/picked');
+      expect(await second, '/work/picked');
+      expect(scene.picker.picks, 1);
+    });
+
+    test('openDroppedPaths: принятая папка — её путь', () async {
+      final scene = _Scene();
+      scene.kinds.kinds['/work/app'] = LocalPathKind.directory;
+      await scene.settings.projectRestored;
+
+      expect(await scene.settings.openDroppedPaths(['/work/app']), '/work/app');
+    });
+
+    for (final (name, paths, kinds)
+        in <(String, List<String?>, Map<String, LocalPathKind>)>[
+          ('пустой список', [], {}),
+          (
+            'несколько элементов',
+            ['/work/a', '/work/b'],
+            {'/work/a': LocalPathKind.directory},
+          ),
+          ('файл', ['/work/f'], {'/work/f': LocalPathKind.file}),
+          ('пропавший путь', ['/work/gone'], {}),
+          ('элемент без пути', [null], {}),
+          ('не локальный путь', ['https://example.test/x'], {}),
+          (
+            'другой вид пути',
+            ['/dev/null'],
+            {'/dev/null': LocalPathKind.other},
+          ),
+        ]) {
+      test('openDroppedPaths: $name — null', () async {
+        final scene = _Scene();
+        scene.kinds.kinds.addAll(kinds);
+        await scene.settings.projectRestored;
+
+        expect(await scene.settings.openDroppedPaths(paths), isNull);
+        expect(scene.settings.projectDirectory, isNull);
+      });
+    }
+
+    test('openDroppedPaths: устаревший результат — null', () async {
+      final scene = _Scene();
+      scene.kinds.kinds['/work/dropped'] = LocalPathKind.directory;
+      scene.kinds.gates['/work/dropped'] = Completer<void>();
+      await scene.settings.projectRestored;
+
+      final dropping = scene.settings.openDroppedPaths(['/work/dropped']);
+      await pumpEventQueue();
+      await scene.settings.selectProject('/work/app');
+      scene.kinds.gates['/work/dropped']!.complete();
+
+      expect(await dropping, isNull);
+      expect(scene.settings.projectDirectory, '/work/app');
+    });
+
+    test('openDroppedPaths: закрытый Cubit — null', () async {
+      final scene = _Scene();
+      scene.kinds.kinds['/work/dropped'] = LocalPathKind.directory;
+      scene.kinds.gates['/work/dropped'] = Completer<void>();
+      await scene.settings.projectRestored;
+
+      final dropping = scene.settings.openDroppedPaths(['/work/dropped']);
+      await pumpEventQueue();
+      await scene.settings.close();
+      scene.kinds.gates['/work/dropped']!.complete();
+
+      expect(await dropping, isNull);
+    });
+  });
 }

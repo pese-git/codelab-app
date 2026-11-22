@@ -19,7 +19,7 @@
 // - ключи: `onboarding-screen`, `onboarding-content` (колонка до 920 px),
 //   `onboarding-steps`, `onboarding-title` (на `Focus` с `focusNode`),
 //   `onboarding-step-{welcome,permissions,model,privacy}`, `onboarding-back`,
-//   `onboarding-next`, `onboarding-finish`, `onboarding-preset-<id>`,
+//   `onboarding-next`, `onboarding-preset-<id>`,
 //   `onboarding-model-setup`, `onboarding-model-again`, `onboarding-model-later`,
 //   `onboarding-permissions-mode` (InfoBar режима), `onboarding-model-notice`
 //   (InfoBar пояснения шага), `onboarding-model-wizard-hint`,
@@ -167,6 +167,7 @@ void main() {
     cubit = OnboardingCubit(
       probe: probe,
       preferences: preferences,
+      project: FakeOnboardingProjectPort(),
       onFinished: () => finished++,
     );
     // Повторный `close()` в teardown fake-async зоны не завершается: тест,
@@ -248,11 +249,14 @@ void main() {
       }
       expect(
         find.text(
-          'Setup takes four short steps. You can change every choice later '
+          'Setup takes five short steps. You can change every choice later '
           'in Settings.',
         ),
         findsOneWidget,
       );
+      // Шагов пять — последний «Open a project» (add-onboarding-project-step
+      // D1, сценарий «Сноска называет пять шагов»).
+      expect(find.textContaining('four short steps'), findsNothing);
       // Строка шагов со всеми четырьмя подписями (D12).
       for (final label in [
         'What CodeLab does',
@@ -406,6 +410,7 @@ void main() {
       cubit = OnboardingCubit(
         probe: probe,
         preferences: preferences,
+        project: FakeOnboardingProjectPort(),
         onFinished: () => finished++,
       );
       addTearDown(cubit.close);
@@ -793,9 +798,11 @@ void main() {
       // Согласия по-прежнему нет (D-29).
       expect(find.byType(Checkbox), findsNothing);
       expect(find.byType(ToggleSwitch), findsNothing);
-      expect(_key('onboarding-next'), findsNothing);
-      expect(_key('onboarding-finish'), findsOneWidget);
-      expect(find.text('Start using CodeLab'), findsOneWidget);
+      // Шаг больше не последний: вместо «Start using CodeLab» — «Next»
+      // (change `add-onboarding-project-step`, D1).
+      expect(_key('onboarding-next'), findsOneWidget);
+      expect(_key('onboarding-finish'), findsNothing);
+      expect(find.text('Start using CodeLab'), findsNothing);
     });
 
     testWidgets('ключи из переменных окружения: без слова keychain (D9)', (
@@ -913,18 +920,28 @@ void main() {
       ]);
     });
 
-    testWidgets('«Start using CodeLab» пишет флаг и завершает onboarding', (
+    testWidgets('сноска шага «Welcome» на русском называет пять шагов', (
       tester,
     ) async {
-      await pump(tester, probeOf(const ProviderReady('llm/m1')));
-      await toStep(tester, 'privacy');
+      await pump(
+        tester,
+        probeOf(const ProviderReady('llm/m1')),
+        locale: const Locale('ru'),
+      );
 
-      await tester.tap(_key('onboarding-finish'));
-      await tester.pumpAndSettle();
-
-      expect(preferences.marked, 1);
-      expect(finished, 1);
+      expect(
+        find.text(
+          'Настройка занимает пять коротких шагов. Любой выбор можно '
+          'изменить позже в настройках.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('четыре коротких шага'), findsNothing);
     });
+
+    // Переход «Next» → шаг проекта и «Skip for now» проверяет
+    // `onboarding_project_step_test.dart`: шаг читает состояние рабочего
+    // места, которого у этого экрана на двойниках нет.
   });
 
   group('локализация и доступность (D14)', () {

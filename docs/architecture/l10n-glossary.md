@@ -413,13 +413,14 @@
 |---|---|---|
 | Welcome to CodeLab | Добро пожаловать в CodeLab | шапка экрана |
 | What CodeLab does | Что делает CodeLab | шаг 1 |
+| Setup takes five short steps. You can change every choice later in Settings. | Настройка занимает пять коротких шагов. Любой выбор можно изменить позже в настройках. | сноска шага 1; число шагов — по change `add-onboarding-project-step` (было «four short steps» / «четыре коротких шага»); «шагов» — родительный падеж множественного числа после «пять» |
 | Permissions (шаг onboarding) | Разрешения | шаг 2; как страница «Permissions & tools» не называется |
 | Choose a model | Выбор модели | шаг 3 |
 | Privacy (шаг onboarding) | Приватность | шаг 4 |
 | Set up {preset}… | Настроить {preset}… | `{preset}` — плейсхолдер (§2) |
 | Set up again… | Настроить заново… | |
 | Set up later | Настроить позже | шаг 3 без записи (D8) |
-| Start using CodeLab | Начать работу с CodeLab | последняя кнопка |
+| Start using CodeLab | Начать работу с CodeLab | последняя кнопка до change `add-onboarding-project-step`; на шаге 4 её заменяет «Next» («Далее») |
 | {preset} is connected | {preset} подключён | |
 | Asks each time | Спрашивает каждый раз | `security` |
 | No prompt | Без вопроса | `security` |
@@ -431,6 +432,11 @@
 | Read the privacy policy | Прочитать политику конфиденциальности | ссылка шага 4; открывает документ внутри onboarding (D10) |
 | Terms of use (ссылка шага 4) | Условия использования | совпадает с вкладкой «Legal» (§«Страница «Legal»») |
 | Back to setup | Назад к настройке | кнопка панели документа; не «Back» шага |
+| Open a project (шаг onboarding) | Откройте проект | шаг 5 (change `add-onboarding-project-step`); как заголовок экрана без проекта 11a |
+| Skip for now | Пока пропустить | шаг 5 без проекта: флаг пишется, рабочее место открывается без папки (решение пользователя 2026-11-22, Q1) |
+| Last project: {folder} | Последний проект: {folder} | шаг 5, проект восстановлен; `{folder}` — имя папки, путь — второй строкой без перевода (Q5) |
+| Continue in {folder} | Продолжить в {folder} | шаг 5, основная кнопка при восстановленном проекте; `{folder}` — имя папки |
+| Recent projects (шаг onboarding) | Недавние проекты | шаг 5, до пяти записей (Q2) |
 | MCP servers (шаг 4) | MCP-серверы | строка сети; web-инструментов в сборке нет (D9) |
 | Client information, the tool list request and the headers from your configuration, including tokens, each time a session starts or reconnects; the arguments of every tool call | Сведения о клиенте, запрос списка инструментов и заголовки из вашей конфигурации, включая токены, — при каждом начале и переподключении сессии; аргументы каждого вызова инструмента | `security`; строка «MCP servers» шага 4 по `PRIVACY.md` §2 (D9) |
 | Only what the agent needs for the work you ask for, sent to services you set up or to addresses you choose to open. CodeLab itself collects nothing. The privacy policy lists every request. | Только то, что агенту нужно для вашей работы, — настроенным вами сервисам или по адресам, которые вы сами открываете. CodeLab сам ничего не собирает. Все запросы перечислены в политике конфиденциальности. | `security`; вводная шага 4 (D9) |

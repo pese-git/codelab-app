@@ -85,7 +85,9 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
     StartupPreferences? startupPreferences,
     Logger? appLogger,
     this.projectRestoreTimeout = const Duration(seconds: 2),
-  }) : _workspace = workspace,
+    bool projectStartHeld = false,
+  }) : _projectStartHeld = projectStartHeld,
+       _workspace = workspace,
        _startupPreferences = startupPreferences,
        _appLogger = appLogger,
        _diagnostics = diagnostics,
@@ -155,6 +157,33 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   void bindProjectStart(Future<void> Function(String project)? start) =>
       _onProjectSelected = start;
 
+  /// Удержание триггера выбора проекта, пока показан onboarding.
+  ///
+  /// Почему: агент не должен стартовать под onboarding (D5 `add-app-onboarding`:
+  /// провайдер, сохранённый на шаге модели, должен действовать при первом
+  /// старте), а выбор папки на шаге «Open a project» — единственный триггер,
+  /// достижимый до рабочего места (design.md change
+  /// `add-onboarding-project-step`, D5). Поэтому пока флаг поднят,
+  /// [_selectProject] делает всё, кроме вызова привязанного триггера.
+  ///
+  /// Как использовать: сборка передаёт `projectStartHeld: true`, если
+  /// onboarding показан (`OnboardingStart.show`); снимает удержание
+  /// [releaseProjectStart], которое зовёт `CodeLabShellCubit.startOnLaunch()`.
+  /// При `CodeLabApp(startOnLaunch: false)` `startOnLaunch()` не зовётся и
+  /// удержание не снимается: так бывает только в тестах.
+  bool _projectStartHeld;
+
+  /// Снимает удержание триггера выбора проекта (D5).
+  ///
+  /// Агента сам НЕ стартует: единственный старт после onboarding делает
+  /// `ConnectionCubit.startOnLaunch()` в папке, выбранной на шаге или
+  /// восстановленной из снимка. Повторный вызов и вызов без удержания —
+  /// no-op. Зовёт только `CodeLabShellCubit.startOnLaunch()`; из onboarding
+  /// его звать нельзя, иначе старт агента вернётся внутрь onboarding. Если
+  /// `startOnLaunch` не вызывается (`CodeLabApp(startOnLaunch: false)`, только
+  /// тесты), удержание остаётся.
+  void releaseProjectStart() => _projectStartHeld = false;
+
   final ClientWorkspace _workspace;
   final ShellDiagnostics _diagnostics;
   final ProjectFolderPicker _projectFolderPicker;
@@ -184,7 +213,7 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   /// Незавершённый системный диалог выбора папки; единственный источник
   /// истины «диалог открыт» (D7): повторный запрос ждёт его, а не открывает
   /// второй диалог.
-  Future<void>? _picking;
+  Future<String?>? _picking;
 
   /// Папка для `cwd` сессии и процесса агента: выбранный проект без
   /// пробелов по краям; `null` — проект не выбран (пустая строка — не
@@ -224,36 +253,49 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   /// дожидаясь следующего запуска. Пустой путь и путь из пробелов проектом не
   /// являются и ничего не меняют (D1). Любой выбор проекта снимает отказ
   /// последнего броска (D4).
-  Future<void> selectProject(String path) {
+  ///
+  /// Возвращает принятую папку (без пробелов по краям) или `null` для пустого
+  /// пути и закрытого Cubit: адаптер шага «Open a project» берёт результат
+  /// отсюда (`add-onboarding-project-step`, D5).
+  Future<String?> selectProject(String path) {
     _projectIntent++;
     return _selectProject(path);
   }
 
-  Future<void> _selectProject(String path) async {
+  /// Возвращает принятую папку (без пробелов по краям) или `null` для
+  /// пустого пути (D5 `add-onboarding-project-step`).
+  Future<String?> _selectProject(String path) async {
     final trimmed = path.trim();
     if (trimmed.isEmpty) {
-      return;
+      return null;
     }
 
     emit(state._copyWith(selectedProjectPath: trimmed, dropRejection: null));
     _workspace.selectProject(trimmed);
     _diagnostics.record('Selected project: $trimmed.', source: 'project');
-    // Ошибки старта не теряются: `ConnectionCubit` публикует их состоянием
-    // соединения и диагностикой, наружу старт не бросает.
-    unawaited(_onProjectSelected?.call(trimmed) ?? Future<void>.value());
+    if (_projectStartHeld) {
+      // Onboarding ещё показан: старт агента — только `startOnLaunch` после
+      // перехода на рабочее место (D5). Путь в событие не пишется (D8).
+      _appLogger?.debug('project.start_held');
+    } else {
+      // Ошибки старта не теряются: `ConnectionCubit` публикует их состоянием
+      // соединения и диагностикой, наружу старт не бросает.
+      unawaited(_onProjectSelected?.call(trimmed) ?? Future<void>.value());
+    }
 
     try {
       await _recentProjectsStore.record(trimmed);
-      if (isClosed) return;
+      if (isClosed) return null;
       await _loadRecentProjects();
     } on Object catch (error) {
-      if (isClosed) return;
+      if (isClosed) return null;
       _diagnostics.record(
         'Failed to record recent project: $error',
         severity: DiagnosticSeverity.warning,
         source: 'project',
       );
     }
+    return trimmed;
   }
 
   /// Открывает системный выбор папки; выбранная папка — как [selectProject],
@@ -262,12 +304,18 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   /// Один диалог за раз (D7): пока диалог открыт, повторный вызов (сайдбар,
   /// «New session» без проекта, Cmd/Ctrl+O) возвращает тот же `Future` и порт
   /// второй раз не вызывает.
-  Future<void> browseForProject() {
+  ///
+  /// Возвращает путь принятой папки или `null` (отмена, сбой порта, пустой
+  /// путь, закрытый Cubit); второй вызывающий получает тот же результат.
+  /// Результат нужен шагу «Open a project» onboarding: он завершается только
+  /// по принятой папке (design.md change `add-onboarding-project-step`, D5,
+  /// D6). Прежние вызывающие через `unawaited` его игнорируют.
+  Future<String?> browseForProject() {
     _projectIntent++;
     return _picking ??= _browse().whenComplete(() => _picking = null);
   }
 
-  Future<void> _browse() async {
+  Future<String?> _browse() async {
     final String? path;
     try {
       path = await _projectFolderPicker.pickFolder(
@@ -291,12 +339,12 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
           context: {'error_class': error.runtimeType.toString()},
         );
       }
-      return;
+      return null;
     }
     if (isClosed || path == null) {
-      return;
+      return null;
     }
-    await selectProject(path);
+    return selectProject(path);
   }
 
   /// Принимает пути, брошенные в окно из файлового менеджера ОС (D4).
@@ -308,21 +356,26 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
   /// (вид не проверяется); `null` или пустой путь — `unsupported`; иначе вид
   /// пути из порта. Путь не канонизируется. Устаревший или закрытый Cubit
   /// результат отбрасывает ([_projectIntent], `isClosed`).
-  Future<void> openDroppedPaths(List<String?> paths) async {
+  ///
+  /// Возвращает путь принятой папки или `null` при каждом отказе, пустом
+  /// списке и устаревшем результате: шаг onboarding завершается только по
+  /// принятой папке, а текст отказа читает из [SettingsState.dropRejection]
+  /// (design.md change `add-onboarding-project-step`, D5, D6).
+  Future<String?> openDroppedPaths(List<String?> paths) async {
     if (paths.isEmpty) {
-      return;
+      return null;
     }
     final intent = ++_projectIntent;
     if (paths.length > 1) {
       _reject(DropMultiple(paths.length));
-      return;
+      return null;
     }
     final path = paths.single?.trim();
     if (path == null || path.isEmpty || !isLocalAbsolutePath(path)) {
       // Не локальный абсолютный путь: отказ БЕЗ пути (он может нести
       // userinfo URL), вид не запрашивается.
       _reject(const DropUnsupported(null));
-      return;
+      return null;
     }
     LocalPathKind kind;
     try {
@@ -332,16 +385,17 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
       kind = LocalPathKind.other;
     }
     if (isClosed || intent != _projectIntent) {
-      return;
+      return null;
     }
     switch (kind) {
       case LocalPathKind.directory:
-        await _selectProject(path);
-        if (isClosed) return;
+        final selected = await _selectProject(path);
+        if (isClosed) return null;
         _appLogger?.info(
           'project.drop',
           context: {'outcome': 'opened', 'count': 1},
         );
+        return selected;
       case LocalPathKind.file:
         _reject(DropNotAFolder(path));
       case LocalPathKind.missing:
@@ -349,6 +403,7 @@ final class SettingsCubit extends ShellPartCubit<SettingsState> {
       case LocalPathKind.other:
         _reject(DropUnsupported(path));
     }
+    return null;
   }
 
   /// Снимает отказ последнего броска: перетаскивание вошло на экран (D4).

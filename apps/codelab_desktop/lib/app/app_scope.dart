@@ -107,6 +107,7 @@ import 'build_version.dart';
 import 'embedded_logger.dart';
 import 'onboarding/onboarding_start.dart';
 import 'onboarding_probe.dart';
+import 'onboarding_project_port.dart';
 import '../core/platform/onboarding_preferences.dart';
 import '../features/onboarding/application/onboarding_cubit.dart';
 import '../features/onboarding/application/onboarding_probe.dart';
@@ -654,6 +655,9 @@ final class CodeLabOnboardingModule extends Module {
       () => OnboardingCubit(
         probe: currentScope.resolve<OnboardingProbe>(),
         preferences: ports,
+        project: ShellOnboardingProjectPort(
+          currentScope.resolve<CodeLabShellCubit>(),
+        ),
         onFinished: currentScope.resolve<NavigationCubit>().finishOnboarding,
         logger: logger,
       ),
@@ -1107,6 +1111,10 @@ final class CodeLabPresentationModule extends Module {
             usageLogger: _usageLogger(),
             startupPreferences: currentScope.resolve<StartupPreferences>(),
             appLogger: codeLabAppLogger(),
+            // Пока показан onboarding, выбор проекта не стартует агента:
+            // старт — только `startOnLaunch()` после перехода (change
+            // `add-onboarding-project-step`, D5).
+            projectStartHeld: _onboardingStart?.show == true,
             clock: _clock,
             // Язык интерфейса: Cubit-ы рабочего места с текстом подписаны на
             // порт в конструкторе (`add-desktop-localization`, D5).

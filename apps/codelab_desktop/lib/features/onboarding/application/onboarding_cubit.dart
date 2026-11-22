@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/platform/onboarding_preferences.dart';
 import '../../settings/application/legal_documents.dart' show LegalTab;
 import 'onboarding_probe.dart';
+import 'onboarding_project_port.dart';
 import 'onboarding_state.dart';
 
 /// Таймаут чтения фактов: время шага `stores` сторожа запуска (design.md
@@ -20,23 +21,30 @@ const kOnboardingFactsTimeout = Duration(seconds: 5);
 /// принадлежит application, а не виджетам (AGENTS.md §7, §10).
 ///
 /// Для чего: читает факты один раз при создании с таймаутом (D6), ведёт шаги
-/// по таблице D4, принимает итог мастера провайдера, завершает onboarding:
-/// пишет флаг и зовёт [onFinished] (D5). События — D13, без путей, имён
+/// по таблице D4, принимает итог мастера провайдера, завершает onboarding на
+/// шаге «Open a project»: выбор → флаг → [onFinished] (D2
+/// `add-onboarding-project-step`). События — D13, без путей, имён папок,
 /// секретов, адресов и текстов исключений.
 ///
 /// Как использовать: composition root создаёт один экземпляр на показ
-/// onboarding; [onFinished] — `NavigationCubit.finishOnboarding`. Кнопки
-/// экрана вызывают [next], [back], [setUpLater], [finish]; после диалога
-/// мастера экран передаёт `Done` в [providerSaved]. Cubit закрывает владелец.
+/// onboarding; [onFinished] — `NavigationCubit.finishOnboarding`, [project] —
+/// адаптер рабочего места. Кнопки экрана вызывают [next], [back],
+/// [setUpLater]; на последнем шаге — [openFolder], [openDropped],
+/// [openRecent], [continueWithProject], [skip]; после диалога мастера экран
+/// передаёт `Done` в [providerSaved]. Агента Cubit не стартует и удержание
+/// триггера выбора не снимает: это делает `CodeLabShellCubit.startOnLaunch()`
+/// рабочего места (D5). Cubit закрывает владелец.
 class OnboardingCubit extends Cubit<OnboardingState> {
   OnboardingCubit({
     required OnboardingProbe probe,
     required OnboardingPreferences preferences,
+    required OnboardingProjectPort project,
     required void Function() onFinished,
     Duration factsTimeout = kOnboardingFactsTimeout,
     Logger? logger,
   }) : _probe = probe,
        _preferences = preferences,
+       _project = project,
        _onFinished = onFinished,
        _logger = logger,
        super(const OnboardingState()) {
@@ -46,6 +54,7 @@ class OnboardingCubit extends Cubit<OnboardingState> {
 
   final OnboardingProbe _probe;
   final OnboardingPreferences _preferences;
+  final OnboardingProjectPort _project;
   final void Function() _onFinished;
   final Logger? _logger;
 
@@ -267,13 +276,17 @@ class OnboardingCubit extends Cubit<OnboardingState> {
           _show(OnboardingStep.privacy);
         }
       case OnboardingStep.privacy:
+        _show(OnboardingStep.project);
+      case OnboardingStep.project:
         break;
     }
   }
 
   /// «Back»: на «Privacy» ведёт на «Choose a model», если шаг не пропущен.
   void back() {
-    if (state.document != null || _wizardPhase == ModelWizard.active) {
+    if (state.document != null ||
+        _wizardPhase == ModelWizard.active ||
+        !_projectStepIdle) {
       return;
     }
     switch (state.step) {
@@ -287,6 +300,8 @@ class OnboardingCubit extends Cubit<OnboardingState> {
         _show(
           _modelSkipped ? OnboardingStep.permissions : OnboardingStep.model,
         );
+      case OnboardingStep.project:
+        _show(OnboardingStep.privacy);
     }
   }
 
@@ -353,17 +368,132 @@ class OnboardingCubit extends Cubit<OnboardingState> {
     _logger?.info('onboarding.model_saved');
   }
 
-  /// «Start using CodeLab» (D5): пишет флаг и зовёт `onFinished`.
+  /// Шаг «Open a project» принимает действия: он показан, выбор не идёт и
+  /// завершение не началось (D6). Для остальных шагов — всегда `true`:
+  /// их навигацию эта проверка не меняет.
+  bool get _projectStepIdle =>
+      state.step != OnboardingStep.project ||
+      !state.finishing && state.project == ProjectStepPhase.idle;
+
+  /// Шаг «Open a project» готов принять выбор или исход.
+  bool get _canChooseProject =>
+      !isClosed &&
+      state.step == OnboardingStep.project &&
+      !state.finishing &&
+      state.project == ProjectStepPhase.idle;
+
+  /// «Open folder…» и Cmd/Ctrl+O: системный выбор папки (D2, D6).
   ///
-  /// Сбой записи не запирает пользователя: onboarding покажется при
-  /// следующем запуске. Повторный вызов во время записи игнорируется.
-  Future<void> finish() async {
-    if (state.step != OnboardingStep.privacy ||
-        state.finishing ||
-        state.document != null) {
+  /// Принятая папка завершает onboarding ([ProjectChosen] `picker`); отмена
+  /// диалога и его сбой оставляют шаг на месте без записи флага и пишут
+  /// `onboarding.project_pick_cancelled`. Пока порт не ответил
+  /// ([ProjectStepPhase.choosing]), повторный вызов игнорируется.
+  Future<void> openFolder() async {
+    final path = await _choose(
+      _project.pickFolder,
+      cancelledEvent: 'onboarding.project_pick_cancelled',
+    );
+    if (path != null) {
+      await _complete(const ProjectChosen(ProjectSource.picker));
+    }
+  }
+
+  /// Бросок на экран: решение о путях принимает рабочее место (порт), здесь
+  /// только исход. Принятая папка — [ProjectChosen] `drop`; отказ (`null`)
+  /// оставляет шаг и флаг как есть, текст отказа показывает зона шага.
+  Future<void> openDropped(List<String?> paths) async {
+    final path = await _choose(() => _project.openDropped(paths));
+    if (path != null) {
+      await _complete(const ProjectChosen(ProjectSource.drop));
+    }
+  }
+
+  /// Запись «Recent projects»: выбор недавнего проекта, как в сайдбаре
+  /// (D3). Принятый — [ProjectChosen] `recent`.
+  Future<void> openRecent(String path) async {
+    final chosen = await _choose(() => _project.openRecent(path));
+    if (chosen != null) {
+      await _complete(const ProjectChosen(ProjectSource.recent));
+    }
+  }
+
+  /// `Continue in <name>`: подтверждает восстановленный проект (D3). Без
+  /// выбранного проекта ничего не делает.
+  Future<void> continueWithProject() async {
+    if (!_canChooseProject || _project.selectedProject == null) {
       return;
     }
-    emit(state.copyWith(finishing: true));
+    await _complete(const ProjectRestored());
+  }
+
+  /// «Skip for now»: откладывает выбор (D2). Действует, только пока проекта
+  /// нет; с проектом на шаге вместо него `Continue…`. Это не «запустить без
+  /// проекта»: восстановление идёт как при обычном запуске.
+  Future<void> skip() async {
+    if (!_canChooseProject || _project.selectedProject != null) {
+      return;
+    }
+    await _complete(const ProjectSkipped());
+  }
+
+  /// Выполняет один выбор через порт под защитой фазы [ProjectStepPhase]
+  /// (D6): возвращает путь принятой папки или `null` (отмена, отказ, сбой
+  /// порта, закрытый Cubit). Результат после `close()` отбрасывается — выбор,
+  /// уже применённый рабочим местом, остаётся и предложит `Continue…` при
+  /// следующем запуске.
+  Future<String?> _choose(
+    Future<String?> Function() action, {
+    String? cancelledEvent,
+  }) async {
+    if (!_canChooseProject) {
+      return null;
+    }
+    emit(state.copyWith(project: ProjectStepPhase.choosing));
+    String? path;
+    var portFailed = false;
+    try {
+      path = await action();
+    } on Object catch (error) {
+      // Порт обязан не бросать; сбой адаптера — «выбор не принят», но не
+      // «отмена диалога»: ошибка не теряется. Только тип: в тексте бывают
+      // пути (D8).
+      portFailed = true;
+      if (!isClosed) {
+        _logger?.warning(
+          'onboarding.project_port_failed',
+          context: {'error_type': error.runtimeType.toString()},
+        );
+      }
+    }
+    if (isClosed) {
+      return null;
+    }
+    if (path == null) {
+      emit(state.copyWith(project: ProjectStepPhase.idle));
+      if (cancelledEvent != null && !portFailed) {
+        _logger?.debug(cancelledEvent);
+      }
+      return null;
+    }
+    return path;
+  }
+
+  /// Единственный выход шага (D2): исход — закрытая иерархия
+  /// [OnboardingProjectExit], порядок «флаг → навигация» один для всех
+  /// исходов. Наружу не открыт: вызывающие проходят проверки своих методов
+  /// ([openFolder], [continueWithProject], [skip] и др.), иначе инварианты D2
+  /// можно обойти. Папку не выбирает: принятый выбор уже сделал порт.
+  ///
+  /// Порядок D2: `finishing` → флаг → (при сбое `save_failed`, без остановки)
+  /// → проверка `isClosed` → `onboarding.completed` → `onFinished`.
+  ///
+  /// Сбой записи не запирает пользователя: рабочее место откроется с
+  /// выбранным проектом, onboarding покажется при следующем запуске.
+  Future<void> _complete(OnboardingProjectExit exit) async {
+    if (isClosed || state.finishing) {
+      return;
+    }
+    emit(state.copyWith(finishing: true, project: ProjectStepPhase.idle));
     try {
       await _preferences.markDone();
     } on Object catch (error) {
@@ -387,6 +517,11 @@ class OnboardingCubit extends Cubit<OnboardingState> {
           ModelSkipped() => 'skipped',
           ModelSaved() => 'saved',
           _ => 'later',
+        },
+        'project': switch (exit) {
+          ProjectChosen(:final source) => source.name,
+          ProjectRestored() => 'restored',
+          ProjectSkipped() => 'skipped',
         },
       },
     );
