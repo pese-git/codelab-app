@@ -327,4 +327,211 @@ void main() {
       );
     });
   });
+
+  // Пара `{name, value}` (задача 1.1 `[client]` change `redesign-protocol-pane`;
+  // design.md, D4; approval-safety «Секрет в паре name/value»).
+  //
+  // Красные тесты: `HttpHeader` и `EnvVariable` ACP несут секрет не под
+  // ключом, а в значении `value` при секретном `name`; сейчас редактор
+  // смотрит только на ключ `value` и значение остаётся открытым.
+  group('a name/value pair with a secret name', () {
+    Map<String, Object?> pair(String name, String value) => {
+      'name': name,
+      'value': value,
+    };
+
+    for (final name in const [
+      'Authorization',
+      'GITHUB_TOKEN',
+      'OPENAI_API_KEY',
+      'X-Api-Key',
+    ]) {
+      test('$name: value is hidden, name is kept', () {
+        expect(redactor.redact(pair(name, 'ghp_abc123')), {
+          'name': name,
+          'value': redactedSecret,
+        });
+      });
+    }
+
+    test('an ordinary variable stays visible', () {
+      expect(redactor.redact(pair('PATH', '/usr/bin')), {
+        'name': 'PATH',
+        'value': '/usr/bin',
+      });
+    });
+
+    test('a numeric token counter under a counter name stays visible', () {
+      // Исключение счётчиков то же, что у правила по ключу: только число
+      // (design.md D4); строка под тем же именем скрывается как секрет.
+      expect(redactor.redact({'name': 'tokens_in', 'value': 900}), {
+        'name': 'tokens_in',
+        'value': 900,
+      });
+      expect(redactor.redact(pair('tokens_in', 'sk-abc')), {
+        'name': 'tokens_in',
+        'value': redactedSecret,
+      });
+    });
+
+    test('other fields of the pair object are processed as before', () {
+      expect(
+        redactor.redact({
+          'name': 'Authorization',
+          'value': 'ghp_abc123',
+          'description': 'plain text',
+          'api_key': 'sk-1',
+        }),
+        {
+          'name': 'Authorization',
+          'value': redactedSecret,
+          'description': 'plain text',
+          'api_key': redactedSecret,
+        },
+      );
+    });
+
+    test('nested headers and env arrays of params.mcpServers', () {
+      final redacted = redactor.redactMap({
+        'method': 'session/new',
+        'params': {
+          'cwd': '/workspace',
+          'mcpServers': [
+            {
+              'type': 'http',
+              'name': 'github',
+              'url': 'https://example.test/mcp',
+              'headers': [
+                pair('Authorization', 'Bearer ghp_abc123'),
+                pair('Accept', 'application/json'),
+              ],
+            },
+            {
+              'name': 'local',
+              'command': '/usr/bin/server',
+              'args': ['--stdio'],
+              'env': [
+                pair('GITHUB_TOKEN', 'abc'),
+                pair('OPENAI_API_KEY', 'sk-1'),
+                pair('PATH', '/usr/bin'),
+              ],
+            },
+          ],
+        },
+      });
+
+      final servers = (redacted['params']! as Map)['mcpServers']! as List;
+      final http = servers[0] as Map;
+      final stdio = servers[1] as Map;
+      expect(http['name'], 'github');
+      expect(http['headers'], [
+        {'name': 'Authorization', 'value': redactedSecret},
+        {'name': 'Accept', 'value': 'application/json'},
+      ]);
+      expect(stdio['env'], [
+        {'name': 'GITHUB_TOKEN', 'value': redactedSecret},
+        {'name': 'OPENAI_API_KEY', 'value': redactedSecret},
+        {'name': 'PATH', 'value': '/usr/bin'},
+      ]);
+    });
+  });
+
+  test('a long string without separators is masked in linear time', () {
+    // Регрессия: ведущий `[A-Za-z0-9_.-]*` шаблона присваивания давал
+    // квадратичный перебор, 20 тыс. символов обрабатывались десятки секунд.
+    final text = 'a' * 250000;
+    final watch = Stopwatch()..start();
+    expect(redactor.redactText(text), text);
+    expect(
+      redactor.redactText('${'b' * 100000}token=abc'),
+      '${'b' * 100000}token=$redactedSecret',
+    );
+    expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+  });
+
+  group('repeats of a secret word are masked in bounded time', () {
+    // Ревью change `redesign-protocol-pane`: хвост `[A-Za-z0-9_.-]*` после
+    // секретного слова и ленивый `[\s\S]*?` ключа давали квадратичный
+    // перебор на повторах слова (20 000 символов — около 2 секунд, 250 000 —
+    // минуты). Бюджет с запасом под нагруженный CI: на рабочей машине
+    // линейный шаблон укладывается в десятки миллисекунд, квадратичный
+    // превысил бы бюджет на порядки.
+    const budget = Duration(seconds: 5);
+
+    for (final word in ['token', 'secret', 'password', 'api_key']) {
+      test('$word repeated 50000 times', () {
+        final text = word * 50000;
+        final watch = Stopwatch()..start();
+        final masked = redactor.redactText(text);
+        expect(watch.elapsed, lessThan(budget));
+        expect(masked, isNotEmpty);
+      });
+    }
+
+    test('BEGIN PRIVATE KEY repeated without END', () {
+      final text = '-----BEGIN RSA PRIVATE KEY-----\n' * 20000;
+      final watch = Stopwatch()..start();
+      redactor.redactText(text);
+      expect(watch.elapsed, lessThan(budget));
+    });
+
+    test('previous masking results are unchanged', () {
+      expect(
+        redactor.redactText('api_key=abc123 and token: xyz; password=p1'),
+        'api_key=$redactedSecret and token: $redactedSecret; '
+        'password=$redactedSecret',
+      );
+      expect(
+        redactor.redactText('x_secret_value = abc'),
+        'x_secret_value = $redactedSecret',
+      );
+      expect(
+        redactor.redactText(
+          'a -----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY----- b',
+        ),
+        'a $redactedSecret b',
+      );
+      expect(
+        redactor.redactText('Authorization: Bearer abc.def'),
+        'Authorization: Bearer $redactedSecret',
+      );
+    });
+  });
+
+  group('private key blocks and the name tail bound', () {
+    test('thousands of complete BEGIN..END blocks in bounded time', () {
+      // Ревью change `redesign-protocol-pane`: `substring(begin.end)` на каждом
+      // BEGIN копировал хвост — квадратичная работа на длинном тексте.
+      const block =
+          '-----BEGIN RSA PRIVATE KEY-----\nabcdef\n'
+          '-----END RSA PRIVATE KEY-----\n';
+      final text = block * 3500;
+      expect(text.length, greaterThan(240000));
+      final watch = Stopwatch()..start();
+      final masked = redactor.redactText(text);
+      expect(watch.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(masked, '$redactedSecret\n' * 3500);
+    });
+
+    test('any tail after the secret word is masked', () {
+      // Ограничение хвоста 64 символами (`redesign-protocol-pane` D4) снято:
+      // имя присваивания берётся целиком и проверяется в коде, время линейно
+      // без ограничения (D3 change `extend-secret-name-redaction`).
+      expect(
+        redactor.redactText('token${'x' * 64}=val'),
+        'token${'x' * 64}=$redactedSecret',
+      );
+      expect(
+        redactor.redactText('token${'x' * 65}=val'),
+        'token${'x' * 65}=$redactedSecret',
+      );
+    });
+
+    test('a long prefix does not hide the secret word', () {
+      expect(
+        redactor.redactText('${'x' * 70}token=val'),
+        '${'x' * 70}token=$redactedSecret',
+      );
+    });
+  });
 }

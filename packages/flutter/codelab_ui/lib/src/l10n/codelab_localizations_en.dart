@@ -515,4 +515,23 @@ class CodeLabLocalizationsEn extends CodeLabLocalizations {
   String codeLabSetupStepPosition(int index, int total) {
     return 'Step $index of $total';
   }
+
+  @override
+  String get codeLabProtocolViewFrames => 'Frames';
+
+  @override
+  String get codeLabProtocolViewLog => 'Log';
+
+  @override
+  String get codeLabProtocolSelectFrame => 'Select a frame to see its details.';
+
+  @override
+  String get codeLabProtocolSelectRecord =>
+      'Select a record to see its fields.';
+
+  @override
+  String get codeLabProtocolMasked => '••••••• (masked)';
+
+  @override
+  String get codeLabDockMoreActions => 'More actions';
 }

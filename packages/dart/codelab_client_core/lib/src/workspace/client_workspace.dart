@@ -8,6 +8,7 @@ import '../connection/connection_profile.dart';
 import '../connection/connection_view.dart';
 import '../connection/transport_resolver.dart';
 import '../diagnostics/diagnostics.dart';
+import '../protocol/protocol_frame_log.dart';
 import '../queue/prompt_queue.dart';
 import '../restore/workspace_restorer.dart';
 import '../restore/workspace_snapshot.dart';
@@ -231,6 +232,11 @@ abstract interface class ClientWorkspace {
   /// секретов; доставляется синхронно, после публикации состояния.
   Stream<WorkspaceDiagnostic> get diagnostics;
 
+  /// Буфер кадров ACP соединения: создаётся вместе с рабочим пространством и
+  /// закрывается в [dispose]. Кадры не входят в [WorkspaceState] (design.md
+  /// change `redesign-protocol-pane`, D5).
+  ProtocolFrameLog get protocolFrames;
+
   /// Отписывается от бэкенда и закрывает потоки; бэкенд закрывает его
   /// владелец.
   Future<void> dispose();
@@ -314,6 +320,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     );
     _sessionSubscription = backend.sessionChanges.listen(_handleSession);
     _usageSubscription = backend.usageNotifications.listen(_handleUsage);
+    protocolFrames = ProtocolFrameLog(backend: backend, logger: _logger);
   }
 
   /// Часы kit: момент первого появления вызова `agent` для времени строк
@@ -416,6 +423,28 @@ final class DefaultClientWorkspace implements ClientWorkspace {
   /// (AGENTS.md §9; см. [_isStale]).
   var _attempt = 0;
 
+  /// Номер попытки kit, которая последней передала транспорт бэкенду.
+  ///
+  /// Почему: ядро ведёт попытку на своём поколении и не знает про [_attempt].
+  /// События ядра принадлежат текущей попытке, только если она сама отдала
+  /// транспорт бэкенду (`_backendAttempt == _attempt`); иначе это хвост
+  /// вытесненной попытки, пока новая ещё открывает транспорт или уже упала на
+  /// `open` (`_transition == none`), и [_handleConnectionState] отбрасывает
+  /// любое такое состояние. Начальные значения равны (0): хост, ведущий ядро
+  /// сам без `connect` kit, события не теряет. `dispose` увеличивает
+  /// [_attempt], и события после него отбрасываются.
+  var _backendAttempt = 0;
+
+  /// Последний сбой соединения, объявленный ядром во время явной попытки
+  /// подключения, с поколением ядра на этот момент.
+  ///
+  /// Почему поле: в окне явной попытки [_handleConnectionState] сбой не
+  /// публикует (см. там), а причина (`reason`, `message` ядра) нужна
+  /// [_publishFailure]. Поколение отличает сбой текущей попытки от сбоя
+  /// вытесненной: сбой новой попытки возникает после замены транспорта, то
+  /// есть на поколении выше того, что было при её старте.
+  ({int generation, ConnectionView failure})? _coreFailure;
+
   @override
   WorkspaceState get current => _current;
 
@@ -427,6 +456,9 @@ final class DefaultClientWorkspace implements ClientWorkspace {
 
   @override
   Stream<WorkspaceDiagnostic> get diagnostics => _diagnostics.stream;
+
+  @override
+  late final ProtocolFrameLog protocolFrames;
 
   @override
   Future<void> connect(
@@ -507,6 +539,8 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     );
     _transition = _Transition.connecting;
     final attempt = ++_attempt;
+    final baseGeneration = _backend.generation;
+    _coreFailure = null;
     // Повторный Connect — новый процесс агента, а то и другой агент из
     // диалога подключения: открытые сессии он не знает. Как при Reconnect,
     // они не шлют промпты, пока не перезагружены, а после подключения
@@ -526,6 +560,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
         await _closeSuperseded(transport);
         return;
       }
+      _backendAttempt = attempt;
       final connectionState = await _backend.connect(transport);
       if (_isStale(attempt)) {
         // Транспорт уже у бэкенда: следующая попытка заменит и закроет его.
@@ -541,7 +576,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       for (final handle in _handles.values) {
         handle.resume();
       }
-      _publishFailure(error);
+      _publishFailure(error, baseGeneration);
       _transition = _Transition.none;
       rethrow;
     }
@@ -605,6 +640,8 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     );
     _transition = _Transition.reconnecting;
     final attempt = ++_attempt;
+    final baseGeneration = _backend.generation;
+    _coreFailure = null;
     // Ход, оборванный заменой транспорта, не должен слить очередь в новое
     // соединение раньше, чем сессия загружена в нём.
     for (final handle in _handles.values) {
@@ -624,6 +661,8 @@ final class DefaultClientWorkspace implements ClientWorkspace {
               await _closeSuperseded(transport);
               throw const _SupersededAttempt();
             }
+            // Транспорт уходит бэкенду: дальше события ядра — этой попытки.
+            _backendAttempt = attempt;
             return transport;
           },
         ),
@@ -641,7 +680,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
       for (final handle in _handles.values) {
         handle.resume();
       }
-      _publishFailure(error);
+      _publishFailure(error, baseGeneration);
       _transition = _Transition.none;
       rethrow;
     }
@@ -1159,6 +1198,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     await _connectionSubscription.cancel();
     await _sessionSubscription.cancel();
     await _usageSubscription.cancel();
+    await protocolFrames.dispose();
     for (final handle in _handles.values) {
       await handle.close();
     }
@@ -1198,7 +1238,40 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     return error;
   }
 
+  /// Принимает состояния соединения ядра и публикует их как вид соединения.
+  ///
+  /// Состояние ядра не несёт поколения, поэтому принадлежность определяется
+  /// двумя признаками (§9, спецификация `acp-client-kit`, «Явный автомат
+  /// соединения»):
+  ///  * `_backendAttempt != _attempt` — транспорт текущей попытки бэкенду ещё
+  ///    не передан (идёт `resolver.open` или он упал), любое состояние ядра —
+  ///    хвост вытесненной попытки (`disconnect`/`connect`/`initialize` так же
+  ///    затёрли бы сбой новой попытки, как `ready`/`fail`); оно отбрасывается
+  ///    целиком независимо от [_transition];
+  ///  * `_transition != none` — идёт явная попытка kit, которая уже отдала
+  ///    транспорт: её исход публикует вызывающий (`_connect`/`_reconnect`,
+  ///    [_publishFailure]), `ready`/`fail` не публикуются, а сбой ядра
+  ///    запоминается в [_coreFailure]; промежуточные состояния проходят.
+  /// Ветка «хост ведёт ядро сам» и `ConnectionLost` не затронуты:
+  /// `_backendAttempt == _attempt` и `_transition == none`. Вдобавок ядро не
+  /// делает переходов вытесненной попытке после замены транспорта
+  /// (`AcpClientApplication._establishConnection`).
   void _handleConnectionState(ClientConnectionState connectionState) {
+    if (_backendAttempt != _attempt) {
+      return;
+    }
+    if (_transition != _Transition.none) {
+      if (connectionState is ClientConnectionFailed) {
+        _coreFailure = (
+          generation: _backend.generation,
+          failure: _viewFor(connectionState),
+        );
+      }
+      if (connectionState is ClientConnectionReady ||
+          connectionState is ClientConnectionFailed) {
+        return;
+      }
+    }
     // Возможности агента берутся и из потока состояний: хост может вести
     // `AcpClientApplication` сам (прогон фикстур), без `connect` kit, а
     // объявление `usage` и `usageLedger` нужно операциям kit (D10).
@@ -1420,10 +1493,15 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     };
   }
 
-  /// Ошибка явного подключения: если ядро уже опубликовало сбой, он
-  /// остаётся; иначе (резолвер не открыл транспорт) — сбой запуска.
-  void _publishFailure(Object error) {
-    if (_current.connection is ConnectionFailed) {
+  /// Ошибка явного подключения: если ядро объявило сбой этой попытки
+  /// ([_coreFailure] на поколении выше [baseGeneration]), публикуется он, с
+  /// причиной ядра; иначе (резолвер не открыл транспорт) — сбой запуска с
+  /// сообщением [error]. Сбой вытесненной попытки сюда не попадает: поколение
+  /// её сбоя не выше [baseGeneration].
+  void _publishFailure(Object error, int baseGeneration) {
+    final core = _coreFailure;
+    if (core != null && core.generation > baseGeneration) {
+      _publishConnection(core.failure);
       return;
     }
     _publishConnection(

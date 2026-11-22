@@ -244,6 +244,12 @@ enum CodeLabShortcut {
   toggleFiles(CodeLabShortcutGroup.navigation, [
     CodeLabKeyCombo(LogicalKeyboardKey.keyE, primary: true, shift: true),
   ]),
+
+  /// Показать или скрыть панель Protocol: Cmd/Ctrl+Shift+I (change
+  /// `redesign-protocol-pane`, D11; `dart-agent-and-clients` §12.3, шаг 3).
+  toggleProtocol(CodeLabShortcutGroup.navigation, [
+    CodeLabKeyCombo(LogicalKeyboardKey.keyI, primary: true, shift: true),
+  ]),
   fileTreeMove(CodeLabShortcutGroup.navigation, [
     CodeLabKeyCombo(LogicalKeyboardKey.arrowUp),
     CodeLabKeyCombo(LogicalKeyboardKey.arrowDown),
@@ -257,6 +263,21 @@ enum CodeLabShortcut {
       LogicalKeyboardKey.enter,
       alsoKeys: [LogicalKeyboardKey.numpadEnter],
     ),
+  ]),
+
+  /// Предыдущий или следующий кадр панели Protocol: Alt+←/→ (D11; пара,
+  /// зарезервированная за навигацией инспектора, DSK-18). Порядок
+  /// альтернатив — порядок слов подписи «Previous or next frame». Привязку
+  /// держит виджет панели в app, а не кит.
+  protocolFrameMove(CodeLabShortcutGroup.navigation, [
+    CodeLabKeyCombo(LogicalKeyboardKey.arrowLeft, alt: true),
+    CodeLabKeyCombo(LogicalKeyboardKey.arrowRight, alt: true),
+  ]),
+
+  /// Предыдущая или следующая запись вида Log: Alt+↑/↓ (D11).
+  protocolRecordMove(CodeLabShortcutGroup.navigation, [
+    CodeLabKeyCombo(LogicalKeyboardKey.arrowUp, alt: true),
+    CodeLabKeyCombo(LogicalKeyboardKey.arrowDown, alt: true),
   ]),
   cancelTurn(CodeLabShortcutGroup.transcript, [
     CodeLabKeyCombo(LogicalKeyboardKey.escape),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_acp_transports/codelab_acp_transports.dart';
@@ -14,6 +15,8 @@ import '../domain/state_machines.dart';
 import '../domain/terminal_access.dart';
 import '../infrastructure/structured_log_logger.dart';
 import 'application_models.dart';
+import 'protocol_frame.dart';
+import 'protocol_frame_recorder.dart';
 import 'usage_ledger_reply.dart';
 import 'usage_notification.dart';
 
@@ -100,7 +103,17 @@ final class AcpClientApplication {
     TerminalProcessRunner? terminalProcessRunner,
     Duration requestTimeout = defaultRequestTimeout,
     Logger? logger,
+
+    /// Базовая политика payload кадров и записи `protocol_message` (D3 change
+    /// `redesign-protocol-pane`): `full` только по явному решению хоста
+    /// (debug-сборка, `--verbose`); по умолчанию — безопасная `metadataOnly`.
+    ProtocolPayloadPolicy protocolPayloads = ProtocolPayloadPolicy.metadataOnly,
+
+    /// Часы для `ProtocolFrame.time`; по умолчанию `DateTime.now`.
+    DateTime Function()? clock,
   }) : _transport = transport,
+       _basePayloadPolicy = protocolPayloads,
+       _frameRecorder = ProtocolFrameRecorder(clock: clock ?? DateTime.now),
        _requestTimeout = requestTimeout,
        _reconnectTransport = reconnectTransport,
        _clientInfo = clientInfo,
@@ -224,6 +237,19 @@ final class AcpClientApplication {
   });
   final _sessionController = StreamController<AcpSession>.broadcast(sync: true);
 
+  /// Базовая политика payload (D3): единственный источник решения для
+  /// `protocol_message`; Trace её не меняет (D17).
+  final ProtocolPayloadPolicy _basePayloadPolicy;
+
+  /// Режим Trace кадров (D17): выключен при создании, включается только
+  /// явным [setFrameTrace], никогда автоматически и не сохраняется.
+  var _frameTrace = false;
+  final ProtocolFrameRecorder _frameRecorder;
+
+  /// Поток кадров ACP (D2): `sync: false`, чтобы подписчик не мог войти
+  /// обратно в ядро из обработчика транспорта; закрывается в [dispose].
+  final _frameController = StreamController<ProtocolFrame>.broadcast();
+
   /// Снимки `_codelab/session/usage` (D8, D21 Т2); владелец — ядро клиента,
   /// закрывается в [dispose]. `sync: true`, как у [sessionChanges]: порядок
   /// доставки совпадает с порядком кадров.
@@ -268,14 +294,17 @@ final class AcpClientApplication {
   ClientConnectionState _connectionState =
       const ClientConnectionState.disconnected();
 
-  /// Incremented every time the underlying transport is replaced
-  /// (initial [connect] counts as generation 0, each [reconnect] bumps it).
+  /// Поколение соединения: растёт на единицу при каждой замене транспорта,
+  /// то есть при каждом [connect] и [reconnect] (0 — до первой замены).
   ///
-  /// In-flight operations capture the generation they started with and
-  /// discard their result instead of mutating session state if a reconnect
-  /// happened while they were awaiting a response, so a stale prompt/cancel/
-  /// permission outcome from a superseded transport can never be applied on
-  /// top of the state produced by a newer connection.
+  /// Почему: ответы и события прежнего транспорта не должны менять состояние,
+  /// созданное более новым (AGENTS.md §9).
+  ///
+  /// Для чего: поколение — номер попытки подключения. Долгие операции
+  /// (промпт, отмена, одобрение) запоминают его при старте и после `await`
+  /// отбрасывают результат, если поколение сменилось; попытка подключения
+  /// ([_replaceTransport], [_establishConnection]) так же определяет, что её
+  /// вытеснила более новая.
   var _generation = 0;
 
   int get generation => _generation;
@@ -290,6 +319,45 @@ final class AcpClientApplication {
   /// Кадры прежнего транспорта сюда не попадают — их отбрасывает
   /// `_bindTransport` до маршрутизации.
   Stream<UsageNotification> get usageNotifications => _usageController.stream;
+
+  /// Кадры ACP: по одному на каждое сообщение, отданное транспорту, и на
+  /// каждое входящее сообщение текущего поколения (spec acp-protocol-client
+  /// «Кадры ACP клиента»; design.md change `redesign-protocol-pane`, D2).
+  ///
+  /// Исходящий кадр публикуется до передачи транспорту: кадр — «что клиент
+  /// отдал транспорту». Подписаться нужно до `connect`, поток broadcast.
+  Stream<ProtocolFrame> get protocolFrames => _frameController.stream;
+
+  /// `true`, если базовая политика — `metadataOnly`, и режим Trace возможен
+  /// (D17); при базовой `full` payload и так полные.
+  bool get traceAvailable =>
+      _basePayloadPolicy == ProtocolPayloadPolicy.metadataOnly;
+
+  /// Включает или выключает режим Trace кадров (D17): пока он включён,
+  /// действующая политика кадров — `full`. Запись `protocol_message` не
+  /// меняется — её определяет только базовая политика.
+  ///
+  /// Идемпотентен; при базовой `full` — no-op без события и исключения. Смена
+  /// политики пишется событием `protocol_frames.policy {policy, reason}`.
+  void setFrameTrace(bool enabled) {
+    if (!traceAvailable || _frameTrace == enabled) {
+      return;
+    }
+    _frameTrace = enabled;
+    _logger.info(
+      'protocol_frames.policy',
+      context: {
+        'policy': _framePolicy.name,
+        'reason': enabled ? 'trace_on' : 'trace_off',
+      },
+    );
+  }
+
+  /// Действующая политика кадров: базовая `full` или включённый Trace.
+  ProtocolPayloadPolicy get _framePolicy =>
+      _basePayloadPolicy == ProtocolPayloadPolicy.full || _frameTrace
+      ? ProtocolPayloadPolicy.full
+      : ProtocolPayloadPolicy.metadataOnly;
 
   Stream<DiagnosticEntry> get diagnosticChanges => _diagnosticController.stream;
 
@@ -308,8 +376,11 @@ final class AcpClientApplication {
     AcpTransport transport, {
     Duration? closeTimeout,
   }) async {
-    await _replaceTransport(transport, closeTimeout: closeTimeout);
-    return _establishConnection();
+    final generation = await _replaceTransport(
+      transport,
+      closeTimeout: closeTimeout,
+    );
+    return _establishConnection(generation);
   }
 
   Future<AcpSession> createSession(CreateSessionCommand command) async {
@@ -651,11 +722,14 @@ final class AcpClientApplication {
 
   /// Переподключение на транспорт из фабрики.
   ///
-  /// Параллельные вызовы не сериализуются здесь: это забота вызывающего.
-  /// Kit вытесняет устаревшую попытку номером `_attempt`
-  /// (`ClientWorkspace._reconnect`, `_isStale`), а `open` встроенного агента
-  /// сериализует `EmbeddedTransportResolver` (`_tail`). Откат метки при сбое
-  /// фабрики закрывает основные случаи наложения.
+  /// Параллельные вызовы не сериализуются очередью. Начиная с
+  /// [_replaceTransport] ядро само вытесняет устаревшую попытку поколением:
+  /// она закрывает свой транспорт, не делает переходов автомата соединения и
+  /// завершается `StateTransitionException`. Окно самой фабрики
+  /// `createTransport()` остаётся заботой вызывающего: kit вытесняет попытку
+  /// номером `_attempt` (`ClientWorkspace._reconnect`, `_isStale`), а `open`
+  /// встроенного агента сериализует `EmbeddedTransportResolver` (`_tail`).
+  /// Откат метки при сбое фабрики закрывает основные случаи наложения.
   Future<ClientConnectionState> reconnect(ReconnectCommand command) async {
     final createTransport = command.transportFactory ?? _reconnectTransport;
     if (createTransport == null) {
@@ -698,15 +772,33 @@ final class AcpClientApplication {
       await _closeUnusedTransport(replacement);
       throw const AcpClientApplicationException('ACP application disposed.');
     }
-    await _replaceTransport(replacement, closeTimeout: command.closeTimeout);
+    final generation = await _replaceTransport(
+      replacement,
+      closeTimeout: command.closeTimeout,
+    );
 
-    return _establishConnection();
+    return _establishConnection(generation);
   }
 
-  /// Starts the freshly bound transport and performs the ACP `initialize`
-  /// handshake required before any session operation, per
-  /// `docs/protocols/acp/protocol/02-Initialization.md`.
-  Future<ClientConnectionState> _establishConnection() async {
+  /// Запускает привязанный транспорт и выполняет ACP `initialize`,
+  /// обязательный до любой операции с сессией
+  /// (`docs/protocols/acp/protocol/02-Initialization.md`).
+  ///
+  /// [generation] — поколение, которое вернул [_replaceTransport] этой
+  /// попытке. Почему: повторный `connect()`/`reconnect()` вытесняет попытку в
+  /// любой точке ожидания после [_replaceTransport], а автомат соединения
+  /// общий; без проверки `fail`/`ready` устаревшей попытки попали бы в
+  /// [connectionStateChanges] во время подключения новой, и хост показал бы
+  /// чужой сбой или мигающее «подключено» (требование «Явный автомат
+  /// соединения» спецификации `acp-client-kit`, AGENTS.md §9). Вытесненная
+  /// попытка не делает переходов и завершается `StateTransitionException`
+  /// ([_requireCurrentGeneration]); её транспорт закроет замена новой
+  /// попытки. Исходная ошибка вытесненной попытки пишется в журнал
+  /// ([_requireCurrentAttempt], §16), чтобы причина не терялась.
+  Future<ClientConnectionState> _establishConnection(int generation) async {
+    // Продолжение после `await _replaceTransport` могло выполниться уже после
+    // вытеснения: до первого перехода проверяем поколение.
+    _requireCurrentGeneration(generation);
     if (_connectionState is! ClientConnectionDisconnected) {
       _transitionConnection(const ConnectionStateEvent.disconnect());
     }
@@ -715,6 +807,7 @@ final class AcpClientApplication {
     try {
       await _transport.start();
     } on Object catch (error) {
+      _requireCurrentAttempt(generation, 'start', error);
       _transitionConnection(
         ConnectionStateEvent.fail(
           reason: ConnectionFailureReason.startFailed,
@@ -732,6 +825,7 @@ final class AcpClientApplication {
     if (_disposed) {
       throw const AcpClientApplicationException('ACP application disposed.');
     }
+    _requireCurrentGeneration(generation);
 
     _transitionConnection(const ConnectionStateEvent.initialize());
 
@@ -753,6 +847,10 @@ final class AcpClientApplication {
         ),
       );
     } on Object catch (error) {
+      // Замена транспорта новой попыткой роняет ожидающий `initialize`
+      // ошибкой «transport was replaced»: это не сбой соединения, а
+      // вытеснение, и `fail` в автомат не попадает.
+      _requireCurrentAttempt(generation, 'initialize', error);
       _transitionConnection(
         ConnectionStateEvent.fail(
           reason: ConnectionFailureReason.protocolViolation,
@@ -762,6 +860,9 @@ final class AcpClientApplication {
       );
       rethrow;
     }
+
+    // Ответ мог прийти до вытеснения, а продолжение — после него.
+    _requireCurrentGeneration(generation);
 
     if (response.protocolVersion != supportedProtocolVersion) {
       final failure = UnsupportedProtocolVersionException(
@@ -787,6 +888,29 @@ final class AcpClientApplication {
     );
 
     return _connectionState;
+  }
+
+  /// Как [_requireCurrentGeneration], но для ошибки попытки подключения:
+  /// если попытку вытеснили, исходная [error] пишется в журнал до того, как
+  /// её заменит `StateTransitionException` (§16: причина не теряется).
+  ///
+  /// Ошибка проходит редакцию секретов: сообщения транспортов могут
+  /// содержать командную строку или заголовки.
+  void _requireCurrentAttempt(int generation, String phase, Object error) {
+    if (generation != _generation) {
+      _logger
+          .bind({logComponentKey: clientComponent})
+          .withCorrelation(connectionGeneration: generation)
+          .debug(
+            'attempt_superseded',
+            context: {
+              'phase': phase,
+              'current_generation': _generation,
+              'error': _redactor.redactText('$error'),
+            },
+          );
+    }
+    _requireCurrentGeneration(generation);
   }
 
   void _transitionConnection(ConnectionStateEvent event) {
@@ -858,7 +982,16 @@ final class AcpClientApplication {
         session.id,
   };
 
-  Future<void> _replaceTransport(
+  /// Заменяет транспорт и возвращает поколение этой замены.
+  ///
+  /// Замены не сериализуются очередью, вместо этого каждая запоминает своё
+  /// поколение: вторая замена, начатая, пока первая ждёт закрытия прежнего
+  /// транспорта, делает первую устаревшей. Устаревшая замена закрывает
+  /// свой транспорт, не привязывая его, и бросает `StateTransitionException`;
+  /// иначе она привязала бы транспорт, а победитель перезаписал бы `_transport`
+  /// без отмены подписок и закрытия — процесс агента осиротел бы (§9: у
+  /// подписки один owner, reconnect не плодит подписки).
+  Future<int> _replaceTransport(
     AcpTransport transport, {
     Duration? closeTimeout,
   }) async {
@@ -866,7 +999,7 @@ final class AcpClientApplication {
     // старом транспорте, увидят новое поколение, как только продолжатся,
     // даже если их продолжение запланировано, пока этот метод закрывает
     // старый транспорт (§9, поздние события).
-    _generation++;
+    final generation = ++_generation;
     // Ход, шедший в момент замены, агент отменил вместе с соединением; ход
     // остаётся `running` до `session/load`, который и покажет его
     // отменённым (D2 change `cancel-turn-on-ws-disconnect`).
@@ -885,7 +1018,19 @@ final class AcpClientApplication {
     _failPendingRequests(
       const AcpClientApplicationException('ACP transport was replaced.'),
     );
-    await _transport.close(timeout: closeTimeout);
+    // Ошибка закрытия прежнего транспорта не должна оставить переданный
+    // [transport] без владельца: сначала разбираются ветки «ядро закрыто» и
+    // «попытку вытеснили», потом ошибка пробрасывается. Подписки прежнего
+    // транспорта уже сняты, а ошибка закрытия остаётся ошибкой этой попытки
+    // (как и раньше); транспорт, который не привязан, закрывается всегда.
+    Object? closeError;
+    StackTrace? closeStackTrace;
+    try {
+      await _transport.close(timeout: closeTimeout);
+    } on Object catch (error, stackTrace) {
+      closeError = error;
+      closeStackTrace = stackTrace;
+    }
 
     // [dispose] мог прийти, пока закрывался прежний транспорт: новый не
     // привязывается и не запускается (D12 change
@@ -894,9 +1039,25 @@ final class AcpClientApplication {
       await _closeUnusedTransport(transport);
       throw const AcpClientApplicationException('ACP application disposed.');
     }
+    // Пока закрывался прежний транспорт, пришла более новая замена: этот
+    // транспорт проиграл и никому не принадлежит.
+    if (generation != _generation) {
+      await _closeUnusedTransport(transport);
+      // Ошибка закрытия прежнего транспорта вытесненной попытки не
+      // пробрасывается (её заменяет вытеснение), но в журнал попадает.
+      if (closeError != null) {
+        _requireCurrentAttempt(generation, 'replace', closeError);
+      }
+      _requireCurrentGeneration(generation);
+    }
+    if (closeError != null) {
+      await _closeUnusedTransport(transport);
+      Error.throwWithStackTrace(closeError, closeStackTrace!);
+    }
 
     _transport = transport;
     _bindTransport();
+    return generation;
   }
 
   /// Закрывает транспорт, который так и не был привязан к ядру.
@@ -1003,6 +1164,7 @@ final class AcpClientApplication {
     await _diagnosticController.close();
     await _sessionController.close();
     await _usageController.close();
+    await _frameController.close();
     await _connectionStateController.close();
   }
 
@@ -1119,22 +1281,62 @@ final class AcpClientApplication {
     }
   }
 
-  /// Sends [message] over the transport, tracing its full raw payload to
-  /// the developer-only protocol-trace channel first — a single choke
-  /// point covering every outbound ACP wire message (`design.md`
-  /// Decision 4/6), used in place of `_transport.send(...)` everywhere in
-  /// this class.
+  /// Отправляет [message] транспорту, предварительно записав кадр и запись
+  /// трассы `protocol_message` (design.md change `redesign-protocol-pane`,
+  /// D2): единственная точка для всех исходящих ACP-сообщений, вместо
+  /// `_transport.send(...)` везде в этом классе.
   Future<void> _sendTracedMessage(JsonRpcMessage message) {
-    _traceProtocolMessage('outbound', message);
+    _traceProtocolMessage(ProtocolFrameDirection.outbound, message);
     return _transport.send(message);
   }
 
-  void _traceProtocolMessage(String direction, JsonRpcMessage message) {
+  /// Строит кадр, публикует его и пишет запись `protocol_message`.
+  ///
+  /// Почему вместе: размер и поля кадра считаются один раз для кадра и
+  /// трассы (D2). Запись `protocol_message` несёт `payload` только при
+  /// базовой `full` — Trace её не меняет (D3, D17); при сбое построения
+  /// кадра запись идёт без `size` и без `payload`, а кадр не публикуется.
+  void _traceProtocolMessage(
+    ProtocolFrameDirection direction,
+    JsonRpcMessage message,
+  ) {
+    final recorded = _frameRecorder.record(
+      direction,
+      message,
+      generation: _generation,
+      payloads: _framePolicy,
+    );
+    final frame = recorded.frame;
+    if (frame != null) {
+      if (!_frameController.isClosed) {
+        _frameController.add(frame);
+      }
+    } else {
+      _logger.debug(
+        'protocol_frame.build_failed',
+        context: {
+          'method': ?recorded.method,
+          'error_class': recorded.failure.runtimeType.toString(),
+        },
+      );
+    }
     _protocolTraceLogger
-        .withCorrelation(connectionGeneration: _generation)
+        .withCorrelation(
+          connectionGeneration: _generation,
+          sessionId: recorded.sessionId,
+          requestId: recorded.requestId,
+        )
         .trace(
           'protocol_message',
-          context: {'direction': direction, 'payload': message.toJson()},
+          context: {
+            'direction': direction.name,
+            'kind': recorded.kind.name,
+            'method': ?recorded.method,
+            'size': ?recorded.size,
+            if (frame != null &&
+                _basePayloadPolicy == ProtocolPayloadPolicy.full)
+              'payload': message.toJson(),
+          },
         );
   }
 
@@ -1145,7 +1347,7 @@ final class AcpClientApplication {
         _logStaleEvent('inbound_message', boundGeneration);
         return;
       }
-      _traceProtocolMessage('inbound', message);
+      _traceProtocolMessage(ProtocolFrameDirection.inbound, message);
       _handleInboundMessage(message);
     });
     _eventSubscription = _transport.events.listen((event) {
@@ -1366,7 +1568,7 @@ final class AcpClientApplication {
         context: {
           'method': pending.method,
           'requestId': response.id.toJsonValue(),
-          'result': response.result,
+          ..._rawPayloadContext('result', response.result),
         },
       );
       pending.completeError(
@@ -1448,7 +1650,7 @@ final class AcpClientApplication {
         context: {
           'method': request.method,
           'requestId': request.id.toJsonValue(),
-          'params': request.params,
+          ..._rawPayloadContext('params', request.params),
         },
       );
     }
@@ -2314,7 +2516,10 @@ final class AcpClientApplication {
         severity: DiagnosticSeverity.error,
         source: 'application.protocol',
         cause: error,
-        context: {'method': notification.method, 'params': notification.params},
+        context: {
+          'method': notification.method,
+          ..._rawPayloadContext('params', notification.params),
+        },
       );
     }
   }
@@ -2425,7 +2630,7 @@ final class AcpClientApplication {
           context: {
             'source': 'application.protocol',
             'sessionUpdate': kind,
-            'payload': params,
+            ..._rawPayloadContext('payload', params),
           },
         );
   }
@@ -2543,8 +2748,8 @@ final class AcpClientApplication {
   }
 
   void _sendCancelledPermissionResponse(JsonRpcId requestId) {
-    final response = _transport
-        .send(
+    final response =
+        _sendTracedMessage(
           encodeAcpResponse(
             id: requestId,
             method: sessionRequestPermissionMethod,
@@ -2552,8 +2757,7 @@ final class AcpClientApplication {
               outcome: RequestPermissionOutcome.cancelled(),
             ),
           ),
-        )
-        .catchError((Object error) {
+        ).catchError((Object error) {
           _recordDiagnostic(
             message:
                 'Failed to send cancelled ACP response $sessionRequestPermissionMethod.',
@@ -2568,6 +2772,27 @@ final class AcpClientApplication {
           );
         });
     unawaited(response);
+  }
+
+  /// Сырые данные сообщения для диагностики и журнала по базовой политике.
+  ///
+  /// Почему: диагностика уходит в поток `diagnostics`, в состояние сессий и во
+  /// встроенный журнал, где в release не должно быть ни промптов, ни
+  /// содержимого файлов (решение пользователя к ревью change
+  /// `redesign-protocol-pane`; D3). Trace эти данные не раскрывает — как и
+  /// запись `protocol_message`, решает только базовая политика.
+  ///
+  /// При `full` — `{[key]: raw}` (дальше маскирует `SecretRedactor`), иначе —
+  /// только `size` в байтах UTF-8; если размер посчитать нельзя — пусто.
+  Map<String, Object?> _rawPayloadContext(String key, Object? raw) {
+    if (_basePayloadPolicy == ProtocolPayloadPolicy.full) {
+      return {key: raw};
+    }
+    try {
+      return {'size': utf8.encode(jsonEncode(raw)).length};
+    } on Object {
+      return const {};
+    }
   }
 
   void _recordDiagnostic({
@@ -2587,7 +2812,14 @@ final class AcpClientApplication {
       severity: severity,
       source: source,
       context: _redactor.redactMap(context),
-      cause: cause == null ? null : _redactor.redactText(cause.toString()),
+      // Текст исключения может нести данные агента (путь, значение поля): при
+      // базовой `metadataOnly` пишется только класс ошибки (D3 change
+      // `redesign-protocol-pane`).
+      cause: cause == null
+          ? null
+          : _basePayloadPolicy == ProtocolPayloadPolicy.full
+          ? _redactor.redactText(cause.toString())
+          : cause.runtimeType.toString(),
       createdAt: DateTime.now(),
     );
 

@@ -28,6 +28,7 @@ class CodeLabWorkbenchShortcuts extends StatefulWidget {
     this.onToggleSidebar,
     this.onOpenSettings,
     this.onToggleFiles,
+    this.onToggleProtocol,
     this.onGoToApproval,
     this.onAnswerApproval,
     this.enabled = true,
@@ -66,6 +67,11 @@ class CodeLabWorkbenchShortcuts extends StatefulWidget {
   /// передаёт колбэк, только когда панель доступна; без колбэка сочетание не
   /// привязано (Cmd/Ctrl+` терминала — другое сочетание).
   final VoidCallback? onToggleFiles;
+
+  /// Cmd/Ctrl+Shift+I — показать или скрыть панель Protocol (change
+  /// `redesign-protocol-pane`, D11). Как [onToggleFiles]: без колбэка
+  /// сочетание не привязано; app передаёт переключение панели дока.
+  final VoidCallback? onToggleProtocol;
 
   /// Cmd/Ctrl+Shift+A — перейти к ожидающему одобрению (change
   /// `fix-approval-focus`, D3, D4). Хост передаёт колбэк всегда, а наличие
@@ -149,6 +155,7 @@ class _CodeLabWorkbenchShortcutsState extends State<CodeLabWorkbenchShortcuts> {
     final onToggleSidebar = widget.onToggleSidebar;
     final onOpenSettings = widget.onOpenSettings;
     final onToggleFiles = widget.onToggleFiles;
+    final onToggleProtocol = widget.onToggleProtocol;
     final onGoToApproval = widget.onGoToApproval;
     final onAnswerApproval = widget.onAnswerApproval;
     if (!widget.enabled) {
@@ -169,6 +176,8 @@ class _CodeLabWorkbenchShortcutsState extends State<CodeLabWorkbenchShortcuts> {
         ...CodeLabShortcut.openSettings.bind(onOpenSettings),
       if (onToggleFiles != null)
         ...CodeLabShortcut.toggleFiles.bind(onToggleFiles),
+      if (onToggleProtocol != null)
+        ...CodeLabShortcut.toggleProtocol.bind(onToggleProtocol),
       if (onGoToApproval != null)
         ...CodeLabShortcut.goToApproval.bind(onGoToApproval),
       if (onAnswerApproval != null)

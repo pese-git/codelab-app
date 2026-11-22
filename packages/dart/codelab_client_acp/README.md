@@ -86,7 +86,7 @@ Future<void> run(AcpTransport transport) async {
 
 `myReader`, `myWriter`, `myRunner` — реализации портов; пример не самодостаточен, это порядок вызовов. Ядро принимает транспорт и в конструкторе, и в `connect(transport)`: `connect` заменяет транспорт и запускает `initialize`. Версия протокола — `AcpClientApplication.supportedProtocolVersion`; если агент согласовал другую, `connect` падает с `UnsupportedProtocolVersionException`. Запрос, кроме `session/prompt`, снимается по таймауту (`requestTimeout`, по умолчанию 60 с) с `AcpRequestTimeoutException`: ход длится сколько угодно и прерывается `session/cancel`.
 
-`reconnect(ReconnectCommand)` берёт фабрику транспорта из команды или из конструктора (`reconnectTransport`); без фабрики бросает `StateTransitionException`. `dispose` окончателен и идемпотентен: завершает terminal-процессы и закрывает транспорт.
+`reconnect(ReconnectCommand)` берёт фабрику транспорта из команды или из конструктора (`reconnectTransport`); без фабрики бросает `StateTransitionException`. Порядок параллельных попыток задаёт последняя замена транспорта: транспорт вызова `connect()` или `reconnect()`, вытесненного более новым, закрывается, а сам вызов не меняет состояние соединения и завершается `StateTransitionException` («operation is stale»). Окно до замены — пока фабрика `reconnect` открывает транспорт — сериализует вызывающий; `ClientWorkspace` из `codelab_client_core` делает это сам, и вытесненная попытка завершается у него молча. `dispose` окончателен и идемпотентен: завершает terminal-процессы и закрывает транспорт.
 
 ## Жизненный цикл
 

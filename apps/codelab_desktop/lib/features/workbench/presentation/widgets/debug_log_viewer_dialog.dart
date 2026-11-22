@@ -2,18 +2,21 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:structured_log_flutter/structured_log_flutter.dart';
 import 'package:structured_log_fluent/structured_log_fluent.dart';
 
-/// Full-screen master-detail log viewer, opened from `/logs` (the command
-/// palette) and from the docked [WorkbenchDebugLogPane]'s "Expand" button —
-/// both call [show], so there is exactly one open path
-/// (`replace-debug-log-panel-with-fluent/design.md`, Decision 4).
+/// Полноэкранный просмотр журнала (список записей слева, детали справа).
 ///
-/// Wraps `structured_log_fluent`'s [FluentLogViewerPage] as-is: `showDialog`
-/// pushes a route, so `Navigator.canPop` is true and the page's own
-/// back-button appears without extra chrome here. `showDialog`'s defaults
-/// already satisfy the spec's closing/dimming requirements — `dismissWithEsc:
-/// true` (Esc closes it) and a dark `barrierColor` (dims the workbench
-/// behind it) — and pushing/popping a route never touches
-/// [CodeLabShellState], so the workbench underneath is unchanged on close.
+/// Почему отдельный диалог: вид Log панели Protocol показывает область
+/// сессии в фокусе, а полный буфер без неё нужен для разбора сбоев
+/// (`replace-debug-log-panel-with-fluent/design.md`, решение 4; change
+/// `redesign-protocol-pane`, D8).
+///
+/// Для чего: оборачивает `FluentLogViewerPage` пакета `structured_log_fluent`
+/// как есть. `showDialog` кладёт маршрут, поэтому `Navigator.canPop` истинно и
+/// кнопка «назад» страницы появляется без своей обвязки; Esc закрывает
+/// диалог, барьер затемняет рабочее место, а `CodeLabShellState` при
+/// открытии и закрытии не меняется.
+///
+/// Как использовать: единственный путь открытия — [show] из кнопки `Expand`
+/// вида Log; `/logs` теперь открывает вид Log, а не этот диалог.
 class DebugLogViewerDialog extends StatelessWidget {
   const DebugLogViewerDialog({required this.controller, super.key});
 

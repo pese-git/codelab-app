@@ -56,7 +56,6 @@ final class CodeLabShellState {
     this.shownImages = const {},
     this.linkNote,
     this.turnState,
-    required this.inspectorEntries,
     required this.viewMode,
     required this.isPromptEnabled,
     required this.isPromptSubmitting,
@@ -140,7 +139,6 @@ final class CodeLabShellState {
 
   /// Чип состояния хода в шапке; `null` — сессия свободна.
   final CodeLabTurnState? turnState;
-  final List<CodeLabInspectorEntry> inspectorEntries;
   final bool isPromptSubmitting;
   final bool canCancel;
   final bool isRespondingToApproval;
@@ -270,7 +268,6 @@ final class CodeLabShellState {
     Set<String>? shownImages,
     Object? linkNote = _unset,
     Object? turnState = _unset,
-    List<CodeLabInspectorEntry>? inspectorEntries,
     CodeLabViewMode? viewMode,
     bool? isPromptEnabled,
     bool? isPromptSubmitting,
@@ -336,7 +333,6 @@ final class CodeLabShellState {
       turnState: identical(turnState, _unset)
           ? this.turnState
           : turnState as CodeLabTurnState?,
-      inspectorEntries: inspectorEntries ?? this.inspectorEntries,
       viewMode: viewMode ?? this.viewMode,
       isPromptEnabled: isPromptEnabled ?? this.isPromptEnabled,
       isPromptSubmitting: isPromptSubmitting ?? this.isPromptSubmitting,

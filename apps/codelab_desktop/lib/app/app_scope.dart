@@ -67,13 +67,17 @@ import '../core/platform/external_link_opener.dart';
 import '../core/platform/local_folder_opener.dart';
 import '../core/platform/limited_network_image.dart';
 import '../core/platform/local_path_kind.dart';
+import '../core/platform/build_info.dart';
 import '../core/platform/project_folder_picker.dart';
+import '../core/platform/protocol_export_saver.dart';
 import '../core/platform/usage_csv_saver.dart';
 import '../core/platform/recent_projects_migration.dart';
 import '../core/platform/shared_preferences_workspace_snapshot_store.dart';
 import '../core/platform/startup_preferences.dart';
 import '../core/platform/user_shell_launcher.dart';
 import '../features/project_files/application/project_files_cubit.dart';
+import '../features/protocol/application/log_record_source.dart';
+import '../features/protocol/application/protocol_pane_cubit.dart';
 import '../features/settings/application/add_profile_cubit.dart';
 import '../features/settings/application/connection_settings_cubit.dart';
 import '../features/settings/application/default_profile_resolver.dart';
@@ -105,6 +109,7 @@ import 'default_settings_pages.dart';
 import 'about_ports_factory.dart';
 import 'build_version.dart';
 import 'embedded_logger.dart';
+import 'log_buffer_record_source.dart';
 import 'onboarding/onboarding_start.dart';
 import 'onboarding_probe.dart';
 import 'onboarding_project_port.dart';
@@ -197,6 +202,13 @@ Scope createCodeLabRootScope({
   LocalFolderOpener? localFolderOpener,
   ProjectFolderPicker? projectFolderPicker,
   UsageCsvSaver? usageCsvSaver,
+  // Порт сохранения экспорта панели Protocol (`redesign-protocol-pane`, D10):
+  // шов тестов, без него — диалог `file_selector`.
+  ProtocolExportSaver? protocolExportSaver,
+  // Режим сборки (design.md change `redesign-protocol-pane`, D3): шов тестов,
+  // без него — `kDebugMode`. `true` — ядро клиента хранит payload кадров
+  // (`full`), иначе — только метаданные.
+  bool? debugBuild,
   ProjectFiles? projectFiles,
   bool projectFilesEnabled = true,
   // Часы задержек ответа сочетанием на одобрение (D14): шов тестов, без него
@@ -216,6 +228,10 @@ Scope createCodeLabRootScope({
         // `runApp()`, in `main.dart` — this fallback only covers callers
         // that skip that step (tests constructing the scope directly).
         logDirectoryPath: logDirectoryPath ?? Directory.systemTemp.path,
+      ),
+      CodeLabProtocolModule(
+        debugBuild: debugBuild ?? kDebugMode,
+        exportSaver: protocolExportSaver,
       ),
       CodeLabTransportRuntimeModule(
         transportFactory: transportFactory ?? _createDefaultTransport,
@@ -297,6 +313,43 @@ Future<void> closeCodeLabRootScope() => CherryPick.closeRootScope();
 
 CodeLabDependencies codeLabDependenciesOf(BuildContext context) =>
     CodeLabDependenciesScope.of(context);
+
+/// Политика payload кадров, порт экспорта и источник записей журнала панели
+/// Protocol (design.md change `redesign-protocol-pane`, D3, D7, D10).
+///
+/// Почему отдельный модуль: политику задаёт режим сборки, а решать «хранить
+/// ли промпты и содержимое файлов» должен composition root, а не пакеты
+/// (`observability.md` §27, §48). Для чего: `AcpClientApplication` получает
+/// [ProtocolPayloadPolicy] (`full` в debug-сборке, иначе `metadataOnly`), а
+/// `ProtocolPaneCubit` — ту же политику, порт сохранения и источник записей
+/// над общим `LogBuffer`.
+final class CodeLabProtocolModule extends Module {
+  CodeLabProtocolModule({
+    required bool debugBuild,
+    ProtocolExportSaver? exportSaver,
+  }) : _debugBuild = debugBuild,
+       _exportSaver = exportSaver;
+
+  final bool _debugBuild;
+  final ProtocolExportSaver? _exportSaver;
+
+  @override
+  void builder(Scope currentScope) {
+    bind<ProtocolPayloadPolicy>().toInstance(
+      _debugBuild
+          ? ProtocolPayloadPolicy.full
+          : ProtocolPayloadPolicy.metadataOnly,
+    );
+    bind<ProtocolExportSaver>().toInstance(
+      _exportSaver ?? const FileSelectorProtocolExportSaver(),
+    );
+    bind<LogRecordSource>()
+        .toProvide(
+          () => LogBufferRecordSource(currentScope.resolve<LogBuffer>()),
+        )
+        .singleton();
+  }
+}
 
 final class CodeLabTransportRuntimeModule extends Module {
   CodeLabTransportRuntimeModule({
@@ -1164,6 +1217,27 @@ final class CodeLabPresentationModule extends Module {
           ),
         )
         .singleton();
+    // Панель Protocol: состояние живёт в root scope, чтобы кадры до первого
+    // открытия были видны, а вид, фильтры и выбор переживали закрытие вкладки
+    // (design.md change `redesign-protocol-pane`, D7). Журнал — события
+    // `protocol_pane.*` без путей, payload и значений фильтров (D14).
+    bind<ProtocolPaneCubit>()
+        .toProvide(
+          () => ProtocolPaneCubit(
+            workspace: currentScope.resolve<ClientWorkspace>(),
+            logRecords: currentScope.resolve<LogRecordSource>(),
+            exportSaver: currentScope.resolve<ProtocolExportSaver>(),
+            basePolicy: currentScope.resolve<ProtocolPayloadPolicy>(),
+            appVersion: codelabDesktopVersion,
+            platform: BuildInfo.current().label,
+            clock: _clock ?? DateTime.now,
+            logger: StructuredLogLogger('codelab_desktop.protocol').bind({
+              logCategoryKey: applicationLogCategory,
+              logComponentKey: 'protocol',
+            }),
+          ),
+        )
+        .singleton();
     bind<CodeLabShellCubit>()
         .toProvide(
           () => CodeLabShellCubit(
@@ -1178,6 +1252,9 @@ final class CodeLabPresentationModule extends Module {
             // а не настроек.
             eventLogger: _workbenchLogger(),
             projectFilesBound: _projectFiles != null,
+            // `/logs` открывает вид Log панели Protocol (D8).
+            onShowLogs: () =>
+                currentScope.resolve<ProtocolPaneCubit>().openLog(),
           ),
         )
         .singleton();
@@ -1558,7 +1635,9 @@ abstract class CodeLabProtocolApplicationModuleContract extends Module {
     TextFileReader textFileReader,
     TextFileWriter textFileWriter,
     TerminalProcessRunner terminalProcessRunner,
+    ProtocolPayloadPolicy protocolPayloads,
   ) => AcpClientApplication(
+    protocolPayloads: protocolPayloads,
     transport: transport,
     reconnectTransport: transportFactory,
     textFileReader: textFileReader,
@@ -1584,6 +1663,7 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     TerminalTabsCubit terminalTabsCubit,
     AppLanguageCubit languageCubit,
     AppAppearanceCubit appearanceCubit,
+    ProtocolPaneCubit protocolPaneCubit,
   ) => CodeLabRootLifecycle(
     application: application,
     transport: transport,
@@ -1597,6 +1677,7 @@ abstract class CodeLabRootLifecycleModuleContract extends Module {
     terminalTabsCubit: terminalTabsCubit,
     languageCubit: languageCubit,
     appearanceCubit: appearanceCubit,
+    protocolPaneCubit: protocolPaneCubit,
   );
 }
 
@@ -1647,6 +1728,9 @@ final class CodeLabRootLifecycle implements Disposable {
     // Владелец оформления (D13): `close()` ждёт идущую запись; шаг выхода
     // `appearance` идёт параллельной веткой, как `language`.
     AppAppearanceCubit? appearanceCubit,
+    // Состояние панели Protocol (D7): закрывается вместе с Cubit-ами, до
+    // рабочего пространства — буфер кадров принадлежит ему.
+    ProtocolPaneCubit? protocolPaneCubit,
     Logger? logger,
   }) : _logger = logger ?? codeLabAppLogger(),
        _application = application,
@@ -1659,6 +1743,7 @@ final class CodeLabRootLifecycle implements Disposable {
        _secretMigrationOffer = secretMigrationOffer,
        _navigationCubit = navigationCubit,
        _terminalTabsCubit = terminalTabsCubit,
+       _protocolPaneCubit = protocolPaneCubit,
        _languageCubit = languageCubit,
        _appearanceCubit = appearanceCubit;
 
@@ -1694,6 +1779,9 @@ final class CodeLabRootLifecycle implements Disposable {
   /// (D4, «Выход из app»), затем Cubit закрывается. Порядка относительно
   /// рабочего пространства нет (`add-client-process-shutdown-on-exit`, D2).
   final TerminalTabsCubit _terminalTabsCubit;
+
+  /// Подписчик буфера кадров и фокуса: закрывается шагом `cubits`.
+  final ProtocolPaneCubit? _protocolPaneCubit;
 
   /// Владелец языка интерфейса (D2): закрывается вместе со scope, после чего
   /// запись выбора не применяется.
@@ -1799,6 +1887,7 @@ final class CodeLabRootLifecycle implements Disposable {
     await _step('cubits', () async {
       await _navigationCubit.close();
       await _secretMigrationCubit.close();
+      await _protocolPaneCubit?.close();
       await _shellCubit.close();
     });
     await _step('workspace', _workspace.dispose);
@@ -1864,6 +1953,7 @@ final class CodeLabDependencies {
     required this.secretMigrationCubit,
     required this.navigationCubit,
     required this.terminalTabsCubit,
+    required this.protocolPaneCubit,
     required this.languageCubit,
     required this.appearanceCubit,
     required this.settingsPages,
@@ -1897,6 +1987,9 @@ final class CodeLabDependencies {
 
   /// Вкладки терминала пользователя (`add-integrated-terminal`, D3).
   final TerminalTabsCubit terminalTabsCubit;
+
+  /// Состояние панели Protocol дока (`redesign-protocol-pane`, D7).
+  final ProtocolPaneCubit protocolPaneCubit;
 
   /// Единственный владелец языка интерфейса (D2).
   final AppLanguageCubit languageCubit;
@@ -2076,6 +2169,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     secretMigrationCubit: _scope.resolve<SecretMigrationCubit>(),
     navigationCubit: _scope.resolve<NavigationCubit>(),
     terminalTabsCubit: _scope.resolve<TerminalTabsCubit>(),
+    protocolPaneCubit: _scope.resolve<ProtocolPaneCubit>(),
     languageCubit: _scope.resolve<AppLanguageCubit>(),
     appearanceCubit: _scope.resolve<AppAppearanceCubit>(),
     settingsPages: _scope.resolve<SettingsPages>(),

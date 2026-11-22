@@ -788,66 +788,6 @@ abstract class AppLocalizations {
   /// **'Restart the embedded agent? This interrupts {count, plural, one{{count} running session} other{{count} running sessions}}: {sessions}. Queued prompts stay.'**
   String workbenchRestartMessageEmbedded(int count, String sessions);
 
-  /// Заголовок панели инспектора в панели Protocol. Содержимое инспектора не переводится.
-  ///
-  /// In en, this message translates to:
-  /// **'Inspector'**
-  String get workbenchInspectorTitle;
-
-  /// Тег записи инспектора: одобрение.
-  ///
-  /// In en, this message translates to:
-  /// **'Approval'**
-  String get workbenchInspectorCategoryApproval;
-
-  /// Тег записи инспектора: вызов инструмента.
-  ///
-  /// In en, this message translates to:
-  /// **'Tool'**
-  String get workbenchInspectorCategoryTool;
-
-  /// Тег записи инспектора: протокол.
-  ///
-  /// In en, this message translates to:
-  /// **'Protocol'**
-  String get workbenchInspectorCategoryProtocol;
-
-  /// Тег записи инспектора: диагностика.
-  ///
-  /// In en, this message translates to:
-  /// **'Diagnostic'**
-  String get workbenchInspectorCategoryDiagnostic;
-
-  /// Бейдж риска записи инспектора. Плейсхолдер risk — значение риска из ядра клиента, не переводить.
-  ///
-  /// In en, this message translates to:
-  /// **'Risk {risk}'**
-  String workbenchInspectorRisk(String risk);
-
-  /// Подпись блока исходных параметров записи инспектора.
-  ///
-  /// In en, this message translates to:
-  /// **'Raw input'**
-  String get workbenchInspectorRawInput;
-
-  /// Подпись блока исходного вывода записи инспектора.
-  ///
-  /// In en, this message translates to:
-  /// **'Raw output'**
-  String get workbenchInspectorRawOutput;
-
-  /// Заголовок панели журнала отладки. Содержимое журнала не переводится.
-  ///
-  /// In en, this message translates to:
-  /// **'Debug log'**
-  String get workbenchDebugLogTitle;
-
-  /// Подсказка кнопки, которая открывает журнал отладки на весь экран.
-  ///
-  /// In en, this message translates to:
-  /// **'Expand'**
-  String get workbenchDebugLogExpand;
-
   /// Подпись команды палитры /new.
   ///
   /// In en, this message translates to:
@@ -6670,6 +6610,318 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Back to setup'**
   String get onboardingDocumentBack;
+
+  /// Заголовок колонки подписи метода в таблице кадров панели Protocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Method'**
+  String get protocolColumnMethod;
+
+  /// Заголовок колонки id в таблице кадров; не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Id'**
+  String get protocolColumnId;
+
+  /// Заголовок колонки времени в таблицах панели Protocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Time'**
+  String get protocolColumnTime;
+
+  /// Заголовок колонки уровня в таблице журнала панели Protocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Level'**
+  String get protocolColumnLevel;
+
+  /// Заголовок колонки категории в таблице журнала.
+  ///
+  /// In en, this message translates to:
+  /// **'Category'**
+  String get protocolColumnCategory;
+
+  /// Заголовок колонки события в таблице журнала.
+  ///
+  /// In en, this message translates to:
+  /// **'Event'**
+  String get protocolColumnEvent;
+
+  /// Подсказка сочетаний вида Frames справа от переключателя видов; keys — обозначение сочетания на платформе.
+  ///
+  /// In en, this message translates to:
+  /// **'{keys} previous / next frame'**
+  String protocolHintFrames(String keys);
+
+  /// Подсказка сочетаний вида Log; keys — обозначение сочетания на платформе.
+  ///
+  /// In en, this message translates to:
+  /// **'{keys} previous / next record'**
+  String protocolHintRecords(String keys);
+
+  /// Подвал панели Protocol; shortcut — обозначение Cmd/Ctrl+Shift+I на платформе.
+  ///
+  /// In en, this message translates to:
+  /// **'Panes follow the focused session · {shortcut}'**
+  String protocolFooter(String shortcut);
+
+  /// Подсказка поля поиска вида Frames.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by method, id or text'**
+  String get protocolSearchFramesHint;
+
+  /// Подсказка поля поиска вида Log.
+  ///
+  /// In en, this message translates to:
+  /// **'Search events and fields'**
+  String get protocolSearchLogHint;
+
+  /// Переключатель фильтра Frames: запросы и ответы на них.
+  ///
+  /// In en, this message translates to:
+  /// **'Requests'**
+  String get protocolFilterRequests;
+
+  /// Переключатель фильтра Frames: уведомления.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get protocolFilterNotifications;
+
+  /// Переключатель фильтра Frames: только ошибки.
+  ///
+  /// In en, this message translates to:
+  /// **'Errors only'**
+  String get protocolFilterErrorsOnly;
+
+  /// Пункт выбора категории вида Log: без фильтра.
+  ///
+  /// In en, this message translates to:
+  /// **'All categories'**
+  String get protocolAllCategories;
+
+  /// Пункт выбора минимального уровня вида Log: без фильтра.
+  ///
+  /// In en, this message translates to:
+  /// **'All levels'**
+  String get protocolAllLevels;
+
+  /// Подсказка кнопки вида Log, которая открывает полноэкранный просмотр журнала.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand'**
+  String get protocolExpand;
+
+  /// Таблица кадров пуста: в области панели ещё нет кадров.
+  ///
+  /// In en, this message translates to:
+  /// **'No frames yet.'**
+  String get protocolEmptyFrames;
+
+  /// Фильтры скрыли все кадры области.
+  ///
+  /// In en, this message translates to:
+  /// **'No frames match the filters.'**
+  String get protocolNoFramesMatch;
+
+  /// Таблица журнала пуста: в области панели ещё нет записей.
+  ///
+  /// In en, this message translates to:
+  /// **'No records yet.'**
+  String get protocolEmptyRecords;
+
+  /// Фильтры скрыли все записи области.
+  ///
+  /// In en, this message translates to:
+  /// **'No records match the filters.'**
+  String get protocolNoRecordsMatch;
+
+  /// Заметка над таблицей кадров, когда сессии в фокусе нет.
+  ///
+  /// In en, this message translates to:
+  /// **'No session in focus. Showing connection frames only.'**
+  String get protocolNoFocusFrames;
+
+  /// Заметка над таблицей журнала, когда сессии в фокусе нет.
+  ///
+  /// In en, this message translates to:
+  /// **'No session in focus. Showing connection records only.'**
+  String get protocolNoFocusRecords;
+
+  /// Тег элемента соединения без сессии в таблицах панели Protocol.
+  ///
+  /// In en, this message translates to:
+  /// **'connection'**
+  String get protocolConnectionTag;
+
+  /// Переключатель режима Trace (полные данные кадров) в release-сборке.
+  ///
+  /// In en, this message translates to:
+  /// **'Trace'**
+  String get protocolTrace;
+
+  /// Кнопка шапки дока: заморозить таблицу активного вида.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get protocolPause;
+
+  /// Кнопка шапки дока, пока вид на паузе.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get protocolResume;
+
+  /// Кнопка шапки дока: очистить буфер активного вида.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get protocolClear;
+
+  /// Кнопка шапки дока: сохранить видимое в файл JSON Lines.
+  ///
+  /// In en, this message translates to:
+  /// **'Export…'**
+  String get protocolExport;
+
+  /// Заметка панели Protocol: запись файла экспорта не удалась.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the file.'**
+  String get protocolSaveFailed;
+
+  /// Заголовок подтверждения экспорта кадров с payload. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Export full payloads?'**
+  String get protocolExportConfirmTitle;
+
+  /// Текст подтверждения экспорта. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'The file will contain prompts, file contents and tool output from these frames. Secrets are masked.'**
+  String get protocolExportConfirmBody;
+
+  /// Кнопка подтверждения экспорта.
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get protocolExportConfirmAction;
+
+  /// InfoBar выбранного кадра в debug-сборке. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Debug build: full payloads.'**
+  String get protocolInfoDebugTitle;
+
+  /// Текст InfoBar debug-сборки. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Release builds keep metadata only. Secrets are masked before a frame is stored.'**
+  String get protocolInfoDebugMessage;
+
+  /// InfoBar выбранного кадра в release-сборке без Trace. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Release build: metadata only.'**
+  String get protocolInfoReleaseTitle;
+
+  /// Текст InfoBar release-сборки. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Payloads are not stored. Secrets are masked before a frame is stored.'**
+  String get protocolInfoReleaseMessage;
+
+  /// InfoBar выбранного кадра при включённом Trace. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Trace on: full payloads.'**
+  String get protocolInfoTraceTitle;
+
+  /// Текст InfoBar режима Trace. Метка security (D14): перевод не смягчает смысл.
+  ///
+  /// In en, this message translates to:
+  /// **'Prompts, file contents and tool output are kept in memory until Trace is turned off. Secrets are masked.'**
+  String get protocolInfoTraceMessage;
+
+  /// InfoBar выбранной записи журнала.
+  ///
+  /// In en, this message translates to:
+  /// **'Same buffer as /logs and Expand.'**
+  String get protocolInfoLogTitle;
+
+  /// Текст InfoBar записи журнала; protocol_message — имя события, не переводится.
+  ///
+  /// In en, this message translates to:
+  /// **'Secrets are masked before a record is stored; protocol_message records carry the full frame only in debug builds.'**
+  String get protocolInfoLogMessage;
+
+  /// Строка панели выбранного кадра, записанного до включения Trace.
+  ///
+  /// In en, this message translates to:
+  /// **'Recorded before Trace was turned on: metadata only.'**
+  String get protocolNoteBeforeTrace;
+
+  /// Строка панели выбранного кадра, чей payload не сохранён из-за размера.
+  ///
+  /// In en, this message translates to:
+  /// **'The payload is larger than 256 KB and was not stored.'**
+  String get protocolNoteTooLarge;
+
+  /// Тег направления исходящего кадра.
+  ///
+  /// In en, this message translates to:
+  /// **'client → agent'**
+  String get protocolDirectionOut;
+
+  /// Тег направления входящего кадра.
+  ///
+  /// In en, this message translates to:
+  /// **'agent → client'**
+  String get protocolDirectionIn;
+
+  /// Ссылка поля request_id записи журнала: перейти к кадру в виде Frames.
+  ///
+  /// In en, this message translates to:
+  /// **'Show frame in Frames'**
+  String get protocolShowFrame;
+
+  /// Подсказка недоступной ссылки «Показать кадр».
+  ///
+  /// In en, this message translates to:
+  /// **'The frame is no longer in the buffer.'**
+  String get protocolFrameGone;
+
+  /// Действие сочетания Cmd/Ctrl+Shift+I.
+  ///
+  /// In en, this message translates to:
+  /// **'Show or hide the Protocol pane'**
+  String get settingsKeyboardActionToggleProtocol;
+
+  /// Действие сочетания Alt+←/→ панели Protocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous or next frame'**
+  String get settingsKeyboardActionProtocolFrameMove;
+
+  /// Действие сочетания Alt+↑/↓ панели Protocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous or next log record'**
+  String get settingsKeyboardActionProtocolRecordMove;
+
+  /// Колонка «Где»: вид Frames панели Protocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol pane, Frames view'**
+  String get settingsKeyboardWhereProtocolFrames;
+
+  /// Колонка «Где»: вид Log панели Protocol.
+  ///
+  /// In en, this message translates to:
+  /// **'Protocol pane, Log view'**
+  String get settingsKeyboardWhereProtocolLog;
 }
 
 class _AppLocalizationsDelegate

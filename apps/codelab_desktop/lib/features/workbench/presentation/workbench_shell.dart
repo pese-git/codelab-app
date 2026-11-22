@@ -4,8 +4,6 @@ import 'package:codelab_ui/codelab_ui.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:structured_log_flutter/structured_log_flutter.dart'
-    show LogBuffer;
 
 import '../../../app/app_scope.dart';
 import '../../../app/navigation/navigation_cubit.dart';
@@ -13,6 +11,9 @@ import '../../../app/navigation/settings_page.dart';
 import 'workbench_focus.dart';
 import '../../../l10n/l10n.dart';
 import '../../project_files/presentation/project_files_pane.dart';
+import '../../protocol/application/protocol_pane_cubit.dart';
+import '../../protocol/application/protocol_pane_state.dart';
+import '../../protocol/presentation/protocol_pane.dart';
 import '../../terminal/application/terminal_tabs_cubit.dart';
 import '../../terminal/presentation/terminal_pane.dart';
 import '../../usage/presentation/workbench_usage_pane.dart';
@@ -20,9 +21,6 @@ import '../application/sessions_cubit.dart' show PendingRootSession;
 import '../application/shell_cubit.dart';
 import '../application/ui_mappers.dart'
     show connectionTooltipOf, sidebarProjectsOf;
-import 'widgets/debug_log_pane.dart';
-import 'widgets/debug_log_viewer_dialog.dart';
-import 'widgets/inspector_pane.dart';
 import 'widgets/main_pane.dart';
 import 'widgets/secret_migration_banner.dart';
 import 'widgets/workbench_agents_pane.dart';
@@ -69,7 +67,6 @@ class CodeLabShell extends StatelessWidget {
     return BlocBuilder<CodeLabShellCubit, CodeLabShellState>(
       builder: (context, state) {
         final cubit = context.read<CodeLabShellCubit>();
-        final logBuffer = codeLabDependenciesOf(context).logBuffer;
         final terminals = context.read<TerminalTabsCubit>();
         final layoutClass = CodeLabLayoutClass.ofContext(context);
         final availablePanes = _availablePanesOf(
@@ -86,6 +83,22 @@ class CodeLabShell extends StatelessWidget {
         final dockVisible =
             openPanes.isNotEmpty &&
             (layoutClass.dockAsColumn || state.dockOverlayOpen);
+
+        // Панель закрывается, только если она видна и активна; иначе действие
+        // её открывает (`togglePane`). Один обработчик на app bar и на
+        // Cmd/Ctrl+Shift+I.
+        void togglePane(ToolPane pane) {
+          final opens =
+              !(dockVisible &&
+                  state.activePane == pane &&
+                  openPanes.contains(pane));
+          dockVisible ? cubit.togglePane(pane) : cubit.openPane(pane);
+          // Открытие действием пользователя создаёт первую вкладку;
+          // восстановленный док её не создаёт (D1).
+          if (opens && pane == ToolPane.terminal) {
+            unawaited(terminals.ensureTab());
+          }
+        }
 
         return CodeLabWorkbenchShortcuts(
           onOpenCommandPalette: cubit.openCommandPalette,
@@ -128,6 +141,8 @@ class CodeLabShell extends StatelessWidget {
           onToggleFiles: state.projectFilesAvailable
               ? () => cubit.togglePane(ToolPane.files)
               : null,
+          // Cmd/Ctrl+Shift+I — тот же переключатель, что у app bar (D11).
+          onToggleProtocol: () => togglePane(ToolPane.protocol),
           onToggleSidebar: layoutClass.sidebarAsColumn
               ? cubit.toggleSidebarCollapsed
               : cubit.toggleSidebarOverlay,
@@ -164,22 +179,7 @@ class CodeLabShell extends StatelessWidget {
                               openPanes.contains(pane),
                         ),
                     ],
-                    onPaneToggled: (pane) {
-                      // Панель закрывается, только если она видна и активна;
-                      // иначе действие её открывает (`togglePane`).
-                      final opens =
-                          !(dockVisible &&
-                              state.activePane == pane &&
-                              openPanes.contains(pane));
-                      dockVisible
-                          ? cubit.togglePane(pane)
-                          : cubit.openPane(pane);
-                      // Открытие действием пользователя создаёт первую
-                      // вкладку; восстановленный док её не создаёт (D1).
-                      if (opens && pane == ToolPane.terminal) {
-                        unawaited(terminals.ensureTab());
-                      }
-                    },
+                    onPaneToggled: togglePane,
                     // Проекта нет и агент не запущен: бейдж говорит об этом, а не
                     // о статусе соединения (D8 `add-empty-project-screen`).
                     connectionLabel: state.awaitingProject
@@ -238,32 +238,44 @@ class CodeLabShell extends StatelessWidget {
                   ),
                   dock: openPanes.isEmpty
                       ? null
-                      : CodeLabToolDock(
-                          active: state.activePane ?? openPanes.last,
-                          onSelected: cubit.selectPane,
-                          onClosed: cubit.closePane,
-                          tabs: [
-                            for (final pane in openPanes)
-                              CodeLabDockTab(
-                                pane: pane,
-                                content: switch (pane) {
-                                  ToolPane.files => const ProjectFilesPane(),
-                                  ToolPane.agents =>
-                                    const WorkbenchAgentsPane(),
-                                  ToolPane.usage => const WorkbenchUsagePane(),
-                                  ToolPane.plan =>
-                                    CodeLabProgressChecklist.list(
-                                      entries: state.currentPlan ?? const [],
-                                    ),
-                                  ToolPane.terminal =>
-                                    const WorkbenchTerminalPane(),
-                                  _ => _ProtocolPane(
-                                    state: state,
-                                    logBuffer: logBuffer,
-                                  ),
-                                },
-                              ),
-                          ],
+                      : BlocBuilder<ProtocolPaneCubit, ProtocolPaneState>(
+                          buildWhen: protocolActionsChanged,
+                          builder: (context, protocol) => CodeLabToolDock(
+                            active: state.activePane ?? openPanes.last,
+                            onSelected: cubit.selectPane,
+                            onClosed: cubit.closePane,
+                            tabs: [
+                              for (final pane in openPanes)
+                                CodeLabDockTab(
+                                  pane: pane,
+                                  content: switch (pane) {
+                                    ToolPane.files => const ProjectFilesPane(),
+                                    ToolPane.agents =>
+                                      const WorkbenchAgentsPane(),
+                                    ToolPane.usage =>
+                                      const WorkbenchUsagePane(),
+                                    ToolPane.plan =>
+                                      CodeLabProgressChecklist.list(
+                                        entries: state.currentPlan ?? const [],
+                                      ),
+                                    ToolPane.terminal =>
+                                      const WorkbenchTerminalPane(),
+                                    ToolPane.protocol =>
+                                      const WorkbenchProtocolPane(),
+                                    _ => const SizedBox.shrink(),
+                                  },
+                                  // Действия вкладки Protocol — в строке
+                                  // вкладок дока (D1).
+                                  actions: pane == ToolPane.protocol
+                                      ? protocolDockActionsOf(
+                                          context,
+                                          context.read<ProtocolPaneCubit>(),
+                                          protocol,
+                                        )
+                                      : null,
+                                ),
+                            ],
+                          ),
                         ),
                 ),
                 if (state.isCommandPaletteOpen)
@@ -306,38 +318,6 @@ void openConnectionSettings(
       source: source,
     ),
   );
-}
-
-/// Панель Protocol дока: записи протокола текущей сессии (бывший Inspector)
-/// и debug log с поиском, фильтром и Expand (change
-/// `redesign-workbench-shell`, D5).
-class _ProtocolPane extends StatelessWidget {
-  const _ProtocolPane({required this.state, required this.logBuffer});
-
-  final CodeLabShellState state;
-  final LogBuffer logBuffer;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(flex: 3, child: WorkbenchInspectorPane(state: state)),
-          const SizedBox(height: 8),
-          Expanded(
-            flex: 2,
-            child: WorkbenchDebugLogPane(
-              logBuffer: logBuffer,
-              onExpand: () =>
-                  unawaited(DebugLogViewerDialog.show(context, logBuffer)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// Диалог подтверждения открытия сессии в корне диска (D24).

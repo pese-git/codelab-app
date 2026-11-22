@@ -14,7 +14,13 @@ void main() {
   setUp(() async {
     transport = FakeAcpTransport();
     await transport.start();
-    client = AcpClientApplication(transport: transport);
+    // Тесты проверяют сырые `params`/`result` диагностики и трассы: политика
+    // по умолчанию — `metadataOnly` (ревью change `redesign-protocol-pane`,
+    // D3), поэтому `full` передаётся явно.
+    client = AcpClientApplication(
+      transport: transport,
+      protocolPayloads: ProtocolPayloadPolicy.full,
+    );
   });
 
   tearDown(() async {

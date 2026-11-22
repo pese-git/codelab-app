@@ -29,6 +29,7 @@ export 'src/diagnostics/diagnostics.dart';
 export 'src/files/project_files.dart';
 export 'src/files/project_files_rules.dart';
 export 'src/inspector/inspector_projection.dart';
+export 'src/protocol/protocol_frame_log.dart';
 export 'src/queue/prompt_queue.dart';
 export 'src/restore/workspace_snapshot.dart';
 export 'src/session/session_views.dart';

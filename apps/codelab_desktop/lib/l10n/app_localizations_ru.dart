@@ -462,38 +462,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get workbenchInspectorTitle => 'Инспектор';
-
-  @override
-  String get workbenchInspectorCategoryApproval => 'Одобрение';
-
-  @override
-  String get workbenchInspectorCategoryTool => 'Инструмент';
-
-  @override
-  String get workbenchInspectorCategoryProtocol => 'Протокол';
-
-  @override
-  String get workbenchInspectorCategoryDiagnostic => 'Диагностика';
-
-  @override
-  String workbenchInspectorRisk(String risk) {
-    return 'Риск $risk';
-  }
-
-  @override
-  String get workbenchInspectorRawInput => 'Исходные параметры';
-
-  @override
-  String get workbenchInspectorRawOutput => 'Исходный вывод';
-
-  @override
-  String get workbenchDebugLogTitle => 'Журнал отладки';
-
-  @override
-  String get workbenchDebugLogExpand => 'Развернуть';
-
-  @override
   String get paletteNewLabel => 'Новая сессия';
 
   @override
@@ -4292,4 +4260,183 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingDocumentBack => 'Назад к настройке';
+
+  @override
+  String get protocolColumnMethod => 'Метод';
+
+  @override
+  String get protocolColumnId => 'Id';
+
+  @override
+  String get protocolColumnTime => 'Время';
+
+  @override
+  String get protocolColumnLevel => 'Уровень';
+
+  @override
+  String get protocolColumnCategory => 'Категория';
+
+  @override
+  String get protocolColumnEvent => 'Событие';
+
+  @override
+  String protocolHintFrames(String keys) {
+    return '$keys предыдущий / следующий кадр';
+  }
+
+  @override
+  String protocolHintRecords(String keys) {
+    return '$keys предыдущая / следующая запись';
+  }
+
+  @override
+  String protocolFooter(String shortcut) {
+    return 'Панели следуют за сессией в фокусе · $shortcut';
+  }
+
+  @override
+  String get protocolSearchFramesHint => 'Фильтр по методу, id или тексту';
+
+  @override
+  String get protocolSearchLogHint => 'Поиск по событиям и полям';
+
+  @override
+  String get protocolFilterRequests => 'Запросы';
+
+  @override
+  String get protocolFilterNotifications => 'Уведомления';
+
+  @override
+  String get protocolFilterErrorsOnly => 'Только ошибки';
+
+  @override
+  String get protocolAllCategories => 'Все категории';
+
+  @override
+  String get protocolAllLevels => 'Все уровни';
+
+  @override
+  String get protocolExpand => 'Развернуть';
+
+  @override
+  String get protocolEmptyFrames => 'Кадров пока нет.';
+
+  @override
+  String get protocolNoFramesMatch => 'Нет кадров, подходящих под фильтры.';
+
+  @override
+  String get protocolEmptyRecords => 'Записей пока нет.';
+
+  @override
+  String get protocolNoRecordsMatch => 'Нет записей, подходящих под фильтры.';
+
+  @override
+  String get protocolNoFocusFrames =>
+      'Нет сессии в фокусе. Показаны только кадры подключения.';
+
+  @override
+  String get protocolNoFocusRecords =>
+      'Нет сессии в фокусе. Показаны только записи подключения.';
+
+  @override
+  String get protocolConnectionTag => 'подключение';
+
+  @override
+  String get protocolTrace => 'Трассировка';
+
+  @override
+  String get protocolPause => 'Приостановить';
+
+  @override
+  String get protocolResume => 'Продолжить';
+
+  @override
+  String get protocolClear => 'Очистить';
+
+  @override
+  String get protocolExport => 'Экспорт…';
+
+  @override
+  String get protocolSaveFailed => 'Не удалось сохранить файл.';
+
+  @override
+  String get protocolExportConfirmTitle =>
+      'Экспортировать полные данные кадров?';
+
+  @override
+  String get protocolExportConfirmBody =>
+      'Файл будет содержать промпты, содержимое файлов и вывод инструментов из этих кадров. Секреты замаскированы.';
+
+  @override
+  String get protocolExportConfirmAction => 'Экспортировать';
+
+  @override
+  String get protocolInfoDebugTitle => 'Debug-сборка: полные данные кадров.';
+
+  @override
+  String get protocolInfoDebugMessage =>
+      'В release-сборках хранятся только метаданные. Секреты маскируются до сохранения кадра.';
+
+  @override
+  String get protocolInfoReleaseTitle => 'Release-сборка: только метаданные.';
+
+  @override
+  String get protocolInfoReleaseMessage =>
+      'Данные кадров не сохраняются. Секреты маскируются до сохранения кадра.';
+
+  @override
+  String get protocolInfoTraceTitle =>
+      'Трассировка включена: полные данные кадров.';
+
+  @override
+  String get protocolInfoTraceMessage =>
+      'Промпты, содержимое файлов и вывод инструментов хранятся в памяти, пока трассировка не выключена. Секреты замаскированы.';
+
+  @override
+  String get protocolInfoLogTitle =>
+      'Тот же буфер, что у /logs и «Развернуть».';
+
+  @override
+  String get protocolInfoLogMessage =>
+      'Секреты маскируются до сохранения записи; записи protocol_message содержат полный кадр только в debug-сборках.';
+
+  @override
+  String get protocolNoteBeforeTrace =>
+      'Записан до включения трассировки: только метаданные.';
+
+  @override
+  String get protocolNoteTooLarge =>
+      'Данные кадра больше 256 КБ и не сохранены.';
+
+  @override
+  String get protocolDirectionOut => 'клиент → агент';
+
+  @override
+  String get protocolDirectionIn => 'агент → клиент';
+
+  @override
+  String get protocolShowFrame => 'Показать кадр';
+
+  @override
+  String get protocolFrameGone => 'Кадра уже нет в буфере.';
+
+  @override
+  String get settingsKeyboardActionToggleProtocol =>
+      'Показать или скрыть панель «Протокол»';
+
+  @override
+  String get settingsKeyboardActionProtocolFrameMove =>
+      'Предыдущий или следующий кадр';
+
+  @override
+  String get settingsKeyboardActionProtocolRecordMove =>
+      'Предыдущая или следующая запись журнала';
+
+  @override
+  String get settingsKeyboardWhereProtocolFrames =>
+      'Панель «Протокол», вид «Кадры»';
+
+  @override
+  String get settingsKeyboardWhereProtocolLog =>
+      'Панель «Протокол», вид «Журнал»';
 }

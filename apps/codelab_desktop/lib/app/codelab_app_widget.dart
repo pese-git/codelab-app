@@ -54,6 +54,8 @@ class CodeLabApp extends StatelessWidget {
         BlocProvider.value(value: dependencies.navigationCubit),
         // Панель Terminal дока читает вкладки сессии (D3).
         BlocProvider.value(value: dependencies.terminalTabsCubit),
+        // Панель Protocol и действия в шапке дока читают общее состояние (D7).
+        BlocProvider.value(value: dependencies.protocolPaneCubit),
         BlocProvider.value(value: dependencies.languageCubit),
         BlocProvider.value(value: dependencies.appearanceCubit),
       ],

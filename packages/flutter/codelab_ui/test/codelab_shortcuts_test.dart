@@ -91,6 +91,14 @@ final _table = <(CodeLabShortcut, String, CodeLabShortcutGroup, List<_Combo>)>[
     CodeLabShortcutGroup.navigation,
     [_c(LogicalKeyboardKey.keyE, primary: true, shift: true)],
   ),
+  // Change `redesign-protocol-pane` (D11): панель Protocol — Cmd/Ctrl+Shift+I
+  // сразу после `toggle-files`.
+  (
+    CodeLabShortcut.toggleProtocol,
+    'toggle-protocol',
+    CodeLabShortcutGroup.navigation,
+    [_c(LogicalKeyboardKey.keyI, primary: true, shift: true)],
+  ),
   (
     CodeLabShortcut.fileTreeMove,
     'file-tree-move',
@@ -112,6 +120,26 @@ final _table = <(CodeLabShortcut, String, CodeLabShortcutGroup, List<_Combo>)>[
         LogicalKeyboardKey.enter,
         also: const [LogicalKeyboardKey.numpadEnter],
       ),
+    ],
+  ),
+  // Навигация панели Protocol (D11): Alt без основного модификатора; порядок
+  // альтернатив — как в спецификации «⌥ ← / ⌥ →», «⌥ ↑ / ⌥ ↓».
+  (
+    CodeLabShortcut.protocolFrameMove,
+    'protocol-frame-move',
+    CodeLabShortcutGroup.navigation,
+    [
+      _c(LogicalKeyboardKey.arrowLeft, alt: true),
+      _c(LogicalKeyboardKey.arrowRight, alt: true),
+    ],
+  ),
+  (
+    CodeLabShortcut.protocolRecordMove,
+    'protocol-record-move',
+    CodeLabShortcutGroup.navigation,
+    [
+      _c(LogicalKeyboardKey.arrowUp, alt: true),
+      _c(LogicalKeyboardKey.arrowDown, alt: true),
     ],
   ),
   (
@@ -231,7 +259,7 @@ void main() {
   tearDown(() => debugDefaultTargetPlatformOverride = null);
 
   group('записи по таблице D1', () {
-    test('21 запись по порядку и группам', () {
+    test('24 записи по порядку и группам', () {
       expect(CodeLabShortcut.values, [
         for (final row in _table) row.$1,
         for (final row in _answers) row.$1,
@@ -568,6 +596,36 @@ void main() {
         '⇧⌘E',
         'Ctrl+Shift+E',
       ),
+      (
+        'toggleProtocol',
+        _combo(CodeLabShortcut.toggleProtocol),
+        '⇧⌘I',
+        'Ctrl+Shift+I',
+      ),
+      (
+        'protocolFrameMove ←',
+        _combo(CodeLabShortcut.protocolFrameMove),
+        '⌥←',
+        'Alt+←',
+      ),
+      (
+        'protocolFrameMove →',
+        _combo(CodeLabShortcut.protocolFrameMove, 1),
+        '⌥→',
+        'Alt+→',
+      ),
+      (
+        'protocolRecordMove ↑',
+        _combo(CodeLabShortcut.protocolRecordMove),
+        '⌥↑',
+        'Alt+↑',
+      ),
+      (
+        'protocolRecordMove ↓',
+        _combo(CodeLabShortcut.protocolRecordMove, 1),
+        '⌥↓',
+        'Alt+↓',
+      ),
       // Задача 2.1 `fix-approval-focus` (D3): подпись перехода к одобрению.
       (
         'goToApproval',
@@ -631,6 +689,79 @@ void main() {
       for (final platform in _others) {
         expect(combo.spokenFor(platform), 'Ctrl+Shift+A');
       }
+    });
+  });
+
+  // Change `redesign-protocol-pane`, задача 3.5 (D11; spec app-settings
+  // «Страница «Keyboard»: строки таблицы», сценарий «Строки панели
+  // Protocol»): обозначения новых записей на macOS и на Windows/Linux.
+  group('панель Protocol (change `redesign-protocol-pane`, D11)', () {
+    test('capsFor: ⇧ ⌘ I на macOS и Ctrl Shift I на остальных', () {
+      final combo = _combo(CodeLabShortcut.toggleProtocol);
+      expect(combo.capsFor(_macOS), ['⇧', '⌘', 'I']);
+      for (final platform in _others) {
+        expect(combo.capsFor(platform), ['Ctrl', 'Shift', 'I']);
+      }
+    });
+
+    test('capsFor: Alt-стрелки навигации кадров и записей', () {
+      final frames = CodeLabShortcut.protocolFrameMove;
+      final records = CodeLabShortcut.protocolRecordMove;
+      expect(_combo(frames).capsFor(_macOS), ['⌥', '←']);
+      expect(_combo(frames, 1).capsFor(_macOS), ['⌥', '→']);
+      expect(_combo(records).capsFor(_macOS), ['⌥', '↑']);
+      expect(_combo(records, 1).capsFor(_macOS), ['⌥', '↓']);
+      for (final platform in _others) {
+        expect(_combo(frames).capsFor(platform), ['Alt', '←']);
+        expect(_combo(frames, 1).capsFor(platform), ['Alt', '→']);
+        expect(_combo(records).capsFor(platform), ['Alt', '↑']);
+        expect(_combo(records, 1).capsFor(platform), ['Alt', '↓']);
+      }
+    });
+
+    test('spokenFor: Shift+Cmd+I, Ctrl+Shift+I, Option/Alt+стрелка', () {
+      expect(
+        _combo(CodeLabShortcut.toggleProtocol).spokenFor(_macOS),
+        'Shift+Cmd+I',
+      );
+      expect(
+        _combo(CodeLabShortcut.protocolFrameMove).spokenFor(_macOS),
+        'Option+Left',
+      );
+      expect(
+        _combo(CodeLabShortcut.protocolRecordMove, 1).spokenFor(_macOS),
+        'Option+Down',
+      );
+      for (final platform in _others) {
+        expect(
+          _combo(CodeLabShortcut.toggleProtocol).spokenFor(platform),
+          'Ctrl+Shift+I',
+        );
+        expect(
+          _combo(CodeLabShortcut.protocolFrameMove, 1).spokenFor(platform),
+          'Alt+Right',
+        );
+        expect(
+          _combo(CodeLabShortcut.protocolRecordMove).spokenFor(platform),
+          'Alt+Up',
+        );
+      }
+    });
+
+    test('toggleProtocol стоит сразу после toggleFiles', () {
+      final order = CodeLabShortcut.values;
+      expect(
+        order.indexOf(CodeLabShortcut.toggleProtocol),
+        order.indexOf(CodeLabShortcut.toggleFiles) + 1,
+      );
+      expect(
+        order.indexOf(CodeLabShortcut.protocolFrameMove),
+        order.indexOf(CodeLabShortcut.fileTreeOpen) + 1,
+      );
+      expect(
+        order.indexOf(CodeLabShortcut.protocolRecordMove),
+        order.indexOf(CodeLabShortcut.protocolFrameMove) + 1,
+      );
     });
   });
 

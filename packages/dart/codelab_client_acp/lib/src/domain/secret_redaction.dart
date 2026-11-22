@@ -150,12 +150,39 @@ final class SecretRedactor {
     return switch (value) {
       null || num() || bool() => value,
       String() => redactText(value),
-      Map() => {
-        for (final entry in value.entries)
-          entry.key.toString(): redact(entry.value, key: entry.key.toString()),
-      },
+      Map() => _redactMap(value),
       Iterable() => [for (final item in value) redact(item)],
       _ => redactText(value.toString()),
+    };
+  }
+
+  /// Маскирует объект; пара `{name, value}` с секретным `name` теряет `value`.
+  ///
+  /// Почему: `HttpHeader` и `EnvVariable` ACP (`17-Schema.md`) несут секрет
+  /// не под ключом, а в значении `value` при секретном `name`
+  /// (`Authorization`, `GITHUB_TOKEN`); правило по ключу этого не видит
+  /// (design.md change `redesign-protocol-pane`, D4; approval-safety «Секрет в
+  /// паре name/value»).
+  ///
+  /// Как работает: то же правило имён, что у ключа map (`_isSensitiveKey`:
+  /// секретные слова и признаки `key`, D1/D6 change
+  /// `extend-secret-name-redaction`, с исключением счётчиков токенов),
+  /// отдельного набора правил нет. `name`
+  /// остаётся как есть, прочие поля объекта обрабатываются прежними правилами.
+  Map<String, Object?> _redactMap(Map<Object?, Object?> value) {
+    final name = value['name'];
+    final secretPair =
+        name is String &&
+        value.containsKey('value') &&
+        _isSensitiveKey(name) &&
+        // Исключение счётчиков токенов то же, что у правила по ключу: числовое
+        // значение под именем-счётчиком — статистика.
+        !(value['value'] is num && _isTokenCounterKey(name));
+    return {
+      for (final entry in value.entries)
+        entry.key.toString(): secretPair && entry.key == 'value'
+            ? redactedSecret
+            : redact(entry.value, key: entry.key.toString()),
     };
   }
 

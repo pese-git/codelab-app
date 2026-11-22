@@ -422,6 +422,22 @@ const rules = [
     'apps/codelab_desktop/lib/features/usage/application',
     forbidden: ['package:flutter/', 'dart:io'],
   ),
+  // Application панели Protocol не знает Flutter, `dart:io` и пакеты
+  // отображения журнала (design.md change `redesign-protocol-pane`, D15;
+  // задача 6.1): область, фильтры, маппер и сборка JSON Lines остаются
+  // чистыми; запись файла — только порт `lib/core/platform/
+  // protocol_export_saver.dart`, а `LogBuffer` приходит портом
+  // `LogRecordSource` из `lib/app/`. `package:structured_log/` (уровень
+  // `LogLevel`) разрешён.
+  PackageRule(
+    'apps/codelab_desktop/lib/features/protocol/application',
+    forbidden: [
+      'package:flutter/',
+      'dart:io',
+      'package:structured_log_flutter/',
+      'package:structured_log_fluent/',
+    ],
+  ),
   // ZModem выключен (D3, D11 правило 5): `xterm.dart` реэкспортирует
   // `zmodem.dart`, поэтому запрещены пакет и оба пути; presentation берёт
   // `TerminalView` из `package:xterm2/ui.dart`.

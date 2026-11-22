@@ -166,7 +166,7 @@ void main() {
   test('ничего не найдено: «zzz» даёт пустой список, а «» — все записи', () {
     // Первая проверка отличает пустой результат от «функция ничего не
     // отбирает».
-    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(21));
+    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(24));
     expect(filterKeyboardShortcuts(_entries(), 'zzz'), isEmpty);
   });
 
@@ -191,7 +191,7 @@ void main() {
   });
 
   test('поиск не идёт по «Where»: «files tree» ничего не находит', () {
-    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(21));
+    expect(filterKeyboardShortcuts(_entries(), ''), hasLength(24));
     // «Files tree» — текст «Where» строк дерева, но не их действия.
     expect(filterKeyboardShortcuts(_entries(), 'files tree'), isEmpty);
   });

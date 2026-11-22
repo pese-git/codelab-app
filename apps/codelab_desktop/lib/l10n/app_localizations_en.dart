@@ -456,38 +456,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get workbenchInspectorTitle => 'Inspector';
-
-  @override
-  String get workbenchInspectorCategoryApproval => 'Approval';
-
-  @override
-  String get workbenchInspectorCategoryTool => 'Tool';
-
-  @override
-  String get workbenchInspectorCategoryProtocol => 'Protocol';
-
-  @override
-  String get workbenchInspectorCategoryDiagnostic => 'Diagnostic';
-
-  @override
-  String workbenchInspectorRisk(String risk) {
-    return 'Risk $risk';
-  }
-
-  @override
-  String get workbenchInspectorRawInput => 'Raw input';
-
-  @override
-  String get workbenchInspectorRawOutput => 'Raw output';
-
-  @override
-  String get workbenchDebugLogTitle => 'Debug log';
-
-  @override
-  String get workbenchDebugLogExpand => 'Expand';
-
-  @override
   String get paletteNewLabel => 'New session';
 
   @override
@@ -4222,4 +4190,179 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingDocumentBack => 'Back to setup';
+
+  @override
+  String get protocolColumnMethod => 'Method';
+
+  @override
+  String get protocolColumnId => 'Id';
+
+  @override
+  String get protocolColumnTime => 'Time';
+
+  @override
+  String get protocolColumnLevel => 'Level';
+
+  @override
+  String get protocolColumnCategory => 'Category';
+
+  @override
+  String get protocolColumnEvent => 'Event';
+
+  @override
+  String protocolHintFrames(String keys) {
+    return '$keys previous / next frame';
+  }
+
+  @override
+  String protocolHintRecords(String keys) {
+    return '$keys previous / next record';
+  }
+
+  @override
+  String protocolFooter(String shortcut) {
+    return 'Panes follow the focused session · $shortcut';
+  }
+
+  @override
+  String get protocolSearchFramesHint => 'Filter by method, id or text';
+
+  @override
+  String get protocolSearchLogHint => 'Search events and fields';
+
+  @override
+  String get protocolFilterRequests => 'Requests';
+
+  @override
+  String get protocolFilterNotifications => 'Notifications';
+
+  @override
+  String get protocolFilterErrorsOnly => 'Errors only';
+
+  @override
+  String get protocolAllCategories => 'All categories';
+
+  @override
+  String get protocolAllLevels => 'All levels';
+
+  @override
+  String get protocolExpand => 'Expand';
+
+  @override
+  String get protocolEmptyFrames => 'No frames yet.';
+
+  @override
+  String get protocolNoFramesMatch => 'No frames match the filters.';
+
+  @override
+  String get protocolEmptyRecords => 'No records yet.';
+
+  @override
+  String get protocolNoRecordsMatch => 'No records match the filters.';
+
+  @override
+  String get protocolNoFocusFrames =>
+      'No session in focus. Showing connection frames only.';
+
+  @override
+  String get protocolNoFocusRecords =>
+      'No session in focus. Showing connection records only.';
+
+  @override
+  String get protocolConnectionTag => 'connection';
+
+  @override
+  String get protocolTrace => 'Trace';
+
+  @override
+  String get protocolPause => 'Pause';
+
+  @override
+  String get protocolResume => 'Resume';
+
+  @override
+  String get protocolClear => 'Clear';
+
+  @override
+  String get protocolExport => 'Export…';
+
+  @override
+  String get protocolSaveFailed => 'Couldn\'t save the file.';
+
+  @override
+  String get protocolExportConfirmTitle => 'Export full payloads?';
+
+  @override
+  String get protocolExportConfirmBody =>
+      'The file will contain prompts, file contents and tool output from these frames. Secrets are masked.';
+
+  @override
+  String get protocolExportConfirmAction => 'Export';
+
+  @override
+  String get protocolInfoDebugTitle => 'Debug build: full payloads.';
+
+  @override
+  String get protocolInfoDebugMessage =>
+      'Release builds keep metadata only. Secrets are masked before a frame is stored.';
+
+  @override
+  String get protocolInfoReleaseTitle => 'Release build: metadata only.';
+
+  @override
+  String get protocolInfoReleaseMessage =>
+      'Payloads are not stored. Secrets are masked before a frame is stored.';
+
+  @override
+  String get protocolInfoTraceTitle => 'Trace on: full payloads.';
+
+  @override
+  String get protocolInfoTraceMessage =>
+      'Prompts, file contents and tool output are kept in memory until Trace is turned off. Secrets are masked.';
+
+  @override
+  String get protocolInfoLogTitle => 'Same buffer as /logs and Expand.';
+
+  @override
+  String get protocolInfoLogMessage =>
+      'Secrets are masked before a record is stored; protocol_message records carry the full frame only in debug builds.';
+
+  @override
+  String get protocolNoteBeforeTrace =>
+      'Recorded before Trace was turned on: metadata only.';
+
+  @override
+  String get protocolNoteTooLarge =>
+      'The payload is larger than 256 KB and was not stored.';
+
+  @override
+  String get protocolDirectionOut => 'client → agent';
+
+  @override
+  String get protocolDirectionIn => 'agent → client';
+
+  @override
+  String get protocolShowFrame => 'Show frame in Frames';
+
+  @override
+  String get protocolFrameGone => 'The frame is no longer in the buffer.';
+
+  @override
+  String get settingsKeyboardActionToggleProtocol =>
+      'Show or hide the Protocol pane';
+
+  @override
+  String get settingsKeyboardActionProtocolFrameMove =>
+      'Previous or next frame';
+
+  @override
+  String get settingsKeyboardActionProtocolRecordMove =>
+      'Previous or next log record';
+
+  @override
+  String get settingsKeyboardWhereProtocolFrames =>
+      'Protocol pane, Frames view';
+
+  @override
+  String get settingsKeyboardWhereProtocolLog => 'Protocol pane, Log view';
 }

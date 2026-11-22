@@ -69,9 +69,17 @@ _Check _checkOf(CodeLabShortcut shortcut) => switch (shortcut) {
   CodeLabShortcut.leaveSettings => const _InApp(),
   CodeLabShortcut.toggleSidebar => const _InKit(_workbenchShortcut),
   CodeLabShortcut.toggleFiles => const _InKit(_workbenchShortcut),
+  // Change `redesign-protocol-pane` (D11): `toggle-protocol` — как
+  // `toggle-files`, через `CodeLabWorkbenchShortcuts.onToggleProtocol`.
+  CodeLabShortcut.toggleProtocol => const _InKit(_workbenchShortcut),
   CodeLabShortcut.fileTreeMove => const _InKit(_fileTreeMove),
   CodeLabShortcut.fileTreeFold => const _InKit(_fileTreeFold),
   CodeLabShortcut.fileTreeOpen => const _InKit(_fileTreeOpen),
+  // Навигацию кадров и записей ловит виджет панели Protocol в app (фокус
+  // внутри панели и не в текстовом поле); проверяет `keyboard_bindings_test.dart`
+  // app (задача 5.3).
+  CodeLabShortcut.protocolFrameMove => const _InApp(),
+  CodeLabShortcut.protocolRecordMove => const _InApp(),
   CodeLabShortcut.cancelTurn => const _InKit(_cancelTurn),
   CodeLabShortcut.send => const _InKit(_composerSend),
   CodeLabShortcut.commandMenuMove => const _InKit(_commandMenuMove),
@@ -85,8 +93,8 @@ _Check _checkOf(CodeLabShortcut shortcut) => switch (shortcut) {
 };
 
 void main() {
-  test('в каталоге 21 запись, а запись без сценария не компилируется', () {
-    expect(CodeLabShortcut.values, hasLength(21));
+  test('в каталоге 24 записи, а запись без сценария не компилируется', () {
+    expect(CodeLabShortcut.values, hasLength(24));
     for (final shortcut in CodeLabShortcut.values) {
       expect(_checkOf(shortcut), isA<_Check>(), reason: shortcut.name);
     }
@@ -172,6 +180,9 @@ Future<void> _workbenchShortcut(
         onOpenSettings: shortcut == CodeLabShortcut.openSettings ? hit : null,
         onToggleSidebar: shortcut == CodeLabShortcut.toggleSidebar ? hit : null,
         onToggleFiles: shortcut == CodeLabShortcut.toggleFiles ? hit : null,
+        onToggleProtocol: shortcut == CodeLabShortcut.toggleProtocol
+            ? hit
+            : null,
         // Задача 2.1 `fix-approval-focus`: Cmd/Ctrl+Shift+A вызывает
         // `onGoToApproval` в обоих вариантах основного модификатора.
         onGoToApproval: shortcut == CodeLabShortcut.goToApproval ? hit : null,
