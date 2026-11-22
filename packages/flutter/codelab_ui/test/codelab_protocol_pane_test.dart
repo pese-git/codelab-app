@@ -61,6 +61,8 @@ CodeLabProtocolPane _pane({
   String? emptyRowsText,
   CodeLabProtocolDetail? detail,
   List<String> columns = const ['', 'Method', 'Id', 'Time'],
+  bool followTail = true,
+  Object? tailScope,
   int toneColumn = 1,
   int tagColumn = 1,
   List<CodeLabProtocolInfo> notices = const [],
@@ -75,6 +77,8 @@ CodeLabProtocolPane _pane({
   viewHint: 'Alt+← / Alt+→ previous / next frame',
   filters: const Text('filters-slot'),
   columns: columns,
+  followTail: followTail,
+  tailScope: tailScope,
   toneColumn: toneColumn,
   tagColumn: tagColumn,
   notices: notices,
@@ -173,7 +177,9 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(_host(_pane()));
-      final theme = FluentTheme.of(tester.element(find.byType(FluentApp)));
+      final theme = FluentTheme.of(
+        tester.element(find.byType(CodeLabProtocolPane)),
+      );
       final danger = CodeLabPalette.of(theme).danger;
 
       expect(_textColor(tester, 'error -32603 · Internal error'), danger);
@@ -277,7 +283,7 @@ void main() {
       expect(find.text('Select a frame to see its details.'), findsNothing);
 
       await tester.tap(find.text('Copy'));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(copied, 1);
     });
 
@@ -404,7 +410,7 @@ void main() {
       );
 
       await tester.tap(find.text('Show frame in Frames'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(shown, 1);
     });
@@ -441,7 +447,7 @@ void main() {
       );
       // Нажатие по недоступной ссылке не бросает и ничего не меняет.
       await tester.tap(find.text('Show frame in Frames'));
-      await tester.pump();
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
   });
@@ -627,7 +633,9 @@ void main() {
           ),
         ),
       );
-      final theme = FluentTheme.of(tester.element(find.byType(FluentApp)));
+      final theme = FluentTheme.of(
+        tester.element(find.byType(CodeLabProtocolPane)),
+      );
       final danger = CodeLabPalette.of(theme).danger;
 
       expect(_textColor(tester, 'ERROR'), danger);
@@ -647,7 +655,9 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(_host(_pane()));
-      final theme = FluentTheme.of(tester.element(find.byType(FluentApp)));
+      final theme = FluentTheme.of(
+        tester.element(find.byType(CodeLabProtocolPane)),
+      );
 
       expect(
         _textColor(tester, 'error -32603 · Internal error'),
@@ -760,6 +770,348 @@ void main() {
       );
 
       expect(find.text('Copy'), findsOneWidget);
+    });
+  });
+
+  // D11/D12: организм сам прокручивает выбранную строку в видимую область
+  // (Alt-навигация app меняет только `selected`).
+  group('прокрутка к выбранной строке', () {
+    List<CodeLabProtocolTableRow> rows2000(String? selectedId) => [
+      for (var i = 0; i < 2000; i++)
+        CodeLabProtocolTableRow(
+          id: 'r$i',
+          cells: ['→', 'session/update · $i', '$i', '12:00:00'],
+          selected: 'r$i' == selectedId,
+        ),
+    ];
+
+    ScrollPosition position(WidgetTester tester) => tester
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byKey(_tableKey),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position;
+
+    Future<void> select(WidgetTester tester, int index) async {
+      await tester.pumpWidget(_host(_pane(rows: rows2000('r$index'))));
+      await tester.pump();
+    }
+
+    Rect rowRect(WidgetTester tester, int index) =>
+        tester.getRect(find.byKey(ValueKey('protocol-row-r$index')));
+
+    testWidgets('выбранная строка далеко за экраном становится видимой', (
+      tester,
+    ) async {
+      await select(tester, 1500);
+
+      final row = find.byKey(const ValueKey('protocol-row-r1500'));
+      expect(row, findsOneWidget);
+      final table = tester.getRect(find.byKey(_tableKey));
+      expect(rowRect(tester, 1500).top, greaterThanOrEqualTo(table.top));
+      expect(rowRect(tester, 1500).bottom, lessThanOrEqualTo(table.bottom));
+    });
+
+    testWidgets('выбор уже видимой строки не сдвигает прокрутку', (
+      tester,
+    ) async {
+      await select(tester, 2);
+      expect(position(tester).pixels, 0);
+
+      await select(tester, 4);
+      expect(position(tester).pixels, 0);
+    });
+
+    testWidgets('соседняя строка за нижним краем — сдвиг ровно на строку', (
+      tester,
+    ) async {
+      await select(tester, 1500);
+      final before = position(tester).pixels;
+      final viewportBottom = position(tester).viewportDimension;
+      // Выбранная строка стоит у нижнего края списка.
+      expect(before + viewportBottom, closeTo(1501 * 28.0, 28));
+
+      await select(tester, 1501);
+
+      expect(position(tester).pixels, closeTo(before + 28, 0.5));
+      expect(
+        position(tester).pixels + position(tester).viewportDimension,
+        closeTo(1502 * 28.0, 0.5),
+      );
+    });
+
+    testWidgets('соседняя строка за верхним краем — сдвиг ровно на строку', (
+      tester,
+    ) async {
+      await select(tester, 1500);
+      final before = position(tester).pixels;
+      final firstVisible = (before / 28).ceil();
+
+      await select(tester, firstVisible - 1);
+
+      expect(position(tester).pixels, closeTo((firstVisible - 1) * 28.0, 0.5));
+    });
+
+    testWidgets('выбранная строка при первой раскладке тоже видима', (
+      tester,
+    ) async {
+      // Первый кадр сразу с выбором далеко за экраном (панель открыта заново).
+      await tester.pumpWidget(_host(_pane(rows: rows2000('r900'))));
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('protocol-row-r900')), findsOneWidget);
+    });
+  });
+
+  // Задача 3.7 (D12 «Хвост таблицы»; spec «Таблица кадров»: «Хвост не отнимает
+  // прокрутку», «Хвост возвращается у низа», «Хвост не сбрасывает выбор»).
+  // Красный до 3.8: параметров `followTail` и `tailScope` у организма нет.
+  group('хвост таблицы', () {
+    const rowExtent = 28.0;
+
+    List<CodeLabProtocolTableRow> rowsOf(int count, {String? selectedId}) => [
+      for (var i = 0; i < count; i++)
+        CodeLabProtocolTableRow(
+          id: 'r$i',
+          cells: ['→', 'session/update · $i', '$i', '12:00:00'],
+          selected: 'r$i' == selectedId,
+        ),
+    ];
+
+    Finder tableList() => find.descendant(
+      of: find.byKey(_tableKey),
+      matching: find.byType(Scrollable),
+    );
+
+    ScrollPosition position(WidgetTester tester) =>
+        tester.state<ScrollableState>(tableList()).position;
+
+    bool atBottom(WidgetTester tester) {
+      final p = position(tester);
+      return p.pixels >= p.maxScrollExtent - 0.5;
+    }
+
+    Future<void> show(
+      WidgetTester tester,
+      int count, {
+      CodeLabProtocolView view = CodeLabProtocolView.frames,
+      bool followTail = true,
+      Object? tailScope,
+      String? selectedId,
+      CodeLabProtocolDetail? detail,
+    }) async {
+      await tester.pumpWidget(
+        _host(
+          _pane(
+            view: view,
+            rows: rowsOf(count, selectedId: selectedId),
+            followTail: followTail,
+            tailScope: tailScope,
+            detail: detail,
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    /// Пользователь тянет таблицу вверх (к старым строкам).
+    Future<void> scrollUp(WidgetTester tester) async {
+      await tester.drag(tableList(), const Offset(0, 300));
+      await tester.pumpAndSettle();
+    }
+
+    /// Пользователь возвращает таблицу к последней строке.
+    Future<void> scrollToBottom(WidgetTester tester) async {
+      await tester.drag(tableList(), const Offset(0, -5000));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('(а) у низа новые строки прокручивают к последней', (
+      tester,
+    ) async {
+      await show(tester, 100);
+      await scrollToBottom(tester);
+      expect(atBottom(tester), isTrue);
+
+      await show(tester, 110);
+
+      expect(atBottom(tester), isTrue);
+      expect(find.byKey(const ValueKey('protocol-row-r109')), findsOneWidget);
+    });
+
+    testWidgets('(б) после прокрутки вверх новые строки таблицу не двигают', (
+      tester,
+    ) async {
+      await show(tester, 100);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      final before = position(tester).pixels;
+      expect(atBottom(tester), isFalse);
+
+      await show(tester, 130);
+
+      expect(position(tester).pixels, closeTo(before, 0.5));
+    });
+
+    testWidgets('(в) возврат к низу снова включает следование', (tester) async {
+      await show(tester, 100);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      await scrollToBottom(tester);
+      expect(atBottom(tester), isTrue);
+
+      await show(tester, 120);
+
+      expect(atBottom(tester), isTrue);
+    });
+
+    testWidgets('(г) followTail: false — позиция не меняется; возврат true '
+        'без отрыва прыгает к хвосту', (tester) async {
+      await show(tester, 100);
+      await scrollToBottom(tester);
+      final before = position(tester).pixels;
+
+      await show(tester, 120, followTail: false);
+      expect(position(tester).pixels, closeTo(before, 0.5));
+      expect(atBottom(tester), isFalse);
+
+      await show(tester, 120);
+      expect(atBottom(tester), isTrue);
+    });
+
+    testWidgets('(г) отрыв пользователя переживает followTail: true', (
+      tester,
+    ) async {
+      await show(tester, 100);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      final before = position(tester).pixels;
+
+      await show(tester, 120, followTail: false);
+      await show(tester, 120);
+
+      expect(position(tester).pixels, closeTo(before, 0.5));
+    });
+
+    testWidgets('(д) смена tailScope прыгает к хвосту и снимает отрыв', (
+      tester,
+    ) async {
+      await show(tester, 100, tailScope: 's1');
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      expect(atBottom(tester), isFalse);
+
+      await show(tester, 100, tailScope: 's2');
+      expect(atBottom(tester), isTrue);
+
+      // Отрыв снят: следующие строки снова ведут к хвосту.
+      await show(tester, 115, tailScope: 's2');
+      expect(atBottom(tester), isTrue);
+    });
+
+    testWidgets('(д) смена view прыгает к хвосту и снимает отрыв', (
+      tester,
+    ) async {
+      await show(tester, 100);
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+      expect(atBottom(tester), isFalse);
+
+      await show(tester, 100, view: CodeLabProtocolView.log);
+      expect(atBottom(tester), isTrue);
+
+      await show(tester, 115, view: CodeLabProtocolView.log);
+      expect(atBottom(tester), isTrue);
+    });
+
+    testWidgets('(д) на паузе (followTail: false) смена области прыгает к '
+        'последней строке снимка', (tester) async {
+      await show(tester, 100, tailScope: 's1');
+      await scrollToBottom(tester);
+      await scrollUp(tester);
+
+      await show(tester, 100, tailScope: 's2', followTail: false);
+
+      expect(atBottom(tester), isTrue);
+    });
+
+    testWidgets('(е) прыжок к хвосту не меняет выбор и панель выбранного', (
+      tester,
+    ) async {
+      final selected = <String>[];
+      final detail = _detail(
+        segments: const [CodeLabMaskedSegment('{}', masked: false)],
+      );
+      Widget build(int count) => _host(
+        _pane(
+          rows: rowsOf(count, selectedId: 'r5'),
+          detail: detail,
+          onRowSelected: selected.add,
+        ),
+      );
+      // Выбранная r5 — вверху; таблица у низа и следует за хвостом.
+      await tester.pumpWidget(build(100));
+      await tester.pump();
+      await scrollToBottom(tester);
+      await tester.pumpWidget(build(120));
+      await tester.pump();
+
+      expect(atBottom(tester), isTrue);
+      expect(find.text('→ session/new · id 1'), findsOneWidget);
+      expect(selected, isEmpty);
+
+      // Строка по-прежнему помечена выбранной: вернём её на экран.
+      position(tester).jumpTo(0);
+      await tester.pump();
+      final row = tester.getSemantics(
+        find.byKey(const ValueKey('protocol-row-r5')),
+      );
+      // ignore: deprecated_member_use
+      expect(row.hasFlag(SemanticsFlag.isSelected), isTrue);
+    });
+
+    Future<void> selectionAboveEdgeThenStream(
+      WidgetTester tester,
+      CodeLabProtocolView view,
+    ) async {
+      await show(tester, 100, view: view);
+      await scrollToBottom(tester);
+      expect(atBottom(tester), isTrue);
+
+      // Alt+←: выбрана строка за верхним краем.
+      await show(tester, 100, view: view, selectedId: 'r10');
+      final target = position(tester).pixels;
+      expect(target, closeTo(10 * rowExtent, 0.5));
+      expect(atBottom(tester), isFalse);
+
+      // Поток больше не уводит выбранную строку: отрыв.
+      await show(tester, 130, view: view, selectedId: 'r10');
+      expect(position(tester).pixels, closeTo(target, 0.5));
+      expect(find.byKey(const ValueKey('protocol-row-r10')), findsOneWidget);
+    }
+
+    testWidgets('(ж) выбор за верхним краем прокручивает к строке, поток '
+        'таблицу не двигает', (tester) async {
+      await selectionAboveEdgeThenStream(tester, CodeLabProtocolView.frames);
+    });
+
+    testWidgets('(з) то же в виде Log', (tester) async {
+      await selectionAboveEdgeThenStream(tester, CodeLabProtocolView.log);
+    });
+
+    testWidgets('выбор строки у низа сохраняет следование за хвостом', (
+      tester,
+    ) async {
+      await show(tester, 100);
+      await scrollToBottom(tester);
+      await show(tester, 100, selectedId: 'r99');
+      expect(atBottom(tester), isTrue);
+
+      await show(tester, 115, selectedId: 'r99');
+
+      expect(atBottom(tester), isTrue);
     });
   });
 }
