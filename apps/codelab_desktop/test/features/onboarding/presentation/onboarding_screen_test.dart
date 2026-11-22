@@ -227,6 +227,16 @@ void main() {
     matching: find.textContaining(text, findRichText: true),
   );
 
+  // Дефект ручной проверки 2026-11-22: фон экрана был `scaffoldBackgroundColor`
+  // Fluent — он полупрозрачный (под ним задумана слюда), и в светлой теме при
+  // тёмном режиме macOS сквозь шаги просвечивало тёмное окно.
+  testWidgets('фон экрана onboarding непрозрачен', (tester) async {
+    await pump(tester, probeOf(const ProviderReady('llm/m1')));
+
+    final screen = tester.widget<ColoredBox>(_key('onboarding-screen'));
+    expect(screen.color.a, 1.0, reason: 'фон экрана не прозрачный');
+  });
+
   group('шаг «What CodeLab does»', () {
     testWidgets('заголовок, четыре карточки, подсказка и строка шагов', (
       tester,
