@@ -1,30 +1,36 @@
-# Platform integration в ACP Client
+# Интеграция с платформой в CodeLab
 
-Этот документ определяет правила интеграции ACP Client с desktop-платформами и внешней операционной средой.
+Документ задаёт правила, по которым клиенты CodeLab (desktop, CLI) и Dart-агент работают с операционной системой: файлами, процессами, окружением, секретами, плагинами Flutter и нативными API.
 
 Цели:
 
-* изолировать platform-specific APIs;
-* не допускать распространения `dart:io` и platform plugins по feature-коду;
-* сделать desktop integration тестируемой;
-* сохранить portability между Windows, macOS и Linux;
-* контролировать filesystem, process execution и secure storage;
-* обеспечить единый lifecycle platform resources.
+* изолировать API, зависящие от платформы;
+* не допускать распространения `dart:io` и плагинов платформы по коду фич;
+* сделать интеграцию с desktop тестируемой;
+* сохранить переносимость между Windows, macOS и Linux;
+* держать под контролем файловую систему, запуск процессов и хранение секретов;
+* обеспечить единый жизненный цикл ресурсов платформы.
 
-Связанные документы:
+Общие правила — корневой `AGENTS.md` (§5, §6, §10, §11, §12, §13, §16), [`layers-and-dependencies.md`](layers-and-dependencies.md), [`technology-stack.md`](technology-stack.md), [`permissions.md`](permissions.md), [`concurrency.md`](concurrency.md), [`error-handling.md`](error-handling.md), [`observability.md`](observability.md), [`testing.md`](testing.md). Окружение исполнения агента — [`proposals/agent-core/04-execution-env.md`](proposals/agent-core/04-execution-env.md) (§4.5 — окружение процессов).
 
-* `AGENTS.md`
-* `docs/architecture/layers-and-dependencies.md`
-* `docs/architecture/technology-stack.md`
-* `docs/architecture/permissions.md`
-* `docs/architecture/concurrency.md`
-* `docs/architecture/testing.md`
+Термины:
+
+* **Порт** (semantic port) — узкий интерфейс, через который application-слой просит у платформы одну возможность (`ProjectFolderPicker`, `TerminalProcessRunner`, `ExecutionEnv`) (§4, §79).
+* **Адаптер платформы** (platform adapter) — реализация порта на `dart:io`, плагине Flutter или нативном API; единственное место, где эти API видны (§8).
+* **Возможность** (capability) — то, что нужно приложению («выбрать папку»), в отличие от её реализации на конкретной ОС (§3).
+* **Composition root** — место сборки зависимостей: `apps/codelab_desktop/lib/app/` (Cherrypick), `apps/codelab_cli/lib/src/composition_root.dart`, хост `apps/codelab_agent` (§62).
+* **Рабочая папка** (working directory) — `cwd` сессии ACP; корень, которым ограничены пути и процессы агента (§16, §54).
+* **Containment** — проверка, что путь или `cwd` не выходит за рабочую папку (§16, §71; корневой `AGENTS.md` §10).
+* **`$CODELAB_HOME`** — каталог конфигурации и данных, общий для app, CLI и агента; по умолчанию `~/.codelab` (§12, §28).
+* **Процесс-сирота** (orphan process) — дочерний процесс, переживший своего владельца (§23).
+
+Где в коде. Клиент: порты файлов и процессов ACP `fs/*` и `terminal/*` — `TextFileReader`, `TextFileWriter` и лексическая проверка `resolveWithinWorkingDirectory` (`packages/dart/codelab_client_acp/lib/src/domain/fs_access.dart`), `TerminalProcessRunner`, `TerminalProcessHandle`, `TerminalProcessState` (`terminal_access.dart` того же каталога); их адаптеры на `dart:io` — `codelab_client_io`: `IoTextFileIo`, `IoTerminalProcessRunner`, `IoWorkingDirectoryProvider`, `resolveCodelabHome` (`lib/src/platform/`), хранилища `JsonFileProfileStore` и `JsonFileRecentProjectsStore` с атомарной записью `writeBytesAtomically` (`lib/src/stores/`), дерево файлов проекта `IoProjectFiles` (`lib/src/files/`), транспорты `ioTransportResolver` (`lib/src/transport/`). Процесс внешнего агента по stdio запускает и закрывает `StdioAcpTransport` (`package:codelab_acp_transports/io.dart`). Desktop: адаптеры платформы — `apps/codelab_desktop/lib/core/platform/` (`ProjectFolderPicker`, `ThemeFilePicker`, `ExternalLinkOpener`, `LocalFolderOpener`, `OsDropRegion`, `LocalPathKindOf`, `SystemThemeAccentSource`, `AppMenuBridge`, `UserShellLauncher` и `PtyUserShellLauncher`, хранилища настроек `SharedPreferences*`), сборка — `createCodeLabRootScope` и `CodeLabRootLifecycle` (`lib/app/app_scope.dart`), выход из app — `AppExitHandler` (`lib/app/app_exit_handler.dart`); плагины — `file_selector`, `path_provider`, `shared_preferences`, `url_launcher`, `desktop_drop`, `system_theme`, `pty2`; macOS собран без песочницы (`macos/Runner/*.entitlements`: `com.apple.security.app-sandbox` = `false`). CLI: каталог `CodelabHome` и история с правами `0700`/`0600` (`apps/codelab_cli/lib/src/home.dart`), сигналы (`signals.dart`). Агент: порт `ExecutionEnv` с возможностями `DirectoryListing`, `BinaryFiles`, `PathResolver` (`packages/dart/codelab_agent_core/lib/src/env/execution_env.dart`), граница рабочей папки `BoundedEnv` (`bounded_env.dart`, по `realpath`), тестовая `MemoryExecutionEnv`; реализации на `dart:io` — `codelab_agent_io`: `LocalExecutionEnv` (`lib/src/env/`: shell `/bin/sh -c` или `cmd.exe /d /s /c`, окружение по `hostEnvironmentAllowlist`, завершение дерева процессов `terminateTree`, пути ядра POSIX ↔ пути ОС `toCorePath`/`toHostPath`), stdio-серверы MCP `StdioProcessTransport` (`lib/src/mcp/`), `codelabHomeOf`, `ConfigLoader` и `ConfigWatcher` (`lib/src/config/`), хранилище секретов `openSecretStore` с бэкендами `env` и `file` (`lib/src/secrets/`). Встроенного агента клиенту отдаёт `codelab_embedded` (настольный открыватель — `lib/io.dart`). Проверки `Platform.is*` и `Platform.operatingSystem` есть только в адаптерах, хостах и composition root: `codelab_agent_io`, `codelab_client_io` (`IoTerminalProcessRunner`), `codelab_setup/lib/src/io/`, `codelab_embedded/lib/src/io/` и сценарный открыватель `codelab_embedded/lib/src/testing/scripted_opener.dart`, `apps/codelab_agent`, `apps/codelab_cli/lib/src/` (`home.dart`, `signals.dart`, `serve_alias.dart`, `input/io_terminal.dart`), `apps/codelab_desktop/lib/core/platform/` (`PtyUserShellLauncher`, `build_info.dart`), `lib/app/app_scope.dart` desktop (§5). `main.dart` desktop читает только `Platform.environment`.
 
 ---
 
 ## 1. Основной принцип
 
-Platform-specific behavior является infrastructure concern.
+Поведение, зависящее от платформы, — забота infrastructure.
 
 Предпочтительная модель:
 
@@ -41,27 +47,29 @@ Desktop adapter
 OS / Flutter plugin / dart:io
 ```
 
-Feature-код не должен напрямую зависеть от конкретного platform plugin, если это не presentation-only concern.
+Код фичи НЕ ДОЛЖЕН напрямую зависеть от конкретного плагина платформы, если это не забота только presentation.
 
 ---
 
 ## 2. Поддерживаемые платформы
 
-Desktop application должна сохранять возможность работы на поддерживаемых платформах проекта:
+Desktop-приложение ДОЛЖНО сохранять возможность работы на поддерживаемых платформах проекта:
 
 * Windows;
 * macOS;
 * Linux.
 
-Новая dependency или platform integration должна быть проверена на совместимость со всеми обязательными платформами проекта.
+Новая зависимость или интеграция с платформой ДОЛЖНА быть проверена на совместимость со всеми обязательными платформами проекта.
 
-Если capability поддерживается не везде, это должно быть выражено явно.
+Если возможность поддерживается не везде, это ДОЛЖНО быть выражено явно.
+
+В коде терминал пользователя (`PtyUserShellLauncher`) проверен только на macOS; ветки Linux и Windows есть, но не проверены (D12 change `add-integrated-terminal`). Неподдержанную ОС порт выражает явно — `UserShellLauncher.isSupported`.
 
 ---
 
-## 3. Platform capability
+## 3. Возможность платформы
 
-Следует различать:
+СЛЕДУЕТ различать:
 
 ```text
 application capability
@@ -79,7 +87,7 @@ platform implementation
 OpenFile
 ```
 
-является application capability.
+— возможность приложения.
 
 А:
 
@@ -89,15 +97,15 @@ macOS NSOpenPanel
 Linux GTK picker
 ```
 
-являются implementation details.
+— детали реализации.
 
 ---
 
-## 4. Platform abstraction
+## 4. Абстракция платформы
 
-Platform abstraction должна быть узкой и semantic.
+Абстракция платформы ДОЛЖНА быть узкой и выражать смысл операции.
 
-Предпочтительно:
+Предпочтительно (пример иллюстративный; реальный порт выбора папки — `ProjectFolderPicker` в `apps/codelab_desktop/lib/core/platform/project_folder_picker.dart`):
 
 ```dart
 abstract interface class FilePicker {
@@ -113,7 +121,7 @@ abstract interface class PlatformService {
 }
 ```
 
-Generic platform service скрывает responsibilities и ухудшает type safety.
+Обобщённый сервис платформы скрывает ответственность и ухудшает типобезопасность.
 
 ---
 
@@ -127,35 +135,37 @@ Platform.isMacOS
 Platform.isLinux
 ```
 
-допустимы в:
+МОЖНО использовать в:
 
-* infrastructure adapters;
-* bootstrap/composition;
-* platform-specific utility layer.
+* адаптерах infrastructure;
+* bootstrap и composition;
+* слое утилит, зависящих от платформы.
 
-Не следует использовать их непосредственно в:
+НЕ СЛЕДУЕТ использовать их непосредственно в:
 
 * domain;
-* reusable ACP core;
+* переиспользуемом ядре ACP;
 * BLoC;
-* feature widgets;
+* виджетах фич;
 
-если поведение можно скрыть за abstraction.
+если поведение можно скрыть за абстракцией.
 
 Обозначения клавиш (⌘ или Ctrl, ⌥ или Alt) — не поведение платформы, а соглашение её интерфейса.
 Их выбирает только каталог сочетаний кита `CodeLabShortcut` (`packages/flutter/codelab_ui`) по
 `defaultTargetPlatform` из `package:flutter/foundation.dart`, а не по `Platform.is*`: значение
-подменяется в тестах (`debugDefaultTargetPlatformOverride`) и не требует `dart:io`. Feature-код
+подменяется в тестах (`debugDefaultTargetPlatformOverride`) и не требует `dart:io`. Код фичи
 берёт готовую подпись из каталога и сам платформу для этого не проверяет (change
 `add-app-keyboard-page`, D4).
 
+В коде проверок `Platform.is*` в domain, Cubit и виджетах нет; полный список мест — абзац «Где в коде» выше. Виджеты фич передают `defaultTargetPlatform` в каталог (`compactFor`, `combosFor`) без собственного ветвления.
+
 ---
 
-## 6. Conditional imports
+## 6. Условные импорты
 
-Conditional imports допустимы, если implementation действительно отличается между platforms.
+Условные импорты (conditional imports) МОЖНО использовать, если реализация действительно различается между платформами.
 
-Например:
+Например (иллюстративные имена):
 
 ```text
 platform_window.dart
@@ -164,26 +174,26 @@ platform_window_macos.dart
 platform_window_linux.dart
 ```
 
-Это предпочтительнее большого количества runtime `if (Platform...)` в business/application code.
+Это предпочтительнее множества проверок `if (Platform...)` во время выполнения в бизнес- и application-коде.
 
 ---
 
-## 7. Flutter plugins
+## 7. Плагины Flutter
 
-Flutter plugin следует считать infrastructure dependency, если он предоставляет доступ к:
+Плагин Flutter СЛЕДУЕТ считать зависимостью infrastructure, если он даёт доступ к:
 
-* filesystem;
-* native window API;
-* secure storage;
-* clipboard;
-* notifications;
-* process/system integration.
+* файловой системе;
+* нативному API окна;
+* защищённому хранилищу;
+* буферу обмена;
+* уведомлениям;
+* интеграции с процессами и системой.
 
-Plugin API не должен автоматически становиться public API application layer.
+API плагина НЕ ДОЛЖЕН автоматически становиться публичным API application-слоя.
 
 ---
 
-## 8. Plugin isolation
+## 8. Изоляция плагинов
 
 Предпочтительная схема:
 
@@ -202,11 +212,12 @@ Flutter plugin
 
 Это позволяет:
 
-* тестировать feature без plugin;
-* заменять plugin;
-* изолировать platform differences;
-* уменьшать coupling.
+* тестировать фичу без плагина;
+* заменять плагин;
+* изолировать различия платформ;
+* уменьшать связанность.
 
+В коде импорт части плагинов desktop ограничен одним файлом-адаптером правилами сторожа (`packages/dart/codelab_architecture_tests/test/support/rules.dart`): `pty2` — `user_shell_launcher.dart`, `system_theme` — `system_accent_source.dart`, `desktop_drop` — `os_drop_region.dart`, `file_selector` и `url_launcher` — адаптеры в `lib/core/platform/`.
 
 ### 8а. Нативное меню macOS и канал `codelab/app_menu`
 
@@ -223,21 +234,21 @@ Flutter plugin
 
 ---
 
-## 9. Filesystem
+## 9. Файловая система
 
-Filesystem является infrastructure concern.
+Файловая система — забота infrastructure.
 
-Direct `File`, `Directory` и другие `dart:io` primitives следует использовать только в подходящем infrastructure layer.
+Примитивы `File`, `Directory` и другие примитивы `dart:io` СЛЕДУЕТ использовать напрямую только в подходящем слое infrastructure.
 
-Не следует использовать их напрямую из Widget или domain.
+НЕ СЛЕДУЕТ использовать их напрямую из виджета или domain.
 
 ---
 
-## 10. File access abstraction
+## 10. Абстракция доступа к файлам
 
-Если application logic зависит от работы с файлами, следует использовать abstraction.
+Если application-логика работает с файлами, СЛЕДУЕТ использовать абстракцию.
 
-Например:
+Например (иллюстративный порт; реальные — `TextFileReader` и `TextFileWriter` клиента, `FileSystem` в составе `ExecutionEnv` агента):
 
 ```dart
 abstract interface class FileStore {
@@ -246,29 +257,33 @@ abstract interface class FileStore {
 }
 ```
 
-Конкретная API должна соответствовать реальной semantics задачи.
+Конкретный API ДОЛЖЕН соответствовать реальному смыслу задачи.
+
+В коде у клиента порты `TextFileReader`/`TextFileWriter` живут в web-безопасном `codelab_client_acp`, а адаптер `IoTextFileIo` — в `codelab_client_io`, общем для app и CLI; composition root передаёт его в `AcpClientApplication(textFileReader:, textFileWriter:)`. Агент работает с файлами только через `ExecutionEnv` (`agent-core-architecture` §4).
 
 ---
 
-## 11. Path handling
+## 11. Работа с путями
 
-Paths должны обрабатываться platform-aware способом.
+Пути ДОЛЖНЫ обрабатываться с учётом платформы.
 
-Нельзя полагаться на:
+ЗАПРЕЩЕНО полагаться на:
 
-* hardcoded `/`;
-* Windows-only drive syntax;
-* manually concatenated path strings.
+* жёстко заданный разделитель `/`;
+* синтаксис дисков, существующий только в Windows;
+* пути, склеенные вручную из строк.
 
-Следует использовать approved path handling mechanism проекта.
+СЛЕДУЕТ использовать утверждённый в проекте механизм работы с путями.
+
+В коде клиенты используют `package:path` (`p.join`, `p.normalize`). Ядро агента хранит пути в POSIX-форме независимо от ОС; на Windows `LocalExecutionEnv` и `StdioProcessTransport` переводят их в пути ОС и обратно (`toHostPath`, `toCorePath` в `codelab_agent_io/lib/src/env/host_path.dart`). Ручная склейка через `/` и `Platform.pathSeparator` встречается в `codelab_agent_io` (например, `config_link_containment.dart`, `skill_roots.dart`, `jsonl_session_store.dart`) — внутри адаптеров, с явной веткой Windows.
 
 ---
 
-## 12. Application directories
+## 12. Каталоги приложения
 
-Для app data/config/cache следует использовать platform-appropriate directories.
+Для данных, конфигурации и кэша приложения СЛЕДУЕТ использовать каталоги, принятые на платформе.
 
-Не следует хардкодить:
+НЕ СЛЕДУЕТ жёстко задавать:
 
 ```text
 C:\Users\...
@@ -276,24 +291,28 @@ C:\Users\...
 /home/...
 ```
 
-Application должна получать корректные directories через platform abstraction/plugin.
+Приложение ДОЛЖНО получать правильные каталоги через абстракцию или плагин платформы.
+
+В коде каталог журналов app — `getApplicationSupportDirectory()/logs` (`path_provider`, `apps/codelab_desktop/lib/main.dart`); настройки только app — домен `shared_preferences`. Общие данные app, CLI и агента лежат в `$CODELAB_HOME`: значение переменной `CODELAB_HOME` или `<HOME|USERPROFILE>/.codelab` (`resolveCodelabHome` в `codelab_client_io`, `CodelabHome.resolve` в CLI, `codelabHomeOf` в `codelab_agent_io`). Это не каталог, принятый на платформе (на macOS не `~/Library/Application Support`, на Windows не `%APPDATA%`), а один путь от домашней папки на всех ОС: так app, CLI и агент находят одни и те же файлы без плагина (§28).
 
 ---
 
-## 13. Temp files
+## 13. Временные файлы
 
-Temporary files должны:
+Временные файлы ДОЛЖНЫ:
 
-* иметь owner;
+* иметь владельца;
 * удаляться после использования, если это возможно;
-* не хранить secrets без необходимости;
-* использовать OS-appropriate temp directory.
+* не хранить секреты без необходимости;
+* создаваться во временном каталоге, принятом в ОС.
+
+В коде временный файл атомарной записи (§14) создаётся рядом с целевым, а не во временном каталоге ОС: `rename` атомарен только в пределах одной файловой системы; при сбое записи он удаляется (`writeBytesAtomically`). Временный каталог ОС — запасной каталог журналов, когда тест собирает scope без `main.dart` (`Directory.systemTemp`, `createCodeLabRootScope`).
 
 ---
 
-## 14. File write safety
+## 14. Безопасная запись файлов
 
-Для critical data желательно использовать безопасную write strategy.
+Для критичных данных СЛЕДУЕТ использовать безопасную стратегию записи.
 
 Например:
 
@@ -305,54 +324,62 @@ flush
 atomic replace
 ```
 
-если это необходимо для защиты от partial writes.
+если это нужно для защиты от частичной записи.
+
+В коде так пишутся общие файлы `$CODELAB_HOME` (`writeJsonObject`, `writeBytesAtomically` в `codelab_client_io/lib/src/stores/json_file.dart`: уникальный временный файл рядом, `flush`, `rename`) и выгрузка CSV использования (`UsageCsvSaver`). Файлы рабочей папки пишутся на месте, без временного файла: у клиента — `IoTextFileIo.writeText` (`fs/write_text_file`), у агента — `LocalExecutionEnv.writeText` (с `flush`).
 
 ---
 
-## 15. Destructive operations
+## 15. Разрушающие операции
 
-Удаление, overwrite и recursive filesystem operations могут быть security-sensitive.
+Удаление, перезапись и рекурсивные операции с файловой системой могут быть чувствительны к безопасности.
 
-Если action инициирована AI agent, она должна проходить permission policy.
+Если действие инициировано AI-агентом, оно ДОЛЖНО проходить permission policy.
 
 Подробнее:
 
 `docs/architecture/permissions.md`
 
+Политика разрешений здесь — политика агента. Для ACP-методов `fs/*` и `terminal/*` клиент собственного гейта одобрения не вводит, а вместо него ограничивает `path` и `cwd` рабочей папкой сессии (корневой `AGENTS.md` §10, исключение).
+
 ---
 
-## 16. Symlinks
+## 16. Символические ссылки
 
-Для security-sensitive file operations нужно учитывать symlinks.
+Для операций с файлами, чувствительных к безопасности, ДОЛЖНЫ учитываться символические ссылки.
 
-Path:
+Путь:
 
 ```text
 workspace/file
 ```
 
-может фактически указывать вне workspace.
+может на деле указывать за пределы рабочей папки.
 
-Permission/security layer не должна полагаться только на textual path prefix.
+Слой разрешений и безопасности НЕ ДОЛЖЕН полагаться только на текстовый префикс пути.
 
----
-
-## 17. File watchers
-
-Если используются filesystem watchers, каждый watcher должен иметь:
-
-* owner;
-* lifecycle;
-* cleanup;
-* error handling.
-
-Watcher не должен переживать закрытие feature/workspace без явной причины.
+В коде по реальным путям проверяют агент (`BoundedEnv`: корень и цель раскрываются `realpath` через `PathResolver`, для несуществующей цели — по самому глубокому существующему предку) и дерево файлов проекта app (`IoProjectFiles`: `resolveSymbolicLinks` корня и цели до открытия файла; остаточный риск — подмена ссылки между проверкой и открытием, TOCTOU). Клиентская проверка ACP `fs/*` и `terminal/*` — `resolveWithinWorkingDirectory` — только лексическая (`p.normalize` и сравнение префикса по сегментам) и ссылки не раскрывает: пакет `codelab_client_acp` без `dart:io`. Это расхождение кода с решением D3 change [`add-acp-fs-client-support`](../../openspec/changes/archive/2026-09-04-add-acp-fs-client-support/design.md) (канонический путь, отказ при выходе по symlink; в Risks — `resolveSymbolicLinksSync` и тесты symlink-escape) и со спецификацией `openspec/specs/acp-fs-client/spec.md` («после канонизации»). Doc-комментарий `resolveWithinWorkingDirectory` называет выход по ссылке принятым остаточным риском, но ни design, ни спецификация такого риска не принимают. Порт `LocalPathKindOf` app определяет вид брошенного пути, следуя по ссылкам (§37а).
 
 ---
 
-## 18. External processes
+## 17. Наблюдатели за файлами
 
-Запуск external process является infrastructure concern.
+Если используются наблюдатели за файловой системой (file watchers), у каждого ДОЛЖНЫ быть:
+
+* владелец;
+* жизненный цикл;
+* очистка;
+* обработка ошибок.
+
+Наблюдатель НЕ ДОЛЖЕН переживать закрытие фичи или рабочего пространства без явной причины.
+
+В коде наблюдатель один — `ConfigWatcher` агента (`codelab_agent_io/lib/src/config/config_watcher.dart`): `Directory.watch` на родителе каждого файла конфига, debounce 300 мс, при сбое потока — опрос; его создаёт `FileConfigSource`, вызывает `start`, а после `runtime.dispose()` — `close`.
+
+---
+
+## 18. Внешние процессы
+
+Запуск внешнего процесса — забота infrastructure.
 
 Например:
 
@@ -362,15 +389,15 @@ shell command
 helper executable
 ```
 
-должен иметь явного owner.
+У каждого такого процесса ДОЛЖЕН быть явный владелец.
 
 ---
 
-## 19. Process abstraction
+## 19. Абстракция процессов
 
-Предпочтительно скрывать process API за abstraction, если он используется application logic.
+Предпочтительно скрывать API процессов за абстракцией, если его использует application-логика.
 
-Например:
+Например (иллюстративный порт; реальные — `TerminalProcessRunner` клиента, `Shell.exec` в `ExecutionEnv` агента, `UserShellLauncher` desktop):
 
 ```dart
 abstract interface class ProcessRunner {
@@ -378,22 +405,24 @@ abstract interface class ProcessRunner {
 }
 ```
 
-Для ACP transport может существовать специализированный process transport вместо generic runner.
+Для транспорта ACP может существовать специализированный транспорт процесса вместо общего запускателя — `StdioAcpTransport`.
 
 ---
 
-## 20. Agent process ownership
+## 20. Владение процессом агента
 
-Если AI agent запускается как child process, transport/infrastructure layer должен владеть:
+Если AI-агент запускается как дочерний процесс, слой транспорта и infrastructure ДОЛЖЕН владеть:
 
-* process start;
-* stdin/stdout;
+* запуском процесса;
+* stdin и stdout;
 * stderr;
-* exit code;
-* termination;
-* cleanup.
+* кодом выхода;
+* завершением;
+* очисткой.
 
-UI не должен напрямую управлять `Process`.
+UI НЕ ДОЛЖЕН напрямую управлять `Process`.
+
+В коде процессом внешнего stdio-агента владеет `StdioAcpTransport`: запуск, чтение stdout и stderr, закрытие с эскалацией EOF → `SIGTERM` → `SIGKILL`; транспорт создаёт `ioTransportResolver` по профилю, закрывает `AcpClientApplication` — при отключении, переподключении и `dispose` (при выходе из desktop — шагом `CodeLabRootLifecycle` с пределом `transportCloseTimeout`, 2 с).
 
 ---
 
@@ -409,15 +438,17 @@ stderr
     → diagnostics
 ```
 
-если это соответствует protocol contract.
+если это соответствует контракту протокола.
 
-Не следует смешивать diagnostics и protocol stream без explicit framing.
+НЕ СЛЕДУЕТ смешивать диагностику и поток протокола без явного кадрирования.
+
+В коде `StdioAcpTransport` разбирает stdout как поток ACP, а каждую строку stderr публикует событием `AcpTransportEvent.diagnostic` с `source: 'stderr'`. Бинарь `codelab-agent serve --stdio` пишет журнал в stderr (и по `--log-file` в файл), stdout занят протоколом (§80).
 
 ---
 
-## 22. Process termination
+## 22. Завершение процесса
 
-Следует различать:
+СЛЕДУЕТ различать:
 
 ```text
 graceful shutdown
@@ -425,60 +456,68 @@ terminate
 force kill
 ```
 
-Application lifecycle должен определять, когда используется каждый вариант.
+Жизненный цикл приложения ДОЛЖЕН определять, когда используется каждый вариант.
 
-В CodeLab: graceful shutdown — закрытие stdin (stdio-агент, MCP stdio) или `hangUp` (терминал пользователя); terminate — `SIGTERM`; force kill — `SIGKILL` по истечении grace владельца (2 с у `terminal/*`, stdio-агента после `SIGTERM` и `exec` агента; 3 с у терминала пользователя). Ожидание выхода процесса без предела запрещено (`concurrency.md` §46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D3, D4).
-
----
-
-## 23. Orphan processes
-
-При закрытии приложения не должны оставаться orphan child processes, если это не intentional product behavior.
-
-Shutdown flow должен включать cleanup process resources.
-
-Терминал пользователя (панель Terminal, change [`add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D4) закрывает свои shell при выходе из app явно: `SIGHUP`, затем принудительное завершение по таймауту. Страховка на случай краха или убийства app — сам PTY: при закрытии PTY-мастера ядро шлёт `SIGHUP` сеансу shell. При штатном выходе страховка не срабатывает: `pty2` ждёт код выхода каждого shell блокирующим `waitpid` в отдельном isolate, Dart VM при остановке ждёт этот isolate, а shell ждёт закрытия мастера, который живёт вместе с процессом app. Поэтому явное закрытие при выходе обязательно, без него app зависает (решение пользователя 2026-11-12; D4, D15 п. 9 change). Сиротами остаются только задания, которые пользователь намеренно отвязал (`nohup`, `disown`) — это intentional behavior пользователя.
-
-Остальные дочерние процессы клиента — ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента — закрываются тем же обработчиком выхода через `CodeLabRootLifecycle.dispose()`, параллельно с терминалом, с общим пределом 5 с (`concurrency.md` §45–§46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md)). На EOF stdin при смерти app опираться нельзя: `terminal/*` stdin не читает, команды `exec` и внуки обёрток (`npx`) его не видят. Остаточный риск — потомки `terminal/*` и stdio-агента: сигнал получает только корень (design.md change, Q2), и аварийное завершение app, при котором обработчик не вызывается.
+В CodeLab: штатное завершение (graceful shutdown) — закрытие stdin (stdio-агент, MCP stdio) или `hangUp` (терминал пользователя); terminate — `SIGTERM`; принудительное (force kill) — `SIGKILL` по истечении срока ожидания владельца (2 с у `terminal/*`, у stdio-агента после `SIGTERM` и у `exec` агента; у терминала пользователя — 2 с при закрытии вкладки и 3 с при выходе из app; у stdio-серверов MCP — EOF → 2 с → `SIGTERM` дереву → 5 с → `SIGKILL` → ожидание кода выхода до 2 с, затем потомкам, пережившим корень, `SIGTERM` → 5 с → `SIGKILL`; `codelab_agent_io/lib/src/mcp/stdio_process_transport.dart`). Ожидание выхода процесса без предела ЗАПРЕЩЕНО (`concurrency.md` §46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D3, D4).
 
 ---
 
-## 24. Process exit code
+## 23. Процессы-сироты
 
-Exit code относится к infrastructure diagnostics.
+При закрытии приложения НЕ ДОЛЖНЫ оставаться дочерние процессы-сироты, если это не намеренное поведение продукта.
 
-Он может быть преобразован в application-level failure, например:
+Процесс закрытия ДОЛЖЕН включать очистку ресурсов процессов.
+
+Терминал пользователя (панель Terminal, change [`add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D4) закрывает свои shell при выходе из app явно: `SIGHUP`, затем принудительное завершение по таймауту. Страховка на случай краха или убийства app — сам PTY: при закрытии PTY-мастера ядро ОС шлёт `SIGHUP` сеансу shell. При штатном выходе страховка не срабатывает: `pty2` ждёт код выхода каждого shell блокирующим `waitpid` в отдельном isolate, Dart VM при остановке ждёт этот isolate, а shell ждёт закрытия мастера, который живёт вместе с процессом app. Поэтому закрытие при выходе ДОЛЖНО быть явным, без него app зависает (решение пользователя 2026-11-12; D4, D15 п. 9 change). Сиротами остаются только задания, которые пользователь намеренно отвязал (`nohup`, `disown`), — это намеренное поведение пользователя.
+
+Остальные дочерние процессы клиента — ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента — закрываются тем же обработчиком выхода через `CodeLabRootLifecycle.dispose()`, параллельно с терминалом, с общим пределом 5 с (`concurrency.md` §45–§46; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md)). Опираться на EOF stdin при смерти app ЗАПРЕЩЕНО: `terminal/*` stdin не читает, команды `exec` и внуки обёрток (`npx`) его не видят. Остаточный риск — потомки `terminal/*` и stdio-агента: сигнал получает только корень (design.md change, Q2), и аварийное завершение app, при котором обработчик не вызывается.
+
+Ещё один принятый риск того же change — MCP-сервер встроенного агента, игнорирующий EOF и `SIGTERM`. Закрытие встроенного агента сначала ждёт завершения хода (`server.shutdown`, до 5 с), и только потом `runtime.dispose()` закрывает MCP-серверы по цепочке сроков §22. Вместе это больше общего предела выхода 5 с (`AppExitHandler.exitTimeout`), и такой сервер может остаться сиротой (design.md change, таблица владельцев и Risks «Встроенный агент с зависшим ходом»; смягчение отложено — Q3).
+
+В коде `exec` агента и stdio-серверы MCP завершают всё дерево процессов: `terminateTree` находит потомков по снимку таблицы процессов (`ps`), на Windows — `taskkill /T /F` (`codelab_agent_io/lib/src/env/process_tree.dart`).
+
+---
+
+## 24. Код выхода процесса
+
+Код выхода относится к диагностике infrastructure.
+
+Его можно преобразовать в отказ уровня application, например:
 
 ```text
 agent process exited unexpectedly
 ```
 
-UI не должен анализировать numeric exit codes напрямую.
+UI НЕ ДОЛЖЕН сам анализировать числовые коды выхода.
 
 Код выхода `dart:io` на POSIX для процесса, завершённого сигналом, отрицателен (`-15`, `-9`). Адаптер, который отдаёт статус выхода наружу, переводит его сам. Для ACP `terminal/*` это `exitCode: null` и имя сигнала: схема `TerminalExitStatus` требует `exitCode` ≥ 0. Признак «какой сигнал посылали» статусом выхода не считается: процесс мог выйти сам или обработать `SIGTERM` (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D14).
 
----
-
-## 25. Secure storage
-
-Secrets должны храниться через secure storage abstraction.
-
-К secrets относятся:
-
-* auth tokens;
-* API keys;
-* credentials;
-* private tokens.
-
-Обычный local preferences storage не следует использовать для sensitive data.
+В коде перевод для `terminal/*` делает `terminalStateFromExitCode` в `IoTerminalProcessRunner` (имя сигнала, `SIG<n>` для непортируемых номеров); `LocalExecutionEnv` агента отдаёт `ExecResult(exitCode: null, signal: 'SIG<n>')` с номером, а не именем сигнала, и без ветки по платформе: на Windows отрицательный код выхода (NTSTATUS) тоже станет `SIG<n>`, тогда как клиент переводит в сигнал только на POSIX (D14).
 
 ---
 
-## 26. Secure storage boundary
+## 25. Защищённое хранилище
 
-Application layer должен работать с semantic API.
+Секреты ДОЛЖНЫ храниться через абстракцию защищённого хранилища.
 
-Например:
+К секретам относятся:
+
+* токены авторизации;
+* API-ключи;
+* учётные данные;
+* приватные токены.
+
+Обычное локальное хранилище настроек НЕ СЛЕДУЕТ использовать для чувствительных данных.
+
+В коде хранилища ОС (keychain, Credential Manager, libsecret) нет — ни у app, ни у агента. Секреты хранит хранилище агента `openSecretStore` (`codelab_agent_io`): `secrets.backend` `auto` и `env` — переменные `CODELAB_SECRET_*`, `file` — `$CODELAB_HOME/secrets.yaml` открытым текстом с правами `0600` (на Windows `file` недоступен); `shared_preferences` для секретов не используется (§80).
+
+---
+
+## 26. Граница защищённого хранилища
+
+Application-слой ДОЛЖЕН работать со смысловым API.
+
+Например (иллюстративный порт; реальный порт клиента — `ProfileSecrets` в `codelab_client_core/lib/src/connection/profile_secrets.dart`):
 
 ```dart
 abstract interface class CredentialStore {
@@ -488,27 +527,30 @@ abstract interface class CredentialStore {
 }
 ```
 
-а не напрямую с plugin-specific API.
+а не напрямую с API конкретного плагина.
+
+В коде `ProfileSecrets` app открывает `openProfileSecrets` в composition root (`apps/codelab_desktop/lib/app/client_profile_secrets.dart`) поверх `ClientSecretAccess` из `codelab_setup/io.dart`; Cubit и виджеты получают готовый порт.
 
 ---
 
-## 27. Secrets lifecycle
+## 27. Жизненный цикл секретов
 
-Secrets должны:
+Секреты ДОЛЖНЫ:
 
-* минимально долго находиться в memory;
-* не логироваться;
-* не попадать в exception messages;
-* не сохраняться в debug dump без masking.
+* находиться в памяти минимально долго;
+* не журналироваться;
+* не попадать в сообщения исключений;
+* не сохраняться в отладочный дамп без маскирования.
 
 ---
 
-## 28. Local preferences storage
+## 28. Локальное хранилище настроек
 
-В отличие от secure storage (§25-27), которое предназначено исключительно
-для secrets, ordinary non-sensitive local data (например, recently opened
-projects, UI preferences), пережившие перезапуск приложения, следует
-хранить через отдельный, столь же узкий application-level port:
+В отличие от защищённого хранилища (§25–27), которое предназначено только
+для секретов, обычные нечувствительные локальные данные (например, недавно
+открытые проекты, настройки интерфейса), которые переживают перезапуск
+приложения, СЛЕДУЕТ хранить через отдельный, столь же узкий порт уровня
+application:
 
 ```dart
 abstract interface class RecentProjectsStore {
@@ -519,19 +561,19 @@ abstract interface class RecentProjectsStore {
 
 Правила:
 
-* Application layer работает с semantic API (как в §26), а не напрямую с
-  `SharedPreferences`/эквивалентным plugin.
-* Данные одного логического concern (например, recents) следует хранить как
-  один сериализованный документ под одним ключом, а не как россыпь
-  отдельных ключей — упрощает атомарную замену и будущее версионирование
+* Application-слой работает со смысловым API (как в §26), а не напрямую с
+  `SharedPreferences` или аналогичным плагином.
+* Данные одной логической темы (например, недавних проектов) СЛЕДУЕТ хранить
+  как один сериализованный документ под одним ключом, а не как россыпь
+  отдельных ключей — так проще атомарная замена и будущее версионирование
   формата.
-* Local preferences storage НЕ ДОЛЖЕН использоваться для secrets/tokens
-  (см. §25) и не заменяет structured storage для больших/реляционных
+* Локальное хранилище настроек НЕ ДОЛЖНО использоваться для секретов и токенов
+  (см. §25) и не заменяет структурное хранилище для больших или реляционных
   данных (см. `docs/architecture/technology-stack.md` §12.2).
-* Failures на чтении/записи (например, corrupt/unavailable store) должны
-  деградировать некритично — например, "recents недоступны в этой сессии",
-  а не блокировать application flow.
-* Где лежат данные, решает то, кто ими пользуется. Настройки только app
+* Сбои чтения и записи (например, повреждённое или недоступное хранилище)
+  ДОЛЖНЫ деградировать некритично — например, «недавние проекты недоступны в
+  этой сессии», а не блокировать работу приложения.
+* Где лежат данные, решает тот, кто ими пользуется. Настройки только app
   (раскладка, язык, оформление, снимок рабочего места) — `shared_preferences`
   в `apps/codelab_desktop/lib/core/platform/`. Данные, общие с `codelab`
   (CLI), — JSON-файлы в `$CODELAB_HOME` через хранилища `codelab_client_io`:
@@ -540,10 +582,10 @@ abstract interface class RecentProjectsStore {
   пропали бы. Так хранятся профили подключения (`profiles.json`) и недавние
   проекты (`recent_projects.json`).
 * Общий файл пишут несколько процессов. Запись — через временный файл и
-  атомарное переименование (файл не портится), нечитаемый или незнакомой
-  версии файл не перезаписывается. Порт не обещает межпроцессной
+  атомарное переименование (файл не портится), нечитаемый файл или файл
+  незнакомой версии не перезаписывается. Порт не обещает межпроцессной
   сериализации «прочитать — изменить — записать»; если потеря одной записи
-  при одновременной записи недопустима для concern, это решается отдельно.
+  при одновременной записи недопустима для темы, это решается отдельно.
 
 Порт `RecentProjectsStore` появился в `openspec/changes/archive/2026-09-04-add-open-project-picker/design.md`
 (Decision 4) с реализацией на `shared_preferences`. Change
@@ -552,96 +594,110 @@ abstract interface class RecentProjectsStore {
 (`JsonFileRecentProjectsStore`). Перенос прежнего ключа есть только в
 предвыпускных сборках app и удаляется до первого `stable` (D9).
 
----
-
-## 29. Clipboard
-
-Clipboard является platform capability.
-
-Если clipboard используется для обычного UI action, direct Flutter API может быть допустим на presentation boundary.
-
-Если clipboard access инициируется AI agent или имеет security implications, следует применять permission/security policy.
+В коде порт `RecentProjectsStore` — `codelab_client_core/lib/src/stores/stores.dart`; перенос прежнего ключа — `MigratingRecentProjectsStore` (`apps/codelab_desktop/lib/core/platform/recent_projects_migration.dart`).
 
 ---
 
-## 30. Notifications
+## 29. Буфер обмена
 
-System notifications являются presentation/platform concern.
+Буфер обмена — возможность платформы.
 
-Application layer может выражать intent:
+Если буфер обмена нужен для обычного действия пользователя в UI, прямой API Flutter МОЖНО использовать на границе presentation.
+
+Если доступ к буферу обмена инициирует AI-агент или он затрагивает безопасность, СЛЕДУЕТ применять политику разрешений и безопасности.
+
+В коде буфер обмена используется только по клику пользователя, напрямую через `Clipboard.setData` в presentation (например, `about_section.dart`, `project_files_pane.dart`, `protocol_pane.dart` app и кнопка копирования `CodeLabCodeBlock` в `packages/flutter/codelab_ui/lib/src/rendering/codelab_code_block.dart`); агент к буферу обмена доступа не имеет.
+
+---
+
+## 30. Уведомления
+
+Системные уведомления — забота presentation и платформы.
+
+Application-слой МОЖЕТ выражать намерение:
 
 ```text
 NotifyUser
 ```
 
-но concrete notification plugin должен оставаться platform adapter.
+но конкретный плагин уведомлений ДОЛЖЕН оставаться адаптером платформы.
+
+В коде системных уведомлений нет.
 
 ---
 
-## 31. Window management
+## 31. Управление окнами
 
-Window management может включать:
+Управление окнами может включать:
 
-* minimize;
-* maximize;
-* restore;
-* close;
-* always-on-top;
-* custom title bar.
+* сворачивание;
+* разворачивание;
+* восстановление;
+* закрытие;
+* режим «поверх всех окон»;
+* собственную строку заголовка.
 
-Эти действия должны быть локализованы в app/platform layer.
+Эти действия ДОЛЖНЫ быть локализованы в слое app и платформы.
 
-Feature domain не должен зависеть от window API.
+Domain фичи НЕ ДОЛЖЕН зависеть от API окна.
 
----
-
-## 32. Close interception
-
-Desktop app может перехватывать close для:
-
-* unsaved data;
-* active ACP session;
-* running agent process.
-
-Close flow должен быть application-controlled, а не случайным `dispose`.
+В коде плагина управления окнами нет; окно и его строку заголовка ведёт раннер платформы (`MainFlutterWindow.swift` на macOS).
 
 ---
 
-## 33. Window state persistence
+## 32. Перехват закрытия
+
+Desktop-приложение МОЖЕТ перехватывать закрытие из-за:
+
+* несохранённых данных;
+* активной сессии ACP;
+* работающего процесса агента.
+
+Процесс закрытия ДОЛЖЕН управляться application, а не случайным `dispose`.
+
+В коде запрос выхода от ОС принимает `AppExitHandler` (через `AppLifecycleListener` в `CodeLabBootstrap`) и закрывает `CodeLabRootLifecycle` с пределом 5 с; отмены выхода и вопроса пользователю нет (`concurrency.md` §45–§46).
+
+---
+
+## 33. Сохранение состояния окна
 
 Если сохраняются:
 
-* size;
-* position;
-* maximized state;
+* размер;
+* положение;
+* развёрнутое состояние;
 
-это presentation/platform persistence concern.
+это забота сохранения на стороне presentation и платформы.
 
-Такой state не должен смешиваться с ACP session state.
+Такое состояние НЕ ДОЛЖНО смешиваться с состоянием сессии ACP.
 
----
-
-## 34. Multi-window
-
-Если в будущем появится multi-window, window-scoped dependencies должны иметь корректный scope.
-
-Нельзя заранее делать все services global singleton, если они потенциально должны быть window-scoped.
+В коде размер и положение окна app не сохраняет; раскладка дока и снимок рабочего места — отдельные хранилища `shared_preferences` (`SharedPreferencesDockLayoutStore`, `shared_preferences_workspace_snapshot_store.dart`).
 
 ---
 
-## 35. Open external URL
+## 34. Несколько окон
 
-Открытие внешнего URL является platform action.
+Если в будущем появится несколько окон, зависимости уровня окна ДОЛЖНЫ иметь правильную область жизни (scope).
 
-Если инициировано пользователем из UI — это presentation/platform concern.
-
-Если инициировано agent — может требовать permission.
+ЗАПРЕЩЕНО заранее делать все сервисы глобальными синглтонами, если им, возможно, нужна область жизни окна.
 
 ---
 
-## 36. Deep links
+## 35. Открытие внешнего URL
 
-Если application поддерживает deep links, parsing должен быть отделён от navigation.
+Открытие внешнего URL — действие платформы.
+
+Если его инициирует пользователь из UI, это забота presentation и платформы.
+
+Если его инициирует агент, может потребоваться разрешение.
+
+В коде URL открывает порт `ExternalLinkOpener` (`url_launcher`) только по клику пользователя; можно ли открыть ссылку, решает чистая функция `isOpenableLink` (`lib/core/platform/link_policy.dart`); она проверяется трижды — в `CodeLabMarkdownScope`, в `CodeLabShellCubit.openExternalLink` и в самом адаптере `ExternalLinkOpener.open`.
+
+---
+
+## 36. Глубокие ссылки
+
+Если приложение поддерживает глубокие ссылки (deep links), разбор ДОЛЖЕН быть отделён от навигации.
 
 Например:
 
@@ -655,13 +711,15 @@ application intent
 navigation
 ```
 
+В коде глубоких ссылок нет.
+
 ---
 
-## 37. Drag and drop
+## 37. Перетаскивание
 
-Drag-and-drop является presentation/platform interaction.
+Перетаскивание (drag and drop) — взаимодействие presentation и платформы.
 
-Dropped files следует преобразовывать в normalized application model/path before дальнейшей обработки.
+Брошенные файлы СЛЕДУЕТ преобразовывать в нормализованную модель или путь application до дальнейшей обработки.
 
 ### 37а. Перетаскивание из ОС в app: `OsDropRegion` и `LocalPathKindOf`
 
@@ -685,19 +743,21 @@ Flutter не отдаёт на десктопе события перетаск�
 
 ---
 
-## 38. Native dialogs
+## 38. Нативные диалоги
 
-Native file dialog или system dialog — implementation detail.
+Нативный диалог выбора файла или системный диалог — деталь реализации.
 
-Application layer должен получать typed result, а не зависеть от dialog API.
+Application-слой ДОЛЖЕН получать типизированный результат, а не зависеть от API диалога.
+
+В коде диалоги `file_selector` закрыты портами `ProjectFolderPicker`, `ThemeFilePicker`, `ProtocolExportSaver`, `UsageCsvSaver` (`apps/codelab_desktop/lib/core/platform/`); Cubit получает путь или `null` (`pickFolder`) либо типизированный результат сохранения (`ProtocolExportSaveResult`, `UsageCsvSaveResult`).
 
 ---
 
-## 39. Platform errors
+## 39. Ошибки платформы
 
-Platform-specific exceptions следует преобразовывать в typed infrastructure/application failures.
+Исключения, зависящие от платформы, СЛЕДУЕТ преобразовывать в типизированные отказы infrastructure или application.
 
-Например:
+Например (иллюстративные имена отказов):
 
 ```text
 PlatformException
@@ -713,21 +773,25 @@ FileSystemException
 FileAccessFailure
 ```
 
-UI не должен показывать raw `PlatformException.toString()`.
+UI НЕ ДОЛЖЕН показывать сырое `PlatformException.toString()`.
+
+В коде `FileSystemException` клиента становится `FsNotFoundFailure` или `FsIoFailure` (`IoTextFileIo`), сбой запуска — `TerminalStartFailure` (`IoTerminalProcessRunner`), ошибки дерева проекта — `ProjectFilesFailure` (`IoProjectFiles`); у агента ожидаемые сбои — значения `FileError` и `ExecError` (ENV-1), недоступное хранилище секретов — `SecretStoreUnavailableException`. Общие правила — [`error-handling.md`](error-handling.md).
 
 ---
 
-## 40. Unsupported platform capability
+## 40. Неподдерживаемая возможность платформы
 
-Если capability недоступна на конкретной platform, это должно быть explicit state/error.
+Если возможность недоступна на конкретной платформе, это ДОЛЖНО быть явным состоянием или ошибкой.
 
-Не следует делать silent no-op для критичной operation.
+НЕ СЛЕДУЕТ делать тихий no-op для критичной операции.
+
+В коде так сделаны терминал пользователя (`UserShellLauncher.isSupported`) и бэкенд секретов `file` на Windows (`SecretStoreUnavailableException` с причиной, а не молчаливая подмена).
 
 ---
 
-## 41. Feature detection
+## 41. Определение возможностей
 
-Предпочтительнее проверять capability:
+Предпочтительнее проверять возможность:
 
 ```text
 supportsTray
@@ -735,13 +799,13 @@ supportsSecureStorage
 supportsWindowControl
 ```
 
-чем напрямую в feature-коде проверять OS name.
+чем проверять имя ОС прямо в коде фичи.
 
 ---
 
-## 42. Capability facade
+## 42. Фасад возможностей
 
-Для сложных desktop integrations может быть полезен facade:
+Для сложных интеграций с desktop может пригодиться фасад (пример иллюстративный, в коде такого фасада нет):
 
 ```dart
 abstract interface class DesktopCapabilities {
@@ -750,85 +814,91 @@ abstract interface class DesktopCapabilities {
 }
 ```
 
-Но не следует создавать giant facade для всех platform APIs.
+Но НЕ СЛЕДУЕТ создавать гигантский фасад для всех API платформы.
 
 ---
 
-## 43. Configuration
+## 43. Конфигурация
 
-Platform-specific configuration должна быть локализована.
+Конфигурация, зависящая от платформы, ДОЛЖНА быть локализована.
 
 Например:
 
 * entitlements;
 * plist;
 * manifest;
-* desktop runner settings.
+* настройки desktop-раннера.
 
-Такие изменения следует документировать рядом с соответствующей capability.
+Такие изменения СЛЕДУЕТ документировать рядом с соответствующей возможностью.
 
 ---
 
-## 44. macOS permissions
+## 44. Разрешения macOS
 
 macOS может требовать:
 
 * entitlements;
-* sandbox permissions;
-* user prompts.
+* разрешений песочницы;
+* запросов к пользователю.
 
-Application security policy не должна путать OS-level permission и ACP user permission.
+Политика безопасности приложения НЕ ДОЛЖНА путать разрешение уровня ОС и разрешение пользователя в ACP.
 
-Это разные layers.
+Это разные слои.
 
----
-
-## 45. Windows specifics
-
-Windows-specific behavior может включать:
-
-* process creation semantics;
-* path case-insensitivity;
-* executable extensions;
-* registry;
-* credential manager.
-
-Такой код должен быть локализован.
+В коде песочница выключена в обеих сборках (`DebugProfile.entitlements` и `Release.entitlements`: `com.apple.security.app-sandbox` = `false`); отладочная сборка дополнительно получает `com.apple.security.cs.allow-jit` и `com.apple.security.network.server`.
 
 ---
 
-## 46. Linux specifics
+## 45. Особенности Windows
 
-Linux desktop environment может отличаться по:
+Поведение, специфичное для Windows, может включать:
 
-* notification backend;
-* keyring;
-* file dialogs;
-* window manager behavior.
+* семантику создания процессов;
+* нечувствительность путей к регистру;
+* расширения исполняемых файлов;
+* реестр;
+* Credential Manager.
 
-Не следует предполагать единый Linux desktop environment без необходимости.
+Такой код ДОЛЖЕН быть локализован.
 
----
-
-## 47. Cross-platform invariant
-
-Business/application behavior должно быть максимально одинаковым между platforms.
-
-Platform differences должны влиять только там, где capability действительно отличается.
+В коде ветки Windows локализованы в адаптерах: `cmd.exe /d /s /c` и `taskkill /T /F` (`LocalExecutionEnv`, `terminateTree`), пути с буквой диска (`toCorePath`/`toHostPath`), нет `SIGTERM` (`apps/codelab_agent/lib/src/serve/signals.dart`, `apps/codelab_cli/lib/src/signals.dart`), нет `chmod` (`apps/codelab_cli/lib/src/home.dart`), бэкенд секретов `file` недоступен. Реестр и Credential Manager не используются.
 
 ---
 
-## 48. Platform branching в tests
+## 46. Особенности Linux
 
-Platform-specific code следует тестировать отдельно.
+Окружения рабочего стола Linux могут различаться:
 
-Pure application tests не должны зависеть от host OS CI runner.
+* бэкендом уведомлений;
+* хранилищем ключей (keyring);
+* файловыми диалогами;
+* поведением оконного менеджера.
+
+НЕ СЛЕДУЕТ без необходимости предполагать единое окружение рабочего стола Linux.
 
 ---
 
-## 49. Fake platform adapters
+## 47. Кроссплатформенный инвариант
 
-Для tests следует использовать fakes:
+Бизнес- и application-поведение ДОЛЖНО быть максимально одинаковым на всех платформах.
+
+Различия платформ ДОЛЖНЫ влиять только там, где возможность действительно различается.
+
+---
+
+## 48. Ветвление по платформе в тестах
+
+Код, зависящий от платформы, СЛЕДУЕТ тестировать отдельно.
+
+Чистые application-тесты НЕ ДОЛЖНЫ зависеть от ОС раннера CI.
+
+В коде адаптеры принимают платформу швом теста, а не читают её скрыто: `platform` вместо `Platform.operatingSystem` (`openSecretStore`, `ConfigLoader`, `FileSecretStore`), `windows:` у `toCorePath`/`toHostPath`, `isWindows:` у `chooseUserShell`.
+
+---
+
+## 49. Двойники адаптеров платформы
+
+В тестах СЛЕДУЕТ использовать двойники (fakes):
 
 ```text
 FakeFileStore
@@ -837,26 +907,28 @@ FakeWindowController
 FakeProcessRunner
 ```
 
-Это позволяет тестировать application logic без real OS calls.
+Это позволяет тестировать application-логику без настоящих вызовов ОС.
+
+Имена выше иллюстративные. В коде это, например, `FakeTerminalProcessRunner`, `FakeUserShellLauncher`, `FakeExternalLinkOpener`, `FakeLocalFolderOpener`, `FakeThemeFilePicker`, `FakeProfileSecrets`, `FakeProfileStore` и `MemoryExecutionEnv` ядра агента.
 
 ---
 
-## 50. Integration tests
+## 50. Интеграционные тесты
 
-Real platform integrations следует проверять integration tests там, где это оправдано.
+Настоящие интеграции с платформой СЛЕДУЕТ проверять интеграционными тестами там, где это оправдано.
 
 Особенно:
 
-* file access;
-* secure storage;
-* process execution;
-* desktop window APIs.
+* доступ к файлам;
+* защищённое хранилище;
+* запуск процессов;
+* API окон desktop.
 
 ---
 
-## 51. Permissions и platform APIs
+## 51. Разрешения и API платформы
 
-Если platform action инициирована AI agent, architecture должна разделять:
+Если действие платформы инициировано AI-агентом, архитектура ДОЛЖНА разделять:
 
 ```text
 agent intent
@@ -868,82 +940,92 @@ approved application operation
 platform adapter
 ```
 
-Platform adapter НЕ ДОЛЖЕН сам решать, разрешено ли действие.
+Адаптер платформы НЕ ДОЛЖЕН сам решать, разрешено ли действие.
+
+Исключение — ACP-методы `fs/*` и `terminal/*`: шаг политики разрешений принадлежит агенту, клиент своего гейта одобрения не вводит и вместо него проверяет containment рабочей папкой до вызова адаптера (корневой `AGENTS.md` §10).
 
 ---
 
-## 52. Shell execution
+## 52. Выполнение shell-команд
 
-Shell execution — high-risk capability.
+Выполнение shell-команд — возможность высокого риска.
 
-Если оно поддерживается, следует:
+Если оно поддерживается, СЛЕДУЕТ:
 
-* централизовать execution;
-* использовать permission policy;
-* логировать metadata без secrets;
-* ограничивать lifetime process;
-* корректно обрабатывать cancellation.
+* централизовать выполнение;
+* применять политику разрешений;
+* журналировать метаданные без секретов;
+* ограничивать время жизни процесса;
+* правильно обрабатывать отмену.
 
-Не следует выполнять shell command напрямую из BLoC/Widget.
+НЕ СЛЕДУЕТ выполнять shell-команду напрямую из BLoC или виджета.
 
-**Исключение: терминал пользователя.** Интерактивный shell панели Terminal десктопа (D-28; change [`add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D8) — действие пользователя, а не агента. Permission policy к нему не применяется (`permissions.md` §2, «Терминал пользователя — не действие агента»), рабочая папка его не ограничивает. Остальные требования раздела действуют: запуск централизован в одном порту (`UserShellLauncher`, `lib/core/platform/` app), журнал содержит только метаданные (без ввода, вывода, аргументов и окружения), время жизни процессов ограничено вкладкой и запуском app.
+**Исключение: терминал пользователя.** Интерактивный shell панели Terminal десктопа (D-28; change [`add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D8) — действие пользователя, а не агента. Политика разрешений к нему не применяется (`permissions.md` §2, «Терминал пользователя — не действие агента»), рабочая папка его не ограничивает. Остальные требования раздела действуют: запуск централизован в одном порту (`UserShellLauncher`, `lib/core/platform/` app), журнал содержит только метаданные (без ввода, вывода, аргументов и окружения), время жизни процессов ограничено вкладкой и запуском app.
 
----
-
-## 53. Environment variables
-
-Sensitive environment variables не должны попадать в logs.
-
-При запуске child process следует передавать только необходимые environment values.
-
-Не следует автоматически наследовать весь environment, если это создаёт security risk и продукт этого не требует.
-
-**Исключение: терминал пользователя.** Shell панели Terminal получает окружение процесса app целиком плюс `TERM=xterm-256color` и `COLORTERM=truecolor` и запускается как login shell (`$SHELL -l`) (решение пользователя Q9, change [`add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D5). Продукт этого требует: это собственный shell пользователя, урезанное окружение сломало бы его инструменты, а app из Finder (macOS) получает минимальное окружение, и `PATH` восстанавливает login shell. Окружение по-прежнему не логируется (§65).
+В коде команды агента выполняет только `ExecutionEnv.exec` (`LocalExecutionEnv` или ACP `terminal/*` клиента) после политики разрешений агента, с таймаутом и отменой; клиентский `IoTerminalProcessRunner` запускает команду без shell (`Process.start(command, args)`).
 
 ---
 
-## 54. Working directory
+## 53. Переменные окружения
 
-Process working directory должен быть explicit.
+Чувствительные переменные окружения НЕ ДОЛЖНЫ попадать в журналы.
 
-Не следует полагаться на current process directory как implicit workspace.
+При запуске дочернего процесса СЛЕДУЕТ передавать только нужные значения окружения.
 
----
+НЕ СЛЕДУЕТ автоматически наследовать всё окружение, если это создаёт риск безопасности и продукт этого не требует.
 
-## 55. Executable resolution
+**Исключение: терминал пользователя.** Shell панели Terminal получает окружение процесса app целиком плюс `TERM=xterm-256color` и `COLORTERM=truecolor` и запускается как login shell (`$SHELL -l`) (решение пользователя Q9, change [`add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D5). Продукт этого требует: это собственный shell пользователя, урезанное окружение сломало бы его инструменты, а app из Finder (macOS) получает минимальное окружение, и `PATH` восстанавливает login shell. Окружение по-прежнему не журналируется (§65).
 
-Executable path следует разрешать предсказуемо.
-
-Не следует blindly использовать `PATH` для security-sensitive process execution, если требуется более строгая policy.
+В коде у агента окружение собирается по списку: `exec` (`LocalExecutionEnv`) и stdio-серверы MCP (`StdioProcessTransport`) получают только `hostEnvironmentAllowlist` (`PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `TMPDIR`, `SHELL`) плюс явные переменные, с `includeParentEnvironment: false` (`agent-core/04-execution-env.md` §4.5); `exec` получает ещё фиксированные `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0`, у MCP их нет. У клиента иначе: `IoTerminalProcessRunner` (ACP `terminal/*`) и `StdioAcpTransport` (внешний stdio-агент) наследуют окружение процесса клиента целиком и добавляют переменные запроса или профиля (`includeParentEnvironment` по умолчанию).
 
 ---
 
-## 56. External executable trust
+## 54. Рабочая папка
 
-Если application запускает external agent binary, следует определить:
+Рабочая папка процесса ДОЛЖНА задаваться явно.
+
+НЕ СЛЕДУЕТ полагаться на текущую папку процесса как на неявное рабочее пространство.
+
+В коде app без выбранного проекта `cwd` не подставляет — ни папку процесса, ни домашнюю (`SettingsCubit.projectDirectory`). CLI по умолчанию берёт папку процесса, если `--cwd` не задан (`apps/codelab_cli/lib/src/run.dart`), — обычное соглашение терминальных программ. Бинарь `codelab-agent` читает слой конфигурации проекта от папки процесса (`apps/codelab_agent/lib/src/run.dart`, `agent_host.dart`), а корень сессии получает из `session/new` и ограничивает им инструменты через `BoundedEnv`.
+
+---
+
+## 55. Поиск исполняемого файла
+
+Путь к исполняемому файлу СЛЕДУЕТ разрешать предсказуемо.
+
+НЕ СЛЕДУЕТ вслепую полагаться на `PATH` при запуске процессов, чувствительных к безопасности, если нужна более строгая политика.
+
+В коде профиль stdio хранит путь к агенту так, как его ввёл пользователь, без проверки и без перевода в абсолютный; app, запущенное из меню ОС, не видит `PATH` оболочки, поэтому относительное имя бинаря может не найтись (§80); команды ACP `terminal/*` и stdio-серверов MCP ищутся по `PATH` средствами `Process.start` (MCP — с `runInShell: false`).
+
+---
+
+## 56. Доверие к внешнему исполняемому файлу
+
+Если приложение запускает внешний бинарь агента, СЛЕДУЕТ определить:
 
 * откуда он берётся;
 * кто его выбрал;
-* нужно ли проверять path;
-* какова trust model.
+* нужно ли проверять путь;
+* какова модель доверия.
 
-Это security concern, а не только transport detail.
-
----
-
-## 57. App resources
-
-Bundled resources должны использовать Flutter-approved resource mechanism.
-
-Не следует обращаться к source-tree relative paths в production.
+Это вопрос безопасности, а не только деталь транспорта.
 
 ---
 
-## 58. Workspace files
+## 57. Ресурсы приложения
 
-Workspace/project files отличаются от application internal files.
+Встроенные ресурсы ДОЛЖНЫ использовать механизм ресурсов, утверждённый во Flutter.
 
-Security policy должна различать:
+НЕ СЛЕДУЕТ обращаться в рабочей сборке к путям относительно дерева исходников.
+
+---
+
+## 58. Файлы рабочего пространства
+
+Файлы рабочего пространства и проекта отличаются от внутренних файлов приложения.
+
+Политика безопасности ДОЛЖНА различать:
 
 ```text
 app config
@@ -952,28 +1034,30 @@ workspace data
 arbitrary filesystem
 ```
 
-если product behavior это требует.
+если этого требует поведение продукта.
+
+В коде агент защищает свои файлы конфигурации отдельно от рабочей папки (`AgentConfigPaths` в `codelab_agent_core/lib/src/permissions/agent_config_paths.dart`, его сборка `agentConfigPathsFor` в `codelab_agent_io/lib/src/config/agent_config_paths.dart`; сравнение без учёта регистра на macOS и Windows), а корни навыков вне рабочей папки открывает только для чтения (`BoundedEnv`, `readOnlyRoots`).
 
 ---
 
-## 59. Backup и recovery
+## 59. Резервное копирование и восстановление
 
-Если application пишет важные local data, следует определить:
+Если приложение пишет важные локальные данные, СЛЕДУЕТ определить:
 
-* atomicity;
-* backup strategy;
-* corruption handling;
-* migration.
+* атомарность;
+* стратегию резервного копирования;
+* обработку повреждений;
+* миграцию.
 
-Это относится к persistence architecture, если такая появится.
+Это относится к архитектуре хранения, если она появится.
 
 ---
 
-## 60. Platform adapter naming
+## 60. Имена адаптеров платформы
 
-Adapters следует называть по responsibility.
+Адаптеры СЛЕДУЕТ называть по ответственности.
 
-Хорошо:
+Хорошо (иллюстративные имена):
 
 ```text
 WindowsWindowController
@@ -989,21 +1073,23 @@ SystemManager
 NativeUtils
 ```
 
+Реальные имена в коде: `StdioAcpTransport`, `IoTerminalProcessRunner`, `PtyUserShellLauncher`, `SystemThemeAccentSource`, `JsonFileRecentProjectsStore`.
+
 ---
 
 ## 61. Не создавать `PlatformService`
 
-Generic `PlatformService` с десятками несвязанных методов обычно нарушает SRP.
+Обобщённый `PlatformService` с десятками несвязанных методов обычно нарушает принцип единственной ответственности (SRP).
 
-Лучше несколько узких ports/adapters.
+Лучше несколько узких портов и адаптеров.
 
 ---
 
-## 62. Dependency Injection
+## 62. Внедрение зависимостей
 
-Concrete platform adapters создаются в composition root через Cherrypick.
+Конкретные адаптеры платформы создаются в composition root через Cherrypick.
 
-Например:
+Например (иллюстративные пары «порт → адаптер»):
 
 ```text
 WindowController
@@ -1013,13 +1099,15 @@ CredentialStore
     → NativeCredentialStore
 ```
 
-Application code зависит от abstraction.
+Код application зависит от абстракции.
+
+В коде модули Cherrypick собирает `createCodeLabRootScope` (`apps/codelab_desktop/lib/app/app_scope.dart`); адаптеры по умолчанию подставляются там же и подменяются в тестах параметрами (`createCodeLabRootScope(userShellLauncher:, externalLinkOpener:, themeFilePicker:, …)`). CLI и бинарь агента собирают зависимости вручную, без Cherrypick.
 
 ---
 
-## 63. Scope platform resources
+## 63. Область жизни ресурсов платформы
 
-Platform resources должны иметь подходящий lifecycle:
+У ресурсов платформы ДОЛЖЕН быть подходящий жизненный цикл:
 
 ```text
 application-scoped
@@ -1029,112 +1117,126 @@ window-scoped
 operation-scoped
 ```
 
-Не следует делать все platform adapters singleton по умолчанию.
+НЕ СЛЕДУЕТ по умолчанию делать все адаптеры платформы синглтонами.
 
 ---
 
-## 64. Hot restart / debug
+## 64. Hot restart и отладка
 
-Development lifecycle Flutter может отличаться от production.
+Жизненный цикл Flutter при разработке может отличаться от рабочей сборки.
 
-Не следует строить correctness на assumptions hot reload/hot restart.
+НЕ СЛЕДУЕТ строить корректность на допущениях о hot reload и hot restart.
 
-Agent process и subscriptions должны корректно переживать dev lifecycle либо явно перезапускаться.
-
----
-
-## 65. Observability
-
-Platform integration должна логировать:
-
-* operation type;
-* success/failure;
-* relevant correlation;
-* platform capability unavailable.
-
-Не логировать sensitive payload.
+Процесс агента и подписки ДОЛЖНЫ правильно переживать жизненный цикл разработки либо явно перезапускаться.
 
 ---
 
-## 66. Performance
+## 65. Наблюдаемость
 
-Platform I/O не должно блокировать rendering.
+Интеграция с платформой ДОЛЖНА журналировать:
 
-Большие filesystem scans, process output parsing и hashing должны быть вынесены из rendering-critical path.
+* тип операции;
+* успех или отказ;
+* относящиеся к операции корреляционные идентификаторы;
+* недоступность возможности платформы.
+
+Журналировать чувствительный payload ЗАПРЕЩЕНО.
+
+Подробнее — [`observability.md`](observability.md).
 
 ---
 
-## 67. Large filesystem operations
+## 66. Производительность
 
-Для больших directory scans следует рассмотреть:
+Ввод-вывод платформы НЕ ДОЛЖЕН блокировать отрисовку.
 
-* streaming;
-* batching;
+Большие обходы файловой системы, разбор вывода процессов и хеширование ДОЛЖНЫ быть вынесены с пути, критичного для отрисовки.
+
+В коде известное исключение — `pty2`: адаптер терминала пользователя пока вызывает его на UI isolate, перенос в фоновый isolate отложен до после 1.0 (`technology-stack.md` §20д).
+
+---
+
+## 67. Большие операции с файловой системой
+
+Для больших обходов каталогов СЛЕДУЕТ рассмотреть:
+
+* потоковую обработку;
+* пакетную обработку;
 * isolate;
-* cancellation;
-* progress.
+* отмену;
+* прогресс.
 
-Не загружать весь filesystem tree в memory без необходимости.
-
----
-
-## 68. File encoding
-
-Text file operations должны явно учитывать encoding, если это важно.
-
-Не следует предполагать UTF-8 для arbitrary external file, если product semantics требуют другого.
+Загружать всё дерево файловой системы в память без необходимости ЗАПРЕЩЕНО.
 
 ---
 
-## 69. Line endings
+## 68. Кодировка файлов
 
-Windows/macOS/Linux могут иметь разные line ending conventions.
+Операции с текстовыми файлами ДОЛЖНЫ явно учитывать кодировку, если это важно.
 
-Не следует нормализовать line endings без product requirement.
+НЕ СЛЕДУЕТ считать произвольный внешний файл UTF-8, если смысл продукта требует иного.
 
----
-
-## 70. Case sensitivity
-
-Filesystem case sensitivity различается между platforms.
-
-Path identity logic должна учитывать это, если она влияет на correctness/security.
+В коде оба пути читают UTF-8: клиент — `File.readAsString` (`IoTextFileIo`; не-UTF-8 даёт `FsIoFailure`), агент — строгим декодированием (`LocalExecutionEnv.readText`; не-UTF-8 даёт `FileError(notText)`). Вывод процессов декодируется как UTF-8 с `allowMalformed: true` — и у клиента (`IoTerminalProcessRunner.output`), и у `exec` агента.
 
 ---
 
-## 71. Path comparison
+## 69. Переводы строк
 
-Для security-sensitive path comparison нельзя использовать простое:
+В Windows, macOS и Linux могут быть разные соглашения о переводах строк.
+
+НЕ СЛЕДУЕТ нормализовать переводы строк без требования продукта.
+
+В коде агент сохраняет переводы строк при чтении диапазона (`readText(line:, limit:)` — строки вместе с их окончаниями). Клиентский `IoTextFileIo.readText` с `line` или `limit` читает строки через `readAsLines` и склеивает их `\n`: `\r\n` становится `\n`, завершающий перевод строки теряется. Без `line` и `limit` файл возвращается как есть.
+
+---
+
+## 70. Чувствительность к регистру
+
+Чувствительность файловой системы к регистру различается между платформами.
+
+Логика идентичности путей ДОЛЖНА учитывать это, если она влияет на корректность или безопасность.
+
+В коде регистр учитывает защита файлов конфигурации агента (`caseInsensitive` на macOS и Windows, `agent_config_paths.dart`); проверки рабочей папки (`BoundedEnv`, `resolveWithinWorkingDirectory`) сравнивают пути с учётом регистра.
+
+---
+
+## 71. Сравнение путей
+
+Для сравнения путей, чувствительного к безопасности, ЗАПРЕЩЕНО использовать простое:
 
 ```dart
 path.startsWith(root)
 ```
 
-без normalization/canonicalization.
+без нормализации и канонизации.
+
+В коде нормализацию делают все проверки рабочей папки и сравнивают по границе сегмента; канонизацию по `realpath` — `BoundedEnv` и `IoProjectFiles`, а клиентский `resolveWithinWorkingDirectory` — только нормализацию, вопреки D3 `add-acp-fs-client-support` и спецификации `acp-fs-client` (§16).
 
 ---
 
-## 72. Network boundary
+## 72. Сетевая граница
 
-Если desktop integration включает network access вне ACP transport, оно должно быть отдельным infrastructure concern.
+Если интеграция с desktop включает сетевой доступ вне транспорта ACP, он ДОЛЖЕН быть отдельной заботой infrastructure.
 
-Не следует прятать network request внутри platform adapter, если это не platform-specific capability.
-
----
-
-## 73. Native FFI
-
-Если используется FFI, его следует изолировать в отдельном adapter/package.
-
-Application code не должен напрямую работать с pointers/native lifecycle.
+НЕ СЛЕДУЕТ прятать сетевой запрос внутри адаптера платформы, если это не возможность, зависящая от платформы.
 
 ---
 
-## 74. FFI lifecycle
+## 73. Нативный FFI
 
-Native resources должны иметь explicit cleanup.
+Если используется FFI, его СЛЕДУЕТ изолировать в отдельном адаптере или пакете.
 
-Следует документировать ownership:
+Код application НЕ ДОЛЖЕН напрямую работать с указателями и нативным жизненным циклом.
+
+В коде собственного FFI нет; нативный PTY приходит плагином `pty2` и виден только адаптеру `PtyUserShellLauncher` за портом `UserShellLauncher` (правило сторожа).
+
+---
+
+## 74. Жизненный цикл FFI
+
+Нативные ресурсы ДОЛЖНЫ иметь явную очистку.
+
+СЛЕДУЕТ документировать владение:
 
 ```text
 allocate
@@ -1144,72 +1246,74 @@ dispose
 
 ---
 
-## 75. Platform channel
+## 75. Канал платформы
 
-Если используется custom platform channel, его API должен быть typed и узким.
+Если используется собственный канал платформы (platform channel), его API ДОЛЖЕН быть типизированным и узким.
 
-Не следует делать generic channel:
+НЕ СЛЕДУЕТ делать обобщённый канал:
 
 ```text
 invokeMethod("doAnything", map)
 ```
 
-если можно определить конкретный contract.
+если можно определить конкретный контракт.
+
+В коде собственных каналов два. В рабочей сборке — только `codelab/app_menu` с единственным методом `openSettings` (§8а). В отладочной сборке macOS есть ещё `codelab/e2e_window` с методом `setContentSize` для e2e-тестов (`MainFlutterWindow.swift`, `#if DEBUG`; `integration_test/flutter_test_config.dart`); в release его нет.
 
 ---
 
-## 76. Error normalization
+## 76. Нормализация ошибок
 
-Platform layer должен нормализовать implementation-specific errors до понятных typed failures.
+Слой платформы ДОЛЖЕН приводить ошибки конкретной реализации к понятным типизированным отказам.
 
-Это позволяет application layer оставаться cross-platform.
-
----
-
-## 77. Checklist перед platform integration
-
-Перед добавлением platform-specific functionality агент ОБЯЗАН определить:
-
-1. Это presentation или infrastructure concern?
-2. Нужна ли abstraction?
-3. Поддерживается ли capability на всех target platforms?
-4. Как выглядит unsupported behavior?
-5. Нужна ли permission policy?
-6. Кто владеет lifecycle resource?
-7. Нужно ли cleanup/dispose?
-8. Может ли operation пережить owner?
-9. Какие secrets/data участвуют?
-10. Какие tests нужны?
-11. Требуется ли ADR?
-12. Не протекает ли plugin API в application/domain?
+Это позволяет application-слою оставаться кроссплатформенным.
 
 ---
 
-## 78. Главные invariants
+## 77. Контрольный список перед интеграцией с платформой
 
-### PLATFORM-001 — Platform APIs изолированы
+Перед добавлением функциональности, зависящей от платформы, агент ОБЯЗАН определить:
 
-OS/plugin details не распространяются по application code.
+1. Это забота presentation или infrastructure?
+2. Нужна ли абстракция?
+3. Поддерживается ли возможность на всех целевых платформах?
+4. Как выглядит поведение при отсутствии поддержки?
+5. Нужна ли политика разрешений?
+6. Кто владеет жизненным циклом ресурса?
+7. Нужны ли очистка и `dispose`?
+8. Может ли операция пережить владельца?
+9. Какие секреты и данные участвуют?
+10. Какие тесты нужны?
+11. Нужен ли ADR?
+12. Не протекает ли API плагина в application или domain?
 
-### PLATFORM-002 — Pure Dart boundaries сохраняются
+---
 
-`codelab_acp_protocol`, `codelab_client_acp` и другие pure Dart packages не получают Flutter/platform dependency без архитектурного решения.
+## 78. Главные инварианты
 
-### PLATFORM-003 — Agent-triggered side effects проходят permission policy
+### PLATFORM-001 — API платформы изолированы
 
-Filesystem/process/network actions не обходят security boundary.
+Детали ОС и плагинов не распространяются по коду application.
 
-### PLATFORM-004 — Platform resources имеют owner
+### PLATFORM-002 — Границы чистого Dart сохраняются
 
-Process, watcher, subscription и native handle имеют lifecycle и cleanup.
+`codelab_acp_protocol`, `codelab_client_acp` и другие пакеты на чистом Dart не получают зависимость от Flutter или платформы без архитектурного решения.
 
-### PLATFORM-005 — Unsupported capability явна
+### PLATFORM-003 — Побочные действия агента проходят политику разрешений
 
-Silent no-op не используется для критичных operations.
+Действия агента с файлами, процессами и сетью не обходят границу безопасности.
+
+### PLATFORM-004 — У ресурсов платформы есть владелец
+
+Процесс, наблюдатель, подписка и нативный дескриптор имеют жизненный цикл и очистку.
+
+### PLATFORM-005 — Неподдерживаемая возможность явна
+
+Тихий no-op не используется для критичных операций.
 
 ### PLATFORM-006 — UI не владеет infrastructure
 
-Widgets не создают process/filesystem/native adapters напрямую.
+Виджеты не создают адаптеры процессов, файловой системы и нативных API напрямую.
 
 ---
 
@@ -1230,7 +1334,7 @@ Platform Adapter
 Flutter Plugin / dart:io / OS API
 ```
 
-Если feature напрямую знает о конкретном desktop plugin, platform path rules и OS branching, boundary следует пересмотреть.
+Если фича напрямую знает о конкретном desktop-плагине, правилах путей платформы и ветвлении по ОС, границу СЛЕДУЕТ пересмотреть.
 
 ---
 
@@ -1245,14 +1349,16 @@ Flutter Plugin / dart:io / OS API
 | Профиль по умолчанию | да: app без выбора и `codelab` без `--agent` | нет: выбирается явно |
 | Файлы и команды | сам агент через `AcpServerConfig.localEnv` (профили `embedded-app-desktop`, `embedded-cli`); `fs/*` и `terminal/*` клиенту не уходят | через `fs/*` и `terminal/*` клиента (или локальный листинг по stdio); так редактор видит несохранённые буферы |
 | Конфиг и состояние | `$CODELAB_HOME` (по умолчанию `~/.codelab`): `config.yaml`, сессии, секреты | то же, плюс `CODELAB_*` и флаги запуска |
-| Логи | в `Logger` клиента; диагностика по разделу 65 | stderr процесса, при желании `--log-file`; stdout занят протоколом (раздел 21) |
+| Журналы | в `Logger` клиента; диагностика по разделу 65 | stderr процесса, при желании `--log-file`; stdout занят протоколом (раздел 21) |
 | Остановка | `dispose` встроенного агента: активные ходы отменяются, журнал дописывается | EOF stdin — код `0`, `SIGINT` — `130`, `SIGTERM` — `143`; ход отменяется, журнал дописывается |
 
 Правила платформенной границы для встроенного агента:
 
-* Filesystem, процессы, хранилище секретов и MCP-серверы — infrastructure: их реализуют `codelab_agent_io` и настольный открыватель `codelab_embedded/io.dart`, а не код приложения или ядро. Основной барель `codelab_embedded` остаётся web-безопасным; `io.dart` импортирует только composition root клиента (`AGENTS.md` §5).
-* Контейнмент путей инструментов обеспечивает `BoundedEnv` рабочей папки сессии, а не клиентские проверки платформы. Платформенные ветки (`Platform.is*`) в агенте не распространяются: различия скрыты за портами ядра.
-* Хранилище секретов агента — `env` (по умолчанию) или явный `file`; хранилищ ОС (keychain) в этой версии нет. Секреты приложения и секреты агента не смешиваются (раздел 25–26).
-* Встроенный агент не должен блокировать UI isolate: ходы и вывод инструментов идут асинхронно; тяжёлые процессы — дочерние процессы инструмента `exec`, а не вычисления в isolate app. Долгая работа по-прежнему отменяется через `session/cancel`.
-* Бинарь `codelab-agent` собирается отдельно (`fvm dart run melos run build:agent`) и не входит в сборку app. Приложение, запущенное из меню, не видит `PATH` оболочки, поэтому профиль stdio хранит абсолютный путь к бинарю (раздел 55).
+* Файловая система, процессы, хранилище секретов и MCP-серверы — infrastructure: их реализуют `codelab_agent_io` и настольный открыватель `codelab_embedded/io.dart`, а не код приложения или ядро. Основной барель `codelab_embedded` остаётся web-безопасным; `io.dart` импортирует только composition root клиента (`AGENTS.md` §5).
+* Containment путей инструментов обеспечивает `BoundedEnv` рабочей папки сессии, а не клиентские проверки платформы. Платформенные ветки (`Platform.is*`) в агенте не распространяются: различия скрыты за портами ядра.
+* Хранилище секретов агента — `env` (по умолчанию) или явный `file`; хранилищ ОС (keychain) в этой версии нет. Секреты приложения и секреты агента не смешиваются (раздел 25–26). **Расходится с кодом:** app и CLI хранят свои секреты в хранилище агента (см. абзац «В коде» в конце раздела).
+* Встроенный агент НЕ ДОЛЖЕН блокировать UI isolate: ходы и вывод инструментов идут асинхронно; тяжёлые процессы — дочерние процессы инструмента `exec`, а не вычисления в isolate app. Долгая работа по-прежнему отменяется через `session/cancel`.
+* Бинарь `codelab-agent` собирается отдельно (`fvm dart run melos run build:agent`) и не входит в сборку app. Приложение, запущенное из меню, не видит `PATH` оболочки, поэтому профиль stdio хранит абсолютный путь к бинарю (раздел 55). **Расходится с кодом:** путь хранится так, как его ввёл пользователь, абсолютность не проверяется и не обеспечивается.
 * Отказ встроенного агента — типизированная ошибка открытия (`EmbeddedAgentConfigException` для невалидного конфига) до сетевых вызовов; падение зоны агента закрывает его и сообщается клиенту как сбой соединения, а не необработанное исключение приложения.
+
+В коде app и CLI хранят токены профилей и ключи провайдеров в том же хранилище секретов агента (`ClientSecretAccess` из `codelab_setup/io.dart`, бэкенд по `secrets.backend` пользовательского `config.yaml`): отдельного хранилища секретов у app нет, ключи провайдеров, которые клиент записывает, читает агент. На Windows бэкенд `file` недоступен, остаётся `env`.
