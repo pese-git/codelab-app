@@ -1248,7 +1248,8 @@ CI разделён на два уровня (`.github/workflows/ci.yml`, `AGENT
   l10n               l10n:check — если в codelab_desktop или codelab_ui изменены
                      l10n.yaml, pubspec.yaml, ARB или сгенерированный
                      *_localizations*.dart
-  web-compile        если изменено ядро агента или его зависимость
+  web-compile        если изменён пакет с web-smoke точкой входа (ядро агента,
+                     codelab_embedded, codelab_setup) или его зависимость
   e2e-cli-dart       если затронуты codelab_cli или codelab_agent
   e2e-cli-embedded   если затронуты codelab_cli или codelab_embedded
   site               если изменён site/ или источник страниц сайта (признак site)
@@ -1305,12 +1306,19 @@ MVP (change `switch-default-agent-to-dart`, задача 4.1), а запуск �
 добавляет джоб `guard` даже в «только документации» (`ci_scope.dart`, `ci_scope_test.dart`): иначе
 сломанный разбор матрицы нашла бы только ночь.
 
-В коде условие `web-compile` в суженном прогоне — изменён `codelab_agent_core` или пакет, от которого
-он зависит (`_webSmoke` и `_withDependencies` в `ci_scope.dart`). Скрипт `web-compile` при этом
-собирает ещё точки `codelab_embedded` и `codelab_setup`, но их правка сама по себе джоб `web-compile`
-не запускает — их проверяет полный прогон. Спецификация `testing-quality` (`openspec/specs/testing-quality/spec.md`,
-требование «Проверки workspace») описывает `web-compile` как компиляцию ядра агента — это описание
-устарело: скрипт компилирует ещё основные барели `codelab_embedded` и `codelab_setup`.
+В коде условие `web-compile` в суженном прогоне — изменён пакет из `webSmokePackages`
+(`codelab_agent_core`, `codelab_embedded`, `codelab_setup` — те, чьи `test/web_smoke/main.dart`
+собирает скрипт `web-compile`) или пакет, который попадает в сборку их точек входа
+(`_webSmokeClosure` в `ci_scope.dart`). Точка лежит в `test/` пакета, поэтому у самих этих пакетов
+учитываются и `dependencies`, и `dev_dependencies` (`codelab_client_core` и `codelab_client_acp` —
+dev-зависимости `codelab_embedded`), а дальше обход идёт только по `dependencies`
+(`WorkspacePackage.runtimeDependencies`): dev-зависимости зависимостей, например `codelab_acp_testing`
+у `codelab_agent_acp`, в web-сборку не входят и `web-compile` не запускают. Набор
+`webSmokePackages` сверяет `ci_scope_test.dart` с каталогами `test/web_smoke/` и с самим скриптом:
+новая точка входа без строки в наборе или в скрипте роняет сторож. Спецификация `testing-quality`
+(`openspec/specs/testing-quality/spec.md`, требование «Проверки workspace») описывает `web-compile`
+как компиляцию ядра агента — это описание устарело: скрипт компилирует ещё основные барели
+`codelab_embedded` и `codelab_setup`.
 
 ### 74.1. Доказательства строк Must: `parity_evidence_test`
 
