@@ -45,8 +45,8 @@
 
 Условие: change `redesign-protocol-pane` влит в `develop`, и в `SecretRedactor` есть правило пары. Порядок слияния решён: этот change вливается первым (design.md, Q3).
 
-- [ ] 4.1 `[client]` Тест пар в `secret_redaction_test.dart` (требование «Редактирование секретов», «везде, где редактор сверяет имя»; D6): `{"name": "OPENAI_KEY", "value": "sk-1"}`, `{"name": "Ocp-Apim-Subscription-Key", "value": "abc"}`, `{"name": "AWS_ACCESS_KEY_ID", "value": "AKIA1"}`, `{"name": "openaiKey", "value": "sk-2"}` → `value` скрыт, `name` виден; `{"name": "DATABASE_URL", "value": "postgres://u:p@h/db"}` → `value` = `postgres://<redacted>@h/db`; `{"name": "key", "value": "x"}` и `{"name": "keyboard", "value": "us"}` → `value` виден. Ожидается зелёный сразу: правило пары вызывает расширенный `_isSensitiveKey`. Если красный — правило пары завело свой список имён, что противоречит требованию; сообщить архитектору.
-- [ ] 4.2 `[client]` Проверки 3.2 для `codelab_client_acp` повторно, после слияния.
+- [x] 4.1 `[client]` Тест пар в `secret_redaction_test.dart` (требование «Редактирование секретов», «везде, где редактор сверяет имя»; D6): `{"name": "OPENAI_KEY", "value": "sk-1"}`, `{"name": "Ocp-Apim-Subscription-Key", "value": "abc"}`, `{"name": "AWS_ACCESS_KEY_ID", "value": "AKIA1"}`, `{"name": "openaiKey", "value": "sk-2"}` → `value` скрыт, `name` виден; `{"name": "DATABASE_URL", "value": "postgres://u:p@h/db"}` → `value` = `postgres://<redacted>@h/db`; `{"name": "key", "value": "x"}` и `{"name": "keyboard", "value": "us"}` → `value` виден. Ожидается зелёный сразу: правило пары вызывает расширенный `_isSensitiveKey`. Если красный — правило пары завело свой список имён, что противоречит требованию; сообщить архитектору.
+- [x] 4.2 `[client]` Проверки 3.2 для `codelab_client_acp` повторно, после слияния.
 
 ## 5. Приватный ключ без строки `END` (итерация 5, D8)
 

@@ -534,4 +534,42 @@ void main() {
       );
     });
   });
+
+  // Итерация 4 change `extend-secret-name-redaction` (D6, D9): правило пары
+  // `{name, value}` сверяет `name` с тем же правилом имён, что и ключ map,
+  // поэтому новые признаки `key` и userinfo адреса действуют и в парах.
+  group('a name/value pair with a key-like name', () {
+    for (final entry in const {
+      'OPENAI_KEY': 'sk-1',
+      'Ocp-Apim-Subscription-Key': 'abc',
+      'AWS_ACCESS_KEY_ID': 'AKIA1',
+      'openaiKey': 'sk-2',
+    }.entries) {
+      test('${entry.key}: value is hidden, name is kept', () {
+        expect(redactor.redact({'name': entry.key, 'value': entry.value}), {
+          'name': entry.key,
+          'value': redactedSecret,
+        });
+      });
+    }
+
+    test('DATABASE_URL: only the userinfo is hidden', () {
+      expect(
+        redactor.redact({
+          'name': 'DATABASE_URL',
+          'value': 'postgres://u:p@h/db',
+        }),
+        {'name': 'DATABASE_URL', 'value': 'postgres://$redactedSecret@h/db'},
+      );
+    });
+
+    for (final entry in const {'key': 'x', 'keyboard': 'us'}.entries) {
+      test('${entry.key}: value stays visible', () {
+        expect(redactor.redact({'name': entry.key, 'value': entry.value}), {
+          'name': entry.key,
+          'value': entry.value,
+        });
+      });
+    }
+  });
 }
