@@ -2655,15 +2655,21 @@ final class AcpClientApplication {
           source: 'transport',
           component: transportComponent,
           cause: error,
-          context: {'code': error.code.name, 'cause': error.cause?.toString()},
+          // Внутренняя причина (`SocketException`, исключение разбора с
+          // фрагментом кадра) проходит ту же политику, что и `cause` записи:
+          // при `metadataOnly` — только класс (observability.md §48а).
+          context: {
+            'code': error.code.name,
+            'cause': _causeDetail(error.cause),
+          },
         );
-        // Unexpected transport loss (e.g. the stdio child process dying)
-        // must reach `connectionStateChanges`, not just diagnostics —
-        // otherwise the UI has no way to observe it and stays stuck showing
-        // a connection/turn that no longer exists. `disconnected` is the
-        // only state `ConnectionStateMachine._fail` rejects, so guard
-        // against it the same way `_establishConnection` already does
-        // before an intentional disconnect.
+        // Неожиданная потеря транспорта (например, смерть дочернего процесса
+        // stdio) должна дойти до `connectionStateChanges`, а не только до
+        // диагностики: иначе UI её не увидит и продолжит показывать
+        // соединение и ход, которых уже нет. `ConnectionStateMachine._fail`
+        // отвергает только состояние `disconnected`, поэтому оно
+        // исключается так же, как `_establishConnection` делает перед
+        // намеренным отключением.
         final wasReady = _connectionState is ClientConnectionReady;
         // Агент может завершиться и во время `initialize` (неверные
         // аргументы, сбой старта): ответа на него тоже не будет, и `connect`
@@ -2795,6 +2801,26 @@ final class AcpClientApplication {
     }
   }
 
+  /// Описание причины сбоя для диагностики и журнала по базовой политике.
+  ///
+  /// Почему: текст исключения может нести данные агента и окружения — путь,
+  /// текст `SocketException`, фрагмент кадра в исключении разбора, — а в
+  /// release журнал и диагностика не должны их содержать (D3 change
+  /// `redesign-protocol-pane`, `observability.md` §48а).
+  ///
+  /// Для чего: единственное место, где решается, попадёт ли текст причины
+  /// наружу: поле [DiagnosticEntry.cause] и вложенные причины в `context`.
+  ///
+  /// Как использовать: при `full` — замаскированный `toString()`, иначе —
+  /// только класс ошибки; без причины — `null`. Trace на результат не
+  /// влияет, как и у [_rawPayloadContext].
+  String? _causeDetail(Object? cause) => switch (cause) {
+    null => null,
+    _ when _basePayloadPolicy == ProtocolPayloadPolicy.full =>
+      _redactor.redactText(cause.toString()),
+    _ => cause.runtimeType.toString(),
+  };
+
   void _recordDiagnostic({
     required String message,
     required DiagnosticSeverity severity,
@@ -2812,14 +2838,7 @@ final class AcpClientApplication {
       severity: severity,
       source: source,
       context: _redactor.redactMap(context),
-      // Текст исключения может нести данные агента (путь, значение поля): при
-      // базовой `metadataOnly` пишется только класс ошибки (D3 change
-      // `redesign-protocol-pane`).
-      cause: cause == null
-          ? null
-          : _basePayloadPolicy == ProtocolPayloadPolicy.full
-          ? _redactor.redactText(cause.toString())
-          : cause.runtimeType.toString(),
+      cause: _causeDetail(cause),
       createdAt: DateTime.now(),
     );
 
