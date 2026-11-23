@@ -306,8 +306,14 @@ Scope createCodeLabRootScope({
   // Disposable and awaits its flush on shutdown — see
   // CodeLabLoggingLifecycle's doc comment.
   scope.resolve<CodeLabLoggingLifecycle>();
+  _codeLabRootScope = scope;
   return scope;
 }
+
+/// Root scope, созданный [createCodeLabRootScope]; по нему
+/// `CodeLabBootstrap` узнаёт, что ему передан сам root scope (тесты передают
+/// его явно), и закрывает его через [closeCodeLabRootScope].
+Scope? _codeLabRootScope;
 
 /// Идущее закрытие root scope; `null`, пока закрытие не начато или уже
 /// завершилось.
@@ -319,47 +325,62 @@ Future<void>? _rootScopeClosing;
 /// `await dispose()`, и второй вызов во время закрытия заново закрыл бы те же
 /// `Disposable` (снятие `CodeLabBootstrap`, teardown тестов).
 ///
-/// Для чего: единственная точка закрытия root scope app.
+/// Для чего: единственная точка закрытия root scope app — её зовут и снятие
+/// `CodeLabBootstrap` (в том числе с явно переданным root scope), и тесты.
 ///
 /// Как использовать: параллельные вызовы получают один и тот же `Future`;
-/// после его завершения следующий вызов закрывает уже новый root scope (тесты
-/// открывают его заново). Сбой `Scope.dispose` пробрасывается вызывающему —
-/// fire-and-forget вызов оборачивается [closeScopeLogged].
+/// после его завершения мемо сбрасывается. После успешного закрытия
+/// следующий вызов закрывает уже новый root scope (тесты открывают его
+/// заново). После сбоя CherryPick root scope не обнуляет, и следующий вызов
+/// закрывает тот же scope повторно, включая уже закрытые `Disposable`, —
+/// поэтому каждый `Disposable` root scope ОБЯЗАН быть идемпотентным
+/// (`CodeLabRootLifecycle`, `TerminalOutputFlusher`, `close()` Cubit-ов).
+/// Сбой `Scope.dispose` пробрасывается вызывающему; fire-and-forget вызов
+/// оборачивается [_closeScopeLogged].
 Future<void> closeCodeLabRootScope() => _rootScopeClosing ??=
     CherryPick.closeRootScope().whenComplete(() => _rootScopeClosing = null);
 
-/// Закрывает scope, записывая сбой в журнал вместо проброса.
+/// Закрывает scope при снятии `CodeLabBootstrap`, записывая сбой в журнал
+/// вместо проброса.
 ///
 /// Почему: `CodeLabBootstrap.dispose` закрывает scope fire-and-forget, а
 /// `Scope.dispose` пробрасывает ошибку любого `Disposable` (например, сброса
 /// файловых журналов `CodeLabLoggingLifecycle`) — без перехвата она ушла бы
-/// необработанной в корневую зону (AGENTS.md §12). Шаги `CodeLabRootLifecycle`
-/// изолированы своим `_step`, но сам scope закрывает и других владельцев.
+/// необработанной в корневую зону (AGENTS.md §12).
 ///
-/// Для чего: сбой пишется так же, как сбой шага закрытия, —
-/// `app.shutdown_step_failed {step: root_scope, error_type}` только с типом
-/// ошибки (текст может нести пути, D6 `add-client-process-shutdown-on-exit`).
+/// Для чего: сбой пишется как сбой шага закрытия —
+/// `app.shutdown_step_failed {step: root_scope, error_type}`. В отличие от
+/// шагов `CodeLabRootLifecycle`, закрытие scope после сбоя не продолжается:
+/// `Scope.dispose` CherryPick обрывается на первом бросившем `Disposable`, и
+/// оставшиеся владельцы не закрываются.
 ///
-/// Как использовать: `unawaited(closeScopeLogged(close, logger))`; `Future`
+/// Как использовать: `unawaited(_closeScopeLogged(close, logger))`; `Future`
 /// завершается без ошибки.
-Future<void> closeScopeLogged(
+Future<void> _closeScopeLogged(
   Future<void> Function() close,
   Logger logger,
 ) async {
   try {
     await close();
   } on Object catch (error) {
-    try {
-      logger.error(
-        'app.shutdown_step_failed',
-        context: {
-          'step': 'root_scope',
-          'error_type': error.runtimeType.toString(),
-        },
-      );
-    } on Object {
-      // Журнал не должен мешать закрытию: писать о сбое журнала некуда.
-    }
+    _logShutdownStepFailed(logger, 'root_scope', error);
+  }
+}
+
+/// Пишет `app.shutdown_step_failed {step, error_type}` и глотает сбой журнала.
+///
+/// Почему: в событие попадает только тип ошибки — текст может нести пути
+/// (D6 `add-client-process-shutdown-on-exit`), а сбой самого журнала не должен
+/// мешать закрытию. Для чего: общая запись для шагов `CodeLabRootLifecycle`
+/// и закрытия scope. Как использовать: вызывать из `catch` шага закрытия.
+void _logShutdownStepFailed(Logger logger, String step, Object error) {
+  try {
+    logger.error(
+      'app.shutdown_step_failed',
+      context: {'step': step, 'error_type': error.runtimeType.toString()},
+    );
+  } on Object {
+    // Журнал не должен мешать закрытию: писать о сбое журнала некуда.
   }
 }
 
@@ -1983,14 +2004,7 @@ final class CodeLabRootLifecycle implements Disposable {
     try {
       await body();
     } on Object catch (error) {
-      try {
-        _logger.error(
-          'app.shutdown_step_failed',
-          context: {'step': name, 'error_type': error.runtimeType.toString()},
-        );
-      } on Object {
-        // Журнал не должен мешать закрытию: писать о сбое журнала некуда.
-      }
+      _logShutdownStepFailed(_logger, name, error);
     } finally {
       _pendingSteps.remove(name);
     }
@@ -2167,7 +2181,11 @@ class CodeLabBootstrap extends StatefulWidget {
   final Widget child;
 
   /// Логгер событий `app.*` (выход, сбой закрытия scope); без него —
-  /// [codeLabAppLogger]. Тесты передают записывающий логгер.
+  /// [codeLabAppLogger].
+  ///
+  /// Почему параметр виджета, а не привязка в scope: логгер `app.*` в scope
+  /// не привязан, а шов повторяет `logger` у `CodeLabRootLifecycle` и
+  /// `AppExitHandler`. Тесты передают записывающий логгер.
   final Logger? appLogger;
 
   /// Начальное состояние языка из `main` (D2); без него — `en`.
@@ -2288,9 +2306,13 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     _exitListener.dispose();
     _menuBridge.dispose();
     final providedScope = widget.scope;
+    // Переданный root scope закрывается тем же мемоизированным путём, что и
+    // свой: иначе teardown тестов закрыл бы его параллельно второй раз.
+    final isRoot =
+        providedScope == null || identical(providedScope, _codeLabRootScope);
     unawaited(
-      closeScopeLogged(
-        providedScope == null ? closeCodeLabRootScope : providedScope.dispose,
+      _closeScopeLogged(
+        isRoot ? closeCodeLabRootScope : providedScope.dispose,
         widget.appLogger ?? codeLabAppLogger(),
       ),
     );
