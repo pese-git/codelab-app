@@ -71,6 +71,10 @@ void main() {
 
   testWidgets(
     'the page shows the user skill and the AGENTS.md of the project folder',
+    // В режиме `embedded` открыватель — сценарий модели без конфига дома, а
+    // страница читает `config.yaml` и `skills/` дома: тест не имеет смысла
+    // (как mcp_settings_flow_test.dart).
+    skip: E2eAgent.current.kind == E2eAgentKind.embedded,
     (tester) async {
       final home = File(E2eAgent.current.profilesPath).parent.path;
       File('$home/config.yaml').writeAsStringSync(_config);
@@ -113,57 +117,87 @@ void main() {
     },
   );
 
-  testWidgets('turning a skill off writes skills.disabled and a new session '
-      'does not announce skill:notes', (tester) async {
-    final home = File(E2eAgent.current.profilesPath).parent.path;
-    File('$home/config.yaml').writeAsStringSync(_config);
-    Directory('$home/skills/notes').createSync(recursive: true);
-    File('$home/skills/notes/SKILL.md').writeAsStringSync(
-      '---\nname: notes\ndescription: Take short notes\n---\nBody.\n',
-    );
+  testWidgets(
+    'turning a skill off writes skills.disabled and a new session '
+    'does not announce skill:notes',
+    // Режим `embedded` — сценарий модели без конфига дома (см. выше).
+    skip: E2eAgent.current.kind == E2eAgentKind.embedded,
+    (tester) async {
+      final home = File(E2eAgent.current.profilesPath).parent.path;
+      File('$home/config.yaml').writeAsStringSync(_config);
+      Directory('$home/skills/notes').createSync(recursive: true);
+      File('$home/skills/notes/SKILL.md').writeAsStringSync(
+        '---\nname: notes\ndescription: Take short notes\n---\nBody.\n',
+      );
 
-    await tester.pumpWidget(E2eAgent.current.bootstrap());
-    await tester.pumpAndSettle();
-    final shellCubit = codeLabDependenciesOf(
-      tester.element(find.byType(CodeLabApp)),
-    ).shellCubit;
-    await ensureProject(tester, shellCubit);
-    unawaited(shellCubit.startOnLaunch());
-    await _pumpWhile(
-      tester,
-      () =>
-          shellCubit.state.connectionStatus !=
-          CodeLabConnectionStatus.connected,
-    );
-    await shellCubit.createSession();
-    bool announced() =>
-        shellCubit.state.agentCommands.any((c) => c.id == 'agent-skill:notes');
-    await _pumpWhile(tester, () => !announced());
+      await tester.pumpWidget(E2eAgent.current.bootstrap());
+      await tester.pumpAndSettle();
+      final shellCubit = codeLabDependenciesOf(
+        tester.element(find.byType(CodeLabApp)),
+      ).shellCubit;
+      await ensureProject(tester, shellCubit);
+      unawaited(shellCubit.startOnLaunch());
+      await _pumpWhile(
+        tester,
+        () =>
+            shellCubit.state.connectionStatus !=
+            CodeLabConnectionStatus.connected,
+      );
+      await shellCubit.createSession();
+      bool announced() => shellCubit.state.agentCommands.any(
+        (c) => c.id == 'agent-skill:notes',
+      );
+      await _pumpWhile(tester, () => !announced());
 
-    await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
-    await tester.pumpAndSettle();
-    await tester.tap(_key('settings-nav-skills-and-extensions'));
-    await tester.pumpAndSettle();
-    await _pumpUntil(tester, _key('skills-toggle-notes'));
-    await tester.tap(_key('skills-toggle-notes'));
-    await _pumpUntil(tester, _key('skills-banner'));
+      await tester.tap(find.byKey(CodeLabSessionSidebar.settingsKey));
+      await tester.pumpAndSettle();
+      await tester.tap(_key('settings-nav-skills-and-extensions'));
+      await tester.pumpAndSettle();
+      await _pumpUntil(tester, _key('skills-toggle-notes'));
+      await tester.tap(_key('skills-toggle-notes'));
+      await _pumpUntil(tester, _key('skills-banner'));
 
-    expect(File('$home/config.yaml').readAsStringSync(), contains('notes'));
-    expect(
-      find.descendant(
-        of: _key('skills-banner'),
-        matching: find.textContaining('Saved. New sessions use it'),
-      ),
-      findsOneWidget,
-    );
-    // Открытая сессия список не меняет (SKL-4); новая объявляет без навыка.
-    expect(announced(), isTrue);
-    await shellCubit.createSession();
-    await tester.pump(const Duration(seconds: 1));
-    expect(announced(), isFalse);
+      expect(File('$home/config.yaml').readAsStringSync(), contains('notes'));
+      expect(
+        find.descendant(
+          of: _key('skills-banner'),
+          matching: find.textContaining('Saved. New sessions use it'),
+        ),
+        findsOneWidget,
+      );
+      // Открытая сессия список не меняет (SKL-4); новая объявляет без навыка.
+      expect(announced(), isTrue);
+      // Агент подхватывает запись не сразу: наблюдатель конфига сворачивает
+      // события (debounce `configWatchDebounce` = 300 мс) и только потом
+      // применяет `skills.disabled` (`config.reload.applied`). Сессия,
+      // открытая раньше, получила бы прежний список навыков (SKL-4, D9 change
+      // `add-app-skills-page`: «действует на сессии, открытые после неё»).
+      // Поэтому новые сессии открываются, пока одна из них не объявит список
+      // без навыка, до дедлайна. Проверять `announced()` можно только после
+      // прихода списка команд: у сессии с ещё пустым списком он ложно `false`.
+      final deadline = DateTime.now().add(const Duration(seconds: 15));
+      var withoutSkill = false;
+      while (!withoutSkill && DateTime.now().isBefore(deadline)) {
+        await shellCubit.createSession();
+        await _pumpWhile(
+          tester,
+          () => shellCubit.state.agentCommands.isEmpty,
+          timeout: const Duration(seconds: 10),
+        );
+        withoutSkill = !announced();
+        if (!withoutSkill) {
+          await tester.pump(const Duration(milliseconds: 300));
+        }
+      }
+      expect(
+        withoutSkill,
+        isTrue,
+        reason: 'a new session still announces skill:notes after 15 s',
+      );
 
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpAndSettle();
-    await closeCodeLabRootScope();
-  });
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await closeCodeLabRootScope();
+    },
+  );
 }

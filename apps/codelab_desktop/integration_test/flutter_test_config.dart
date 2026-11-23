@@ -3,6 +3,7 @@
 
 import 'dart:async';
 
+import 'package:codelab_desktop/app/app_scope.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,6 +36,16 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
     // (add-desktop-localization, D9).
     SharedPreferences.setMockInitialValues({'codelab.app.language': 'en'});
     await _resizeWindow(e2eWindowSize);
+  });
+  // Закрывает корневой scope Cherrypick после каждого теста, в том числе
+  // упавшего до своего `closeCodeLabRootScope()`. Почему: `CodeLabBootstrap`
+  // с готовым `scope` при размонтировании освобождает только его, а
+  // статический корень `CherryPick` остаётся; следующий тест файла получал
+  // этот уже отработавший корень и падал вторичной ошибкой «Can't resolve
+  // dependency `CodeLabRootLifecycle`», маскируя исходное падение. Повторное
+  // закрытие после теста, закрывшего корень сам, безопасно.
+  tearDown(() async {
+    await closeCodeLabRootScope();
   });
   await testMain();
 }

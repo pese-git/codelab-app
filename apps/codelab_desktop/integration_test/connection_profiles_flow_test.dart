@@ -214,13 +214,16 @@ void main() {
           matching: find.text('Connected'),
         ),
       );
-      expect(
-        find.descendant(
-          of: _key('connection-profile-row-devbox'),
-          matching: find.text('Current'),
-        ),
-        findsOneWidget,
+      // «Current» ставится после того, как `ensureAgent` вернул управление
+      // (`ConnectionCubit._accepted`), то есть на кадр позже бейджа
+      // `Connected` из состояния workspace: ждём его опросом, а не
+      // проверяем в тот же кадр (D4, D6 change `add-app-settings-shell`).
+      final current = find.descendant(
+        of: _key('connection-profile-row-devbox'),
+        matching: find.text('Current'),
       );
+      await _pumpUntil(tester, current);
+      expect(current, findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -262,8 +265,22 @@ void main() {
       ),
     );
 
+    // Scope закрывается из тела теста, до снятия виджета. Причина зон:
+    // `Future` запуска транспорта (`StdioAcpTransport._startFuture`) создан в
+    // зоне тела теста и завершился ошибкой `ProcessException` (нет команды).
+    // `unawaited(closeCodeLabRootScope())` в `CodeLabBootstrap.dispose` при
+    // `pumpWidget(SizedBox.shrink())` вызывает `close()` транспорта в кадре,
+    // который по журналу идёт в зоне предыдущего теста файла (первого, с живым
+    // WebSocket-агентом). Ошибка `Future` не переходит границу error-зон Dart,
+    // поэтому продолжение `await _startFuture` под `on Object` не выполняется:
+    // `close()` не завершается, а ошибка уходит необработанной — сначала в
+    // предыдущий тест, затем в этот («after the test had completed»).
+    // Одиночный прогон проходит. Закрытие из тела теста даёт одну зону для
+    // запуска и `close()`, и ошибка перехватывается. В приложении зона одна
+    // (в `lib` нет `runZoned*`), и второго `Process.start` нет: запуск виден
+    // в журнале один раз.
+    await closeCodeLabRootScope();
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
-    await closeCodeLabRootScope();
   });
 }

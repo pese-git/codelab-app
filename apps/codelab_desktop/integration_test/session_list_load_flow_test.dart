@@ -222,7 +222,14 @@ void main() {
       await _waitFor(tester, () => _cubit(tester).state.isPromptSubmitting);
       expect(_transcript(tester), isNot(contains('echo: long task')));
 
+      // «Restart agent» при идущем ходе сначала спрашивает подтверждение:
+      // перезапуск обрывает ход без `session/cancel` (D22 change
+      // `require-project-folder`, диалог `restart-agent-dialog`). Тест
+      // отвечает на него, как пользователь.
       await _cubit(tester).restartAgent();
+      await _waitFor(tester, () => _cubit(tester).state.pendingRestart != null);
+      await tester.tap(find.byKey(const ValueKey('restart-agent-confirm')));
+      await tester.pump();
       await _waitFor(
         tester,
         () =>

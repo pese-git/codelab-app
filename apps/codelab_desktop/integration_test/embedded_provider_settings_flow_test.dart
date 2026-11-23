@@ -18,7 +18,6 @@
 // `CODELAB_HOME`, поэтому в режиме `CODELAB_E2E_AGENT=embedded` (сценарий
 // модели вместо конфига) они пропускаются.
 
-import 'dart:async';
 import 'dart:io';
 
 import 'package:codelab_desktop/app/app_scope.dart';
@@ -221,8 +220,11 @@ providers:
       final shellCubit = codeLabDependenciesOf(
         tester.element(find.byType(CodeLabApp)),
       ).shellCubit;
+      // Выбор проекта и есть триггер старта (change `require-project-folder`,
+      // D13): повторный `startOnLaunch()` после него — вторая попытка, и пока
+      // первая уже упала без провайдера, текст причины получил бы суффикс
+      // «Failed again (1)».
       await ensureProject(tester, shellCubit);
-      unawaited(shellCubit.startOnLaunch());
 
       // Новая установка: понятный текст вместо сырых проблем конфига.
       await _pumpUntil(tester, _key('connection-banner-add-provider'));
