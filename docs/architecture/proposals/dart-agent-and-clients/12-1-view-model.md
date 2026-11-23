@@ -761,7 +761,7 @@ Setext-заголовки, HTML, сноски и ссылки-определен
    | `edit`, `delete` | `displayPath` первой локации или `rawInput.path`; при нескольких локациях — суффикс `+<n-1>` |
    | `move` | `<from> → <to>` из двух локаций или `rawInput.source`/`destination` |
    | `search` | `"<pattern>"` из `rawInput.pattern` или `rawInput.query`; суффикс ` in <path>` и ` (<glob>)`, если заданы |
-   | `fetch` | `rawInput.url` без схемы и без query-строки (query может содержать секрет) |
+   | `fetch` | `rawInput.url` без схемы, userinfo, query-строки и фрагмента (userinfo и query могут содержать секрет) |
    | `think` | `rawInput.agent: rawInput.description`, иначе `rawInput.description`, иначе пусто |
    | `other` | первое строковое поле из `command`, `path`, `file_path`, `url`, `query`, `pattern`, `description`, `name`; иначе пусто |
 
@@ -854,7 +854,7 @@ Setext-заголовки, HTML, сноски и ссылки-определен
    `resource` — только при `embeddedContext == true`.
 8. **VIEW-8.** Вложение с путём вне `cwd` сессии не уходит агенту без явного подтверждения
    пользователя.
-9. **VIEW-9.** Деталь строки инструмента проходит `SecretRedactor` и не содержит query-строки URL.
+9. **VIEW-9.** Деталь строки инструмента проходит `SecretRedactor` и не содержит userinfo и query-строки URL.
 10. **VIEW-10.** Проекция полей отображения подчиняется свойству §9.10: проекция с нуля равна
     инкрементальной, кроме полей времени `startedAt/finishedAt` (в проекции с нуля они `null`).
 11. **VIEW-11.** Неизменившийся `TranscriptItem` и закреплённый блок markdown (последнее — для
