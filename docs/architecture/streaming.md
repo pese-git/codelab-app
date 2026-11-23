@@ -1,130 +1,101 @@
-# Streaming в ACP Client
+# Потоковые события в ACP-клиенте
 
-Этот документ определяет правила обработки streaming events в ACP Client.
+Документ задаёт, как клиент CodeLab обрабатывает потоковые события агента — `session/update` хода, реплей `session/load`, ответы и события транспорта.
 
 Цели:
 
-* обеспечить предсказуемое обновление state;
-* исключить дублирование данных;
-* корректно обрабатывать late events;
-* сохранить consistency при reconnect;
-* обеспечить корректную cancellation semantics;
-* локализовать streaming logic вне Flutter widgets;
-* сделать streaming поведение тестируемым.
+* предсказуемо обновлять состояние;
+* не дублировать данные;
+* не давать поздним событиям менять текущее состояние;
+* сохранять согласованность при переподключении;
+* корректно обрабатывать отмену;
+* держать логику потоков вне Flutter-виджетов;
+* сделать поведение потоков тестируемым.
 
-Связанные документы:
+Общие правила — корневой `AGENTS.md` (§7, §9, §12, §16), [`acp-boundary.md`](acp-boundary.md), [`session-lifecycle.md`](session-lifecycle.md), [`concurrency.md`](concurrency.md), [`observability.md`](observability.md), [`testing.md`](testing.md).
 
-* `AGENTS.md`
-* `docs/architecture/acp-boundary.md`
-* `docs/architecture/session-lifecycle.md`
-* `docs/architecture/concurrency.md`
-* `docs/architecture/observability.md`
-* `docs/architecture/testing.md`
+Термины:
+
+* **Ход** (prompt turn) — один запрос `session/prompt`: поток `session/update` до ответа агента со `stopReason`.
+* **Дельта** (delta) — обновление-приращение, которое дописывается к накопленному: чанки `agent_message_chunk`, `agent_thought_chunk`, `user_message_chunk`.
+* **Снимок** (snapshot) — обновление, несущее полное текущее значение и заменяющее прежнее: `plan`, `current_mode_update`, `config_option_update` и т.п.
+* **Поколение соединения** (generation) — локальный номер экземпляра транспорта; растёт при каждой его замене (`session-lifecycle.md` §15).
+* **Устаревшее событие** (stale event) — событие прежнего поколения, запроса, сессии или завершённого хода.
+* **Реплей** (replay) — повтор истории сессии агентом уведомлениями `session/update` до ответа на `session/load`.
+* **Редьюсер** (reducer) — чистая функция перехода `состояние + событие → новое состояние`.
+
+Где в коде: приём и маршрутизация `session/update` — `AcpClientApplication._handleSessionUpdate` (`packages/dart/codelab_client_acp/lib/src/application/acp_client_application.dart`): кадры прежнего транспорта отсекает `_bindTransport` по поколению, реплей загружаемой сессии копится в `_sessionReplays`, обновления ещё не созданной сессии — в `_earlyUpdates`. Редьюсеры — `SessionStateMachine` и `PromptTurnStateMachine` (`lib/src/domain/state_machines.dart` того же пакета; слияние обновлений — `_applyUpdateToTurn`, `_mergeToolCallUpdate`), результат перехода — `StateTransitionResult` (`applied`, `ignored`, `rejected`). Снимки `AcpSession` уходят в `sessionChanges`; их потребитель — `ClientWorkspace` (`packages/dart/codelab_client_core/lib/src/workspace/client_workspace.dart`), который строит транскрипт `TranscriptProjector` (`lib/src/transcript/transcript_projector.dart`) и публикует `SessionView` и `WorkspaceState`. Транспорты — `codelab_acp_transports` (`StdioAcpTransport`, `WebSocketAcpTransport`, `InProcessAcpLink`).
 
 ---
 
 ## 1. Основной принцип
 
-Streaming event не должен напрямую изменять Flutter UI.
+Потоковое событие НЕ ДОЛЖНО напрямую менять Flutter UI. Виджеты ДОЛЖНЫ отображать уже нормализованное состояние.
 
-Предпочтительный flow:
-
-```text
-ACP transport
-    │
-    ▼
-protocol decode
-    │
-    ▼
-client/application event
-    │
-    ▼
-stream reducer / state machine
-    │
-    ▼
-application state
-    │
-    ▼
-BLoC / Cubit
-    │
-    ▼
-Flutter UI
-```
-
-Widgets должны отображать уже нормализованное состояние.
-
----
-
-## 2. Что считается streaming
-
-К streaming относятся долгоживущие операции, результат которых приходит несколькими событиями.
-
-Например:
-
-* incremental assistant output;
-* progress notifications;
-* tool-call updates;
-* status changes;
-* partial results;
-* execution logs;
-* file-operation progress;
-* completion/error notifications.
-
-Streaming не обязательно означает текстовый token stream.
-
----
-
-## 3. Ownership
-
-Streaming lifecycle должен иметь одного authoritative owner.
-
-Предпочтительно:
+Путь события в CodeLab:
 
 ```text
-ACP request streaming
-    → codelab_client_acp
-
-presentation projection
-    → BLoC/Cubit
+ACP-транспорт (codelab_acp_transports)
+    │
+    ▼
+декодирование (codelab_acp_protocol)
+    │
+    ▼
+AcpClientApplication._handleSessionUpdate: поколение, буферы реплея
+    │
+    ▼
+редьюсеры SessionStateMachine / PromptTurnStateMachine
+    │
+    ▼
+AcpSession → sessionChanges
+    │
+    ▼
+ClientWorkspace + TranscriptProjector → SessionView / WorkspaceState
+    │
+    ▼
+Cubit-ы app, экраны CLI
+    │
+    ▼
+UI
 ```
-
-Не допускается одновременно иметь независимую streaming aggregation logic в:
-
-* transport;
-* client core;
-* BLoC;
-* widget.
 
 ---
 
-## 4. Correlation
+## 2. Что считается потоком
 
-Каждое streaming event должно быть связано с корректным operation context.
+Поток — долгоживущая операция, результат которой приходит несколькими событиями: приращения ответа ассистента, обновления вызовов инструментов, план, смена режима и опций, частичные результаты, прогресс (в том числе файловых операций), смена статуса, журналы выполнения, уведомления о завершении или ошибке. Поток — не обязательно текстовые токены.
 
-В зависимости от ACP это могут быть:
+В ACP это прежде всего `session/update` хода и реплей `session/load` (`docs/protocols/acp/protocol/05-Prompt Turn.md`, `03-Session Setup.md#loading-a-session`). Уведомление `session/update` незнакомого вида пропускается без ошибки и без изменения состояния (`acp-protocol-client`, «Жизненный цикл prompt turn»; `_skipUnsupportedSessionUpdate`).
 
-* `session_id`;
-* `request_id`;
-* `message_id`;
-* `tool_call_id`;
-* sequence number;
-* connection generation.
+---
 
-Не следует связывать event с request только по признаку:
+## 3. Владелец
+
+У жизненного цикла потока ДОЛЖЕН быть один авторитетный владелец:
 
 ```text
-"это сейчас единственный active request"
+накопление обновлений хода и сессии  → codelab_client_acp (AcpClientApplication, редьюсеры)
+проекция в транскрипт и представления → codelab_client_core (ClientWorkspace, TranscriptProjector)
+отображение                           → Cubit-ы app, экраны CLI
 ```
 
-если protocol предоставляет явный identifier.
+Независимая логика накопления потока одновременно в транспорте, ядре клиента, BLoC и виджете ЗАПРЕЩЕНА. `TranscriptProjector` — не второе накопление, а проекция снимка `AcpSession`: на каждом шаге его результат совпадает с пересчётом с нуля `projectTranscript` (`acp-client-kit`, «Инкрементальная проекция транскрипта»).
 
 ---
 
-## 5. Request ownership
+## 4. Корреляция
 
-Каждый active streaming request должен иметь owner.
+Каждое потоковое событие ДОЛЖНО быть связано с правильным контекстом операции. Возможные ключи: `sessionId`, id запроса, id сообщения, `toolCallId`, порядковый номер, поколение соединения.
 
-Conceptual model:
+НЕ СЛЕДУЕТ связывать событие с запросом только по признаку «это сейчас единственный активный запрос», если протокол даёт явный идентификатор.
+
+В ACP у `session/update` есть только `sessionId` и, у вызовов инструментов, `toolCallId`; идентификатора хода нет. Поэтому `SessionStateMachine._applyUpdate` относит обновление к активному ходу сессии (`AcpSession.activeTurn`), а единственность активного хода — инвариант клиента (§21). Вызовы внутри хода коррелируются по `toolCallId`, одобрения — по id запроса `session/request_permission` (`session-lifecycle.md` §52).
+
+---
+
+## 5. Владелец запроса
+
+У каждого активного потокового запроса ДОЛЖЕН быть владелец. Концептуально:
 
 ```text
 StreamingRequest
@@ -135,345 +106,265 @@ StreamingRequest
 └── accumulatedState
 ```
 
-Точная модель определяется реализацией.
+Точная модель определяется реализацией. В коде это `PromptTurn` внутри `AcpSession` (id хода, `sessionId`, статус, `updates`, `toolCalls`, `approvals`); поколение `sendPrompt` запоминает при старте и сверяет после ответа (`_requireCurrentGeneration`).
 
 ---
 
-## 6. Connection generation
+## 6. Поколение соединения
 
-Streaming event должен относиться к connection generation, если reconnect способен оставить late events от старого transport.
-
-Пример:
+Событие ДОЛЖНО относиться к поколению соединения, если переподключение способно оставить поздние события старого транспорта:
 
 ```text
-generation 7
-    request 42
-        chunk A
+поколение 7
+    запрос 42
+        чанк A
 
-reconnect
+переподключение
 
-generation 8
-    request 42 / restored request
+поколение 8
+    запрос 42 / восстановленный запрос
 
-late chunk from generation 7
+поздний чанк поколения 7
 ```
 
-Late chunk старой generation не должен автоматически применяться к current state.
+Поздний чанк старого поколения НЕ ДОЛЖЕН автоматически применяться к текущему состоянию.
+
+В коде `_bindTransport` запоминает поколение при подписке на транспорт и отбрасывает входящие кадры и события транспорта, если поколение сменилось, с записью `event_ignored` (`reason: stale_generation`). Ответ `session/prompt`, пришедший после замены транспорта, отбрасывает `_requireCurrentGeneration`.
 
 ---
 
-## 7. Stale events
+## 7. Устаревшие события
 
-Event считается stale, если он относится к уже неактуальному:
+Событие устарело, если относится к уже неактуальному соединению, сессии, запросу, вызову инструмента или поколению потока.
 
-* connection;
-* session;
-* request;
-* tool call;
-* streaming generation.
+Устаревшее событие НЕ ДОЛЖНО менять авторитетное текущее состояние. Его МОЖНО проигнорировать, залогировать на уровне debug или trace, учесть в диагностических метриках.
 
-Stale event НЕ ДОЛЖЕН менять authoritative current state.
-
-Он может быть:
-
-* проигнорирован;
-* залогирован на debug/trace level;
-* учтён в diagnostic metrics.
+В коде: кадр прежнего поколения — §6; обновление хода без активного хода (ход уже терминальный) — `ignored` с причиной `session has no active prompt turn`; ответ без ожидающего запроса — `response_ignored` (`no_pending_request`).
 
 ---
 
-## 8. Duplicate events
+## 8. Повторные события
 
-Если ACP допускает replay или duplicate delivery, streaming reducer должен быть устойчив к дубликатам.
-
-Пример нежелательного поведения:
+Если ACP допускает повторную доставку, редьюсер ДОЛЖЕН быть устойчив к дублям. Нежелательный пример:
 
 ```text
-chunk "Hello"
-chunk "Hello" replayed
+чанк "Hello"
+чанк "Hello" повторно
 
 UI:
 HelloHello
 ```
 
-Idempotency strategy должна основываться на protocol guarantees.
+Стратегия идемпотентности ДОЛЖНА опираться на гарантии протокола: стабильный id события, порядковый номер, смещение, ревизию, ключ дедупликации.
 
-Возможные механизмы:
+Придумывать эвристику дедупликации без опоры в протоколе НЕ СЛЕДУЕТ.
 
-* stable event id;
-* sequence number;
-* offset;
-* revision;
-* deduplication key.
+В CodeLab (`acp-protocol-client`, «Идемпотентные переходы состояния»; change `fix-repeated-message-chunks`):
 
-Не следует придумывать deduplication heuristic без protocol basis.
+* чанки — дельты без ключа; повтор неотличим от следующей дельты с тем же текстом, поэтому чанки всегда дописываются (`_applyUpdateToTurn`);
+* снимок — дубль, только если равен последнему обновлению того же вида в ходе (`_latestOfKind`); возврат A → B → A применяется;
+* `tool_call` и `tool_call_update` сливаются в запись вызова по `toolCallId`; кадр, не меняющий запись, — `ignored` (`duplicate session update has no new visible effect`).
 
 ---
 
-## 9. Ordering
+## 9. Порядок
 
-Клиент не должен предполагать ordering сильнее, чем гарантирует ACP.
+Клиент НЕ ДОЛЖЕН предполагать порядок строже, чем гарантирует ACP.
 
-Нужно явно определить:
+ДОЛЖНО быть явно определено:
 
-* гарантирован ли порядок внутри request;
-* гарантирован ли порядок между tool events;
-* возможно ли interleaving нескольких requests;
-* возможно ли получение completion раньше buffered updates.
+* гарантирован ли порядок внутри запроса;
+* гарантирован ли порядок между событиями инструментов;
+* возможно ли чередование нескольких запросов;
+* может ли завершение прийти раньше буферизованных обновлений.
 
-Если ordering является частью protocol, reducer должен проверять его.
+Если порядок — часть протокола, редьюсер ДОЛЖЕН его проверять.
+
+Что даёт ACP: транспорт — одно упорядоченное JSON-RPC-соединение; обновления хода, в том числе после `session/cancel`, агент ДОЛЖЕН прислать до ответа на `session/prompt` (`05-Prompt Turn.md#cancellation`); реплей — до ответа на `session/load` (`03-Session Setup.md#loading-a-session`). Порядковых номеров у `session/update` нет. Клиент применяет кадры в порядке приёма: контроллеры ядра клиента синхронные (`broadcast(sync: true)`), `InProcessAcpTransport` доставляет по одному сообщению в порядке `send`.
 
 ---
 
-## 10. Sequence numbers
+## 10. Порядковые номера
 
-Если ACP предоставляет sequence number, его следует использовать как first-class concept.
-
-Например:
+Если ACP даёт порядковый номер, его СЛЕДУЕТ использовать как полноценное понятие:
 
 ```text
-request 42:
+запрос 42:
 seq 1
 seq 2
 seq 3
 ```
 
-Клиент может обнаруживать:
+По номерам клиент может обнаружить повтор, пропуск и нарушение порядка. Реакцию определяет спецификация.
 
-* duplicate sequence;
-* missing sequence;
-* out-of-order sequence.
-
-Конкретная reaction определяется specification.
+В ACP у `session/update` номеров нет. Номер `seq` есть у расширения CodeLab `_codelab/session/usage`: снимок — полное состояние, применяется новейший по паре (поколение, `seq`), пропуски номеров — норма (`acp-client-kit`, «Usage сессии»; `ClientWorkspace._handleUsage`, `applyUsage`).
 
 ---
 
-## 11. Out-of-order event
+## 11. Событие вне порядка
 
-Out-of-order event не должен автоматически применяться к state, если это нарушает semantics.
+Событие вне порядка НЕ ДОЛЖНО автоматически применяться к состоянию, если это нарушает семантику. Возможные стратегии: буферизовать, отклонить, ждать недостающее событие, пометить запрос несогласованным, завершить запрос отказом. Выбор ДОЛЖЕН соответствовать ACP и OpenSpec.
 
-Возможные стратегии:
-
-* buffer;
-* reject;
-* wait for missing event;
-* mark request inconsistent;
-* fail request.
-
-Выбор должен соответствовать ACP/OpenSpec.
-
-UI не должен самостоятельно переставлять protocol events.
+UI НЕ ДОЛЖЕН сам переставлять протокольные события.
 
 ---
 
-## 12. Buffering
+## 12. Буферизация
 
-Buffering допускается только если он решает конкретную protocol/application проблему.
+Буферизация допустима, только если решает конкретную задачу протокола или приложения.
 
-Buffer должен иметь:
+У буфера ДОЛЖНЫ быть владелец, ограниченное время жизни, политика размера и правило очистки. Бесконечный буфер без лимитов ЗАПРЕЩЁН.
 
-* owner;
-* bounded lifecycle;
-* size policy;
-* cleanup behavior.
+Буферы потока в коде:
 
-Не допускается бесконечный buffer без лимитов.
+* `_sessionReplays` — реплей загружаемой сессии; живёт до ответа на `session/load`, убирается при любом исходе запроса;
+* `_earlyUpdates` — обновления сессии, пришедшие раньше ответа на `session/new` (change `add-command-palette-agent-commands`, D7); очищается, когда `session/new` в полёте не остаётся;
+* `InProcessAcpTransport._pending` — сообщения, пришедшие до `start()` конца и до первой подписки на `inbound`; после этого не копятся.
 
----
-
-## 13. Buffer limits
-
-Если streaming способен генерировать большой объём данных, следует определить limits.
-
-Например:
-
-* max buffered events;
-* max buffered bytes;
-* max retained logs;
-* max in-memory message size.
-
-Exceeded limit должен иметь определённое behavior.
+Время жизни у всех трёх ограничено запросом или первой подпиской, лимита размера нет (см. §13).
 
 ---
 
-## 14. Backpressure
+## 13. Лимиты буферов
 
-Если producer может генерировать события быстрее, чем client способен обрабатывать, необходимо учитывать backpressure.
+Если поток способен порождать большой объём данных, СЛЕДУЕТ определить лимиты: число событий и байт в буфере, число хранимых записей журнала, размер сообщения в памяти. Превышение лимита ДОЛЖНО иметь определённое поведение.
 
-Возможные подходы зависят от transport/API:
-
-* bounded queue;
-* throttling;
-* sampling для non-critical progress;
-* batching;
-* producer-side flow control.
-
-Критические protocol events нельзя терять ради UI performance.
+Сейчас ограничен только кольцевой буфер диагностики ядра клиента (`_maxDiagnostics = 500`, §54). Буферы §12, строки stdio (`LineSplitter` без предела длины) список `PromptTurn.updates` и копии диагностики в `AcpSession.diagnostics` каждой сессии (`_recordDiagnostic`) лимитов не имеют.
 
 ---
 
-## 15. UI throttling
+## 14. Обратное давление
 
-Application state и UI refresh rate — разные concerns.
+Если производитель может слать события быстрее, чем клиент их обрабатывает, обратное давление (backpressure) ДОЛЖНО учитываться. Подходы зависят от транспорта и API: ограниченная очередь, ограничение частоты (throttling), выборка некритичного прогресса, пакетирование, управление потоком на стороне производителя.
 
-Допустимо:
+Терять критические протокольные события ради производительности UI ЗАПРЕЩЕНО.
+
+---
+
+## 15. Ограничение частоты UI
+
+Состояние приложения и частота обновления UI — разные задачи. Допустимо:
 
 ```text
-100 protocol events/sec
+100 протокольных событий/с
         │
         ▼
-application state updates
+обновления состояния приложения
         │
         ▼
-UI projection throttled to 30 FPS
+проекция UI, не чаще 30 кадров/с
 ```
 
-если это не меняет semantics.
+если это не меняет семантику. Оптимизация UI НЕ ДОЛЖНА терять авторитетные события.
 
-UI optimization не должна приводить к потере authoritative events.
+В коде публикации потока ACP не склеиваются: `ClientWorkspace` публикует новый `SessionView` (`revision + 1`) на каждое изменение сессии в ядре клиента, а частоту перерисовки ограничивает сам Flutter — не чаще одного перестроения за кадр. Стоимость шага снижает инкрементальная проекция (`TranscriptProjector`). Склейка есть только у отдельных видов отображения: покадровый сброс с бюджетом у вывода встроенного терминала (`TerminalOutputFlusher` в `apps/codelab_desktop`, change `add-integrated-terminal`, D3) и публикация не чаще раза в 100 мс у `ProtocolPaneCubit` панели Protocol (change `redesign-protocol-pane`).
 
 ---
 
-## 16. Text streaming
+## 16. Потоковый текст
 
-Для incremental text следует определить semantics event.
+Для приращений текста СЛЕДУЕТ определить семантику события. Возможные модели: дописать дельту, заменить текущий текст, снимок ревизии.
 
-Возможные модели:
+Предполагать дописывание, если протокол передаёт полный снимок, ЗАПРЕЩЕНО.
 
-```text
-append delta
-replace current text
-revision snapshot
-```
-
-Нельзя предполагать `append`, если protocol передаёт полный snapshot.
+В ACP чанки сообщений — дельты (`05-Prompt Turn.md`); план — полный снимок, клиент ОБЯЗАН заменить план целиком (`11-Agent Plan.md`); `tool_call_update` несёт только изменённые поля (`08-Tool Calls.md`), и `_mergeToolCallUpdate` берёт отсутствующие поля из записи.
 
 ---
 
-## 17. Delta semantics
+## 17. Дельты и снимки
 
-Если event является delta:
+Если событие — дельта:
 
 ```text
 "Hel"
 "lo"
 ```
 
-reducer может собрать:
-
-```text
-"Hello"
-```
-
-Если event является snapshot:
+редьюсер собирает `"Hello"`. Если событие — снимок:
 
 ```text
 "Hel"
 "Hello"
 ```
 
-результат также:
+результат тоже `"Hello"`, но алгоритм другой. Семантику ДОЛЖНЫ определять протокольный слой и отображение в приложение.
+
+В коде ядро клиента хранит дельты в `PromptTurn.updates` как есть, а склеивает их `TranscriptProjector`: подряд идущие чанки ответа и размышлений агента (`agent_message_chunk`, `agent_thought_chunk`) одного вида дописываются в один элемент транскрипта (`acp-client-kit`, «Инкрементальная проекция транскрипта»).
+
+---
+
+## 18. Обновления с ревизией
+
+Если ACP поддерживает ревизии, СЛЕДУЕТ хранить ревизию или версию. Старая ревизия НЕ ДОЛЖНА перезаписывать более новое состояние.
+
+В ACP ревизий у `session/update` нет.
+
+---
+
+## 19. Несколько потоков
+
+У сессии может быть несколько параллельных потоков: ответ ассистента, выполнение инструмента, прогресс, диагностика. НЕ СЛЕДУЕТ сводить их в один поток только ради удобства, если семантика различается.
+
+В коде ядро клиента публикует раздельно: `sessionChanges` (сессии и ходы), `usageNotifications` (расход), `diagnosticChanges` (диагностика), `connectionStateChanges` (соединение).
+
+---
+
+## 20. Параллельные запросы
+
+Если ACP поддерживает параллельные запросы:
 
 ```text
-"Hello"
+запрос A ── поток
+запрос B ── поток
 ```
 
-но algorithm другой.
+редьюсер ОБЯЗАН разделять их по идентификаторам запросов. Одно состояние BLoC МОЖЕТ агрегировать несколько запросов, но принадлежность каждого события ДОЛЖНА оставаться однозначной.
 
-Это должно быть определено protocol layer/application mapping.
-
----
-
-## 18. Revision-based updates
-
-Если ACP поддерживает revisions, следует хранить revision/version.
-
-Пример:
-
-```text
-message revision 1
-message revision 2
-```
-
-Older revision не должен перезаписывать newer state.
+В CodeLab параллельны сессии, а не ходы одной сессии: события разных сессий разделяются по `sessionId`.
 
 ---
 
-## 19. Multiple streams
+## 21. Один запрос на сессию
 
-Session может потенциально иметь несколько параллельных streams.
+Если приложение разрешает только один активный запрос на сессию, это ДОЛЖНО быть инвариантом приложения. Реализация потока НЕ ДОЛЖНА случайно допускать второй запрос только потому, что транспорт способен его передать.
 
-Например:
-
-```text
-assistant output
-tool execution
-progress
-diagnostics
-```
-
-Их не следует объединять в один stream только ради удобства, если semantics различаются.
+В коде `SessionStateMachine._startTurn` отклоняет второй ход (`session already has an active prompt turn`), а промпт, отправленный во время хода, ставит в очередь `ClientWorkspace` (`acp-client-kit`, «Очередь промптов на сессию»).
 
 ---
 
-## 20. Concurrent requests
+## 22. Завершение
 
-Если ACP поддерживает concurrent requests:
+Завершение — событие жизненного цикла, а не очередной чанк. После терминального завершения запрос ДОЛЖЕН перестать принимать обычные обновления, если протокол не определяет иначе.
 
-```text
-request A ── stream
-request B ── stream
-```
-
-reducer обязан разделять их по request identifiers.
-
-Один BLoC state может агрегировать несколько requests, но ownership каждого event должен оставаться однозначным.
+В коде ход завершает только ответ на его `session/prompt` (`completeTurn`, `failTurn`); статус берётся из `stopReason` (`acp-protocol-client`, «Жизненный цикл prompt turn»).
 
 ---
 
-## 21. Single-request policy
+## 23. Повторное завершение
 
-Если приложение разрешает только один active request на session, это должно быть application invariant.
+Повторное завершение ДОЛЖНО быть безопасным. Оно НЕ ДОЛЖНО:
 
-Streaming implementation не должна случайно допускать второй request только потому, что transport способен его передавать.
+* повторно финализировать состояние;
+* повторно показывать уведомление;
+* повторно запускать сохранение;
+* повторно завершать `Completer`;
+* без необходимости порождать второе аналитическое событие.
 
----
-
-## 22. Completion
-
-Completion является lifecycle event, а не просто очередным chunk.
-
-После terminal completion request должен перестать принимать normal streaming updates, если protocol не определяет иначе.
+В коде второй ответ с тем же JSON-RPC id не находит ожидающего запроса (`response_ignored`), а `PromptTurnStateMachine._complete`, `_fail` и `_cancel` у терминального хода возвращают `ignored`.
 
 ---
 
-## 23. Duplicate completion
+## 24. Событие после завершения
 
-Duplicate completion должен быть безопасным.
+Событие после терминального завершения ДОЛЖНО обрабатываться по семантике протокола. По умолчанию его СЛЕДУЕТ считать неожиданным или устаревшим, а не оживлять запрос.
 
-Он не должен:
-
-* повторно финализировать state;
-* повторно показывать notification;
-* повторно запускать persistence;
-* повторно завершать completer;
-* генерировать вторую analytics event без необходимости.
+В коде обновление хода после терминального завершения не находит активного хода и игнорируется (§7). Сессионные обновления (`available_commands_update`, `config_option_update`, `current_mode_update`, `session_info_update`) ACP разрешает в любой момент сессии, поэтому они применяются к сессии и без хода (`_applySessionScopedUpdate`).
 
 ---
 
-## 24. Event after completion
+## 25. Завершение ошибкой
 
-Event, пришедший после terminal completion, должен быть обработан согласно protocol semantics.
-
-По умолчанию его следует считать unexpected/stale, а не оживлять request.
-
----
-
-## 25. Error completion
-
-Error должен быть явным terminal outcome, если ACP определяет его как terminal.
-
-Например:
+Ошибка ДОЛЖНА быть явным терминальным исходом, если ACP определяет её как терминальную:
 
 ```text
 streaming
@@ -482,15 +373,13 @@ streaming
 failed
 ```
 
-После этого обычные chunks не должны менять state.
+После этого обычные чанки НЕ ДОЛЖНЫ менять состояние. В коде ошибка `session/prompt` переводит ход в `failed` с типизированным сбоем `PromptFailure` (`acp-protocol-client`, «Типизированный сбой prompt turn»).
 
 ---
 
-## 26. Cancellation
+## 26. Отмена
 
-Cancellation взаимодействует со streaming lifecycle.
-
-Типовой flow:
+Отмена взаимодействует с жизненным циклом потока:
 
 ```text
 streaming
@@ -503,134 +392,110 @@ cancelling
     └── failed
 ```
 
-Во время `cancelling` могут прийти late events.
+Во время `cancelling` могут прийти поздние события; их семантика ДОЛЖНА быть определена.
 
-Их semantics должны быть определены.
-
----
-
-## 27. Chunks during cancellation
-
-Если chunk приходит после отправки cancel, но до acknowledgement:
-
-* он может быть valid;
-* он может быть ignored;
-* он может быть accepted до terminal cancellation.
-
-Правило должно соответствовать ACP.
-
-UI не должен самостоятельно решать этот race.
+В коде `cancelTurn` отправляет `session/cancel`, отвечает `cancelled` на ждущие `session/request_permission` и переводит ход в нетерминальный `cancelling`; незавершённые вызовы помечаются `failed` с `cancelledByClient` (change `fix-prompt-cancel-tool-calls`). Повторная отмена возвращает тот же ход (`session-lifecycle.md` §29).
 
 ---
 
-## 28. Completion during cancellation
+## 27. Чанки во время отмены
 
-Completion и cancellation могут соревноваться.
+Чанк, пришедший после отправки отмены, но до её подтверждения, может быть законным, игнорируемым или принимаемым до терминальной отмены. Правило ДОЛЖНО соответствовать ACP. UI НЕ ДОЛЖЕН сам решать эту гонку.
 
-Необходимо иметь deterministic rule.
+ACP: агент МОЖЕТ присылать обновления после `session/cancel`, но до ответа на `session/prompt`, и клиенту СЛЕДУЕТ принимать обновления вызовов инструментов, пришедшие после отмены (`05-Prompt Turn.md#cancellation`). В коде ход в `cancelling` остаётся активным и принимает их, не выходя из отмены (`acp-protocol-client`, сценарий «Запоздавшее обновление после cancel»). Поздний неитоговый статус вызова, отменённого клиентом, не возвращает его в работу (`_mergeToolCallUpdate`).
 
-Например:
+---
+
+## 28. Завершение во время отмены
+
+Завершение и отмена могут состязаться. ДОЛЖНО быть детерминированное правило. Например:
 
 ```text
-completion received first
+первым пришло завершение
     → completed
 
-cancellation acknowledgement received first
+первым пришло подтверждение отмены
     → cancelled
 ```
 
-Конкретное правило — source of truth в specification/application lifecycle.
+Конкретное правило — источник истины в спецификации и жизненном цикле приложения.
+
+В CodeLab итог хода определяет `stopReason` ответа на `session/prompt`: обычно `cancelled`, `end_turn` — если агент закончил ход раньше, чем получил отмену (`acp-protocol-client`, «Отмена prompt turn»; `session-lifecycle.md` §27).
 
 ---
 
-## 29. Disconnect during stream
+## 29. Обрыв во время потока
 
-При disconnect необходимо определить судьбу stream.
+При обрыве соединения ДОЛЖНА быть определена судьба потока: немедленный отказ, приостановка, восстановление после переподключения, реплей после переподключения, продолжение с номера.
 
-Варианты:
-
-* fail immediately;
-* suspend;
-* recover after reconnect;
-* replay after reconnect;
-* resume from sequence.
-
-Это protocol/application policy.
+Это политика протокола и приложения. В CodeLab — отказ хода: обрыв отменяет ход на стороне агента, клиент запоминает прерванный ход (`_interruptedTurns`) и после `session/load` показывает последний ход реплея отменённым (`acp-protocol-client`, «Ход, прерванный заменой транспорта»; `session-lifecycle.md` §30).
 
 ---
 
-## 30. Reconnect
+## 30. Переподключение
 
-Reconnect не должен автоматически создавать второй subscriber на тот же logical stream.
+Переподключение НЕ ДОЛЖНО автоматически создавать второго подписчика на тот же логический поток.
 
-После reconnect необходимо проверить:
+После переподключения ДОЛЖНО быть проверено:
 
-* какие subscriptions были закрыты;
+* какие подписки закрыты;
 * какие восстановлены;
-* какие request IDs ещё valid;
-* какие events могли быть replayed.
+* какие id запросов ещё действительны;
+* какие события могли прийти повторно.
+
+В коде замена транспорта отменяет подписки прежнего (`_inboundSubscription`, `_eventSubscription`) и подписывается на новый (`_bindTransport`); ожидающие одобрения снимаются (`_dropPendingApprovals`, `session-lifecycle.md` §52). Подписки `ClientWorkspace` на потоки ядра клиента живут всё время жизни рабочего пространства и не пересоздаются.
 
 ---
 
-## 31. Replay after reconnect
+## 31. Реплей после переподключения
 
-Если agent может replay события после reconnect, reducer обязан быть idempotent.
+Если агент может повторить события после переподключения, редьюсер ОБЯЗАН быть идемпотентным. Если реплей начинается с определённого номера или ревизии, клиент ДОЛЖЕН использовать их для сверки.
 
-Если replay начинается с определённой sequence/revision, client должен использовать её для reconciliation.
+В ACP реплей — это `session/load`: агент повторяет всю историю, номера начала нет. Клиент копит реплей отдельно (`_sessionReplays`) и после ответа строит сессию заново (`SessionStateMachine.replayHistory`), а не дописывает к прежней (§33).
 
 ---
 
-## 32. Resume cursor
+## 32. Курсор возобновления
 
-Если ACP поддерживает resume cursor/offset/sequence, его следует хранить на application boundary.
-
-Например:
+Если ACP поддерживает курсор, смещение или номер возобновления, его СЛЕДУЕТ хранить на границе приложения:
 
 ```text
 lastAppliedSequence = 184
 ```
 
-После reconnect:
+После переподключения — `resume from 185`, если протокол это поддерживает.
+
+В ACP курсора возобновления нет.
+
+---
+
+## 33. Сверка со снимком
+
+Если после переподключения агент присылает полный снимок, приложение ДОЛЖНО уметь сверить его с локальным состоянием. Снимок может быть авторитетным. Автоматически дописывать снимок к старому состоянию НЕ СЛЕДУЕТ.
+
+В коде реплей `session/load` заменяет ходы сессии, а `ClientWorkspace` сбрасывает проекцию транскрипта по событию загрузки (`_SessionHandle.reload` → `TranscriptProjector.reset`): id ходов реплея могут совпасть с прежними (change `add-session-list-and-reload`, D4).
+
+---
+
+## 34. Локальное оптимистичное состояние
+
+Оптимистичное состояние UI СЛЕДУЕТ отличать от подтверждённого состояния ACP:
 
 ```text
-resume from 185
+локально:
+промпт отправлен
+
+агент:
+запрос принят
 ```
 
-если protocol это поддерживает.
+Оптимистичное обновление НЕ ДОЛЖНО мешать корректной сверке при отказе.
 
 ---
 
-## 33. Snapshot reconciliation
+## 35. Поток вызова инструмента
 
-Если после reconnect agent присылает полный snapshot, приложение должно уметь reconciliate его с локальным state.
-
-Snapshot может быть authoritative.
-
-Не следует автоматически append snapshot к старому state.
-
----
-
-## 34. Local optimistic state
-
-Если UI показывает optimistic state, его следует отличать от confirmed ACP state.
-
-Например:
-
-```text
-local:
-prompt submitted
-
-remote:
-request accepted
-```
-
-Optimistic update не должен уничтожать возможность корректной reconciliation при failure.
-
----
-
-## 35. Tool call streaming
-
-Tool call может иметь собственный stream:
+У вызова инструмента может быть собственный поток:
 
 ```text
 requested
@@ -641,186 +506,142 @@ progress
 completed
 ```
 
-Tool call events должны коррелироваться по `tool_call_id` или эквиваленту.
+События вызова ДОЛЖНЫ коррелироваться по `toolCallId` или эквиваленту. В коде — записи `PromptTurn.toolCalls` по `toolCallId`; повторный `tool_call` с тем же id обновляет запись, а в транскрипте — тот же `ToolCallItem` на прежней позиции.
 
 ---
 
-## 36. Permission pause
+## 36. Пауза на разрешение
 
-Если tool call ждёт permission, это не обязательно terminal pause всего session stream.
+Ожидание разрешения вызовом не обязательно останавливает весь поток сессии. ДОЛЖНО быть определено: продолжает ли агент слать другие события, блокируется ли запрос, возможны ли параллельные вызовы. Модель состояния ДОЛЖНА поддерживать семантику протокола.
 
-Необходимо определить:
-
-* продолжает ли agent слать другие events;
-* блокируется ли request;
-* возможны ли параллельные tool calls.
-
-State model должна поддерживать protocol semantics.
+В коде ход в `awaitingApproval` нетерминальный и продолжает принимать обновления; одобрения хранятся по id запроса, ждущих может быть несколько.
 
 ---
 
-## 37. Progress events
+## 37. События прогресса
 
-Progress events обычно менее critical, чем state transitions.
-
-Их можно:
-
-* throttle;
-* aggregate;
-* drop intermediate values;
-
-если конечный state сохраняется и specification это допускает.
+События прогресса обычно менее критичны, чем переходы состояния. Их МОЖНО прореживать, агрегировать, отбрасывать промежуточные значения, если итоговое состояние сохраняется и спецификация это допускает.
 
 ---
 
-## 38. Critical vs non-critical events
+## 38. Критичные и некритичные события
 
-Следует различать:
+СЛЕДУЕТ различать:
 
-### Critical
+### Критичные
 
-* request started;
-* tool call requested;
-* permission required;
-* completed;
-* failed;
-* cancelled.
+* запрос начат;
+* запрошен вызов инструмента;
+* требуется разрешение;
+* завершён;
+* отказ;
+* отменён.
 
-### Potentially compressible
+### Допускающие сжатие
 
-* percentage progress;
-* frequent intermediate status;
-* rendering-only telemetry.
+* процент прогресса;
+* частые промежуточные статусы;
+* телеметрия отрисовки.
 
-Оптимизации не должны затрагивать critical events.
+Оптимизации НЕ ДОЛЖНЫ затрагивать критичные события.
 
 ---
 
-## 39. Event normalization
+## 39. Нормализация событий
 
-Protocol events следует нормализовать до application semantics.
-
-Например:
+Протокольные события СЛЕДУЕТ нормализовать до семантики приложения:
 
 ```text
-ACP notification A
-ACP notification B
-ACP notification C
+ACP-уведомление A
+ACP-уведомление B
+ACP-уведомление C
         │
         ▼
 RequestProgressChanged
 ```
 
-если они представляют одно application concept.
+если они выражают одно понятие приложения. В коде DTO `SessionUpdate` нормализуются в `PromptTurn`/`AcpSession`, а те — в `TranscriptItem` и `SessionView`.
 
 ---
 
-## 40. Reducer
+## 40. Редьюсер
 
-Для сложного streaming state следует использовать reducer/state machine approach.
+Для сложного потокового состояния СЛЕДУЕТ использовать подход редьюсера или автомата: `CurrentState + Event → NewState`. Он даёт детерминированные тесты, воспроизведение, наблюдаемость, разбор гонок и обработку дублей.
 
-Conceptually:
-
-```text
-CurrentState + Event → NewState
-```
-
-Преимущества:
-
-* deterministic tests;
-* replay;
-* observability;
-* race analysis;
-* duplicate handling.
+В коде это статический `reduce` каждого автомата (`session-lifecycle.md` §57).
 
 ---
 
-## 41. Reducer purity
+## 41. Чистота редьюсера
 
-По возможности reducer должен быть pure.
+Редьюсер СЛЕДУЕТ делать чистым — `state + event -> new state` без сети, файловой системы, диалогов, таймеров и скрытого глобального состояния. Побочные эффекты запускаются отдельно в слое приложения.
 
-То есть:
-
-```text
-state + event -> new state
-```
-
-без:
-
-* network;
-* filesystem;
-* dialogs;
-* timers;
-* hidden global state.
-
-Side effects запускаются отдельно на application layer.
+В коде редьюсеры `state_machines.dart` — чистые функции; отправка, журнал и публикация — в `AcpClientApplication`.
 
 ---
 
-## 42. Side effects
+## 42. Побочные эффекты
 
-Streaming event может инициировать side effect.
-
-Например:
+Потоковое событие может запускать побочный эффект:
 
 ```text
 PermissionRequired
-    → request user decision
+    → запросить решение пользователя
 ```
 
-Но reducer должен сначала сформировать explicit state/event, а не напрямую открыть dialog.
+Но редьюсер ДОЛЖЕН сначала сформировать явное состояние или событие, а не открывать диалог сам. В коде запрос разрешения становится одобрением `pending` в ходе, а решение пользователя приходит намерением `respondToPermission`.
 
 ---
 
-## 43. Event processing queue
+## 43. Очередь обработки событий
 
-Если несколько events могут приходить concurrently, application layer должна определить serialization strategy.
+Если события могут приходить конкурентно, слой приложения ДОЛЖЕН определить стратегию сериализации. Для одного логического запроса обычно СЛЕДУЕТ сохранять последовательную обработку.
 
-Для одного logical request обычно следует сохранять sequential processing.
+Одновременно менять одно изменяемое состояние из двух асинхронных обработчиков ЗАПРЕЩЕНО.
 
-Нельзя позволять двум async handlers одновременно мутировать один mutable state.
+В коде `session/update` обрабатывается синхронно, без `await` между чтением и записью сессии (`_handleSessionUpdate` → `_storeSession`).
 
 ---
 
-## 44. Sequential processing
+## 44. Последовательная обработка
 
-Conceptually:
+Концептуально
 
 ```text
-event 1
+событие 1
    ↓
 reduce
    ↓
-event 2
+событие 2
    ↓
 reduce
 ```
 
-предпочтительнее:
+предпочтительнее, чем
 
 ```text
-event 1 ── async mutate ──┐
-                          ├── race
-event 2 ── async mutate ──┘
+событие 1 ── async mutate ──┐
+                            ├── гонка
+событие 2 ── async mutate ──┘
 ```
 
 ---
 
-## 45. Async event handlers
+## 45. Асинхронные обработчики событий
 
-Если обработка event требует async operation, следует отделять:
+Если обработка события требует асинхронной операции, СЛЕДУЕТ разделять:
 
 ```text
-event received
+событие получено
     │
     ▼
-state transition
+переход состояния
     │
     ▼
-side effect
+побочный эффект
     │
     ▼
-result event
+событие-результат
 ```
 
 Например:
@@ -837,180 +658,125 @@ ReconnectSucceeded / ReconnectFailed
 
 ---
 
-## 46. Event loop ownership
+## 46. Владелец цикла событий
 
-Application/client layer должен иметь явный event processing mechanism.
-
-Нельзя распределять обработку одного streaming lifecycle по множеству независимых callbacks без общего ownership.
+У слоя приложения и клиента ДОЛЖЕН быть явный механизм обработки событий. Распределять обработку одного потока по множеству независимых callbacks без общего владельца ЗАПРЕЩЕНО.
 
 ---
 
-## 47. Stream subscription lifecycle
+## 47. Жизненный цикл подписки
 
-Каждый `StreamSubscription` должен:
+Каждый `StreamSubscription` ДОЛЖЕН:
 
-* иметь owner;
+* иметь владельца;
 * быть сохранён;
-* быть cancelled;
-* не переживать owner без явной причины.
+* быть отменён;
+* не переживать владельца без явной причины.
 
-Не создавать `listen(...)` без lifecycle plan.
+`listen(...)` без плана жизненного цикла ЗАПРЕЩЁН.
 
----
-
-## 48. Broadcast streams
-
-Broadcast stream следует использовать только когда действительно требуется несколько независимых consumers.
-
-Не следует делать каждый stream broadcast по умолчанию.
-
-Broadcast semantics усложняет:
-
-* ordering;
-* lifecycle;
-* missed events;
-* ownership.
+В коде: подписки на транспорт — поля `AcpClientApplication`, отменяются при замене транспорта и в `dispose`; подписки на ядро клиента — поля `ClientWorkspace`, отменяются в его `dispose` (`session-lifecycle.md` §40).
 
 ---
 
-## 49. Late subscribers
+## 48. Broadcast-потоки
 
-Если consumer должен видеть current state после подписки, обычный event stream может быть недостаточен.
+Broadcast-поток СЛЕДУЕТ использовать, только когда действительно нужно несколько независимых потребителей. Делать каждый поток broadcast по умолчанию НЕ СЛЕДУЕТ: broadcast-семантика усложняет порядок, жизненный цикл, учёт пропущенных событий и владение.
 
-Следует использовать:
-
-* state holder;
-* replay mechanism;
-* current snapshot API;
-
-вместо предположения, что новый subscriber получит старые events.
+В коде broadcast — все потоки клиентских транспортов (`inbound`, `events`), ядра клиента и `ClientWorkspace` (у серверных транспортов агента `inbound` однопоточный); у ядра клиента и `ClientWorkspace` контроллеры синхронные, чтобы порядок доставки совпадал с порядком кадров. Подписчик, пришедший поздно, прошлых событий не получает (§49). Это расходится с нормой выше: на поток транспорта подписан один владелец (`AcpClientApplication`), а причина broadcast записана только у in-process транспорта.
 
 ---
 
-## 50. Stream errors
+## 49. Поздние подписчики
 
-Нельзя позволять stream error бесконтрольно завершать critical subscription.
+Если потребителю после подписки нужно текущее состояние, обычного потока событий может не хватить. СЛЕДУЕТ использовать держатель состояния, механизм повтора или API текущего снимка, а не рассчитывать, что новый подписчик получит старые события.
 
-Следует определить:
-
-* является ли error terminal;
-* переводится ли он в application event;
-* должен ли stream закрыться;
-* требуется ли reconnect.
+В коде текущее состояние читается синхронно: `AcpClientApplication.connectionState`, `ClientWorkspace.current` и `SessionHandle.current` рядом с потоками изменений.
 
 ---
 
-## 51. Stream closure
+## 50. Ошибки потока
 
-`onDone` должен иметь defined semantics.
+Ошибка потока НЕ ДОЛЖНА бесконтрольно завершать критичную подписку. СЛЕДУЕТ определить:
 
-Например:
+* терминальна ли ошибка;
+* переводится ли она в событие приложения;
+* закрывается ли поток;
+* нужно ли переподключение.
+
+В коде ошибка чтения stdout или кадр не-JSON-RPC переводят транспорт в отказ (`AcpTransportFailure`, коды `receiveFailed`, `protocolViolation`), а ядро клиента — соединение в `failed`. Ошибка разбора одного `session/update` пишется в диагностику и не рвёт подписку.
+
+---
+
+## 51. Закрытие потока
+
+У `onDone` ДОЛЖНА быть определённая семантика:
 
 ```text
-transport stream done
+поток транспорта завершён
     ↓
 TransportClosed
     ↓
 ConnectionLost
 ```
 
-а не просто молчаливое завершение updates.
+а не молчаливое прекращение обновлений. В коде неожиданный выход процесса stdio или закрытие сокета дают `AcpTransportFailure` с кодом `disconnected`, ядро клиента переводит соединение в `failed`, представление — в `ConnectionLost` (`session-lifecycle.md` §13, §44).
 
 ---
 
-## 52. Memory management
+## 52. Память
 
-Streaming может удерживать большой объём state.
+Поток может удерживать большой объём состояния. СЛЕДУЕТ избегать:
 
-Следует избегать:
+* бесконечной истории сырых чанков;
+* хранения всех протокольных payload;
+* удержания устаревших запросов;
+* удержания старых подписок.
 
-* бесконечной истории raw chunks;
-* сохранения всех protocol payload;
-* retaining stale requests;
-* retaining old subscriptions.
+Приложение МОЖЕТ хранить нормализованное итоговое состояние вместо всех промежуточных событий.
 
-Application может хранить normalized final state вместо всех промежуточных events.
-
----
-
-## 53. Conversation history
-
-Conversation history и streaming buffer — разные вещи.
-
-После завершения message можно хранить:
-
-```text
-final message
-```
-
-а не обязательно:
-
-```text
-all 10 000 deltas
-```
-
-если они не нужны для diagnostics.
+В коде `PromptTurn.updates` хранит все обновления хода, включая каждый чанк, всё время жизни сессии в памяти (§53).
 
 ---
 
-## 54. Diagnostics buffer
+## 53. История переписки
 
-Если нужен protocol/event history для debug, он должен иметь bounded size.
-
-Например:
-
-```text
-last N events
-```
-
-или ring buffer.
-
-Не следует бесконечно хранить full protocol trace в RAM.
+История переписки и буфер потока — разные вещи. После завершения сообщения МОЖНО хранить итоговое сообщение, а не все 10 000 дельт, если они не нужны для диагностики.
 
 ---
 
-## 55. Logging
+## 54. Буфер диагностики
 
-Streaming logs должны позволять понять flow без логирования каждого символа текста.
+Если для отладки нужна история протокола или событий, её размер ДОЛЖЕН быть ограничен — «последние N событий» или кольцевой буфер. Бесконечно хранить полную протокольную трассировку в памяти НЕ СЛЕДУЕТ.
 
-Полезно логировать:
+В коде — `_maxDiagnostics = 500` записей диагностики ядра клиента (`observability.md` §28); полный журнал пишется отдельно и этим лимитом не ограничен.
 
-* request id;
-* event type;
-* sequence/revision;
-* generation;
-* transition;
-* duplicate/stale detection.
+---
 
-Например:
+## 55. Логирование
+
+Журнал потока ДОЛЖЕН позволять понять ход событий без логирования каждого символа текста. Полезно логировать id запроса, тип события, номер или ревизию, поколение, переход, распознанный дубль или устаревшее событие:
 
 ```text
 request=42 seq=8 event=chunk applied
 request=42 seq=8 event=chunk duplicate ignored
 ```
 
----
-
-## 56. Payload logging
-
-Полный streaming payload не следует логировать в production по умолчанию.
-
-Причины:
-
-* secrets;
-* user data;
-* performance;
-* log volume.
-
-Debug protocol tracing определяется `observability.md`.
+В коде: `event_ignored` с `reason: stale_generation` и поколением события, `response_ignored`, DEBUG-запись пропуска незнакомого вида обновления; корреляция — `connectionGeneration`, `sessionId`, `toolCallId`.
 
 ---
 
-## 57. BLoC boundary
+## 56. Логирование payload
 
-BLoC должен получать application-friendly updates.
+Полный payload потока НЕ СЛЕДУЕТ логировать в production по умолчанию: секреты, пользовательские данные, производительность, объём журнала. Отладочная протокольная трассировка — по `observability.md` (канал `category=protocol`, выключен по умолчанию).
 
-Предпочтительно:
+В коде содержание payload задаёт базовая политика `ProtocolPayloadPolicy` хоста (`observability.md` §48а): по умолчанию `metadataOnly`, `full` — только в debug-сборке desktop и в CLI с `--verbose`. При `metadataOnly` запись `protocol_message` и диагностика ядра в ветках ошибок — включая ошибку разбора `session/update` в `_handleSessionUpdate` — несут метод, id, сессию, размер и класс ошибки, но не сырые `params` (`_rawPayloadContext`). Полные payload кадров в release — только в режиме Trace панели Protocol, только в памяти (`observability.md` §49а).
+
+---
+
+## 57. Граница BLoC
+
+BLoC ДОЛЖЕН получать обновления в терминах приложения. Предпочтительно
 
 ```text
 RequestStateChanged
@@ -1018,137 +784,97 @@ MessageUpdated
 ToolCallChanged
 ```
 
-вместо raw:
+вместо сырого `JsonRpcNotification(method, params)`.
+
+В коде Cubit-ы app и экраны CLI получают `WorkspaceState` и `SessionView` из `codelab_client_core`.
+
+---
+
+## 58. Перестроения BLoC
+
+Поток может порождать много изменений состояния. Презентацию СЛЕДУЕТ оптимизировать там, где это нужно: `buildWhen`, `BlocSelector`, гранулярное состояние, производные модели представления. Оптимизация НЕ ДОЛЖНА менять авторитетную семантику приложения.
+
+---
+
+## 59. Локальное состояние виджета
+
+Эфемерное состояние только для отображения МОЖЕТ оставаться в виджете: наведение, временное состояние анимации, локальное раскрытие.
+
+Потоковое состояние ACP НЕ ДОЛЖНО становиться авторитетным локальным состоянием виджета.
+
+---
+
+## 60. Прокрутка
+
+Автопрокрутка — задача представления. Она ДОЛЖНА реагировать на состояние представления, а не участвовать в редьюсере потока:
 
 ```text
-JsonRpcNotification(method, params)
+сообщение обновлено
+    ↓
+перестроение UI
+    ↓
+политика автопрокрутки
 ```
 
 ---
 
-## 58. BLoC rebuilds
+## 61. Сохранение
 
-Streaming может генерировать много state changes.
+Записывать в постоянное хранилище каждый маленький чанк без необходимости НЕ СЛЕДУЕТ. Возможные стратегии: debounce, периодическая контрольная точка, сохранение терминального состояния, транзакционные пакеты. Стратегия сохранения ДОЛЖНА обеспечивать семантику восстановления и не блокировать UI.
 
-Presentation следует оптимизировать через:
-
-* `buildWhen`;
-* `BlocSelector`;
-* granular state;
-* derived view models;
-
-где это необходимо.
-
-Но optimization не должна менять authoritative application semantics.
+В CodeLab клиент транскрипт не сохраняет: история хранится у агента и восстанавливается через `session/load`.
 
 ---
 
-## 59. Widget local state
+## 62. Восстановление после сбоя
 
-Ephemeral presentation-only state может оставаться в widget.
-
-Например:
-
-* scroll hover;
-* temporary animation state;
-* local expansion state.
-
-Streaming ACP state не должен становиться widget-local authoritative state.
+Если нужно восстанавливать незавершённый поток после аварии, СЛЕДУЕТ определить семантику контрольных точек. Считать любое промежуточное состояние UI восстановимым состоянием ACP ЗАПРЕЩЕНО.
 
 ---
 
-## 60. Scroll behavior
+## 63. Стратегия тестирования
 
-Auto-scroll является presentation concern.
-
-Он должен реагировать на presentation state, а не участвовать в streaming reducer.
-
-Например:
-
-```text
-message updated
-    ↓
-UI rebuild
-    ↓
-auto-scroll policy
-```
+Тесты потоков ДОЛЖНЫ быть преимущественно детерминированными и на чистом Dart. Инструменты: поддельный транспорт, управляемые потоки, явная последовательность событий, `Completer`, поддельные часы при необходимости. Корпус ACP-фикстур — `codelab_acp_testing` (`testing.md`).
 
 ---
 
-## 61. Persistence
-
-Не следует записывать persistent storage на каждый маленький streaming chunk без необходимости.
-
-Возможные strategies:
-
-* debounce;
-* periodic checkpoint;
-* persist terminal state;
-* transactional batches.
-
-Persistence strategy должна обеспечивать recovery semantics и не блокировать UI.
-
----
-
-## 62. Crash recovery
-
-Если требуется recovery незавершённого stream после crash, следует определить checkpoint semantics.
-
-Нельзя предполагать, что любой промежуточный UI state является recoverable ACP state.
-
----
-
-## 63. Testing strategy
-
-Streaming tests должны быть преимущественно deterministic и pure Dart.
-
-Использовать:
-
-* fake transport;
-* controlled streams;
-* explicit sequence events;
-* Completer;
-* fake clock при необходимости.
-
----
-
-## 64. Базовые streaming tests
+## 64. Базовые тесты потока
 
 Минимум:
 
-* one chunk;
-* multiple chunks;
-* completion;
-* duplicate chunk;
-* duplicate completion;
-* late chunk after completion;
-* out-of-order event;
-* stale generation event;
-* stale request event;
-* disconnect during stream;
-* reconnect;
-* cancellation during stream;
-* completion/cancel race.
+* один чанк;
+* несколько чанков;
+* завершение;
+* повторный чанк;
+* повторное завершение;
+* поздний чанк после завершения;
+* событие вне порядка;
+* событие устаревшего поколения;
+* событие устаревшего запроса;
+* обрыв во время потока;
+* переподключение;
+* отмена во время потока;
+* гонка завершения и отмены.
 
 ---
 
-## 65. Replay tests
+## 65. Тесты реплея
 
-Если replay поддерживается:
+Если реплей поддерживается:
 
 ```text
-events 1..10 applied
-reconnect
-events 7..12 replayed
+события 1..10 применены
+переподключение
+события 7..12 повторены
 ```
 
-финальный state должен быть эквивалентен корректной последовательности `1..12`.
+итоговое состояние ДОЛЖНО совпадать с корректной последовательностью `1..12`.
 
 ---
 
-## 66. Interleaving tests
+## 66. Тесты чередования
 
-Если concurrent requests допустимы:
+Если параллельные запросы допустимы:
 
 ```text
 A1
@@ -1158,13 +884,13 @@ B2
 A3
 ```
 
-state request A и B должен собираться независимо.
+состояния запросов A и B ДОЛЖНЫ собираться независимо.
 
 ---
 
-## 67. Missing sequence tests
+## 67. Тесты пропуска номеров
 
-Если sequence является обязательным:
+Если номер обязателен, последовательность
 
 ```text
 1
@@ -1172,59 +898,51 @@ state request A и B должен собираться независимо.
 4
 ```
 
-должно приводить к defined behavior.
-
-Не следует незаметно считать, что sequence 3 не нужен.
+ДОЛЖНА приводить к определённому поведению. Незаметно считать, что номер 3 не нужен, НЕ СЛЕДУЕТ.
 
 ---
 
-## 68. Load tests
+## 68. Нагрузочные тесты
 
-Для high-volume streaming полезно отдельно проверять:
+Для потоков большого объёма полезно отдельно проверять рост памяти, задержку обработки событий, частоту перестроений Flutter, рост очередей, объём журнала.
 
-* memory growth;
-* event processing latency;
-* Flutter rebuild frequency;
-* queue growth;
-* log volume.
-
-Performance optimization должна выполняться после сохранения correctness invariants.
+Оптимизация производительности ДОЛЖНА сохранять инварианты корректности.
 
 ---
 
-## 69. Нежелательные patterns
+## 69. Нежелательные паттерны
 
-### Raw stream в widget
+### Сырой поток в виджете
 
 ```dart
 StreamBuilder<RawAcpMessage>(...)
 ```
 
-нежелателен для application-level ACP stream.
+нежелателен для потока ACP уровня приложения.
 
 ---
 
-### JSON parsing в BLoC
+### Разбор JSON в BLoC
 
 ```dart
 final json = jsonDecode(event.payload);
 ```
 
-для wire ACP protocol в presentation layer — нарушение boundary.
+для wire-протокола ACP в слое представления — нарушение границы.
 
 ---
 
-### Untracked `listen`
+### `listen` без учёта
 
 ```dart
 client.events.listen(...);
 ```
 
-без сохранения subscription и disposal — запрещённый lifecycle pattern.
+без сохранения подписки и освобождения — запрещённый паттерн жизненного цикла.
 
 ---
 
-### Shared mutable accumulator
+### Общий изменяемый накопитель
 
 ```dart
 var currentText = '';
@@ -1235,99 +953,99 @@ stream.listen((chunk) async {
 });
 ```
 
-может создавать race при concurrent callbacks.
+может давать гонки при конкурентных callbacks.
 
 ---
 
-### UI-driven deduplication
+### Дедупликация в UI
 
 ```text
 if widget already displays same text -> ignore event
 ```
 
-не является protocol deduplication strategy.
+не является стратегией дедупликации протокола.
 
 ---
 
-## 70. Checklist перед изменением streaming
+## 70. Проверочный список перед изменением потока
 
 Перед реализацией агент ОБЯЗАН определить:
 
-1. Какой request/session владеет stream.
-2. Какие IDs используются для correlation.
-3. Какие ordering guarantees даёт ACP.
-4. Возможны ли duplicates.
-5. Возможен ли replay.
-6. Возможны ли late events.
-7. Как определяется terminal state.
-8. Как работает cancellation.
-9. Что происходит при disconnect.
-10. Как работает reconnect.
-11. Требуется ли buffering.
-12. Какие memory limits нужны.
-13. Где находится reducer/state machine.
-14. Какие tests покрывают races.
+1. Какой запрос или сессия владеет потоком.
+2. Какие id используются для корреляции.
+3. Какой порядок гарантирует ACP.
+4. Возможны ли дубли.
+5. Возможен ли реплей.
+6. Возможны ли поздние события.
+7. Как определяется терминальное состояние.
+8. Как работает отмена.
+9. Что происходит при обрыве.
+10. Как работает переподключение.
+11. Нужна ли буферизация.
+12. Какие нужны лимиты памяти.
+13. Где находится редьюсер или автомат.
+14. Какие тесты покрывают гонки.
 
 ---
 
-## 71. Главные invariants
+## 71. Главные инварианты
 
-### STR-001 — Raw ACP не мутирует UI напрямую
+### STR-001 — Сырой ACP не меняет UI напрямую
 
-Все protocol events проходят application boundary.
+Все протокольные события проходят границу приложения.
 
-### STR-002 — Event имеет owner
+### STR-002 — У события есть владелец
 
-Любой event однозначно относится к session/request/tool call.
+Любое событие однозначно относится к сессии, запросу или вызову инструмента.
 
-### STR-003 — Stale event не меняет current state
+### STR-003 — Устаревшее событие не меняет текущее состояние
 
-Old generation/request/session event игнорируется.
+Событие старого поколения, запроса или сессии игнорируется.
 
-### STR-004 — Terminal state не оживает
+### STR-004 — Терминальное состояние не оживает
 
-После completion/cancel/failure обычный late event не возвращает request в running.
+После завершения, отмены или отказа обычное позднее событие не возвращает запрос в выполнение.
 
-### STR-005 — Duplicate event безопасен
+### STR-005 — Повторное событие безопасно
 
-Replay/deduplication не создаёт duplicate user-visible state.
+Реплей и дедупликация не создают дублей в видимом пользователю состоянии.
 
-### STR-006 — Streaming lifecycle тестируем
+### STR-006 — Жизненный цикл потока тестируем
 
-Основная aggregation/state transition logic работает без Flutter binding.
+Основная логика накопления и переходов работает без Flutter binding.
 
-### STR-007 — UI optimization не меняет semantics
+### STR-007 — Оптимизация UI не меняет семантику
 
-Throttle/rebuild optimization допускается только на presentation boundary.
+Ограничение частоты и оптимизация перестроений допустимы только на границе представления.
 
 ---
 
 ## 72. Основная модель
 
-Streaming следует проектировать как deterministic processing pipeline:
+Поток СЛЕДУЕТ проектировать как детерминированный конвейер обработки:
 
 ```text
-incoming event
+входящее событие
       │
       ▼
-validate identity
+проверка идентичности (поколение, сессия)
       │
       ▼
-validate ordering/lifecycle
+проверка порядка и жизненного цикла
       │
-      ├── stale/duplicate → ignore/log
+      ├── устаревшее / дубль → игнорировать, записать в журнал
       │
       ▼
-normalize
+нормализация
       │
       ▼
 reduce
       │
       ▼
-new application state
+новое состояние приложения
       │
       ▼
-presentation projection
+проекция для представления
 ```
 
-Если корректность streaming зависит от случайного порядка async callbacks, widget lifecycle или набора mutable flags, архитектуру следует пересмотреть.
+Если корректность потока зависит от случайного порядка асинхронных callbacks, жизненного цикла виджета или набора изменяемых флагов, архитектуру СЛЕДУЕТ пересмотреть.
