@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart' show SessionId;
-import 'package:codelab_client_acp/codelab_client_acp.dart' show ProtocolFrame;
+import 'package:codelab_client_acp/codelab_client_acp.dart'
+    show ProtocolFrame, ProtocolPayloadPolicy;
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -22,6 +23,13 @@ final class FakeFrameBackend extends Fake implements AgentBackend {
 
   @override
   final bool traceAvailable;
+
+  /// Согласована с [traceAvailable]: Trace возможен только при `metadataOnly`
+  /// (D3, D17 change `redesign-protocol-pane`).
+  @override
+  ProtocolPayloadPolicy get protocolPayloads => traceAvailable
+      ? ProtocolPayloadPolicy.metadataOnly
+      : ProtocolPayloadPolicy.full;
 
   final List<bool> traceCalls = [];
 

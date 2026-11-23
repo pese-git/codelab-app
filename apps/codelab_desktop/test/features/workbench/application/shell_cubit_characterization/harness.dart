@@ -54,6 +54,7 @@ final class ShellHarness {
     CodeLabWebSocketTransportFactory? webSocketTransportFactory,
     Map<String, String>? environment,
     DirectoryExists? directoryExists,
+    bool? debugBuild,
   }) : agent = agent ?? FakeAcpTransport() {
     // Проект выбран с самого начала: без него агент не стартует и сессию
     // создать нельзя (require-project-folder/design.md, D1, D20). Тесты,
@@ -72,6 +73,7 @@ final class ShellHarness {
       webSocketTransportFactory: webSocketTransportFactory,
       environment: environment,
       directoryExists: directoryExists,
+      debugBuild: debugBuild,
     );
   }
 

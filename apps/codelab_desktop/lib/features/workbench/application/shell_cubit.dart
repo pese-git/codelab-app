@@ -135,7 +135,10 @@ final class CodeLabShellParts {
   }) {
     final now = clock ?? createMonotonicClock();
     final changes = ShellChanges();
-    final diagnostics = ShellDiagnostics(logger: logger);
+    final diagnostics = ShellDiagnostics(
+      logger: logger,
+      payloads: application.protocolPayloads,
+    );
     final settings = SettingsCubit(
       changes: changes,
       workspace: workspace,
