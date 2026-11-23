@@ -68,6 +68,28 @@ String describeFailure(Object error) => _redactor.redactText(switch (error) {
   _ => error.toString(),
 });
 
+/// Текст сбоя для записи диагностики или журнала по базовой политике payload.
+///
+/// Почему: `JsonRpcError.message` и `data` агента — payload (пути, фрагменты
+/// данных). Развилка «метаданные или текст» одна на kit и app, чтобы правила
+/// не разошлись (design.md change `redesign-protocol-pane`, D3, «Текст
+/// ошибки агента»).
+///
+/// Для чего: `metadataOnly` — `describeFailureMetadata` (метод, код, класс,
+/// без текста агента); `full` — [describeFailure] (замаскированный текст).
+/// Текст для пользователя (заметка, баннер, вывод CLI) этой функцией НЕ
+/// строится — он остаётся за [describeFailure].
+///
+/// Как использовать: [policy] — `AgentBackend.protocolPayloads` (kit) или
+/// `AcpClientApplication.protocolPayloads` (app): второго источника политики
+/// быть не должно.
+String describeFailureForDiagnostic(
+  Object error,
+  ProtocolPayloadPolicy policy,
+) => policy == ProtocolPayloadPolicy.full
+    ? describeFailure(error)
+    : describeFailureMetadata(error);
+
 /// JSON с отступами после редакции секретов по ключам и по тексту; `null` —
 /// `null`. Так инспектор и одобрения показывают сырые аргументы вызова.
 String? formatRedactedJson(Object? value) => value == null

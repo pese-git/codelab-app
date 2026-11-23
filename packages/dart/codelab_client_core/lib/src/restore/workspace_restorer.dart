@@ -35,6 +35,12 @@ abstract interface class RestoreHost {
   });
 
   void report(WorkspaceDiagnostic diagnostic);
+
+  /// Текст сбоя для диагностики восстановления по базовой политике payload
+  /// ядра: `metadataOnly` — только метаданные, `full` — замаскированный текст
+  /// (design.md change `redesign-protocol-pane`, D3). Сбой `session/load` или
+  /// `session/new` несёт текст агента — payload, в журнал он не идёт.
+  String diagnosticFailureText(Object error);
 }
 
 /// Восстановление рабочего пространства после перезапуска хоста и запись
@@ -172,7 +178,9 @@ final class WorkspaceRestorer {
     try {
       json = await _store.read();
     } on Object catch (error) {
-      _warn('Failed to read workspace snapshot: ${describeFailure(error)}');
+      _warn(
+        'Failed to read workspace snapshot: ${_host.diagnosticFailureText(error)}',
+      );
       return null;
     }
     if (json == null) {
@@ -267,7 +275,9 @@ final class WorkspaceRestorer {
         }
       }
     } on Object catch (error) {
-      _warn('Failed to restore the workspace: ${describeFailure(error)}');
+      _warn(
+        'Failed to restore the workspace: ${_host.diagnosticFailureText(error)}',
+      );
     }
     _observeCurrent();
   }
@@ -360,7 +370,9 @@ final class WorkspaceRestorer {
         try {
           await _store.write(next.encode());
         } on Object catch (error) {
-          _warn('Failed to save workspace snapshot: ${describeFailure(error)}');
+          _warn(
+            'Failed to save workspace snapshot: ${_host.diagnosticFailureText(error)}',
+          );
         }
         _written = next;
       }

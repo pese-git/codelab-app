@@ -13,6 +13,7 @@ export 'package:codelab_acp_transports/codelab_acp_transports.dart'
 
 export 'src/application/acp_client_application.dart';
 export 'src/application/application_models.dart';
+export 'src/application/failure_metadata.dart' show describeFailureMetadata;
 export 'src/application/protocol_frame.dart';
 export 'src/application/usage_ledger_reply.dart';
 export 'src/application/usage_notification.dart';

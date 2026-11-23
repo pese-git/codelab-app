@@ -1,6 +1,7 @@
 // Тесты диагностики kit (tasks 6.1; spec acp-client-kit «Диагностика без
 // секретов»; design D9).
 
+import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_client_acp/codelab_client_acp.dart';
 import 'package:codelab_client_core/codelab_client_core.dart';
 import 'package:test/test.dart';
@@ -8,6 +9,29 @@ import 'package:test/test.dart';
 import '../support/kit_agent.dart';
 
 void main() {
+  group('describeFailureForDiagnostic', () {
+    const error = AcpClientApplicationException(
+      'ACP request x failed: PRIVATE api_key=sk-LEAKEDTOKEN123456',
+      cause: JsonRpcError(code: -32603, message: 'PRIVATE'),
+    );
+
+    test('metadataOnly: метаданные без текста', () {
+      expect(
+        describeFailureForDiagnostic(error, ProtocolPayloadPolicy.metadataOnly),
+        'AcpClientApplicationException: JSON-RPC error -32603 (Internal error)',
+      );
+    });
+
+    test('full: замаскированный текст', () {
+      final text = describeFailureForDiagnostic(
+        error,
+        ProtocolPayloadPolicy.full,
+      );
+      expect(text, contains('PRIVATE'));
+      expect(text, isNot(contains('sk-LEAKEDTOKEN123456')));
+    });
+  });
+
   group('describeFailure', () {
     test('takes the message of the client core and transport errors', () {
       expect(

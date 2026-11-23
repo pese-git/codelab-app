@@ -15,6 +15,7 @@ import '../domain/state_machines.dart';
 import '../domain/terminal_access.dart';
 import '../infrastructure/structured_log_logger.dart';
 import 'application_models.dart';
+import 'failure_metadata.dart';
 import 'protocol_frame.dart';
 import 'protocol_frame_recorder.dart';
 import 'usage_ledger_reply.dart';
@@ -327,6 +328,16 @@ final class AcpClientApplication {
   /// Исходящий кадр публикуется до передачи транспорту: кадр — «что клиент
   /// отдал транспорту». Подписаться нужно до `connect`, поток broadcast.
   Stream<ProtocolFrame> get protocolFrames => _frameController.stream;
+
+  /// Базовая политика payload, переданная в конструктор (D2, D3).
+  ///
+  /// Почему геттер: kit и app решают, что писать в диагностику о сбое, по
+  /// единственному источнику — этому параметру ядра; второго параметра у них
+  /// нет, рассинхронизация невозможна (D3, «Текст ошибки агента»).
+  ///
+  /// Это НЕ действующая политика кадров: режим Trace ([setFrameTrace]) её не
+  /// меняет — он касается только кадров, а не журнала.
+  ProtocolPayloadPolicy get protocolPayloads => _basePayloadPolicy;
 
   /// `true`, если базовая политика — `metadataOnly`, и режим Trace возможен
   /// (D17); при базовой `full` payload и так полные.
@@ -647,8 +658,10 @@ final class AcpClientApplication {
       }
       final failedSession = SessionStateMachine.failTurn(
         _requireSession(command.sessionId),
-        message: error.toString(),
-        failure: _promptFailureOf(error),
+        // Текст для пользователя (транскрипт): текст агента сохраняется при
+        // любой политике, но проходит через маскирование (D3).
+        message: _redactor.redactText(error.toString()),
+        failure: _redactPromptFailure(_promptFailureOf(error)),
         completedAt: DateTime.now(),
       ).stateOrThrow;
 
@@ -656,6 +669,27 @@ final class AcpClientApplication {
       rethrow;
     }
   }
+
+  /// Маскирует секреты в тексте типизированного сбоя хода.
+  ///
+  /// Почему: `PromptFailure.message` несёт текст агента, и его показывают
+  /// заметка app и вывод CLI (в headless — stderr); spec structured-logging
+  /// требует «после маскирования секретов» при любой политике (D3, «Текст
+  /// ошибки агента»). Единственное место: значение строится здесь же, в
+  /// ядре, потребители получают уже безопасный текст.
+  PromptFailure _redactPromptFailure(PromptFailure failure) =>
+      switch (failure) {
+        AgentPromptFailure() => failure.copyWith(
+          message: _redactor.redactText(failure.message),
+        ),
+        RequestPromptFailure() => failure.copyWith(
+          message: _redactor.redactText(failure.message),
+        ),
+        UnknownPromptFailure() => failure.copyWith(
+          message: _redactor.redactText(failure.message),
+        ),
+        ConnectionLostPromptFailure() => failure,
+      };
 
   Future<PromptTurn> cancelTurn(CancelTurnCommand command) async {
     final generation = _generation;
@@ -896,6 +930,11 @@ final class AcpClientApplication {
   ///
   /// Ошибка проходит редакцию секретов: сообщения транспортов могут
   /// содержать командную строку или заголовки.
+  ///
+  /// Текст ошибки агента — payload (D3, «Текст ошибки агента»): при базовой
+  /// `metadataOnly` запись несёт только `error_class` и `error_code` (если
+  /// причина — `JsonRpcError`), без `error`; при `full` — `error` с текстом
+  /// после маскирования.
   void _requireCurrentAttempt(int generation, String phase, Object error) {
     if (generation != _generation) {
       _logger
@@ -906,7 +945,14 @@ final class AcpClientApplication {
             context: {
               'phase': phase,
               'current_generation': _generation,
-              'error': _redactor.redactText('$error'),
+              // Текст ошибки агента — payload (D3): при `metadataOnly` в
+              // журнал идут только класс и код, а не `toString()`.
+              if (_basePayloadPolicy == ProtocolPayloadPolicy.full)
+                'error': _redactor.redactText('$error')
+              else ...{
+                'error_class': error.runtimeType.toString(),
+                'error_code': ?jsonRpcErrorCodeOf(error),
+              },
             },
           );
     }
@@ -1521,24 +1567,34 @@ final class AcpClientApplication {
           .debug('response_ignored', context: {'reason': 'no_pending_request'});
       return;
     }
-    if (response.error != null) {
+    final agentError = response.error;
+    if (agentError != null) {
+      // Текст ответа-ошибки агента — payload (D3, «Текст ошибки агента»):
+      // при `metadataOnly` запись журнала несёт метод, id, код и стандартное
+      // имя, а текст агента получает только вызывающий через исключение.
+      final metadataOnly =
+          _basePayloadPolicy == ProtocolPayloadPolicy.metadataOnly;
       _recordDiagnostic(
         message:
-            'ACP request ${pending.method} failed: ${response.error?.message}',
+            'ACP request ${pending.method} failed: '
+            '${metadataOnly ? describeFailureMetadata(agentError) : agentError.message}',
         severity: DiagnosticSeverity.error,
         source: 'application.protocol',
-        cause: response.error,
+        cause: agentError,
         requestId: response.id.toJsonValue().toString(),
         context: {
           'method': pending.method,
           'requestId': response.id.toJsonValue(),
-          'error': response.error?.toJson(),
+          if (metadataOnly)
+            'error_code': agentError.code
+          else
+            'error': agentError.toJson(),
         },
       );
       pending.completeError(
         AcpClientApplicationException(
-          'ACP request ${pending.method} failed: ${response.error?.message}',
-          cause: response.error,
+          'ACP request ${pending.method} failed: ${agentError.message}',
+          cause: agentError,
         ),
       );
       return;
@@ -2657,10 +2713,12 @@ final class AcpClientApplication {
           cause: error,
           // Внутренняя причина (`SocketException`, исключение разбора с
           // фрагментом кадра) проходит ту же политику, что и `cause` записи:
-          // при `metadataOnly` — только класс (observability.md §48а).
+          // при `metadataOnly` — только класс (observability.md §48а). Ключ
+          // `inner_cause`, а не `cause`: ключ `cause` записи журнала занят
+          // причиной самой диагностики и перекрывал бы вложенную (D3).
           context: {
             'code': error.code.name,
-            'cause': _causeDetail(error.cause),
+            'inner_cause': _causeDetail(error.cause),
           },
         );
         // Неожиданная потеря транспорта (например, смерть дочернего процесса
@@ -2865,10 +2923,14 @@ final class AcpClientApplication {
     );
   }
 
-  /// Emits [entry] (already redacted by [_recordDiagnostic] — reused as-is,
-  /// not re-derived, so both `DiagnosticEntry` and this structured event
-  /// come from a single redaction pass, see `design.md` Decision 3) through
-  /// the structured Logger, tagged with layer ownership and correlation.
+  /// Пишет [entry] в структурированный логгер с владельцем слоя и
+  /// корреляцией.
+  ///
+  /// Почему запись берётся как есть: [_recordDiagnostic] уже замаскировала
+  /// секреты, и `DiagnosticEntry` с этим событием получаются за один проход
+  /// редакции (design.md Decision 3 change `structured-logging`). Ключ
+  /// `cause` записи — причина самой диагностики; одноимённый ключ контекста
+  /// уходит в `inner_cause` и не затирает уже стоящий (D3).
   void _logDiagnosticEntry(
     DiagnosticEntry entry, {
     required String component,
@@ -2884,11 +2946,19 @@ final class AcpClientApplication {
           requestId: requestId,
           toolCallId: toolCallId,
         );
-    final logContext = {
+    final logContext = <String, Object?>{
       if (entry.source != null) 'source': entry.source,
-      ...entry.context,
-      if (entry.cause != null) 'cause': entry.cause,
+      for (final MapEntry(:key, :value) in entry.context.entries)
+        if (key != 'cause') key: value,
     };
+    // Одноимённый ключ контекста — вложенная причина: в `inner_cause`, но не
+    // поверх уже стоящего значения.
+    if (entry.context.containsKey('cause')) {
+      logContext.putIfAbsent('inner_cause', () => entry.context['cause']);
+    }
+    if (entry.cause != null) {
+      logContext['cause'] = entry.cause;
+    }
 
     switch (entry.severity) {
       case DiagnosticSeverity.debug:

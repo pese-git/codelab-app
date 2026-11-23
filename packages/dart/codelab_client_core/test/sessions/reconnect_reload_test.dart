@@ -193,6 +193,11 @@ void main() {
       describeFailure((outcome as PromptFailed).error),
       'Session s-a is detached from the agent.',
     );
+    // Оба места `Failed to send prompt` идут через метаданные (D3).
+    expect(
+      agent.diagnostics.map((d) => d.message),
+      contains('Failed to send prompt: ClientWorkspaceException'),
+    );
     expect(agent.transport.sentMessages, hasLength(sentBefore));
     expect(a.current.queue.map((q) => q.text), ['queued']);
     expect(await a.queue.sendNow(a.current.queue.single.id), isNull);
