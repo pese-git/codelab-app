@@ -86,7 +86,7 @@ UI isolate Flutter НЕ ДОЛЖЕН блокироваться долгими �
 
 Использовать блокирующий API только ради простоты реализации, если он может заморозить UI, ЗАПРЕЩЕНО.
 
-В коде синхронный файловый ввод-вывод остаётся в писателе конфигурации агента: `ConfigWriter` и блокировка `ConfigWriteLocks` (`packages/dart/codelab_agent_io/lib/src/config/config_writer.dart`, `config_write_lock.dart`) читают, пишут и переименовывают файлы `*Sync`-вызовами. Файлы конфигурации маленькие, но в app запись настроек провайдера и MCP доходит до писателя через `FileAgentConfigStore` (`codelab_setup`) на UI isolate. Ещё два синхронных вызова — `FileStat.statSync` при проверке shell в `PtyUserShellLauncher` и `existsSync` временного файла в `FileSelectorUsageCsvSaver` (`apps/codelab_desktop/lib/core/platform/`).
+В коде синхронный файловый ввод-вывод (`*Sync`-вызовы) есть в конфигурационном и секретном слое `codelab_agent_io`: писатель конфигурации `ConfigWriter` и его блокировка `ConfigWriteLocks`, загрузчик `ConfigLoader` (`readAsBytesSync`, `statSync`, `resolveSymbolicLinksSync`), хранилище секретов `FileSecretStore` и `ClientSecretAccess` (`lib/src/config/`, `lib/src/secrets/`), журнал usage (`lib/src/session/jsonl_usage_ledger_store.dart`); а также в `FileAgentConfigStore._pathForms` (`resolveSymbolicLinksSync`, `codelab_setup`). Файлы маленькие, но во встроенном режиме desktop всё это исполняется на UI isolate. В desktop ещё два синхронных вызова: `FileStat.statSync` при проверке shell в `PtyUserShellLauncher` и `existsSync` в функции `writeFileAtomically` (`apps/codelab_desktop/lib/core/platform/usage_csv_saver.dart`), которую вызывает `FileSelectorUsageCsvSaver`.
 
 ---
 
@@ -153,7 +153,7 @@ UI isolate Flutter НЕ ДОЛЖЕН блокироваться долгими �
 
 Если владелец не определён, жизненный цикл операции почти наверняка станет проблемой.
 
-В коде: транспорт и подписки на него — `AcpClientApplication`; подписки на ядро клиента (`connectionStateChanges`, `sessionChanges`, `usageNotifications`) — `DefaultClientWorkspace`; подписки на рабочее пространство и порты app — Cubit-ы рабочего места и настроек; анимации — `State` виджета.
+В коде: транспорт и подписки на него — `AcpClientApplication`; подписки на ядро клиента через порт `AgentBackend` (`connectionStates`, `sessionChanges`, `usageNotifications`) — `DefaultClientWorkspace`; подписки на рабочее пространство и порты app — Cubit-ы рабочего места и настроек; анимации — `State` виджета.
 
 ---
 
@@ -247,7 +247,7 @@ BLoC НЕ ДОЛЖЕН владеть переиспользуемым низк�
 
 Поздний результат A НЕ ДОЛЖЕН перезаписать актуальное состояние B.
 
-Для этого ДОЛЖНЫ использоваться:
+Для этого ДОЛЖЕН использоваться хотя бы один из механизмов:
 
 * токен запроса (request token);
 * поколение (generation);
@@ -349,7 +349,7 @@ reduce
 событие B ── async-изменение ─┘
 ```
 
-В коде входящий кадр обрабатывается синхронно в обработчике подписки (`_handleInboundMessage`), а переход делают редьюсеры `SessionStateMachine` и `PromptTurnStateMachine` (`streaming.md`); асинхронно, через `unawaited`, идут только обработчики запросов агента `fs/*` и `terminal/*`.
+В коде входящий кадр обрабатывается синхронно в обработчике подписки (`_handleInboundMessage`), а переход делают редьюсеры `SessionStateMachine` и `PromptTurnStateMachine` (`streaming.md`); асинхронно, через `unawaited`, идут только обработчики запросов агента `fs/*` и `terminal/*` и ответ `-32601` на неподдерживаемый запрос (`_rejectUnsupportedRequest`).
 
 ---
 
@@ -694,7 +694,7 @@ currentToolCall
 
 решение A НЕ ДОЛЖНО завершить B.
 
-В коде несколько запросов `session/request_permission` поддержаны: каждый хранится по своему `ApprovalRequestId` и привязан к своему вызову инструмента; при замене транспорта ожидающие одобрения снимаются (`permissions.md` §35).
+В коде несколько запросов `session/request_permission` поддержаны: каждый хранится по своему `ApprovalRequestId` и привязан к своему вызову инструмента; при замене транспорта ожидающие одобрения снимаются (`_dropPendingApprovals`, D22 change `require-project-folder`); политика параллельных запросов — `permissions.md` §35.
 
 ---
 
@@ -985,9 +985,9 @@ AppExitResponse.exit
 * шаги закрытия изолированы: сбой одного (`app.shutdown_step_failed`) не отменяет следующие;
 * шаг без сигналов процессам, который ждёт запись (`language` — запись выбора языка до 3 с, §47а; `appearance` — запись оформления до 3 с, §47б), идёт своей параллельной ветвью и не стоит в очереди перед шагами с сигналами; он последний в закрытом наборе шагов и есть в `pending`, только если у `CodeLabRootLifecycle` есть его владелец.
 
-В коде сроки: `AppExitHandler.exitTimeout` = 5 с и `flushTimeout` = 500 мс (`apps/codelab_desktop/lib/app/app_exit_handler.dart`); `transportCloseTimeout` = 2 с — срок EOF для `StdioAcpTransport.close` в шаге `client` (без него — 5 с), после `SIGTERM` — `_termGracePeriod` = 2 с; `IoTerminalProcessRunner._termGracePeriod` = 2 с; `TerminalTabsCubit` `closeAllGrace` = 3 с; шаг `embedded` ограничен `defaultEmbeddedCloseTimeout` = 10 с (`apps/codelab_desktop/lib/app/app_scope.dart`) — больше общего предела, поэтому он вынесен в параллельную подветвь (D11).
+В коде сроки: `AppExitHandler.exitTimeout` = 5 с и `flushTimeout` = 500 мс (`apps/codelab_desktop/lib/app/app_exit_handler.dart`); `transportCloseTimeout` = 2 с — срок EOF для `StdioAcpTransport.close` в шаге `client` (без него — 5 с), после `SIGTERM` — `_termGracePeriod` = 2 с; `_termGracePeriod` = 2 с у `_IoTerminalProcessHandle` (`terminal_process_runner.dart`) для `kill()`; `TerminalTabsCubit` `closeAllGrace` = 3 с; шаг `embedded` ограничен `defaultEmbeddedCloseTimeout` = 10 с (`apps/codelab_desktop/lib/app/app_scope.dart`) — больше общего предела, поэтому он вынесен в параллельную подветвь (D11).
 
-Общий предел не покрывает худший случай закрытия stdio-серверов MCP встроенного агента. Закрытие встроенного агента (`_Agent._dispose`, `packages/dart/codelab_embedded/lib/src/assemble.dart`) сначала ждёт завершения ходов — `AcpAgentServer.shutdown(grace: 5 с)`, и только потом `runtime.dispose()` закрывает сессии по очереди, а с ними — их stdio-серверы MCP. Каждый сервер закрывает `StdioProcessTransport.close` (`packages/dart/codelab_agent_io/lib/src/mcp/stdio_process_transport.dart`): EOF → `_exitAfterEof` = 2 с → `SIGTERM` дереву → `_exitAfterTerm` = 5 с → `SIGKILL` → ожидание кода выхода до `_exitAfterKill` = 2 с, затем потомкам, пережившим корень, `SIGTERM` → 5 с → `SIGKILL` (`platform-integration.md` §22). Сервер, игнорирующий EOF и `SIGTERM`, получает `SIGKILL` не раньше чем через 7 с после EOF, а EOF приходит только после ожидания ходов; вместе это больше общего предела выхода 5 с (`AppExitHandler.exitTimeout`). По истечении предела ответ всё равно `exit`, и такой сервер может остаться сиротой (`platform-integration.md` §23). design.md change записывает это в Risks («Встроенный агент с зависшим ходом»; в таблице владельцев худший случай MCP — около 14 с, сессии закрываются по очереди), смягчение — параметр grace у `EmbeddedAgent.dispose` — отложено в отдельный change (Q3). Обычно MCP-сервер выходит по EOF сразу: в ручной проверке change выход с MCP-сервером и `exec` посреди хода занял 0,5 с. Процессы `exec` при этом завершаются: отмена хода приходит в начале `shutdown`, `terminateTree` укладывается в 2 с.
+Общий предел не покрывает худший случай закрытия stdio-серверов MCP встроенного агента. Закрытие встроенного агента (`_Agent._dispose`, `packages/dart/codelab_embedded/lib/src/assemble.dart`) начинается с `AcpAgentServer.shutdown(grace: 5 с)` (`packages/dart/codelab_agent_acp/lib/src/agent_server.dart`): он отменяет ходы, ждёт их не дольше `grace`, затем по очереди закрывает сессии — `SessionBridge.close()` → `_Session.close()`, который ждёт простоя агента (`waitForIdle`) и закрывает MCP-серверы сессии (`_mcp.close()`, `packages/dart/codelab_agent_core/lib/src/runtime/agent_runtime.dart`). Следующий шаг, `runtime.dispose()`, закрывает только оставшиеся сессии. Каждый сервер закрывает `StdioProcessTransport.close` (`packages/dart/codelab_agent_io/lib/src/mcp/stdio_process_transport.dart`): EOF → `_exitAfterEof` = 2 с → `SIGTERM` дереву → `_exitAfterTerm` = 5 с → `SIGKILL` → ожидание кода выхода до `_exitAfterKill` = 2 с, затем потомкам, пережившим корень, `SIGTERM` → 5 с → `SIGKILL` (`platform-integration.md` §22). Сервер, игнорирующий EOF и `SIGTERM`, получает `SIGKILL` не раньше чем через 7 с после EOF, а EOF приходит только после ожидания ходов и закрытия предыдущих сессий; вместе это больше общего предела выхода 5 с (`AppExitHandler.exitTimeout`). По истечении предела ответ всё равно `exit`, и такой сервер может остаться сиротой (`platform-integration.md` §23). design.md change записывает это в Risks («Встроенный агент с зависшим ходом»; в таблице владельцев худший случай MCP — около 14 с, сессии закрываются по очереди), смягчение — параметр grace у `EmbeddedAgent.dispose` — отложено в отдельный change (Q3). Обычно MCP-сервер выходит по EOF сразу: в ручной проверке change выход с MCP-сервером и `exec` посреди хода занял 0,5 с. Процессы `exec` при этом завершаются: отмена хода приходит в начале `shutdown`, `terminateTree` укладывается в 2 с.
 
 ---
 
@@ -1170,7 +1170,7 @@ completer.complete(...)
 _connectFuture
 ```
 
-После терминального завершения его ДОЛЖНО сбрасывать корректно.
+После терминального завершения закешированный `Future` ДОЛЖЕН корректно сбрасываться.
 
 Иначе новая законная операция может навсегда получать старый `Future`.
 
