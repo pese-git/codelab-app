@@ -1,65 +1,67 @@
-# Error handling в ACP Client
+# Обработка ошибок в CodeLab
 
-Этот документ определяет архитектуру обработки ошибок в ACP Client.
+Документ задаёт, как клиент и агент CodeLab представляют, преобразуют, журналируют и показывают ошибки на каждом архитектурном уровне.
 
 Цели:
 
 * разделить ошибки разных архитектурных уровней;
-* не допускать утечки implementation-specific exceptions в UI;
-* обеспечить типизированную обработку ожидаемых failures;
-* явно определить retryability и recovery semantics;
-* сохранить диагностический context;
-* обеспечить безопасное отображение ошибок пользователю;
-* сделать error handling предсказуемым и тестируемым.
+* не пропускать в UI исключения, зависящие от реализации;
+* обрабатывать ожидаемые сбои типизированно;
+* явно задать, можно ли повторить операцию и как восстановиться;
+* сохранить контекст для диагностики;
+* безопасно показывать ошибки пользователю;
+* сделать обработку ошибок предсказуемой и тестируемой.
 
-Связанные документы:
+Общие правила — корневой `AGENTS.md` (§2, §10, §12, §15, §16), [`layers-and-dependencies.md`](layers-and-dependencies.md), [`acp-boundary.md`](acp-boundary.md), [`session-lifecycle.md`](session-lifecycle.md), [`streaming.md`](streaming.md), [`concurrency.md`](concurrency.md), [`permissions.md`](permissions.md), [`state-management.md`](state-management.md), [`observability.md`](observability.md), [`testing.md`](testing.md). Модель ошибок ядра агента — [`proposals/agent-core/12-observability-and-errors.md`](proposals/agent-core/12-observability-and-errors.md) (§12.2).
 
-* `AGENTS.md`
-* `docs/architecture/layers-and-dependencies.md`
-* `docs/architecture/acp-boundary.md`
-* `docs/architecture/session-lifecycle.md`
-* `docs/architecture/streaming.md`
-* `docs/architecture/concurrency.md`
-* `docs/architecture/permissions.md`
-* `docs/architecture/state-management.md`
-* `docs/architecture/observability.md`
-* `docs/architecture/testing.md`
+Термины:
+
+* **Исключение** (exception) — объект, брошенный через `throw`; обычно возникает на технической границе или в стороннем API.
+* **Ошибка программиста** (programming error) — нарушение инварианта или дефект реализации.
+* **Сбой** (failure) — ожидаемая или нормализованная ошибка операции на границе приложения; отвечает на вопрос «почему операция не удалась».
+* **Состояние ошибки** (error state) — представление сбоя в состоянии приложения или экрана.
+* **Сообщение пользователю** (user message) — текст, который видит человек; отделён от диагностического сообщения (§99).
+* **Восстановимый / терминальный сбой** (recoverable / terminal) — после первого работа продолжается или повторяется, после второго текущая операция автоматически продолжиться не может (§26–§28).
+* **Преобразование** (mapping) — перевод ошибки одного уровня в ошибку другого, когда меняется её семантика (§18).
+* **Устаревший сбой** (stale failure) — сбой операции, которую уже заменила другая или чьё соединение сменилось (§77).
+
+Где в коде. Протокол: `AcpProtocolError` с видом `AcpProtocolErrorKind` и кодом `jsonRpcCode`, исключение разбора `JsonRpcProtocolException`, коды JSON-RPC (`jsonRpcParseErrorCode` −32700 … `jsonRpcInternalErrorCode` −32603) и ACP `acpResourceNotFoundCode` −32002 (`packages/dart/codelab_acp_protocol/lib/src/json_rpc/protocol_error.dart`), объект ошибки ответа `JsonRpcError` (`json_rpc_error.dart`). Транспорты: `AcpTransportException` с `AcpTransportErrorCode` (`startFailed`, `sendFailed`, `receiveFailed`, `protocolViolation`, `closed`, `timeout`, `disconnected`, `unknown`), событие `AcpTransportEvent.failure`, причина `AcpWebSocketHandshakeRejected` (`packages/dart/codelab_acp_transports/lib/src/acp_transport.dart`); серверный разбор кадра — `ServerFrame` (`lib/src/io/server_frames.dart`). Протокольный клиент `codelab_client_acp`: исключения `AcpClientApplicationException` и наследники `AcpConnectionLostException`, `MissingAcpSessionException`, `AcpRequestTimeoutException`, `UnsupportedProtocolVersionException` (`lib/src/application/acp_client_application.dart`), сбой хода `PromptFailure` (`lib/src/domain/prompt_failure.dart`), `ConnectionFailureReason` и `ClientConnectionState.failed` (`lib/src/domain/domain_models.dart`), `FsAccessFailure` (`lib/src/domain/fs_access.dart`), `TerminalAccessFailure` (`lib/src/domain/terminal_access.dart`), `StateTransitionException` и `StateTransitionResult` (`lib/src/domain/state_machines.dart`), `AcpClientApplicationFailure` (`lib/src/application/application_models.dart`) и `TaskEither<AcpClientApplicationFailure, T>` use case-ов (`lib/src/application/use_cases.dart`), маскирование `SecretRedactor` (`lib/src/domain/secret_redaction.dart`), политика payload `ProtocolPayloadPolicy` (`lib/src/application/protocol_frame.dart`). Ядро клиента `codelab_client_core`: `ClientWorkspaceException`, `ConnectionView.lost`/`failed`, `PromptOutcome`, `SessionView.canRetry`, `NoticeReason`, `WorkspaceDiagnostic` и `describeFailure` (`lib/src/diagnostics/diagnostics.dart`), sealed-результаты `ProfileCommitResult`, `ProfileDraftResult`, `ThemeImportResult`. Агент: `Result<T, E>` с `Ok`/`Err` (`packages/dart/codelab_agent_core/lib/src/util/result.dart`), `FileError`/`FileErrorCode` и `ExecError`/`ExecErrorCode` (`lib/src/env/execution_env.dart`), `LlmErrorClass` (`lib/src/llm/errors.dart`), событие `AgentError` с `AgentErrorClass` (`lib/src/loop/agent_events.dart`), `ConfigException`, `HostWiringException`; ACP-проекция агента — `AcpRequestError` (`packages/dart/codelab_agent_acp/lib/src/connection/acp_error.dart`), `ClientCallFailure` (`lib/src/connection/client_requests.dart`), ответ-ошибка хода с `data.codelab` (`turnResponse`, `lib/src/event_projection.dart`).
 
 ---
 
 ## 1. Основной принцип
 
-Ошибка должна представляться на том уровне, semantics которого она описывает.
+Ошибка ДОЛЖНА представляться на том уровне, семантику которого она описывает.
 
-Типичный flow:
+Типичный путь:
 
-```text id="l22vsl"
-External / runtime exception
+```text
+Внешнее исключение / исключение среды выполнения
         │
         ▼
-Infrastructure / protocol error
+Ошибка инфраструктуры / протокола
         │
         ▼
-Application failure
+Сбой приложения
         │
         ▼
-Presentation error state
+Состояние ошибки для отображения
         │
         ▼
-User-facing message
+Сообщение пользователю
 ```
 
-Не каждая ошибка обязана иметь отдельный type на каждом уровне.
+Не каждая ошибка обязана иметь отдельный тип на каждом уровне.
 
-Mapping необходим тогда, когда меняется semantics ошибки или требуется скрыть implementation details.
+Преобразование ДОЛЖНО выполняться там, где меняется семантика ошибки или нужно скрыть детали реализации.
 
 ---
 
 ## 2. Основные категории
 
-Следует различать:
+СЛЕДУЕТ различать:
 
-```text id="4v76hh"
+```text
 Exception
 Error
 Failure
@@ -67,13 +69,13 @@ Error State
 User Message
 ```
 
-Эти понятия не являются взаимозаменяемыми.
+Эти понятия не взаимозаменяемы.
 
 ---
 
-## 3. Exception
+## 3. Исключение
 
-Exception представляет exceptional condition, обычно возникшую на technical boundary или внутри стороннего API.
+Исключение (exception) описывает исключительную ситуацию — обычно на технической границе или внутри стороннего API.
 
 Примеры:
 
@@ -84,41 +86,41 @@ Exception представляет exceptional condition, обычно возн�
 * `TimeoutException`;
 * `PlatformException`.
 
-Exception может быть implementation detail.
-
-Он НЕ ДОЛЖЕН автоматически становиться частью public application API.
+Исключение может быть деталью реализации. Оно НЕ ДОЛЖНО автоматически становиться частью публичного API приложения.
 
 ---
 
-## 4. Programming error
+## 4. Ошибка программиста
 
-Programming error означает нарушение invariant или ошибку реализации.
+Ошибка программиста — нарушение инварианта или дефект реализации.
 
 Примеры:
 
-* unreachable state;
-* invalid internal assumption;
-* unexpected null;
-* impossible transition;
-* misuse API.
+* недостижимое состояние;
+* неверное внутреннее допущение;
+* неожиданный `null`;
+* невозможный переход;
+* неправильное использование API.
 
-Programming error не следует автоматически преобразовывать в обычный recoverable business failure.
+Ошибку программиста НЕ СЛЕДУЕТ автоматически превращать в обычный восстановимый сбой.
 
-Он должен быть:
+Она ДОЛЖНА:
 
-* диагностируемым;
-* иметь stack trace;
-* исправляться как defect.
+* быть диагностируемой;
+* сохранять стек вызовов (stack trace);
+* исправляться как дефект.
+
+В коде ядро агента бросает для таких случаев `StateError`, `ArgumentError`, `ConfigException` и `HostWiringException` (`12-observability-and-errors.md` §12.2, третий класс).
 
 ---
 
-## 5. Failure
+## 5. Сбой
 
-Failure представляет ожидаемую или нормализованную ошибку операции на application boundary.
+Сбой (failure) — ожидаемая или нормализованная ошибка операции на границе приложения.
 
-Например:
+Иллюстрация семейств:
 
-```text id="wtihls"
+```text
 ConnectionFailure
 ProtocolFailure
 SessionFailure
@@ -126,23 +128,25 @@ PermissionDenied
 FileAccessFailure
 ```
 
-Failure отвечает на вопрос:
+Имена иллюстративные; реальные типы — в абзаце «Где в коде» и §68.
 
-> Почему application operation не смогла завершиться?
+Сбой отвечает на вопрос:
+
+> Почему операция приложения не смогла завершиться?
 
 а не:
 
-> Какой конкретный Dart exception был выброшен?
+> Какое именно исключение Dart было брошено?
 
 ---
 
-## 6. Typed failures
+## 6. Типизированные сбои
 
-Ожидаемые failure modes следует представлять типизированно.
+Ожидаемые виды сбоев СЛЕДУЕТ представлять типизированно.
 
 Предпочтительно:
 
-```dart id="6blp58"
+```dart
 sealed class ConnectionFailure {
   const ConnectionFailure();
 }
@@ -150,41 +154,43 @@ sealed class ConnectionFailure {
 
 или эквивалентная модель.
 
-Не следует использовать:
+НЕ СЛЕДУЕТ использовать
 
-```dart id="9r2ucn"
+```dart
 Exception('connection failed')
 ```
 
-как единственную application-level representation.
+как единственное представление на уровне приложения.
+
+В коде так устроены `PromptFailure`, `FsAccessFailure`, `TerminalAccessFailure`, `ClientCallFailure` (sealed-классы) и `ClientConnectionState.failed` с `ConnectionFailureReason`; класса `ConnectionFailure` нет.
 
 ---
 
 ## 7. `fpdart`
 
-Проект использует `fpdart`.
+`fpdart` — утверждённая библиотека функциональных примитивов (`technology-stack.md` §10).
 
-`Either<Failure, T>` может использоваться для operations, где failure является ожидаемой частью contract.
+`Either<Failure, T>` МОЖЕТ использоваться для операций, где сбой — ожидаемая часть контракта.
 
-Conceptually:
+Концептуально:
 
-```dart id="hwum6i"
+```dart
 Future<Either<ConnectionFailure, Session>> connect();
 ```
 
 Это пример подхода, а не обязательная сигнатура существующего API.
 
-Следует придерживаться established error model конкретного package.
+СЛЕДУЕТ придерживаться модели ошибок, уже принятой в конкретном пакете.
+
+В коде `fpdart` импортирует только `codelab_client_acp`: use case-ы `lib/src/application/use_cases.dart` возвращают `TaskEither<AcpClientApplicationFailure, T>`. `ClientWorkspace` и приложения эти use case-ы не используют: приложения работают через `ClientWorkspace`, а он вызывает `AcpClientApplication` через `AcpClientBackend` (`codelab_client_core/lib/src/backend/agent_backend.dart`), ловит ошибки в основном `on Object` и сводит их в текст `describeFailure`; типизированная проверка одна — `is AcpClientApplicationException`. `codelab_acp_protocol`, `codelab_acp_transports`, `codelab_acp_testing` и `apps/codelab_desktop` объявляют `fpdart` в `pubspec.yaml`, но в `lib/` его не импортируют. Ядро агента `fpdart` не использует (allowlist PKG-2) и возвращает ожидаемые сбои окружения собственным `Result<T, E>` (ENV-1).
 
 ---
 
 ## 8. Когда использовать `Either`
 
-`Either` хорошо подходит, если caller должен явно обработать ожидаемые outcomes.
+`Either` хорошо подходит, если вызывающий должен явно обработать ожидаемые исходы, например:
 
-Например:
-
-```text id="wmw7nl"
+```text
 success
 unsupported
 permission denied
@@ -193,24 +199,24 @@ connection unavailable
 
 ---
 
-## 9. Когда использовать Exception
+## 9. Когда использовать исключение
 
-Exception допустим, если:
+Исключение МОЖНО использовать, если:
 
 * этого требует внешний API;
-* ошибка действительно exceptional;
-* caller не может осмысленно восстановиться локально;
-* нарушение является programming error.
+* ошибка действительно исключительная;
+* вызывающий не может осмысленно восстановиться на месте;
+* это ошибка программиста.
 
-На архитектурной boundary exception следует нормализовать, если caller должен принимать application decision.
+На архитектурной границе исключение СЛЕДУЕТ нормализовать, если вызывающий принимает по нему решение приложения.
 
 ---
 
-## 10. Не смешивать error models
+## 10. Не смешивать модели ошибок
 
-Для одной категории operations не следует хаотично использовать:
+Для одной категории операций НЕ СЛЕДУЕТ хаотично использовать
 
-```text id="r2u3wg"
+```text
 Either<Failure, T>
 T?
 bool
@@ -218,108 +224,86 @@ Exception
 Result<T>
 ```
 
-без различий в semantics.
+без различий в семантике. Единообразие важнее локального удобства.
 
-Consistency важнее локального удобства.
+В коде модель выбрана по пакету: протокольный клиент бросает типизированные исключения (`AcpClientApplicationException` и наследники), ядро клиента возвращает sealed-результаты для пользовательских операций (`ProfileCommitResult`, `ThemeImportResult`, `PromptOutcome`), ядро агента — `Result<T, E>` для окружения и события `AgentError` для сбоев работы (OBS-1).
 
 ---
 
-## 11. Protocol errors
+## 11. Ошибки протокола
 
-Protocol errors принадлежат `codelab_acp_protocol`.
+Ошибки протокола принадлежат `codelab_acp_protocol`.
 
 Примеры:
 
-* malformed ACP message;
-* invalid field type;
-* missing required field;
-* unsupported protocol version;
-* invalid method payload.
+* некорректное сообщение ACP;
+* неверный тип поля;
+* отсутствует обязательное поле;
+* неподдерживаемая версия протокола;
+* неверный payload метода.
 
-Protocol error должен содержать достаточно context для diagnostics.
+Ошибка протокола ДОЛЖНА содержать достаточно контекста для диагностики и НЕ ДОЛЖНА содержать поведения, связанного с Flutter.
 
-Он не должен содержать Flutter-specific behavior.
-
----
-
-## 12. Unknown protocol data
-
-Unknown optional data не обязательно является error.
-
-Если ACP разрешает forward compatibility:
-
-```text id="q0qz0x"
-unknown optional field
-```
-
-может быть нормальным condition.
-
-Нельзя превращать любое неизвестное поле в fatal protocol failure.
+В коде: `JsonRpcProtocolException` (`invalidJson`, `invalidShape`, `unknownMethod`) бросает разбор, `AcpProtocolError` несёт вид (`AcpProtocolErrorKind`), метод и причину и сам выбирает код и текст JSON-RPC (`jsonRpcCode`, `jsonRpcMessage`, `toJsonRpcError`).
 
 ---
 
-## 13. Unsupported protocol
+## 12. Неизвестные данные протокола
 
-Если agent использует несовместимую protocol version, это должно быть explicit failure.
+Неизвестные необязательные данные — не обязательно ошибка.
 
-Например:
+Если ACP допускает прямую совместимость (forward compatibility), неизвестное необязательное поле может быть нормальным условием.
 
-```text id="4s03zq"
-UnsupportedProtocolVersion
-```
+ЗАПРЕЩЕНО превращать любое неизвестное поле в фатальный сбой протокола.
 
-Presentation может затем показать понятное сообщение пользователю.
+В коде: `session/update` незнакомого вида пропускается с записью debug (`_skipUnsupportedSessionUpdate`), незнакомый `ToolKind` сводится к `other` с предупреждением в журнале, поле `data.codelab` неожиданного типа в ответе-ошибке считается отсутствующим (`PromptFailure.fromJsonRpcError`).
 
 ---
 
-## 14. Transport errors
+## 13. Неподдерживаемый протокол
 
-Transport errors принадлежат `codelab_acp_transports`.
+Если агент использует несовместимую версию протокола, это ДОЛЖНО быть явным сбоем, например `UnsupportedProtocolVersion`. Presentation затем может показать понятное сообщение.
+
+В коде: `UnsupportedProtocolVersionException` (`codelab_client_acp`), соединение переходит в `ClientConnectionState.failed` с `ConnectionFailureReason.unsupportedProtocolVersion`.
+
+---
+
+## 14. Ошибки транспорта
+
+Ошибки транспорта принадлежат `codelab_acp_transports`.
 
 Примеры:
 
-* connection refused;
-* process exited;
-* stream closed;
-* broken pipe;
-* socket failure;
-* framing failure.
+* соединение отклонено;
+* процесс завершился;
+* поток закрыт;
+* разорван канал (broken pipe);
+* сбой сокета;
+* сбой разбиения на кадры (framing).
 
-Transport error описывает technical failure transport layer.
+Ошибка транспорта описывает технический сбой транспортного уровня.
 
----
-
-## 15. Transport error ≠ Session failure
-
-Например:
-
-```text id="92x9mh"
-ProcessExited
-```
-
-может быть преобразован в:
-
-```text id="cyrmxs"
-ConnectionLost
-```
-
-а затем привести к:
-
-```text id="84qt6w"
-SessionState.reconnecting
-```
-
-Transport не должен сам определять final session semantics.
+В коде это `AcpTransportException` с `AcpTransportErrorCode` и причиной `cause`/`stackTrace`; приходит событием `AcpTransportEvent.failure` в `events`, а не ошибкой потока. Отказ рукопожатия WebSocket различается по `cause is AcpWebSocketHandshakeRejected` с HTTP-статусом, а не по тексту.
 
 ---
 
-## 16. Infrastructure errors
+## 15. Ошибка транспорта ≠ сбой сессии
 
-Infrastructure adapters должны нормализовать implementation-specific exceptions.
+Например, `ProcessExited` может быть преобразован в `ConnectionLost`, а затем привести к `SessionState.reconnecting`.
+
+Транспорт НЕ ДОЛЖЕН сам определять итоговую семантику сессии.
+
+В коде: `AcpTransportFailure` в `AcpClientApplication._handleTransportEvent` переводит соединение в `ClientConnectionState.failed` (причина — `ConnectionFailureReason` по коду транспорта), если соединение было готово или инициализировалось, снимает ожидающие запросы `AcpConnectionLostException` и одобрения; `ClientWorkspace` публикует `ConnectionView.lost`. Автоматического перехода в переподключение нет: его запускает пользователь (`reconnect()`, §79).
+
+---
+
+## 16. Ошибки инфраструктуры
+
+Адаптеры инфраструктуры ДОЛЖНЫ нормализовать исключения, зависящие от реализации.
 
 Например:
 
-```text id="fv7lgv"
+```text
 FileSystemException
        │
        ▼
@@ -328,24 +312,26 @@ FileAccessFailure
 
 или:
 
-```text id="x2pjxe"
+```text
 PlatformException
        │
        ▼
 SecureStorageFailure
 ```
 
-Application code не должен зависеть от plugin-specific exceptions без необходимости.
+Код приложения НЕ ДОЛЖЕН без необходимости зависеть от исключений конкретного плагина.
+
+В коде: клиентские `fs/*` дают `FsAccessFailure` (`PathOutsideWorkingDirectoryFailure`, `FsNotFoundFailure`, `FsIoFailure`), `terminal/*` — `TerminalAccessFailure`; окружение агента — значения `Err(FileError)` и `Err(ExecError)` вместо исключений (ENV-1).
 
 ---
 
-## 17. Application failures
+## 17. Сбои приложения
 
-Application failure описывает ошибку meaningful operation.
+Сбой приложения описывает ошибку осмысленной операции.
 
-Например:
+Иллюстрация:
 
-```text id="zmsdxm"
+```text
 SessionUnavailable
 PromptRejected
 PermissionDenied
@@ -353,17 +339,19 @@ ReconnectExhausted
 WorkspaceUnavailable
 ```
 
-Application failure может агрегировать несколько lower-level technical causes.
+Сбой приложения может объединять несколько технических причин нижнего уровня.
+
+В коде таких имён нет; ближайшие — `MissingAcpSessionException`, `PromptFailure`, `ClientWorkspaceException`, `AcpClientApplicationFailure` (`transport`, `protocol`, `stateRejected`, `missingSession`, `unexpected`).
 
 ---
 
-## 18. Error mapping
+## 18. Преобразование ошибок
 
-Mapping следует выполнять на boundary, где меняется semantics.
+Преобразование СЛЕДУЕТ выполнять на границе, где меняется семантика.
 
 Пример:
 
-```text id="z0l2nc"
+```text
 SocketException
       │
       ▼
@@ -373,15 +361,17 @@ TransportConnectionFailure
 SessionConnectionLost
 ```
 
-Не нужно создавать отдельный wrapper, если он не добавляет semantics.
+Отдельная обёртка не нужна, если она не добавляет семантики.
+
+В коде этот путь — `SocketException` → `AcpTransportException(startFailed | disconnected …)` → `ConnectionFailureReason` в `ClientConnectionState.failed` → `ConnectionView.failed` или `ConnectionView.lost`; ход, прерванный обрывом, получает `PromptFailure.connectionLost()`.
 
 ---
 
-## 19. Не делать mechanical wrapping
+## 19. Без механического оборачивания
 
-Нежелательно:
+НЕ СЛЕДУЕТ строить цепочку
 
-```text id="im8wzq"
+```text
 SocketException
     ↓
 TransportException
@@ -393,36 +383,36 @@ ServiceException
 ApplicationException
 ```
 
-если каждый уровень только меняет имя.
-
-Mapping должен иметь архитектурный смысл.
+если каждый уровень только меняет имя. Преобразование ДОЛЖНО иметь архитектурный смысл.
 
 ---
 
-## 20. Preserve cause
+## 20. Сохранение причины
 
-При mapping technical error желательно сохранять original cause для diagnostics, если это безопасно.
+При преобразовании технической ошибки СЛЕДУЕТ сохранять исходную причину для диагностики, если это безопасно.
 
-Conceptually:
+Концептуально:
 
-```text id="dxaw16"
+```text
 ConnectionFailure(
   reason: transportClosed,
   cause: originalError,
 )
 ```
 
-Original cause не должен автоматически становиться user-facing content.
+Исходная причина НЕ ДОЛЖНА автоматически становиться содержимым для пользователя.
+
+В коде поле `cause` есть у `AcpTransportException`, `AcpProtocolError`, `AcpClientApplicationException`, `ClientConnectionState.failed`, `AcpClientApplicationFailure` и `DiagnosticEntry`; в диагностику причина попадает после `SecretRedactor`, а при `ProtocolPayloadPolicy.metadataOnly` поле `DiagnosticEntry.cause` — только классом (`_recordDiagnostic`; `observability.md` §48а). Исключение — сбой транспорта: `_handleTransportEvent` кладёт в `context` строку `'cause': error.cause?.toString()`, и при любой политике полный текст внутренней причины (путь, текст `SocketException` или `JsonRpcProtocolException`) после одного лишь маскирования секретов уходит в диагностику и журнал. Это расходится с `observability.md` §48а («класс ошибки»).
 
 ---
 
-## 21. Stack trace
+## 21. Стек вызовов
 
-Unexpected exception должен сохранять stack trace.
+Неожиданное исключение ДОЛЖНО сохранять стек вызовов.
 
-Нежелательно:
+НЕ СЛЕДУЕТ писать
 
-```dart id="n2mq2l"
+```dart
 try {
   ...
 } catch (e) {
@@ -430,169 +420,149 @@ try {
 }
 ```
 
-если при этом теряется stack trace и причина.
+если при этом теряются стек и причина.
+
+В коде стек сохраняется не везде. Его хранят `AcpTransportException.stackTrace` и ветки отката инструментов цикла агента (`_settle`, `Error.throwWithStackTrace`). Порт `Logger` клиента (`codelab_client_acp/lib/src/domain/logger.dart`) параметра для стека не имеет; `_mapApplicationFailure` получает `StackTrace` и не сохраняет его; адаптер журнала встроенного агента в app (design D9 change `add-embedded-agent-mode`) намеренно пишет только `error_class` без стека — так сказано в его doc-комментарии (`apps/codelab_desktop/lib/app/embedded_logger.dart`); изолированная очистка `_step` в `app_scope.dart` тоже пишет только `error_type`; общий `catch` хода в цикле агента стек не ловит (`agent_loop.dart`, ветка `TurnEndReason.failed`).
 
 ---
 
-## 22. Catch scope
+## 22. Где ловить
 
-`try/catch` должен находиться там, где component способен:
+`try/catch` ДОЛЖЕН находиться там, где компонент способен:
 
 * восстановиться;
-* добавить meaningful context;
-* преобразовать error semantics;
-* выполнить cleanup.
+* добавить осмысленный контекст;
+* изменить семантику ошибки;
+* выполнить очистку ресурсов.
 
-Не следует ловить exception только для того, чтобы сразу бросить его снова без пользы.
+НЕ СЛЕДУЕТ ловить исключение только ради того, чтобы сразу бросить его снова без пользы.
 
 ---
 
-## 23. Catch-all
+## 23. Перехват всего
 
-Использование:
+Перехват всего (catch-all)
 
-```dart id="sjsqqd"
+```dart
 catch (e) {
   ...
 }
 ```
 
-допустимо на outer boundary для предотвращения uncontrolled failure.
+МОЖНО использовать на внешней границе, чтобы не допустить неконтролируемого сбоя.
 
-Но catch-all НЕ ДОЛЖЕН превращать programming errors в обычный:
+Но catch-all НЕ ДОЛЖЕН превращать ошибки программиста в обычное «Something went wrong» без диагностики.
 
-```text id="4g9pyf"
-Something went wrong
-```
-
-без diagnostics.
+В коде глобальных обработчиков (`runZonedGuarded`, `FlutterError.onError`, `PlatformDispatcher.instance.onError`) в `apps/*` нет; catch-all стоят на границах операций — шаги завершения app (`_step` в `app_scope.dart`), общий `catch` хода в цикле агента (LOOP-1), `on Object` в обработчиках запросов `fs/*` и `terminal/*` клиента с ответом `-32603`.
 
 ---
 
-## 24. Silent catch
+## 24. Молчаливый catch
 
-ЗАПРЕЩЕНО:
+ЗАПРЕЩЕНО
 
-```dart id="0o5l70"
+```dart
 try {
   ...
 } catch (_) {}
 ```
 
-для значимой operation.
+для значимой операции.
 
-Если ошибка намеренно игнорируется, причина должна быть очевидна и безопасна.
+Если ошибка игнорируется намеренно, причина ДОЛЖНА быть очевидна и безопасна (комментарий рядом, как в `_step` при сбое самого журнала).
 
 ---
 
-## 25. Error ownership
+## 25. Владелец ошибки
 
-Ошибка должна обрабатываться тем layer, который способен принять решение.
+Ошибку ДОЛЖЕН обрабатывать тот слой, который способен принять решение.
 
 Например:
 
-```text id="7vq7z4"
-transport error
+```text
+ошибка транспорта
     ↓
-client core decides reconnect
+ядро клиента решает о переподключении
 ```
 
 а не:
 
-```text id="ftxbt9"
-transport error
+```text
+ошибка транспорта
     ↓
-widget decides reconnect
+виджет решает о переподключении
 ```
 
 ---
 
-## 26. Recoverable vs terminal
+## 26. Восстановимые и терминальные
 
-Каждый значимый failure должен иметь понятную recovery semantics.
+У каждого значимого сбоя ДОЛЖНА быть понятная семантика восстановления.
 
-Следует различать:
-
-```text id="4y5htp"
-recoverable
-terminal
-```
-
-или эквивалентную модель.
+СЛЕДУЕТ различать `recoverable` и `terminal` или использовать эквивалентную модель.
 
 ---
 
-## 27. Recoverable failure
+## 27. Восстановимый сбой
 
-Recoverable failure позволяет продолжить operation/system lifecycle.
+Восстановимый сбой позволяет продолжить операцию или жизненный цикл системы.
 
 Например:
 
-* temporary connection loss;
-* retryable transport error;
-* recoverable persistence conflict.
+* временная потеря соединения;
+* ошибка транспорта, допускающая повтор;
+* восстановимый конфликт при сохранении.
 
-Он может приводить к:
-
-```text id="ok8vxr"
-retrying
-reconnecting
-waiting
-```
+Он может приводить к состояниям `retrying`, `reconnecting`, `waiting`.
 
 ---
 
-## 28. Terminal failure
+## 28. Терминальный сбой
 
-Terminal failure означает, что текущая operation не может автоматически продолжиться.
+Терминальный сбой означает, что текущая операция не может продолжиться автоматически.
 
 Например:
 
-* incompatible protocol;
-* exhausted reconnect policy;
-* invalid persisted state без migration;
-* permanently unavailable required capability.
+* несовместимый протокол;
+* исчерпана политика переподключения;
+* неверное сохранённое состояние без миграции;
+* обязательная возможность недоступна навсегда.
 
-Terminal failure не обязательно означает crash всего приложения.
-
----
-
-## 29. Retryability
-
-Retryability является application/transport policy, а не свойством UI.
-
-Следует уметь определить:
-
-```text id="2bfpsx"
-retryable
-notRetryable
-```
-
-или более конкретную policy.
+Терминальный сбой не обязательно означает падение всего приложения.
 
 ---
 
-## 30. Не retry всё подряд
+## 29. Возможность повтора
 
-Нельзя автоматически retry:
+Возможность повтора (retryability) — политика приложения или транспорта, а не свойство UI.
 
-* permission denied;
-* invalid protocol message;
-* unsupported version;
-* invalid user input;
-* programming error.
+СЛЕДУЕТ уметь определить `retryable` и `notRetryable` или более конкретную политику.
 
-Retry должен иметь semantic basis.
+В коде: агент помечает сбой хода `data.codelab.retryable` по `LlmErrorClass` (`network`, `timeout`, `rateLimited`, `server`; `_retryable` в `event_projection.dart`), клиент выводит `SessionView.canRetry` из `PromptFailure` и состояния сессии (`_canRetry` в `client_workspace.dart`, spec `acp-client-kit` «Повтор сорвавшегося хода»).
 
 ---
 
-## 31. Retry context
+## 30. Не повторять всё подряд
 
-Retry operation должна сохранять correlation context.
+ЗАПРЕЩЕНО автоматически повторять при:
 
-Например:
+* отказе в разрешении;
+* некорректном сообщении протокола;
+* неподдерживаемой версии;
+* неверном пользовательском вводе;
+* ошибке программиста.
 
-```text id="84ixk3"
+У повтора ДОЛЖНО быть смысловое основание.
+
+В коде `withTransientRetry` ядра агента никогда не повторяет `aborted`, `overflow`, `auth`, `badRequest`, `terminalFinish` и ничего после фиксации ответа (LLM-8, LLM-9); у клиента автоматических повторов запросов ACP нет.
+
+---
+
+## 31. Контекст повтора
+
+Повтор ДОЛЖЕН сохранять контекст корреляции, например:
+
+```text
 request_id
 attempt
 generation
@@ -601,94 +571,80 @@ failure_type
 
 ---
 
-## 32. Retry exhaustion
+## 32. Исчерпание повторов
 
-После исчерпания retry policy должен возникнуть explicit terminal outcome.
+После исчерпания политики повторов ДОЛЖЕН возникать явный терминальный исход, например `ReconnectExhausted`, а не бесконечный цикл повторов.
 
-Например:
-
-```text id="d60yvv"
-ReconnectExhausted
-```
-
-а не вечный цикл retries.
+В коде: у ядра агента итоговая ошибка `withTransientRetry` несёт историю попыток и становится `AgentError(retrying: false)` → `TurnEnded(failed)`. У клиента политики повторов переподключения нет (§79), поэтому нет и `ReconnectExhausted`.
 
 ---
 
-## 33. Timeout
+## 33. Таймаут
 
-Timeout является отдельным failure reason.
+Таймаут — отдельная причина сбоя.
 
-Следует различать:
+СЛЕДУЕТ различать:
 
-* transport connect timeout;
-* request timeout;
-* permission timeout;
-* shutdown timeout.
+* таймаут подключения транспорта;
+* таймаут запроса;
+* таймаут разрешения;
+* таймаут завершения работы.
 
-Они имеют разные recovery semantics.
+У них разная семантика восстановления.
 
----
-
-## 34. Cancellation не всегда ошибка
-
-User-requested cancellation обычно является нормальным lifecycle outcome, а не `error`.
-
-Например:
-
-```text id="tkfguo"
-RequestCancelled
-```
-
-не следует автоматически логировать на error level.
+В коде: `AcpRequestTimeoutException` — таймаут исходящих запросов клиента (`requestTimeout`, по умолчанию 60 с; `session/prompt` без таймаута); `AcpTransport.close({timeout})` — завершение; `ClientTimedOut` — запросы агента к клиенту (`fs/*` 30 с, `terminal/kill` 10 с, `13-acp-adapter.md` §13.9); `session/request_permission` таймаута по умолчанию не имеет (ждёт человека; `permissions.timeout` конфигурации агента включает его); `AcpTransportErrorCode.timeout` и `LlmErrorClass.timeout`.
 
 ---
 
-## 35. Permission denied не crash
+## 34. Отмена — не всегда ошибка
 
-Permission denial — expected application outcome.
+Отмена по просьбе пользователя обычно — нормальный исход жизненного цикла, а не `error`.
 
-Он должен быть:
+Например, `RequestCancelled` НЕ СЛЕДУЕТ автоматически журналировать на уровне error.
+
+В коде отменённый ход завершается `stopReason: cancelled` (статус `cancelled`, не `failed`), отмена журналируется на уровне info (`Cancelled prompt turn …`).
+
+---
+
+## 35. Отказ в разрешении — не падение
+
+Отказ в разрешении — ожидаемый исход приложения.
+
+Он ДОЛЖЕН быть:
 
 * типизирован;
 * обработан;
 * при необходимости показан пользователю;
 
-но не считаться unexpected exception.
+и НЕ ДОЛЖЕН считаться неожиданным исключением.
+
+В коде: решения `PermissionDecision` ядра агента (`rejectOnce`, `rejectAlways`, `cancelled`), у клиента — `ApprovalStatus` одобрения.
 
 ---
 
-## 36. Stale event не обязательно error
+## 36. Устаревшее событие — не обязательно ошибка
 
-Stale event после reconnect может быть ожидаемым consequence concurrency.
+Устаревшее событие после переподключения может быть ожидаемым следствием конкурентности.
 
-Обычно:
+Обычно «проигнорировать и записать debug/warning» лучше, чем фатальная ошибка. Если устаревшее событие нарушает гарантию ACP, серьёзность может быть выше.
 
-```text id="2cvnke"
-ignored + debug/warning
-```
-
-лучше, чем fatal error.
-
-Если stale event нарушает ACP guarantee, severity может быть выше.
+В коде — запись `event_ignored` (`reason: stale_generation`) на уровне debug (`streaming.md` §6).
 
 ---
 
-## 37. Duplicate event
+## 37. Дублирующее событие
 
-Duplicate event также не обязательно failure.
-
-Если replay разрешён, deduplication является normal behavior.
+Дублирующее событие тоже не обязательно сбой. Если реплей разрешён, устранение дублей — нормальное поведение.
 
 ---
 
-## 38. Presentation error state
+## 38. Состояние ошибки для отображения
 
-Presentation должна получать normalized error state.
+Presentation ДОЛЖЕН получать нормализованное состояние ошибки.
 
-Например:
+Иллюстрация:
 
-```text id="imc0fh"
+```text
 SessionErrorViewState(
   title,
   description,
@@ -696,48 +652,52 @@ SessionErrorViewState(
 )
 ```
 
-Это presentation model, а не transport exception.
+Это модель отображения, а не исключение транспорта.
+
+В коде этой роли служат `ConnectionView.lost`/`failed`, заметки транскрипта `NoticeItem` с `NoticeReason` и `SessionView.canRetry`.
 
 ---
 
-## 39. User-facing message
+## 39. Сообщение для пользователя
 
-User-facing message должен:
+Сообщение для пользователя ДОЛЖНО:
 
 * быть понятным;
-* описывать действие/последствие;
-* не раскрывать internal stack trace;
-* не раскрывать secrets;
-* при возможности предлагать recovery action.
+* описывать действие и последствие;
+* не раскрывать внутренний стек вызовов;
+* не раскрывать секреты;
+* по возможности предлагать действие для восстановления.
 
 ---
 
 ## 40. Не показывать `toString()`
 
-ЗАПРЕЩЕНО использовать:
+ЗАПРЕЩЕНО использовать
 
-```dart id="n5sikd"
+```dart
 Text(error.toString())
 ```
 
-как общий production error UX.
+как общий способ показа ошибок в production.
 
-Technical exception text может:
+Текст технического исключения может:
 
 * быть непонятным;
-* содержать paths;
-* содержать implementation details;
-* содержать sensitive data.
+* содержать пути;
+* содержать детали реализации;
+* содержать чувствительные данные.
+
+В коде ядро клиента даёт текст для UI и CLI через `describeFailure`: поле `message` известных исключений вместо `ClassName: message`, после `SecretRedactor.redactText`. Для прочих объектов используется `toString()` после той же редакции.
 
 ---
 
-## 41. Technical details
+## 41. Технические подробности
 
-UI может предоставлять отдельный expandable diagnostic section в debug или product-approved flow.
+UI МОЖЕТ предоставлять отдельный раскрываемый раздел диагностики в debug-сборке или в одобренном продуктом сценарии.
 
 Например:
 
-```text id="14mnjc"
+```text
 Connection to agent was lost.
 
 [Retry]
@@ -746,39 +706,39 @@ Technical details:
 Transport closed unexpectedly.
 ```
 
-Technical details должны быть sanitized.
+Технические подробности ДОЛЖНЫ проходить очистку (sanitization).
 
 ---
 
-## 42. Error codes
+## 42. Коды ошибок
 
-Для support/diagnostics полезны stable error codes.
+Для поддержки и диагностики полезны стабильные коды ошибок, например:
 
-Например:
-
-```text id="o7ic43"
+```text
 ACP_PROTOCOL_UNSUPPORTED
 ACP_CONNECTION_LOST
 ACP_RECONNECT_EXHAUSTED
 PERMISSION_DENIED
 ```
 
-Error code не должен заменять typed error model внутри Dart.
+Код ошибки НЕ ДОЛЖЕН заменять типизированную модель ошибок внутри Dart.
+
+В коде строковых кодов такого вида нет. Стабильные коды — перечисления (`AcpTransportErrorCode`, `ConnectionFailureReason`, `AcpProtocolErrorKind`, `FileErrorCode`, `ExecErrorCode`, `LlmErrorClass`), числовые коды JSON-RPC и ACP на проводе и поля расширения CodeLab `data.codelab.errorClass` и `data.codelab.reason`.
 
 ---
 
-## 43. Localization
+## 43. Локализация
 
-User-facing error text не следует хранить внутри low-level failure type, если application поддерживает localization.
+Текст ошибки для пользователя НЕ СЛЕДУЕТ хранить внутри низкоуровневого типа сбоя, если приложение поддерживает локализацию.
 
 Лучше:
 
-```text id="0u5uvg"
+```text
 Failure
    ↓
-Presentation mapping
+преобразование в presentation
    ↓
-localized message
+локализованное сообщение
 ```
 
 В CodeLab эта граница реализована change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md) (D5, D6; правила — `layers-and-dependencies.md` §54):
@@ -786,34 +746,36 @@ localized message
 * **Ядро клиента** (`codelab_client_core`, `codelab_client_acp`) отдаёт типизированную причину и сбой: `PromptFailure`, `ProfileDraftIssueCode`, sealed-результаты `ProfileCommitter`, причина заметки транскрипта `NoticeReason` (spec `acp-client-kit` «Типизированная причина заметки транскрипта»). Английские `text`/`message` ядра остаются для CLI и диагностики; `intl` в ядре клиента запрещён сторожем.
 * **App** строит переведённый текст по варианту и коду (`context.l10n`) и НЕ ДОЛЖЕН разбирать английскую строку ядра. Не хватает данных — ядро получает аддитивное типизированное поле.
 * **Разовое сообщение об ошибке или исходе** (ошибка записи конфига, отказ подключения, исход удаления) хранится в состоянии Cubit-а типизированным значением с аргументами, а не готовой строкой: текст собирает presentation, поэтому при смене языка он пересобирается.
-* **Не переводятся** (D7): тексты ошибок от агента и бэкендов (тело `PromptFailure`, причина хранилища секретов), диагностика (`WorkspaceDiagnostic.message`, `ClientWorkspaceException.message`, «Debug log», «Inspector»), события журнала. Они подставляются в переведённую фразу плейсхолдером как есть (§99 — diagnostic message vs user message).
+* **Не переводятся** (D7): тексты ошибок от агента и бэкендов (тело `PromptFailure`, причина хранилища секретов), диагностика (`WorkspaceDiagnostic.message`, `ClientWorkspaceException.message`, «Debug log», «Inspector»), события журнала. Они подставляются в переведённую фразу плейсхолдером как есть (§99 — диагностическое сообщение и сообщение пользователю).
 * Текст исключения пользователю не показывается и в переводимые сообщения не попадает; в журнал пишется только `runtimeType` (`observability.md`).
 
 ---
 
-## 44. BLoC error handling
+## 44. Обработка ошибок в BLoC/Cubit
 
-BLoC должен:
+BLoC или Cubit ДОЛЖЕН:
 
-* вызвать application API;
-* получить typed failure;
-* преобразовать его в presentation state/effect.
+* вызвать API приложения;
+* получить типизированный сбой;
+* преобразовать его в состояние или эффект отображения.
 
-BLoC НЕ ДОЛЖЕН знать о:
+BLoC/Cubit НЕ ДОЛЖЕН знать о:
 
 * `SocketException`;
 * `ProcessException`;
-* raw ACP parse errors;
+* сырых ошибках разбора ACP;
 
-если application boundary уже должна их нормализовать.
+если граница приложения уже обязана их нормализовать.
+
+В CodeLab это Cubit-ы `apps/codelab_desktop` поверх `ClientWorkspace` (`state-management.md`).
 
 ---
 
-## 45. BLoC try/catch
+## 45. try/catch в BLoC/Cubit
 
-Нежелательно повторять:
+НЕ СЛЕДУЕТ повторять во всех обработчиках
 
-```dart id="25tjdl"
+```dart
 try {
   await client.doSomething();
 } catch (e) {
@@ -821,161 +783,128 @@ try {
 }
 ```
 
-во всех handlers.
-
-Error handling strategy должна быть согласованной.
+Стратегия обработки ошибок ДОЛЖНА быть согласованной.
 
 ---
 
-## 46. Error state vs effect
+## 46. Состояние ошибки и разовый эффект
 
-Некоторые ошибки являются durable state.
+Некоторые ошибки — долговременное состояние, например «сессия сорвалась». Другие — разовый эффект отображения, например «не удалось скопировать текст».
 
-Например:
-
-```text id="67w96h"
-session failed
-```
-
-Другие могут быть one-shot presentation effect:
-
-```text id="fy5gm9"
-failed to copy text
-```
-
-Не следует превращать каждую мелкую operation error в global screen error state.
+НЕ СЛЕДУЕТ превращать каждую мелкую ошибку операции в глобальное состояние ошибки экрана.
 
 ---
 
-## 47. Partial failure
+## 47. Частичный сбой
 
-Одна feature operation может failed, пока остальное application state остаётся valid.
+Операция одной функции может сорваться, пока остальное состояние приложения остаётся корректным.
 
 Например:
 
-```text id="j7mtm4"
+```text
 session = ready
 historySave = failed
 ```
 
-Не следует переводить всю session в failed state, если failure локальный.
+НЕ СЛЕДУЕТ переводить всю сессию в состояние сбоя, если сбой локальный.
 
 ---
 
-## 48. Aggregated failures
+## 48. Агрегированные сбои
 
-Если operation выполняет несколько independent actions, может потребоваться aggregated result.
+Если операция выполняет несколько независимых действий, может понадобиться агрегированный результат.
 
-Но не следует создавать generic `List<Exception>` как application API.
-
-Aggregation должна иметь понятную semantics.
+Но НЕ СЛЕДУЕТ делать общий `List<Exception>` API приложения. У агрегации ДОЛЖНА быть понятная семантика.
 
 ---
 
-## 49. Validation errors
+## 49. Ошибки проверки
 
-Validation failure является ожидаемым outcome.
+Сбой проверки (validation) — ожидаемый исход.
 
-Следует различать:
-
-```text id="kfr5l4"
-presentation validation
-application validation
-protocol validation
-```
-
-Они принадлежат разным boundaries.
+СЛЕДУЕТ различать проверку в presentation, проверку в приложении и проверку протокола: они принадлежат разным границам.
 
 ---
 
-## 50. User input validation
+## 50. Проверка пользовательского ввода
 
-Простая UI validation может оставаться presentation concern.
+Простая проверка в UI может оставаться задачей presentation — например, пустое поле или неверный формат локального пути.
 
-Например:
-
-```text id="xmrz4g"
-empty field
-invalid local path format
-```
-
-Но security/application constraints должны проверяться ниже UI.
+Но ограничения безопасности и приложения ДОЛЖНЫ проверяться ниже UI.
 
 ---
 
-## 51. Protocol validation
+## 51. Проверка протокола
 
-Protocol validation проверяет:
+Проверка протокола охватывает:
 
-* schema;
-* types;
-* required fields;
-* protocol invariants.
+* схему;
+* типы;
+* обязательные поля;
+* инварианты протокола.
 
-Она не должна определять application permission policy.
+Она НЕ ДОЛЖНА определять политику разрешений приложения.
 
 ---
 
-## 52. Security failures
+## 52. Сбои безопасности
 
-Security failure должен fail closed.
+Сбой безопасности ДОЛЖЕН закрывать доступ (fail closed).
 
-Например, internal exception permission subsystem НЕ ДОЛЖЕН приводить к auto-allow.
+Например, внутреннее исключение подсистемы разрешений НЕ ДОЛЖНО приводить к автоматическому разрешению.
 
 Предпочтительно:
 
-```text id="chzfj1"
-policy error
+```text
+ошибка политики
     ↓
-deny operation
+операция отклонена
     ↓
-log unexpected failure
+неожиданный сбой записан в журнал
 ```
 
----
-
-## 53. Persistence errors
-
-Следует различать:
-
-* data unavailable;
-* corrupted data;
-* migration failure;
-* write failure;
-* stale write conflict.
-
-Не следует представлять всё как:
-
-```text id="yuehrd"
-StorageException
-```
-
-если application recovery различается.
+В коде: без `PermissionGate` любое «спросить» становится отказом (PERM-5); сбой запроса `session/request_permission` у ACP-проекции агента (ошибка клиента, неверный ответ) даёт `rejectOnce` и предупреждение `acp.permission.failed` (`_failed` в `acp_permission_gate.dart`).
 
 ---
 
-## 54. Corrupted persisted data
+## 53. Ошибки хранения
 
-Corruption должна иметь explicit recovery policy.
+СЛЕДУЕТ различать:
 
-Возможные варианты:
+* данные недоступны;
+* данные повреждены;
+* сбой миграции;
+* сбой записи;
+* конфликт устаревшей записи.
 
-* reject;
-* restore backup;
-* reset affected data;
-* ask user.
-
-Нельзя молча игнорировать corruption, если это приводит к потере данных.
+НЕ СЛЕДУЕТ представлять всё одним `StorageException`, если восстановление различается.
 
 ---
 
-## 55. Platform errors
+## 54. Повреждённые сохранённые данные
 
-Platform-specific errors должны нормализоваться до cross-platform semantics там, где это возможно.
+У повреждения данных ДОЛЖНА быть явная политика восстановления.
+
+Варианты:
+
+* отклонить;
+* восстановить резервную копию;
+* сбросить затронутые данные;
+* спросить пользователя.
+
+ЗАПРЕЩЕНО молча игнорировать повреждение, если это ведёт к потере данных.
+
+В коде: неразбираемый снимок рабочего пространства сбрасывается с предупреждением `Workspace snapshot is invalid; starting fresh.` (`WorkspaceRestorer._readProject`); резервных копий хранилища не делают.
+
+---
+
+## 55. Ошибки платформы
+
+Ошибки, зависящие от платформы, ДОЛЖНЫ нормализоваться до кроссплатформенной семантики там, где это возможно.
 
 Например:
 
-```text id="akvrar"
+```text
 Windows credential error
 macOS keychain error
 Linux keyring error
@@ -986,106 +915,87 @@ CredentialStoreFailure
 
 ---
 
-## 56. Unsupported capability
+## 56. Неподдерживаемая возможность
 
-Unsupported capability должна иметь typed representation.
+Неподдерживаемая возможность ДОЛЖНА иметь типизированное представление, например `CapabilityUnavailable`. Это лучше общего исключения.
 
-Это лучше, чем generic exception.
-
-Например:
-
-```text id="c82p0p"
-CapabilityUnavailable
-```
-
-Presentation может disable action или показать explanation.
+Presentation может отключить действие или показать пояснение.
 
 ---
 
-## 57. Error context
+## 57. Контекст ошибки
 
-Failure может содержать structured context:
+Сбой может содержать структурированный контекст:
 
-```text id="b51hrm"
+```text
 sessionId
 requestId
 operation
 reason
 ```
 
-Но context не должен превращаться в arbitrary `Map<String, dynamic>` без необходимости.
+Но контекст НЕ ДОЛЖЕН без необходимости превращаться в произвольный `Map<String, dynamic>`.
 
 ---
 
-## 58. Sensitive context
+## 58. Чувствительный контекст
 
-Failure objects не должны бесконтрольно хранить:
+Объекты сбоев НЕ ДОЛЖНЫ бесконтрольно хранить:
 
-* token;
-* credentials;
-* full prompt;
-* full file content.
+* токен;
+* учётные данные;
+* полный промпт;
+* полное содержимое файла.
 
-Иначе они могут случайно попасть в logs/crash reports.
-
----
-
-## 59. Logging expected failure
-
-Expected failure следует логировать на appropriate level.
-
-Например:
-
-```text id="2a2yb8"
-permission denied
-    → info/debug
-```
-
-```text id="d6lrg4"
-temporary connection loss
-    → warning
-```
-
-```text id="edn3ff"
-unexpected invariant violation
-    → error
-```
+Иначе они могут случайно попасть в журналы или отчёты о падениях.
 
 ---
 
-## 60. Не логировать одну ошибку в каждом layer
+## 59. Журналирование ожидаемого сбоя
 
-Нежелательно:
+Ожидаемый сбой СЛЕДУЕТ журналировать на подходящем уровне:
 
-```text id="jyf54k"
+```text
+отказ в разрешении              → info/debug
+временная потеря соединения     → warning
+неожиданное нарушение инварианта → error
+```
+
+В коде любой `AcpTransportFailure`, включая обрыв соединения, записывается в диагностику клиента с `DiagnosticSeverity.error` (`_handleTransportEvent`). На тот же обрыв `ClientWorkspace` пишет вторую запись уровня error `Connection to ACP agent lost` — это ещё и дубль (§60).
+
+---
+
+## 60. Не журналировать одну ошибку в каждом слое
+
+НЕ СЛЕДУЕТ для одной причины писать:
+
+```text
 transport: ERROR
 client: ERROR
 bloc: ERROR
 widget: ERROR
 ```
 
-для одной причины.
-
 Лучше:
 
-```text id="c57x7h"
-transport
-    → technical failure + stack trace
+```text
+транспорт
+    → технический сбой + стек вызовов
 
-client
-    → application transition/recovery
+клиент
+    → переход и восстановление приложения
 
 presentation
-    → user-visible state
+    → состояние, видимое пользователю
 ```
 
 ---
 
-## 61. Error correlation
+## 61. Корреляция ошибок
 
-Ошибка должна сохранять correlation с operation, в которой она возникла.
+Ошибка ДОЛЖНА сохранять связь с операцией, в которой возникла.
 
-При наличии следует использовать:
+При наличии СЛЕДУЕТ использовать:
 
 * `session_id`;
 * `request_id`;
@@ -1094,40 +1004,42 @@ presentation
 * `connection_generation`;
 * `operation_id`.
 
-Это особенно важно для concurrent operations.
+Это особенно важно для конкурентных операций.
+
+В коде клиент привязывает корреляцию через `Logger.withCorrelation` и параметры `_recordDiagnostic` (`sessionId`, `requestId`, `toolCallId`); у агента записи о вызове инструмента несут `session_id`, `turn_id`, `tool_call_id` (OBS-3).
 
 ---
 
-## 62. Correlation после mapping
+## 62. Корреляция после преобразования
 
-При преобразовании:
+При преобразовании
 
-```text id="pmk7oa"
+```text
 TransportFailure
       │
       ▼
 SessionConnectionLost
 ```
 
-correlation context не должен теряться.
+контекст корреляции НЕ ДОЛЖЕН теряться.
 
-Например, application layer должен иметь возможность определить:
+Слой приложения ДОЛЖЕН иметь возможность определить:
 
-```text id="u5y6ny"
-какая session потеряла connection
-какая generation завершилась
-был ли active request
+```text
+какая сессия потеряла соединение
+какое поколение завершилось
+был ли активный запрос
 ```
 
 ---
 
-## 63. Error identity
+## 63. Идентичность ошибки
 
-Не следует использовать текст сообщения как identity ошибки.
+НЕ СЛЕДУЕТ использовать текст сообщения как идентичность ошибки.
 
 Плохо:
 
-```dart id="1vyfja"
+```dart
 if (error.message == 'Connection closed') {
   reconnect();
 }
@@ -1135,56 +1047,59 @@ if (error.message == 'Connection closed') {
 
 Предпочтительно:
 
-```dart id="xyv7ur"
+```dart
 switch (failure) {
   case ConnectionLost():
     ...
 }
 ```
 
-или другой typed mechanism.
+или другой типизированный механизм.
+
+В коде есть ветвления по тексту:
+
+* `AcpClientExecutionEnv` ищет `timed out` в сообщении `FileError`, которое сам сформировал из `ClientTimedOut` (`codelab_agent_acp/lib/src/acp_client_env.dart`) — типизированная альтернатива возможна;
+* сравнение диагностики с константой сообщения: `agent_definition_row_view.dart` в `codelab_setup` (`agentDefinitionModelNotInCatalogMessage`, осознанное решение D18 change `add-settings-agents-modes`) и `secret_migrator.dart` в `codelab_agent_io` (`providerKeySourcesConflictMessage`, префикс `untrustedProjectWritePrefix`);
+* подсказка к тексту ошибки провайдера по `prompt_cache_key` (`codelab_agent_core/lib/src/llm/providers/http_support.dart`);
+* разбор сообщений внешних библиотек без типизированной альтернативы — `YamlException` (`codelab_agent_io/lib/src/config/yaml_reader.dart`) и `ArgParserException` (`apps/codelab_cli/lib/src/cli_args.dart`).
 
 ---
 
-## 64. Error codes и typed errors
+## 64. Коды ошибок и типизированные ошибки
 
-Stable error code может быть частью typed failure.
+Стабильный код ошибки может быть частью типизированного сбоя.
 
-Conceptually:
+Концептуально:
 
-```text id="utpks8"
+```text
 ConnectionLost
     code = ACP_CONNECTION_LOST
 ```
 
-Typed class используется application logic.
+Типизированный класс использует логика приложения. Код используется для:
 
-Code используется для:
-
-* diagnostics;
-* support;
-* telemetry;
-* external representation.
+* диагностики;
+* поддержки;
+* телеметрии;
+* внешнего представления.
 
 ---
 
-## 65. Error equality
+## 65. Равенство ошибок
 
-Если failure используется как immutable state, equality должна быть предсказуемой.
+Если сбой хранится как неизменяемое состояние, равенство ДОЛЖНО быть предсказуемым.
 
-Не следует включать в equality mutable или случайные technical objects без необходимости.
-
-Например stack trace обычно не должен определять semantic equality presentation state.
+НЕ СЛЕДУЕТ без необходимости включать в равенство изменяемые или случайные технические объекты. Например, стек вызовов обычно НЕ ДОЛЖЕН определять смысловое равенство состояния отображения.
 
 ---
 
-## 66. Failure hierarchy
+## 66. Иерархия сбоев
 
-Не следует создавать одну гигантскую hierarchy всех ошибок приложения, если domains независимы.
+НЕ СЛЕДУЕТ создавать одну гигантскую иерархию всех ошибок приложения, если предметные области независимы.
 
-Предпочтительно иметь bounded families:
+Предпочтительно иметь ограниченные семейства
 
-```text id="ck34mu"
+```text
 ProtocolFailure
 TransportFailure
 SessionFailure
@@ -1193,33 +1108,33 @@ FileFailure
 CredentialFailure
 ```
 
-в соответствующих packages.
+в соответствующих пакетах.
 
 ---
 
-## 67. Generic `AppFailure`
+## 67. Общий `AppFailure`
 
-Один общий:
+Один общий тип
 
-```dart id="xmkvdh"
+```dart
 class AppFailure {
   final String message;
 }
 ```
 
-обычно слишком слаб для application decisions.
+обычно слишком слаб для решений приложения.
 
-Если используется общий base type, concrete failure types должны сохранять semantics.
+Если используется общий базовый тип, конкретные типы сбоев ДОЛЖНЫ сохранять семантику.
 
 ---
 
-## 68. Failure ownership
+## 68. Владелец типа сбоя
 
-Failure type должен находиться рядом с boundary, contract которого он представляет.
+Тип сбоя ДОЛЖЕН находиться рядом с границей, контракт которой он представляет.
 
-Например:
+Иллюстрация:
 
-```text id="yyt4ya"
+```text
 codelab_acp_protocol
     → ProtocolFailure
 
@@ -1229,331 +1144,304 @@ codelab_acp_transports
 codelab_client_acp
     → SessionFailure / ClientFailure
 
-platform adapter
+адаптер платформы
     → FileAccessFailure
 ```
 
-Не следует помещать все failure types в глобальный `errors.dart` только ради централизации.
+В коде:
 
----
-
-## 69. `core` и errors
-
-Shared `core` package может содержать только действительно cross-cutting error primitives.
-
-Например:
-
-* common result abstraction;
-* generic cancellation marker;
-* shared error metadata.
-
-Feature-specific failure не следует переносить в `core`.
-
----
-
-## 70. Public API
-
-Если failure является частью public API package, он должен быть:
-
-* typed;
-* documented;
-* stable enough для consumers;
-* экспортирован через public package API.
-
-Consumer другого package не должен импортировать `src/errors/...`.
-
----
-
-## 71. Internal errors
-
-Implementation-only error может оставаться private/internal.
-
-Не следует делать public каждый technical exception.
-
-Public API должен показывать только errors, которые consumer способен осмысленно обработать.
-
----
-
-## 72. Async operation contract
-
-Public async API должен иметь понятную error semantics.
-
-Consumer должен понимать:
-
-```text id="ftr84a"
-какие failures ожидаемы
-какие outcomes terminal
-можно ли retry
-можно ли cancel
+```text
+codelab_acp_protocol    → AcpProtocolError, JsonRpcProtocolException, JsonRpcError
+codelab_acp_transports  → AcpTransportException, AcpTransportErrorCode
+codelab_client_acp      → AcpClientApplicationException и наследники, PromptFailure,
+                          FsAccessFailure, TerminalAccessFailure, StateTransitionException
+codelab_client_core     → ClientWorkspaceException, ConnectionView, PromptOutcome
+codelab_agent_core      → Result, FileError, ExecError, LlmErrorClass, AgentError,
+                          ConfigException, HostWiringException
+codelab_agent_acp       → AcpRequestError, ClientCallFailure
 ```
 
-Необязательно перечислять все programming exceptions.
+НЕ СЛЕДУЕТ складывать все типы сбоев в глобальный `errors.dart` только ради централизации.
 
 ---
 
-## 73. Stream error contract
+## 69. `core` и ошибки
 
-Для long-lived streams следует решить, как errors представлены:
+Общий пакет `core` МОЖЕТ содержать только действительно сквозные примитивы ошибок, например:
 
-### Через stream error channel
+* общую абстракцию результата;
+* общий маркер отмены;
+* общие метаданные ошибок.
 
-```text id="mvk2vr"
+Сбои конкретной функции НЕ СЛЕДУЕТ переносить в `core`.
+
+В коде общего пакета `core` нет: `codelab_client_core` — клиентский слой, а не сквозной; `Result` и `CancelledException` живут в `codelab_agent_core`, `lib/core/` app держит адаптеры платформы.
+
+---
+
+## 70. Публичный API
+
+Если сбой — часть публичного API пакета, он ДОЛЖЕН быть:
+
+* типизирован;
+* документирован;
+* достаточно стабилен для потребителей;
+* экспортирован через публичный API пакета.
+
+Потребитель из другого пакета НЕ ДОЛЖЕН импортировать `src/errors/...`.
+
+---
+
+## 71. Внутренние ошибки
+
+Ошибка, нужная только реализации, МОЖЕТ оставаться приватной или внутренней.
+
+НЕ СЛЕДУЕТ делать публичным каждое техническое исключение. Публичный API ДОЛЖЕН показывать только ошибки, которые потребитель способен осмысленно обработать.
+
+---
+
+## 72. Контракт асинхронной операции
+
+У публичного асинхронного API ДОЛЖНА быть понятная семантика ошибок.
+
+Потребитель ДОЛЖЕН понимать:
+
+```text
+какие сбои ожидаемы
+какие исходы терминальны
+можно ли повторить
+можно ли отменить
+```
+
+Перечислять все исключения-ошибки программиста не обязательно.
+
+---
+
+## 73. Контракт ошибок потока
+
+Для долгоживущих потоков СЛЕДУЕТ решить, как представлены ошибки:
+
+### Через канал ошибок потока
+
+```text
 stream.addError(...)
 ```
 
-### Через typed application event/state
+### Через типизированное событие или состояние приложения
 
-```text id="0lvdsw"
+```text
 ClientEvent.connectionFailed(...)
 ```
 
-Для complex lifecycle часто предпочтительнее typed event/state, потому что stream error может завершить subscription.
+Для сложного жизненного цикла часто предпочтительнее типизированное событие или состояние: ошибка потока может завершить подписку.
+
+В коде выбран второй вариант: сбой транспорта — событие `AcpTransportEvent.failure` в `events`, сбой соединения — состояние в `connectionStateChanges`, исход хода — `PromptOutcome` в `ClientWorkspace.promptOutcomes`.
 
 ---
 
-## 74. Critical streams
+## 74. Критические потоки
 
-Critical application stream не должен случайно умереть из-за recoverable error.
+Критический поток приложения НЕ ДОЛЖЕН случайно завершаться из-за восстановимой ошибки.
 
-Например connection loss может быть:
-
-```text id="nqfxp3"
-event → reconnecting
-```
-
-а не обязательно:
-
-```text id="n2bc97"
-stream terminated forever
-```
+Например, потеря соединения может быть событием «→ reconnecting», а не обязательно «поток завершён навсегда».
 
 ---
 
-## 75. Stream termination
+## 75. Завершение потока
 
-Если stream действительно terminal, это должно быть частью contract.
-
-Consumer должен знать, что после `done` новых events не будет.
+Если поток действительно терминальный, это ДОЛЖНО быть частью контракта. Потребитель ДОЛЖЕН знать, что после `done` новых событий не будет.
 
 ---
 
-## 76. Error after dispose
+## 76. Ошибка после dispose
 
-Ошибка от operation, завершившейся после dispose owner, не должна:
+Ошибка операции, завершившейся после dispose владельца, НЕ ДОЛЖНА:
 
-* emit presentation state;
-* показывать dialog;
-* запускать reconnect;
-* создавать notification.
+* публиковать состояние отображения;
+* показывать диалог;
+* запускать переподключение;
+* создавать уведомление.
 
-При этом unexpected error не следует полностью терять: его можно диагностировать на owning lower layer.
+При этом неожиданную ошибку НЕ СЛЕДУЕТ терять полностью: её МОЖНО диагностировать на нижнем слое, который ею владеет.
 
 ---
 
-## 77. Stale failure
+## 77. Устаревший сбой
 
-Failure может быть stale так же, как success result.
+Сбой может устареть так же, как успешный результат.
 
 Пример:
 
-```text id="w75mns"
-request A started
-request B replaced A
-request A fails late
+```text
+запрос A начат
+запрос B заменил A
+запрос A поздно завершился сбоем
 ```
 
-Failure A не должен переводить UI B в error state.
+Сбой A НЕ ДОЛЖЕН переводить UI запроса B в состояние ошибки.
 
 ---
 
-## 78. Generation guard
+## 78. Проверка поколения
 
-Перед применением async failure к current state следует проверить:
+Перед применением асинхронного сбоя к текущему состоянию СЛЕДУЕТ проверить:
 
-* operation identity;
-* session identity;
-* connection generation;
+* идентичность операции;
+* идентичность сессии;
+* поколение соединения;
 
-если operation может стать stale.
+если операция может устареть.
+
+В коде: `_bindTransport` отбрасывает события транспорта прежнего поколения, `_requireCurrentGeneration` — ответы, пришедшие после замены транспорта (`streaming.md` §6).
 
 ---
 
-## 79. Error during reconnect
+## 79. Ошибка во время переподключения
 
-Failure отдельной reconnect attempt не обязательно terminal.
+Сбой отдельной попытки переподключения не обязательно терминальный.
 
 Например:
 
-```text id="8r85tq"
-attempt 1 failed
+```text
+попытка 1 не удалась
     ↓
-backoff
+пауза (backoff)
     ↓
-attempt 2
+попытка 2
 ```
 
-Presentation может оставаться в:
+Presentation может оставаться в состоянии `reconnecting`, пока политика не исчерпана.
 
-```text id="2xkdxs"
-reconnecting
-```
-
-до exhaustion policy.
+В коде политики повторов переподключения нет: `reconnect()` — одна попытка текущего профиля, после неудачи — `ConnectionView.failed` (spec `acp-client-kit` «Явный автомат соединения»; `ConnectionView.reconnecting.attempt` всегда 1). Введение повторов требует OpenSpec change.
 
 ---
 
-## 80. Reconnect exhausted
+## 80. Переподключение исчерпано
 
-После exhaustion должен возникнуть explicit terminal application failure.
+После исчерпания ДОЛЖЕН возникать явный терминальный сбой приложения, например:
 
-Например:
-
-```text id="k2kn5r"
+```text
 ReconnectExhausted(
   attempts: 5,
   lastFailure: ...
 )
 ```
 
-Конкретная модель определяется implementation.
+Конкретную модель определяет реализация. В коде её нет (§79).
 
 ---
 
-## 81. Error during shutdown
+## 81. Ошибка во время завершения работы
 
-Expected errors, вызванные intentional shutdown, не следует ошибочно считать application failures.
+Ожидаемые ошибки, вызванные намеренным завершением работы, НЕ СЛЕДУЕТ ошибочно считать сбоями приложения.
 
-Например:
-
-```text id="r2k8j3"
-stream closed
-process terminated
-subscription cancelled
-```
-
-во время controlled shutdown могут быть normal lifecycle.
+Например, «поток закрыт», «процесс завершён», «подписка отменена» во время управляемого завершения могут быть нормальным жизненным циклом.
 
 ---
 
-## 82. Shutdown context
+## 82. Контекст завершения работы
 
-Lifecycle должен позволять отличить:
+Жизненный цикл ДОЛЖЕН позволять отличить
 
-```text id="f04ys4"
-unexpected process exit
+```text
+неожиданное завершение процесса
 ```
 
 от:
 
-```text id="m4nsl2"
-process exit because application is shutting down
+```text
+завершения процесса, потому что приложение закрывается
 ```
 
-Иначе приложение может случайно запустить reconnect при закрытии.
+Иначе приложение может случайно запустить переподключение при закрытии.
+
+В коде `StdioAcpTransport` после начала `close` (`_isClosed`) не публикует сбой завершения процесса; неожиданный выход даёт `AcpTransportErrorCode.disconnected`.
 
 ---
 
-## 83. Error during cleanup
+## 83. Ошибка при очистке ресурсов
 
-Cleanup error должен быть диагностируемым.
+Ошибка очистки ДОЛЖНА быть диагностируемой.
 
-Например failure закрыть один resource не должен автоматически предотвращать cleanup остальных resources.
+Например, сбой закрытия одного ресурса НЕ ДОЛЖЕН автоматически мешать очистке остальных.
 
-Conceptually:
+Концептуально:
 
-```text id="32ggzo"
-close subscription
-close transport
-terminate process
-dispose container
+```text
+закрыть подписку
+закрыть транспорт
+завершить процесс
+освободить контейнер
 ```
 
-следует попытаться выполнить полностью, сохраняя errors.
+СЛЕДУЕТ попытаться выполнить полностью, сохраняя ошибки.
+
+В коде так устроено завершение app: каждый шаг идёт через `_step`, сбой шага пишется в журнал `app.shutdown_step_failed` с типом ошибки и не мешает следующим (`apps/codelab_desktop/lib/app/app_scope.dart`).
 
 ---
 
-## 84. Multiple cleanup failures
+## 84. Несколько сбоев очистки
 
-Если shutdown генерирует несколько failures, можно агрегировать diagnostics.
+Если завершение работы порождает несколько сбоев, диагностику МОЖНО агрегировать.
 
-Но user-facing UX обычно должен показывать meaningful overall outcome, а не список внутренних exceptions.
+Но интерфейс для пользователя обычно ДОЛЖЕН показывать осмысленный общий исход, а не список внутренних исключений.
 
 ---
 
-## 85. Graceful degradation
+## 85. Плавная деградация
 
-Если optional subsystem failed, application может продолжить работу.
+Если необязательная подсистема сломалась, приложение может продолжить работу.
+
+Например, «уведомления рабочего стола недоступны» не обязательно означает «ACP-клиент непригоден».
+
+Серьёзность сбоя ДОЛЖНА соответствовать важности возможности.
+
+---
+
+## 86. Сбой обязательной зависимости
+
+Если недоступна обязательная подсистема — например, ACP-транспорт не запускается, — приложение ДОЛЖНО перейти в явное состояние «недоступно» или «сбой».
+
+НЕ СЛЕДУЕТ продолжать в частично инициализированном состоянии без определённой семантики.
+
+---
+
+## 87. Ошибки инициализации
+
+У инициализации ДОЛЖЕН быть отдельный путь сбоя.
 
 Например:
 
-```text id="00as90"
-desktop notifications unavailable
-```
-
-не обязательно означает:
-
-```text id="74k0yv"
-ACP client unusable
-```
-
-Failure severity должна соответствовать importance capability.
-
----
-
-## 86. Required dependency failure
-
-Если required subsystem недоступен:
-
-```text id="2slf5j"
-ACP transport cannot start
-```
-
-application должна перейти в explicit unavailable/failed state.
-
-Не следует продолжать в partially initialized состоянии без defined semantics.
-
----
-
-## 87. Initialization errors
-
-Initialization должен иметь отдельный failure path.
-
-Например:
-
-```text id="r53odf"
+```text
 initializing
     │
     ├── ready
     └── initializationFailed
 ```
 
-Не следует маскировать initialization failure как `disconnected`, если application ещё не была корректно initialized.
+НЕ СЛЕДУЕТ выдавать сбой инициализации за `disconnected`, если приложение ещё не было корректно инициализировано.
+
+В коде `ClientConnectionState.initializing` переходит в `ready` или `failed`; выход агента во время `initialize` сразу снимает ожидающий запрос, не дожидаясь таймаута.
 
 ---
 
-## 88. Configuration errors
+## 88. Ошибки конфигурации
 
-Invalid configuration должна быть отличима от runtime transport failure.
+Неверная конфигурация ДОЛЖНА отличаться от сбоя транспорта во время работы.
 
-Например:
+Например, `AgentExecutableNotConfigured`, `InvalidAgentArguments`, `UnsupportedConfiguration` могут требовать действия пользователя, а не повтора.
 
-```text id="svq8u5"
-AgentExecutableNotConfigured
-InvalidAgentArguments
-UnsupportedConfiguration
-```
-
-может требовать user action, а не retry.
+В коде: `UnsupportedConnectionProfileException` (нет резолвера для профиля), `ProfileDraftIssueCode` черновика профиля, у агента — `ConfigIssue`/`ConfigException` до старта транспорта (бинарь завершается с кодом `64`, `12-observability-and-errors.md` §12.2).
 
 ---
 
-## 89. Actionable errors
+## 89. Ошибки с действием
 
-Если user может исправить проблему, presentation должна по возможности предоставить действие.
+Если пользователь может исправить проблему, presentation ДОЛЖЕН по возможности предложить действие.
 
 Например:
 
-```text id="fh13mt"
+```text
 Agent executable not found.
 
 [Choose executable]
@@ -1561,58 +1449,51 @@ Agent executable not found.
 
 или:
 
-```text id="t36rqn"
+```text
 Connection lost.
 
 [Retry]
 ```
 
-Action должен соответствовать typed failure semantics.
+Действие ДОЛЖНО соответствовать семантике типизированного сбоя.
 
 ---
 
-## 90. Non-actionable errors
+## 90. Ошибки без действия
 
-Если retry бессмысленен, UI не должен показывать ложную кнопку Retry.
+Если повтор бессмыслен, UI НЕ ДОЛЖЕН показывать ложную кнопку Retry.
 
-Например incompatible protocol version может требовать:
-
-* обновить client;
-* обновить agent;
-
-но не немедленно повторить тот же request.
+Например, несовместимая версия протокола может требовать обновить клиент или агента, но не повторить немедленно тот же запрос.
 
 ---
 
 ## 91. `canRetry`
 
-`canRetry` может быть presentation projection typed failure.
+`canRetry` может быть проекцией типизированного сбоя в presentation.
 
-Не следует хранить его как независимый source of truth, если retryability определяется failure type/policy.
+НЕ СЛЕДУЕТ хранить его как независимый источник истины, если возможность повтора определяется типом сбоя и политикой.
 
----
-
-## 92. Retry action
-
-Presentation выражает intent:
-
-```text id="8jd5xg"
-RetryRequested
-```
-
-Application layer решает, какую operation действительно повторить.
-
-Widget не должен вручную повторять low-level transport call.
+В коде `SessionView.canRetry` вычисляется при каждой публикации (`_canRetry`): повтор запрещён при `PromptFailure.connectionLost` и `AgentPromptFailure(retryable: false)`, при идущем или отменяемом ходе и без соединения.
 
 ---
 
-## 93. Error recovery state
+## 92. Действие повтора
 
-Recovery должна иметь явный state, если операция занимает время.
+Presentation выражает намерение — `RetryRequested`. Слой приложения решает, какую операцию действительно повторить.
+
+Виджет НЕ ДОЛЖЕН вручную повторять низкоуровневый вызов транспорта.
+
+В коде намерение — `retry()` сессии `ClientWorkspace`: она повторяет промпт последнего сорвавшегося хода или бросает `ClientWorkspaceException`, если повторять нечего.
+
+---
+
+## 93. Состояние восстановления
+
+Если восстановление занимает время, у него ДОЛЖНО быть явное состояние.
 
 Например:
 
-```text id="0k60ba"
+```text
 failed
   ↓ retry
 retrying
@@ -1622,358 +1503,326 @@ ready
 
 а не:
 
-```text id="d2e5rv"
+```text
 failed
   ↓
-immediately pretend ready
+сразу делаем вид, что ready
 ```
 
 ---
 
-## 94. Error history
+## 94. История ошибок
 
-Не следует хранить бесконечную history всех failures в application state.
+НЕ СЛЕДУЕТ хранить в состоянии приложения бесконечную историю всех сбоев. Для диагностики служит подсистема наблюдаемости.
 
-Для diagnostics используется observability subsystem.
-
-Application state должен хранить только данные, необходимые текущему behavior/UI.
+Состояние приложения ДОЛЖНО хранить только данные, нужные текущему поведению и UI.
 
 ---
 
-## 95. Last error
+## 95. Последняя ошибка
 
-`lastError` допустим, если semantics понятна.
+`lastError` МОЖНО использовать, если его семантика понятна.
 
-Но следует избегать generic global:
+Но СЛЕДУЕТ избегать общего глобального
 
-```dart id="6ec85f"
+```dart
 Object? lastError;
 ```
 
-для всего приложения.
+на всё приложение.
 
 ---
 
-## 96. Error clearing
+## 96. Сброс ошибки
 
-Необходимо определить, когда error перестаёт быть актуальной.
+ДОЛЖНО быть определено, когда ошибка перестаёт быть актуальной.
 
 Например:
 
-```text id="vv2dq1"
-send failed
+```text
+отправка не удалась
     ↓
-new send succeeds
+новая отправка успешна
     ↓
-old send error cleared
+старая ошибка отправки сброшена
 ```
 
-Старый error не должен продолжать влиять на unrelated operation.
+Старая ошибка НЕ ДОЛЖНА продолжать влиять на несвязанную операцию.
 
 ---
 
-## 97. One-shot error notification
+## 97. Разовое уведомление об ошибке
 
-Для локальной non-durable ошибки может использоваться presentation effect:
-
-```text id="xf2k5n"
-Copy failed
-    → show notification
-```
-
-Не обязательно менять основной screen state.
+Для локальной недолговременной ошибки МОЖЕТ использоваться эффект отображения: «Copy failed → показать уведомление». Менять основное состояние экрана не обязательно.
 
 ---
 
-## 98. Error localization boundary
+## 98. Граница локализации ошибок
 
-Low-level package не должен формировать окончательный localized user text.
+Низкоуровневый пакет НЕ ДОЛЖЕН формировать окончательный локализованный текст для пользователя.
 
-Например:
+Например,
 
-```dart id="ht5wq7"
+```dart
 throw TransportFailure(
   userMessage: 'Не удалось подключиться к агенту',
 );
 ```
 
-создаёт presentation coupling.
+создаёт связь с presentation. Лучше передать типизированную причину.
 
-Лучше передать typed reason.
-
----
-
-## 99. Diagnostic message vs user message
-
-Следует различать:
-
-```text id="nhm23k"
-diagnosticMessage
-```
-
-и:
-
-```text id="96a0gp"
-userMessage
-```
-
-Первое может содержать technical context после sanitization.
-
-Второе должно быть понятно пользователю.
+В коде app строит текст заметок по `NoticeReason` и `PromptFailure`, а английский `NoticeItem.text` остаётся только запасным текстом (`transcriptRowsOf` в `apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart`; §43).
 
 ---
 
-## 100. Security-sensitive errors
+## 99. Диагностическое сообщение и сообщение пользователю
 
-Security error не должен раскрывать лишнюю информацию.
+СЛЕДУЕТ различать `diagnosticMessage` и `userMessage`.
 
-Например authentication failure не должен показывать secret/token или internal credential storage details.
-
----
-
-## 101. Permission policy failure
-
-Если permission subsystem неожиданно failed:
-
-```text id="31xbmu"
-evaluation exception
-```
-
-опасная operation должна быть denied.
-
-При этом unexpected exception должен попасть в diagnostics.
+Первое может содержать технический контекст после очистки. Второе ДОЛЖНО быть понятно пользователю.
 
 ---
 
-## 102. ACP malformed message
+## 100. Ошибки, чувствительные для безопасности
 
-Malformed message должен:
+Ошибка безопасности НЕ ДОЛЖНА раскрывать лишнюю информацию.
 
-1. Создать protocol-level error.
-2. Получить correlation context, если его можно безопасно извлечь.
-3. Быть залогирован.
-4. Привести к defined protocol/application behavior.
+Например, сбой аутентификации НЕ ДОЛЖЕН показывать секрет, токен или внутренние детали хранилища учётных данных.
 
-Нельзя просто:
+В коде: `AcpWebSocketHandshakeRejected` несёт только HTTP-статус, без URL, заголовков и токена; тексты клиента проходят `SecretRedactor` (`describeFailure`, `_recordDiagnostic`); ошибки провайдера у агента вычищаются от `ProviderConfig.secrets` (`redactSecrets`, OBS-2).
 
-```dart id="5v75vu"
+---
+
+## 101. Сбой политики разрешений
+
+Если подсистема разрешений неожиданно сломалась (исключение при оценке), опасная операция ДОЛЖНА быть отклонена.
+
+При этом неожиданное исключение ДОЛЖНО попасть в диагностику.
+
+В коде — §52.
+
+---
+
+## 102. Некорректное сообщение ACP
+
+Некорректное сообщение ДОЛЖНО:
+
+1. Создать ошибку уровня протокола.
+2. Получить контекст корреляции, если его можно безопасно извлечь.
+3. Быть записано в журнал.
+4. Привести к определённому поведению протокола или приложения.
+
+ЗАПРЕЩЕНО просто
+
+```dart
 catch (_) {
   return null;
 }
 ```
 
-и продолжить как будто сообщения не было.
+и продолжать, будто сообщения не было.
+
+В коде стороны поступают по-разному. Клиентский транспорт считает некорректный кадр агента нарушением протокола: `AcpTransportException(protocolViolation)` с причиной и стеком, соединение переходит в `failed` (`StdioAcpTransport._handleStdoutLine`, `WebSocketAcpTransport`). Серверный транспорт агента соединение не рвёт: отвечает `-32700` или `-32600` и сообщает о кадре диагностикой (`decodeServerFrame`, ACP-4).
 
 ---
 
-## 103. Unknown method
+## 103. Неизвестный метод
 
-Unknown method обрабатывается согласно ACP compatibility policy.
+Неизвестный метод обрабатывается по политике совместимости ACP.
 
-Возможные outcomes:
+Возможные исходы:
 
-* ignore;
-* protocol error;
-* unsupported event;
-* connection/session failure.
+* игнорировать;
+* ошибка протокола;
+* событие «не поддерживается»;
+* сбой соединения или сессии.
 
-Решение не должно приниматься presentation layer.
+Решение НЕ ДОЛЖНО приниматься в presentation.
+
+В коде клиент отвечает на неизвестный запрос агента `-32601 Method not found` (JSON-RPC требует ответа на каждый запрос, `15-Extensibility.md`) и журналирует только метод и id; неизвестные уведомления пропускаются. Агент отвечает `AcpRequestError.methodNotFound`.
 
 ---
 
-## 104. Invalid state transition
+## 104. Недопустимый переход состояния
 
-Попытка выполнить operation в недопустимом state должна иметь typed outcome.
+Попытка выполнить операцию в недопустимом состоянии ДОЛЖНА давать типизированный исход.
+
+Например, `sendPrompt` без соединения НЕ ДОЛЖЕН приводить к случайному исключению `null` или `late`.
+
+В коде редьюсеры возвращают `StateTransitionResult` (`applied`, `ignored`, `rejected`), отказ доходит до вызывающего `StateTransitionException`; `ClientWorkspace` отклоняет вызов в неподходящем состоянии `ClientWorkspaceException`.
+
+---
+
+## 105. Предусловия
+
+API приложения МОЖЕТ проверять предусловия до побочного эффекта.
 
 Например:
 
-```text id="20hdvw"
-sendPrompt while disconnected
+```text
+сессия должна быть готова
+запрос не должен быть уже активен
+вызов инструмента должен ещё ждать решения
 ```
 
-не должна приводить к случайному null/late exception.
+Невыполненное предусловие — ожидаемый исход приложения.
 
 ---
 
-## 105. Preconditions
+## 106. Утверждения
 
-Application API может проверять preconditions до side effect.
+`assert` МОЖНО использовать для инвариантов разработчика, но не для проверки внешних, пользовательских или протокольных данных: в release утверждения могут быть отключены.
 
-Например:
+ЗАПРЕЩЕНО использовать
 
-```text id="qq7nwe"
-session must be ready
-request must not already be active
-tool call must still be pending
-```
-
-Failure precondition является expected application outcome.
-
----
-
-## 106. Assertions
-
-`assert` может использоваться для developer invariants, но не для validation external/user/protocol data.
-
-Assertions могут быть отключены в release.
-
-Нельзя использовать:
-
-```dart id="c9w8mt"
+```dart
 assert(userInputIsValid);
 ```
 
-как единственную защиту production behavior.
+как единственную защиту поведения в production.
 
 ---
 
-## 107. Exhaustive handling
+## 107. Исчерпывающая обработка
 
-Для sealed failure types следует предпочитать exhaustive handling там, где caller обязан учитывать все cases.
+Для sealed-типов сбоев СЛЕДУЕТ предпочитать исчерпывающую обработку там, где вызывающий обязан учесть все случаи.
 
-Freezed/sealed classes могут помочь compiler-assisted handling.
+Sealed-классы и `freezed` помогают проверке компилятором.
 
 ---
 
-## 108. Default branch
+## 108. Ветка `default`
 
-Не следует добавлять broad default branch, который скрывает новый security/protocol-critical failure type.
+НЕ СЛЕДУЕТ добавлять широкую ветку `default`, которая скрывает новый тип сбоя, критичный для безопасности или протокола.
 
-Например:
+Например,
 
-```dart id="z3m8sv"
+```dart
 default:
   return retry();
 ```
 
-может стать опасным после добавления нового non-retryable failure.
+может стать опасной после добавления нового сбоя без повтора.
 
 ---
 
-## 109. Error model evolution
+## 109. Развитие модели ошибок
 
-При добавлении нового failure type следует проверить:
+При добавлении нового типа сбоя СЛЕДУЕТ проверить:
 
-* application handlers;
-* retry policy;
-* BLoC mapping;
-* observability;
-* tests;
-* user-facing presentation.
+* обработчики приложения;
+* политику повторов;
+* преобразование в BLoC/Cubit;
+* наблюдаемость;
+* тесты;
+* отображение пользователю.
 
-Typed error model должен эволюционировать контролируемо.
-
----
-
-## 110. Public error compatibility
-
-Изменение public failure type в reusable package может быть breaking API change.
-
-Необходимо учитывать consumers и OpenSpec/ADR, если изменение архитектурно значимо.
+Типизированная модель ошибок ДОЛЖНА развиваться контролируемо.
 
 ---
 
-## 111. Testing error handling
+## 110. Совместимость публичных ошибок
 
-Error handling должен иметь direct tests.
+Изменение публичного типа сбоя в переиспользуемом пакете может быть несовместимым изменением API.
+
+Если изменение архитектурно значимо, потребители ДОЛЖНЫ учитываться через OpenSpec change или ADR.
+
+---
+
+## 111. Тестирование обработки ошибок
+
+Обработка ошибок ДОЛЖНА иметь прямые тесты.
 
 Минимальные категории:
 
-* expected failure;
-* unexpected exception;
-* mapping;
-* retryable failure;
-* terminal failure;
-* stale failure;
-* cancellation;
-* permission denial;
-* protocol error;
-* transport error.
+* ожидаемый сбой;
+* неожиданное исключение;
+* преобразование;
+* сбой с повтором;
+* терминальный сбой;
+* устаревший сбой;
+* отмена;
+* отказ в разрешении;
+* ошибка протокола;
+* ошибка транспорта.
 
 ---
 
-## 112. Mapping tests
+## 112. Тесты преобразования
 
-Следует тестировать meaningful mappings.
+СЛЕДУЕТ тестировать осмысленные преобразования, например «`ProcessExited` неожиданно → `ConnectionLost`».
 
-Например:
-
-```text id="nn6fph"
-ProcessExited unexpectedly
-    → ConnectionLost
-```
-
-Не нужно тестировать trivial constructor wrapping.
+Тестировать тривиальное оборачивание в конструктор не нужно.
 
 ---
 
-## 113. Retry tests
+## 113. Тесты повторов
 
 Проверять:
 
-* retryable error запускает retry;
-* non-retryable error не запускает retry;
-* retry exhaustion terminal;
-* manual disconnect останавливает retry.
+* ошибка с повтором запускает повтор;
+* ошибка без повтора его не запускает;
+* исчерпание повторов терминально;
+* ручное отключение останавливает повторы.
 
 ---
 
-## 114. Stale error tests
+## 114. Тесты устаревших ошибок
 
-Обязательный race scenario:
+Обязательный сценарий гонки:
 
-```text id="s0vgf7"
-operation A starts
-operation B supersedes A
-A fails late
+```text
+операция A начинается
+операция B заменяет A
+A поздно завершается сбоем
 ```
 
-State B не должен перейти в failure из-за A.
+Состояние B НЕ ДОЛЖНО перейти в сбой из-за A.
 
 ---
 
-## 115. Presentation mapping tests
+## 115. Тесты отображения
 
-BLoC/presentation tests должны проверять:
+Тесты BLoC/Cubit и presentation ДОЛЖНЫ проверять
 
-```text id="p0kl6d"
-typed failure
+```text
+типизированный сбой
     ↓
-correct UI state/action
+верное состояние или действие UI
 ```
 
-Не следует в этих tests воспроизводить low-level exception.
+НЕ СЛЕДУЕТ воспроизводить в этих тестах низкоуровневое исключение.
 
 ---
 
-## 116. Security error tests
+## 116. Тесты ошибок безопасности
 
 Минимум:
 
-* permission subsystem error → deny;
-* secret не попадает в user message;
-* secret не попадает в log;
-* unknown dangerous capability не auto-approved.
+* ошибка подсистемы разрешений → отказ;
+* секрет не попадает в сообщение пользователю;
+* секрет не попадает в журнал;
+* неизвестная опасная возможность не одобряется автоматически.
 
 ---
 
-## 117. Observability tests
+## 117. Тесты наблюдаемости
 
-Unexpected exception должен сохранять:
+Неожиданное исключение ДОЛЖНО сохранять:
 
-* error type;
-* stack trace;
-* correlation context.
+* тип ошибки;
+* стек вызовов;
+* контекст корреляции.
 
-Expected application failure не должен ошибочно репортиться как crash.
+Ожидаемый сбой приложения НЕ ДОЛЖЕН ошибочно попадать в отчёты как падение.
 
 ---
 
-## 118. Нежелательные patterns
+## 118. Нежелательные паттерны
 
 ### `catch (e) => Error(e.toString())`
 
-```dart id="hn6b2p"
+```dart
 try {
   ...
 } catch (e) {
@@ -1981,131 +1830,133 @@ try {
 }
 ```
 
-теряет semantics и может раскрывать technical details.
+теряет семантику и может раскрыть технические подробности.
 
 ---
 
-### Generic Exception
+### Общий `Exception`
 
-```dart id="wq1u0h"
+```dart
 throw Exception('failed');
 ```
 
-для expected application outcome.
+для ожидаемого исхода приложения.
 
 ---
 
-### Silent catch
+### Молчаливый catch
 
-```dart id="s57v6v"
+```dart
 catch (_) {}
 ```
 
-для meaningful operation.
+для значимой операции.
 
 ---
 
-### Retry everything
+### Повтор всего подряд
 
-```dart id="jgfdbk"
+```dart
 catch (_) {
   retry();
 }
 ```
 
-опасно.
+опасен.
 
 ---
 
-### User message в infrastructure
+### Сообщение пользователю в инфраструктуре
 
-```dart id="dhc0v3"
+```dart
 throw FileFailure('Не удалось открыть файл');
 ```
 
-если строка является presentation/localization concern.
+если строка — задача presentation или локализации.
 
 ---
 
-### Error text как control flow
+### Текст ошибки как управление потоком
 
-```dart id="50xbga"
+```dart
 if (e.toString().contains('closed')) {
   reconnect();
 }
 ```
 
-запрещённый pattern.
+ЗАПРЕЩЕНО.
 
 ---
 
-### Raw exception в BLoC state
+### Сырое исключение в состоянии BLoC/Cubit
 
-```dart id="dhxqob"
+```dart
 class ErrorState {
   final Object error;
 }
 ```
 
-как основной presentation contract.
+как основной контракт отображения.
+
+В коде `PromptFailed.error` (`codelab_client_core/lib/src/queue/prompt_queue.dart`) — `Object`: исключение `codelab_client_acp` как есть, без типизированного сбоя.
 
 ---
 
-### Logging and rethrowing everywhere
+### Журнал и повторный throw везде
 
-```text id="2g0df8"
-layer A logs
-layer B logs
-layer C logs
+```text
+слой A пишет в журнал
+слой B пишет в журнал
+слой C пишет в журнал
 ```
 
-создаёт duplicate noise.
+создаёт дублирующий шум.
 
 ---
 
-## 119. Checklist при добавлении failure
+## 119. Чек-лист при добавлении сбоя
 
-Перед добавлением нового failure type агент ОБЯЗАН определить:
+Перед добавлением нового типа сбоя агент ОБЯЗАН определить:
 
-1. Какой layer владеет failure?
-2. Это expected outcome или unexpected exception?
-3. Нужно ли caller его обрабатывать?
-4. Recoverable ли он?
-5. Retryable ли он?
-6. Terminal ли он для текущей operation?
-7. Как он влияет на lifecycle state?
-8. Как он отображается в presentation?
-9. Какие correlation fields нужны?
-10. Есть ли sensitive context?
-11. Как он логируется?
-12. Какие tests нужны?
+1. Какой слой владеет сбоем?
+2. Это ожидаемый исход или неожиданное исключение?
+3. Должен ли вызывающий его обрабатывать?
+4. Восстановим ли он?
+5. Можно ли его повторить?
+6. Терминален ли он для текущей операции?
+7. Как он влияет на состояние жизненного цикла?
+8. Как он показывается в presentation?
+9. Какие поля корреляции нужны?
+10. Есть ли чувствительный контекст?
+11. Как он журналируется?
+12. Какие тесты нужны?
 
 ---
 
-## 120. Checklist при `catch`
+## 120. Чек-лист при `catch`
 
 Перед добавлением `catch` определить:
 
-1. Почему exception ловится именно здесь?
-2. Может ли этот layer восстановиться?
-3. Меняется ли semantics ошибки?
-4. Нужно ли сохранить cause?
-5. Нужно ли сохранить stack trace?
-6. Нужно ли логировать?
-7. Не будет ли error залогирована ещё раз выше?
-8. Может ли result стать stale?
-9. Что увидит caller?
+1. Почему исключение ловится именно здесь?
+2. Может ли этот слой восстановиться?
+3. Меняется ли семантика ошибки?
+4. Нужно ли сохранить причину?
+5. Нужно ли сохранить стек вызовов?
+6. Нужно ли журналировать?
+7. Не будет ли ошибка записана в журнал ещё раз выше?
+8. Может ли результат устареть?
+9. Что увидит вызывающий?
 10. Что увидит пользователь?
 
-Если ответ только:
+Если ответ только
 
 > чтобы приложение не упало
 
-следует проверить, не находится ли `catch` на неправильном уровне.
+СЛЕДУЕТ проверить, не стоит ли `catch` на неправильном уровне.
 
 ---
 
-## 121. Checklist для user-facing error
+## 121. Чек-лист для ошибки, показываемой пользователю
 
 Перед показом ошибки пользователю проверить:
 
@@ -2113,6 +1964,6 @@ layer C logs
 2. Понятно ли влияние на текущую работу?
 3. Может ли пользователь что-то сделать?
 4. Нужно ли показывать Retry?
-5. Не раскрывается ли sensitive data?
-6. Не показывается ли internal exception text?
-7. Не устарела ли ошибка
+5. Не раскрываются ли чувствительные данные?
+6. Не показывается ли текст внутреннего исключения?
+7. Не устарела ли ошибка?
