@@ -82,10 +82,12 @@
 - параметры конструктора `AcpClientApplication`: `ProtocolPayloadPolicy protocolPayloads = ProtocolPayloadPolicy.metadataOnly` (D3) и `DateTime Function()? clock` (по умолчанию `DateTime.now`; имя — как у `ClientWorkspace`);
 - `Stream<ProtocolFrame> get protocolFrames` — закрывается в `dispose`;
 - `bool get traceAvailable` — `true`, если базовая политика `metadataOnly`; через него `AcpClientBackend` отвечает порту kit (D5);
+- `ProtocolPayloadPolicy get protocolPayloads` — базовая политика, переданная в конструктор (не действующая политика кадров: Trace её не меняет); по ней kit и app решают, что писать в диагностику о сбое (D3, «Текст ошибки агента»);
+- `String describeFailureMetadata(Object error)` — описание сбоя без текста агента для журнала при `metadataOnly` (D3, «Текст ошибки агента»);
 - `void setFrameTrace(bool enabled)` — режим Trace (D17), правила вызова — там же;
 - `extension ProtocolFrameRedaction on ProtocolFrame { ProtocolFrame withoutPayload(); }` — единое правило снятия payload (D17), им пользуются kit и app.
 
-Стандартное имя кода ошибки (`standardErrorName`) — внутренний помощник пакета: его используют `withoutPayload` и `ProtocolFrameRecorder`, вне пакета он нужен только тестам. Если исполнитель оставит его в бареле — это поправка этого абзаца, не новое решение.
+Стандартное имя кода ошибки (`standardErrorName`) — внутренний помощник пакета: его используют `withoutPayload`, `ProtocolFrameRecorder` и `describeFailureMetadata`, вне пакета он нужен только тестам. Если исполнитель оставит его в бареле — это поправка этого абзаца, не новое решение.
 
 Геттера действующей политики и признака «Trace включён» у ядра нет: состояние Trace для хоста держит буфер kit (`ProtocolFrameLog.traceEnabled`, D5), второму источнику истины не из чего возникнуть (`AGENTS.md` §13).
 
@@ -117,9 +119,52 @@
 К записи `protocol_message` применяется только **базовая** политика, Trace её не меняет (D17): при `metadataOnly` запись несёт `direction`, `kind`, `method`, `request_id`, `size` и корреляцию `session_id`, `connection_generation`, но не `payload`. Типы полей записи: `direction` и `kind` — имя значения перечисления (`'outbound'`, `'request'`), `method` — строка или отсутствует, `request_id` — строка `id.toJsonValue().toString()` (как в `event_ignored`; числовой id `5` даёт `'5'`), `size` — `int`; при `full` `payload` — замаскированный `Map`. Поля без значения не пишутся (`dropNullValues`). Это закрывает дефект «полный payload в release» (proposal, п. 1) для встроенного журнала и `protocol.log` одним правилом. Sink `debug-panel` по-прежнему принимает категорию `protocol` (решение 5 `replace-debug-log-panel-with-fluent` не меняется): видимость — фильтр категории, содержимое — политика payload.
 
 
-**Сырые данные в ветках ошибок** (решение пользователя 2026-11-23, ревью безопасности п. 6). Базовая политика действует не только на `protocol_message`, но и на диагностику ядра, которая раньше клала в контекст сырые данные сообщения: `_recordDiagnostic` при сбое декодирования или обработки ответа и запроса (`result`, `params`) и `_skipUnsupportedSessionUpdate` (`payload`). При `metadataOnly` такие записи несут только метаданные — `method`, `requestId`, `session_id`, `sessionUpdate` (если он прочитан), `size`, класс ошибки, — но не `params`, `result` и `payload`. `size` здесь — длина UTF-8 `jsonEncode` сырого значения (`params`, `result` или уведомления); если значение не кодируется в JSON, поле `size` не пишется. При `full` — замаскированные данные, как прежде. Иначе release-сборка хранила бы промпты и содержимое файлов в журнале через ветку ошибки, в обход правила выше. Это касается и причины сбоя: текст исключения декодирования (`cause.toString()`) цитирует фрагменты сообщения, поэтому при `metadataOnly` диагностика этих веток пишет только класс ошибки (`error_class`), без текста причины; при `full` — замаскированный текст, как прежде. Правило действует на любую причину в диагностике ядра, не только в ветках декодирования: текст причины выбирает одно место — `_causeDetail` в `AcpClientApplication`. Это относится и к вложенной причине сбоя транспорта (`AcpTransportException.cause` — `SocketException`, исключение разбора с фрагментом кадра, путь процесса агента), которую `_handleTransportEvent` кладёт в `context['cause']` рядом с `code`: при `metadataOnly` там только класс (дефект, найденный при сверке `error-handling.md` §20, решение пользователя 2026-11-23).
+**Сырые данные в ветках ошибок** (решение пользователя 2026-11-23, ревью безопасности п. 6). Базовая политика действует не только на `protocol_message`, но и на диагностику ядра, которая раньше клала в контекст сырые данные сообщения: `_recordDiagnostic` при сбое декодирования или обработки ответа и запроса (`result`, `params`) и `_skipUnsupportedSessionUpdate` (`payload`). При `metadataOnly` такие записи несут только метаданные — `method`, `requestId`, `session_id`, `sessionUpdate` (если он прочитан), `size`, класс ошибки, — но не `params`, `result` и `payload`. `size` здесь — длина UTF-8 `jsonEncode` сырого значения (`params`, `result` или уведомления); если значение не кодируется в JSON, поле `size` не пишется. При `full` — замаскированные данные, как прежде. Иначе release-сборка хранила бы промпты и содержимое файлов в журнале через ветку ошибки, в обход правила выше. Это касается и причины сбоя: текст исключения декодирования (`cause.toString()`) цитирует фрагменты сообщения, поэтому при `metadataOnly` диагностика этих веток пишет только класс ошибки (`error_class`), без текста причины; при `full` — замаскированный текст, как прежде. Правило действует на любую причину в диагностике ядра, не только в ветках декодирования: текст причины выбирает одно место — `_causeDetail` в `AcpClientApplication`. Это относится и к вложенной причине сбоя транспорта (`AcpTransportException.cause` — `SocketException`, исключение разбора с фрагментом кадра, путь процесса агента), которую `_handleTransportEvent` кладёт в `context['inner_cause']` рядом с `code` (ключ — см. «Текст ошибки агента» ниже): при `metadataOnly` там только класс (дефект, найденный при сверке `error-handling.md` §20, решение пользователя 2026-11-23).
+
+**Текст ошибки агента** (2026-11-23, ревью безопасности: пути того же класса, что п. 6). `JsonRpcError.message` и `JsonRpcError.data` ответа агента — **payload**: агент кладёт туда пути, фрагменты файлов и вывод команд. Правило кадра-ошибки выше («текст `error.message` агента не хранится») при базовой `metadataOnly` действует и на **диагностику и журнал**, а не только на кадры. Разделение такое:
+
+- **Текст для пользователя** — сообщение в транскрипте (`PromptTurn.failureMessage`), баннере соединения (`ConnectionView.failed.message`), выводе CLI (`describeFailure`) и исключение, которое получает вызывающий. Он несёт текст агента **при любой политике**, после `SecretRedactor.redactText`: пользователь должен видеть, почему агент отказал. Это состояние и ответ вызывающему, а не запись журнала; оно не сохраняется на диск.
+- **Текст для журнала** — `DiagnosticEntry` ядра (поток `diagnostics`, `AcpSession.diagnostics`, запись логгера), `WorkspaceDiagnostic` kit и записи `ShellDiagnostics` app. При `metadataOnly` он несёт только метаданные: метод, `request_id`, `session_id`, поколение, код ошибки JSON-RPC (`error_code`), стандартное имя кода (`standardErrorName`; у незнакомого кода — без имени), класс ошибки (`error_class`), код транспортной ошибки (`AcpTransportErrorCode.name`) и постоянный текст CodeLab (`Failed to send prompt`). Текста `error.message`, `error.data`, `toString()` исключения, в которое они вложены, — нет. При `full` — как прежде: текст после `SecretRedactor`.
+
+Единое правило описания — `describeFailureMetadata(Object error)` в `codelab_client_acp` (экспорт из бареля, рядом с `standardErrorName`, которым он пользуется):
+- `JsonRpcError` → `JSON-RPC error <code> (<имя>)`, у незнакомого кода — `JSON-RPC error <code>`;
+- исключение с `cause` типа `JsonRpcError` (`AcpClientApplicationException`) → `<класс>: JSON-RPC error <code> (<имя>)`;
+- `AcpTransportException` → `AcpTransportException(<code.name>)`;
+- прочее → `runtimeType` (класс ошибки).
+
+Сообщение известных исключений CodeLab в `metadataOnly` не используется даже там, где оно — шаблон CodeLab: `AcpClientApplicationException` с ответом-ошибкой собирает текст агента в `message` (`ACP request … failed: <message агента>`), и различать «безопасные» шаблоны по строке нельзя. Метод и id уже есть в контексте записи.
+
+Политику знают через единственный источник — параметр конструктора ядра (D2, геттер `protocolPayloads`); второго параметра у kit и app нет, рассинхронизация невозможна:
+- kit: порт `AgentBackend` получает `ProtocolPayloadPolicy get protocolPayloads`, `AcpClientBackend` отдаёт геттер ядра; `DefaultClientWorkspace` строит текст сбоя для `WorkspaceDiagnostic` общей функцией `describeFailureForDiagnostic(Object error, ProtocolPayloadPolicy policy)` из `codelab_client_core` (`diagnostics.dart`, рядом с `describeFailure`): `full` → `describeFailure(error)`, `metadataOnly` → `describeFailureMetadata(error)`; развилка политики живёт только в ней; ручки сессий получают её так же, как `_onDiagnostic`. `describeFailure` остаётся функцией текста **для пользователя** и не меняется;
+- desktop: `CodeLabShellCubit` передаёт `application.protocolPayloads` в `ShellDiagnostics(payloads: …)`; новый метод `ShellDiagnostics.recordFailure(String what, Object error, {severity, source})` пишет `'$what: <описание>'` через ту же `describeFailureForDiagnostic`. Все записи cubit-ов вида `'… : ${describeFailure(error)}'` и `'… : $error'` идут через него; `record` для постоянного текста остаётся;
+- CLI: отдельной правки нет. Без `--verbose` логгер молчит и `diagnostics` не читается; с `--verbose` политика `full`.
+
+Места и поведение:
+
+| Место | `metadataOnly` | `full` |
+|---|---|---|
+| `AcpClientApplication._completePendingRequest`, ответ-ошибка | `message` = `ACP request <method> failed: <describeFailureMetadata(error)>`; `context` = `method`, `requestId`, `error_code`; без `error` (`toJson()` с `message` и `data`); `cause` — класс (`_recordDiagnostic`) | прежнее: текст агента и `context['error']` после `SecretRedactor` |
+| то же, исключение вызывающему | текст агента (нужен UI, `_promptFailureOf`) | то же |
+| `_requireCurrentAttempt`, debug `attempt_superseded` | `error_class` и `error_code` (если причина — `JsonRpcError`), без `error` | `error` = `redactText('$error')`, как прежде |
+| `sendPrompt`, `failureMessage` | `redactText(error.toString())` — текст для транскрипта | то же |
+| `sendPrompt`, `PromptFailure.message` (`AgentPromptFailure`, `RequestPromptFailure`, `UnknownPromptFailure`) | `redactText` одним местом ядра при построении — его показывают заметка desktop и CLI (в headless — stderr) | то же |
+| `_logDiagnosticEntry` | причина вложенной ошибки — ключ `inner_cause`, поле `DiagnosticEntry.cause` — ключ `cause`; ключи не перекрывают друг друга | то же |
+| `ClientWorkspace`: загрузка и список сессий, ход (оба места `Failed to send prompt`), отмена, ответ на одобрение, опция конфигурации | префикс CodeLab + `describeFailureMetadata(error)` | префикс + `describeFailure(error)`, как прежде |
+| `WorkspaceRestorer` — чтение и запись снимка, восстановление (`session/load`); политика через `RestoreHost.diagnosticFailureText` от того же бэкенда | префикс CodeLab + `describeFailureMetadata(error)` | префикс + `describeFailure(error)` |
+| `ProfileCommitter` (`ProfileSaveFailed`, `RemoveFailed`, `ProfileRemoved`) | не меняется: текст для пользователя об ошибке хранилища профилей и секретов, не диагностика и не журнал | то же |
+| `ClientWorkspace._publishFailure` | `describeFailure(error)` — текст баннера для пользователя (сейчас `'$error'` без маскирования у прочих объектов) | то же |
+| desktop `connection_cubit` (старт, перезапуск, вытесненная попытка), `sessions_cubit` (создание сессии) | через `recordFailure`: префикс + описание без текста агента | префикс + `describeFailure(error)` |
+
+Ключ причины (`_logDiagnosticEntry`): контекст транспортного сбоя кладёт вложенную причину (`AcpTransportException.cause`) под ключ `inner_cause`, а не `cause`; `cause` в записи журнала — только поле `DiagnosticEntry.cause`. Раньше `...entry.context` и `'cause': entry.cause` писали один ключ, и одно значение молча терялось. Содержимое `inner_cause` — по правилу причины сбоя транспорта (класс при `metadataOnly`, замаскированный текст при `full`). Форма `DiagnosticEntry` не меняется (structured-logging «Существующий контракт diagnostics-потока не меняется»): меняется только имя ключа в `context`.
 
 Альтернативы:
+- считать текст ошибки агента не payload и только маскировать секреты — отклонено: маскирование ловит токены, но не пути и фрагменты файлов; кадр-ошибка уже скрывает этот текст (D3), журнал раскрыл бы его в обход;
+- убрать текст агента и из UI в release — отклонено ограничением продукта: пользователь должен видеть причину отказа;
+- второй параметр политики у `ClientWorkspace` и `ShellDiagnostics` из composition root — отклонено: два источника истины, хост, забывший один, получил бы разные правила у ядра и kit;
+- использовать `traceAvailable` как признак политики — отклонено: имя про Trace кадров, а не про журнал; при будущем изменении Trace правило журнала сломалось бы молча;
+- различать «безопасные» сообщения исключений CodeLab по типу — отклонено: `AcpClientApplicationException` несёт и шаблоны, и текст агента в одном поле.
+
+Альтернативы политики payload:
 - политика по умолчанию `full` — отклонено: забытый параметр в новом хосте открыл бы полный payload в release (безопасность — приоритет 1);
 - обязательный параметр без значения по умолчанию — отклонено: правка десятков тестов ядра без пользы для безопасности; значение по умолчанию и так безопасное;
 - хранить payload и прятать его в UI release-сборки — отклонено: макет требует «Release builds keep metadata only», данные в памяти попадали бы в Copy и Export.
@@ -389,10 +434,10 @@ Cubit создаётся в root scope (как `TerminalTabsCubit`), поэто�
 
 | Пакет | Слой | Что |
 |---|---|---|
-| `codelab_client_acp` | application, domain | `ProtocolFrame`, `ProtocolPayloadPolicy`, `ProtocolFrameRecorder`, поток, `setFrameTrace`; правило пары в `SecretRedactor` |
-| `codelab_client_core` | порт `AgentBackend`, `src/protocol/` | `protocolFrames`, `setFrameTrace`, `ProtocolFrameLog` (область не знает; Trace и снятие payload — да) |
+| `codelab_client_acp` | application, domain | `ProtocolFrame`, `ProtocolPayloadPolicy`, `ProtocolFrameRecorder`, поток, `setFrameTrace`, `protocolPayloads`, `describeFailureMetadata`; правило пары в `SecretRedactor` |
+| `codelab_client_core` | порт `AgentBackend`, `src/protocol/`, `src/workspace/` | `protocolFrames`, `setFrameTrace`, `protocolPayloads`, `ProtocolFrameLog` (область не знает; Trace и снятие payload — да); текст сбоя в `WorkspaceDiagnostic` по политике (D3) |
 | `apps/codelab_cli` | composition root | политика payload |
-| `apps/codelab_desktop` | `features/protocol/{application,presentation}`, `core/platform`, `app/` | Cubit, мапперы, экспорт, порт сохранения, адаптер `LogRecordSource`, привязки |
+| `apps/codelab_desktop` | `features/protocol/{application,presentation}`, `features/workbench/application`, `core/platform`, `app/` | Cubit, мапперы, экспорт, порт сохранения, адаптер `LogRecordSource`, привязки; `ShellDiagnostics.recordFailure` (D3) |
 | `codelab_ui` | atomics, organisms | `actions`, ось разделителя, организм, записи каталога |
 
 Направление зависимостей прежнее: app → kit → `codelab_client_acp` → `codelab_acp_protocol`; кит UI не зависит от внутренних пакетов. Новых зависимостей в `pubspec.yaml` нет; allowlist kit (`{codelab_client_acp, codelab_acp_protocol, codelab_acp_transports, freezed_annotation, meta, collection, async}`) хватает. Allowlist ядра агента (PKG-2) не затронут. `codelab_client_core` и `codelab_client_acp` остаются web-безопасными: `dart:convert` и `dart:async` — да, `dart:io` — нет.
@@ -462,6 +507,7 @@ PackageRule(
 - **Правило пары `name`/`value`** может скрыть безвредное значение у имени со словом `token`/`auth` (`{"name": "AUTHOR", "value": …}` — `auth` совпадает). → Это уже свойство общего правила имён (`author` в ключе скрывается и сейчас); отдельных исключений не вводим.
 - **Удаление карточек Inspector** — в release-сборке сырые аргументы и результат вызова без одобрения больше не видны (D9). → Принято решением пользователя 2026-11-22 (Q8); руководство app обновляется в этом change; в debug-сборке они есть в кадре `session/update · tool_call_update`.
 - **Утечка через `Copy`** в буфер обмена ОС. → Копируется только замаскированное; в release без Trace — только метаданные.
+- **Журнал release-сборки без текста ошибки агента** (D3, «Текст ошибки агента»): по журналу release не понять, *что* написал агент, только метод, код и класс. → Пользователь видит текст в транскрипте и баннере; для разбора — режим Trace (кадр-ошибка с `detail` после маскирования) или debug-сборка.
 - **Trace оставлен включённым надолго** — промпты и файлы копятся в памяти (до 8 MiB). → Видимая индикация, сброс при перезапуске, выключение снимает payload (D17).
 
 ## Migration Plan

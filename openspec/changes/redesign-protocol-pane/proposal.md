@@ -61,9 +61,9 @@
   - MODIFIED «Паттерны взаимодействия agent workbench»: панель Protocol показывает сессию в фокусе, записей инспектора больше нет;
   - ADDED «Панель Protocol: виды Frames и Log», «Таблица кадров», «Выбранный кадр», «Вид Log панели Protocol», «Pause, Clear и Export панели Protocol», «Режим Trace панели Protocol», «Клавиатура панели Protocol».
 - `acp-protocol-client`: ADDED «Кадры ACP клиента».
-- `acp-client-kit`: ADDED «Буфер кадров протокола».
+- `acp-client-kit`: ADDED «Буфер кадров протокола»; MODIFIED «Диагностика без секретов»: текст сбоя в диагностике по базовой политике payload, без текста ошибки агента при `metadataOnly`.
 - `structured-logging`:
-  - MODIFIED «Protocol tracing выключен по умолчанию в release»: встроенный журнал release-сборки тоже без payload; Trace кадров журнал не меняет;
+  - MODIFIED «Protocol tracing выключен по умолчанию в release»: встроенный журнал release-сборки тоже без payload; Trace кадров журнал не меняет; текст ответа-ошибки агента (`error.message`, `error.data`) — payload и для диагностики; ключ `inner_cause`;
   - MODIFIED «Существующий контракт diagnostics-потока не меняется»: без ссылки на удаляемый `inspector_pane.dart`.
 - `approval-safety`: ADDED «Секрет в паре name/value».
 - `app-settings`: MODIFIED «Страница «Keyboard»: строки таблицы»: строки `toggle-protocol`, `protocol-frame-move`, `protocol-record-move`.
@@ -71,10 +71,10 @@
 
 ## Impact
 
-- **`codelab_client_acp`** (`[client]`): `ProtocolFrame`, `ProtocolPayloadPolicy`, внутренний `ProtocolFrameRecorder`, поток `AcpClientApplication.protocolFrames`, параметры конструктора `protocolPayloads` и `clock`, `traceAvailable`, `setFrameTrace`, перечисления кадра, расширение `ProtocolFrameRedaction.withoutPayload()`, правило пары в `SecretRedactor` и линейное время маскирования текста, метаданные вместо сырых данных в диагностике ошибок при `metadataOnly`. Публичный API пакета расширяется.
-- **`codelab_client_core`** (`[client]`): `AgentBackend.protocolFrames`, `ProtocolFrameLog`, `ClientWorkspace.protocolFrames`.
+- **`codelab_client_acp`** (`[client]`): `ProtocolFrame`, `ProtocolPayloadPolicy`, внутренний `ProtocolFrameRecorder`, поток `AcpClientApplication.protocolFrames`, параметры конструктора `protocolPayloads` и `clock`, `traceAvailable`, `setFrameTrace`, перечисления кадра, расширение `ProtocolFrameRedaction.withoutPayload()`, правило пары в `SecretRedactor` и линейное время маскирования текста, метаданные вместо сырых данных и текста ошибки агента в диагностике ошибок при `metadataOnly`, геттер `protocolPayloads`, `describeFailureMetadata`. Публичный API пакета расширяется.
+- **`codelab_client_core`** (`[client]`): `AgentBackend.protocolFrames`, `AgentBackend.protocolPayloads`, `ProtocolFrameLog`, `ClientWorkspace.protocolFrames`; текст сбоя `WorkspaceDiagnostic` по политике.
 - **`apps/codelab_cli`** (`[client]`): composition root передаёт `protocolPayloads` по `--verbose`.
-- **`apps/codelab_desktop`** (`[desktop]`): feature `lib/features/protocol/` (`ProtocolPaneCubit`, мапперы, порт `LogRecordSource`), порт `ProtocolExportSaver` в `lib/core/platform/`, удаление `inspector_pane.dart`, `debug_log_pane.dart`, `inspectorEntries`; привязки сочетаний; ARB `en`/`ru`.
+- **`apps/codelab_desktop`** (`[desktop]`): feature `lib/features/protocol/` (`ProtocolPaneCubit`, мапперы, порт `LogRecordSource`), порт `ProtocolExportSaver` в `lib/core/platform/`, удаление `inspector_pane.dart`, `debug_log_pane.dart`, `inspectorEntries`; `ShellDiagnostics.recordFailure` (журнал сбоев без текста агента при `metadataOnly`); привязки сочетаний; ARB `en`/`ru`.
 - **`codelab_ui`** (`[desktop]`): `CodeLabDockTab.actions`, ось у `CodeLabResizeHandle`, организм `CodeLabProtocolPane`, записи каталога `CodeLabShortcut`.
 - **Сторож** (`[desktop]`): правило для `apps/codelab_desktop/lib/features/protocol/application`.
 - **`[protocol]`, `[agent]`** — задач нет: модели ACP, транспорты, фикстуры и ядро агента не меняются.
