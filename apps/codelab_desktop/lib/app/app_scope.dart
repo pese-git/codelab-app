@@ -2108,10 +2108,15 @@ class CodeLabBootstrap extends StatefulWidget {
     this.appearance,
     this.systemAccentSource,
     this.themeLibrary,
+    this.appLogger,
     super.key,
   });
 
   final Widget child;
+
+  /// Логгер событий `app.*` (выход, сбой закрытия scope); без него —
+  /// [codeLabAppLogger]. Тесты передают записывающий логгер.
+  final Logger? appLogger;
 
   /// Начальное состояние языка из `main` (D2); без него — `en`.
   final AppLanguageStart? language;
