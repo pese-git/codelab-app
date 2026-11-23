@@ -66,6 +66,7 @@ final _authorizationPattern = RegExp(
 /// Почему три отдельных шаблона: camelCase-признак регистрозависим (иначе
 /// `monkey` и `turnkey` совпали бы), остальные — нет, а флагов внутри одного
 /// выражения Dart не поддерживает.
+final _keyWordPattern = RegExp('key', caseSensitive: false);
 final _keySuffixPattern = RegExp(r'[_-]key$', caseSensitive: false);
 final _accessKeyPattern = RegExp(r'access[_-]?key', caseSensitive: false);
 final _camelKeySuffixPattern = RegExp(r'[a-z0-9]Key$');
@@ -202,12 +203,23 @@ final class SecretRedactor {
   /// `DATABASE_URL`, D4), затем присваивания `имя=значение` (D3). Каждое
   /// правило работает за линейное время (D5).
   String redactText(String value) {
-    final withoutUserinfo = _redactPrivateKeys(value)
-        .replaceAllMapped(_authorizationPattern, (match) {
-          return '${match.group(1)} $redactedSecret';
-        })
-        .replaceAll(_urlUserinfoPattern, '://$redactedSecret@');
-    return _redactAssignments(withoutUserinfo);
+    // Быстрые пути: каждое правило запускается, только если в тексте есть его
+    // обязательная подстрока. Режим кадров `full` маскирует payload каждого
+    // кадра стриминга, и без этих проверок он дороже базового прогона больше
+    // чем в 1,5 раза (`protocol_frame_cost_test.dart`, change
+    // `redesign-protocol-pane`). Результат от проверок не зависит.
+    var text = value;
+    if (text.contains('-----BEGIN')) text = _redactPrivateKeys(text);
+    text = text.replaceAllMapped(_authorizationPattern, (match) {
+      return '${match.group(1)} $redactedSecret';
+    });
+    if (text.contains('://')) {
+      text = text.replaceAll(_urlUserinfoPattern, '://$redactedSecret@');
+    }
+    if (text.contains('=') || text.contains(':')) {
+      text = _redactAssignments(text);
+    }
+    return text;
   }
 
   /// Заменяет PEM-блоки приватного ключа на `<redacted>` (D8).
@@ -287,6 +299,9 @@ final class SecretRedactor {
   /// считаются; `cache_key` и `hotKey` скрываются осознанно (цена правила,
   /// Q4). Общий список признаков для имён map и для текста (D3).
   bool _isKeyLikeName(String name) {
+    // Без подстроки `key` (в любом регистре) ни один признак не совпадёт;
+    // проверка дешевле трёх шаблонов на каждом ключе каждого кадра.
+    if (!_keyWordPattern.hasMatch(name)) return false;
     return _keySuffixPattern.hasMatch(name) ||
         _accessKeyPattern.hasMatch(name) ||
         _camelKeySuffixPattern.hasMatch(name);
