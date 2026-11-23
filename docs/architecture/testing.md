@@ -1,124 +1,136 @@
-# Testing strategy в ACP Client
+# Стратегия тестирования в CodeLab
 
-Этот документ определяет стратегию тестирования ACP Client и правила выбора уровня тестов.
+Документ задаёт стратегию тестирования CodeLab — клиентов (desktop, CLI), встроенного Dart-агента и общих пакетов — и правила выбора уровня теста.
 
 Цели:
 
-* проверять correctness на минимально необходимом уровне;
-* держать основную ACP/application logic тестируемой без Flutter;
-* использовать `codelab_acp_testing` для reusable test infrastructure;
-* избегать чрезмерно тяжёлых integration tests;
-* покрывать lifecycle, streaming, reconnect и permission races;
-* обеспечивать предсказуемую validation strategy для AI coding agents и CI.
+* проверять корректность на минимально необходимом уровне;
+* держать основную логику ACP и приложения тестируемой без Flutter;
+* использовать `codelab_acp_testing` как переиспользуемую тестовую инфраструктуру;
+* избегать чрезмерно тяжёлых интеграционных тестов;
+* покрывать жизненный цикл, потоки, переподключение и гонки разрешений;
+* дать AI coding agents и CI предсказуемую стратегию проверки.
 
-Связанные документы:
+Общие правила — корневой `AGENTS.md` (§2, §5, §9, §12, §17, §19, §20, §21), [`layers-and-dependencies.md`](layers-and-dependencies.md), [`acp-boundary.md`](acp-boundary.md), [`session-lifecycle.md`](session-lifecycle.md), [`streaming.md`](streaming.md), [`concurrency.md`](concurrency.md), [`permissions.md`](permissions.md), [`state-management.md`](state-management.md), [`platform-integration.md`](platform-integration.md), [`error-handling.md`](error-handling.md), [`observability.md`](observability.md). TDD ядра агента — `packages/dart/codelab_agent_core/AGENTS.md` §2 и [план миграции §9.0](proposals/dart-agent-and-clients/09-00-migration-plan.md); формат golden-фикстур ACP — [`proposals/agent-core/14-golden-fixtures.md`](proposals/agent-core/14-golden-fixtures.md).
 
-* `AGENTS.md`
-* `docs/architecture/layers-and-dependencies.md`
-* `docs/architecture/acp-boundary.md`
-* `docs/architecture/session-lifecycle.md`
-* `docs/architecture/streaming.md`
-* `docs/architecture/concurrency.md`
-* `docs/architecture/permissions.md`
-* `docs/architecture/state-management.md`
-* `docs/architecture/platform-integration.md`
-* `docs/architecture/observability.md`
+Термины:
+
+* **Уровень теста** — ступень пирамиды: протокол, транспорт, ядро клиента, Cubit, виджет, интеграция (§1, §90).
+* **Модульный тест** (unit test) — тест одной единицы логики без реальной сети, процессов и файловой системы пользователя (§3, §51, §52).
+* **Виджет-тест** (widget test) — тест виджетов через `testWidgets` из `flutter_test`, без настоящего окна (§28).
+* **Интеграционный тест** (integration test) — тест нескольких реальных слоёв вместе: на Dart VM — тесты пакетов с реальными процессами и сокетами, на устройстве — `apps/codelab_desktop/integration_test/` (§5, §32, §36).
+* **e2e** — приёмочный тест исполняемого файла целиком: PTY-e2e CLI (`test:e2e:cli:*`) и тесты app на macOS (`test:e2e:app:*`) (§36, §74).
+* **Golden-фикстура ACP** — JSON-сценарий обмена кадрами между клиентом и агентом; корпус проверяет обе стороны протокола (§12).
+* **Conformance** — прогон корпуса golden-фикстур против стороны протокола (§12, §74).
+* **Двойник** (test double) — подмена зависимости в тесте: fake — упрощённая работающая реализация со своим состоянием, mock — запись и проверка вызовов (§64, §65).
+* **Поддельные часы** (fake clock) — источник времени, который двигает тест (§54, §55).
+* **Флейк** (flaky test) — тест, который на одном и том же коде то проходит, то падает (§61).
+* **Сторож** — тестовый пакет `codelab_architecture_tests` (`melos run guard`), проверяющий границы пакетов (§71).
+* **Затронутое** (affected) — изменённые пакеты и все пакеты, которые от них зависят; объём проверки pull request (§74, §75).
+* **Полный прогон** — все шаги `melos run check`; в CI — все джобы (§74, §76).
+* **Доказательство строки Must** — фикстура или тест, которые закрывают строку Must матрицы целей агента (§74.1).
+
+Где в коде. Скрипты проверок — секция `melos:` корневого `pubspec.yaml`. `check` выполняет шаги `check-format`, `analyze`, `guard`, `prompts:check`, `l10n:check`, `test`, `test:e2e:cli:dart-agent`, `test:e2e:cli:embedded`, `protocol-conformance`, `conformance:client`, `conformance:agent`, `conformance:embedded`, `web-compile`. Вне `check`: `format`, `analyze:packages` (анализ по пакетам для суженного CI), `test:dart` (Dart-пакеты через `fvm dart test`), `test:e2e:cli` (CLI против scripted stdio-агента; эти тесты входят и в `test`), `test:e2e:cli:python-agent` (только локально), `build:agent`, `build:cli` и `test:e2e:app:*` — тесты app на macOS, только в `release/*`: по одному файлу (`stdio`, `permission`, `fs`, `open-project`, `terminal`, `plan-checklist`, `prompt-queue`, `multi-session`, `command-palette`, `transcript-rendering`, `language`, `appearance`, `onboarding`, `legal`, `usage` — два файла) и все файлы — `test:e2e:app:dart-agent` и `test:e2e:app:embedded`. Тесты каждого пакета и приложения — в его `test/`; двойники и обвязка — в `test/support/` (например, `FakeClientWorkspace`, `FakeSessionHandle` и `CodeLabTestBinding` в `apps/codelab_desktop/test/support/`). Интеграционные тесты desktop — `apps/codelab_desktop/integration_test/` (`*_flow_test.dart`, общая настройка `flutter_test_config.dart`, обвязка `support/`, сценарии модели `llm_scripts/`); `apps/codelab_desktop/test_driver/app.dart` — точка входа с расширением `flutter_driver` для управления запущенным app, тестов в ней нет. PTY-e2e CLI — `apps/codelab_cli/test/e2e/` (псевдотерминал `support/pty_process.dart`, выбор агента `support/e2e_agent.dart`, теги `scripted-only` и `python-agent` в `apps/codelab_cli/dart_test.yaml`). Общая ACP-инфраструктура — `packages/dart/codelab_acp_testing`: `FakeAcpTransport`, `FakeTerminalProcessRunner`, скриптовый stdio-агент (`writeCodelabCompatibleStdioAgent`), корпус golden-фикстур `fixtures/acp/` со схемой `_schema.json`, драйверы `runClientFixture`, `runAgentFixture`, `runAgentFixtureOver` и агент-повторитель `FixtureReplayAgent`. Тестовые барели агентской стороны: `package:codelab_agent_core/testing.dart` (`FakeClock`, `ScriptedStreamFunction`, `RecordingLogger`, `SequentialIdGenerator`), `package:codelab_agent_io/testing.dart` (сценарий модели), `package:codelab_agent_mcp/testing.dart` (поддельный MCP-сервер `FakeMcpServer`) и `package:codelab_embedded/testing.dart` (сценарный открыватель встроенного агента). Библиотек моков (`mockito`, `mocktail`) и `bloc_test` в репозитории нет: двойники пишутся вручную, часть — на базе `Fake` из `package:test`. Сторож — `packages/dart/codelab_architecture_tests` (`melos run guard`; правила импорта `test/support/rules.dart`, allowlist-ы `test/pubspec_allowlist_test.dart`). CI — `.github/workflows/ci.yml`: джобы `scope`, `checks` (матрица по джобам `format`, `analyze`, `test`, `conformance`, `guard`, `l10n`, `web-compile`, `e2e-cli-dart`, `e2e-cli-embedded`), `site`, `parity` и итоговый `ci`; матрицу считает `tool/ci/affected.dart`, логика выбора затронутого — `tool/ci/ci_scope.dart` (§74).
 
 ---
 
 ## 1. Основной принцип
 
-Тест должен находиться на минимально необходимом уровне.
+Тест ДОЛЖЕН находиться на минимально необходимом уровне.
 
 Предпочтительная пирамида:
 
 ```text
-                Integration / E2E
-                     ▲
-                     │
-                 Widget tests
-                     ▲
-                     │
-                  BLoC tests
-                     ▲
-                     │
-        Application / client-core tests
-                     ▲
-                     │
-          Protocol / pure Dart unit tests
+                Интеграционные / e2e
+                         ▲
+                         │
+                   Виджет-тесты
+                         ▲
+                         │
+                  Тесты BLoC/Cubit
+                         ▲
+                         │
+          Тесты приложения / ядра клиента
+                         ▲
+                         │
+     Протокольные / модульные тесты на чистом Dart
 ```
 
-Чем ниже уровень, тем быстрее и детерминированнее должен быть тест.
+Чем ниже уровень, тем быстрее и детерминированнее ДОЛЖЕН быть тест.
+
+В коде нижние уровни — тесты Dart-пакетов `codelab_acp_*`, `codelab_client_*`, `codelab_agent_*`, `codelab_setup`, `codelab_embedded` на `package:test`; уровень Cubit и виджетов — `apps/codelab_desktop/test/` и `packages/flutter/codelab_ui/test/` на `flutter_test`; верхний — интеграционные тесты пакетов на Dart VM, PTY-e2e CLI и `apps/codelab_desktop/integration_test/` (§36, §74).
 
 ---
 
-## 2. Тестировать behavior, а не implementation
+## 2. Тестировать поведение, а не реализацию
 
-Тест должен проверять observable semantics.
+Тест ДОЛЖЕН проверять наблюдаемую семантику.
 
-Предпочтительно:
-
-```text
-given:
-  connection lost
-
-when:
-  reconnect succeeds
-
-then:
-  session returns to ready
-```
-
-вместо:
+СЛЕДУЕТ писать так (иллюстративный пример):
 
 ```text
-method _retryInternal called exactly 2 times
+дано:
+  соединение потеряно
+
+когда:
+  переподключение удалось
+
+тогда:
+  сессия снова готова
 ```
 
-если конкретный внутренний вызов не является частью contract.
+а не так:
+
+```text
+метод _retryInternal вызван ровно 2 раза
+```
+
+если конкретный внутренний вызов не является частью контракта.
 
 ---
 
-## 3. Pure Dart first
+## 3. Сначала чистый Dart
 
-Если behavior можно протестировать без Flutter, следует использовать pure Dart test.
+Если поведение можно проверить без Flutter, СЛЕДУЕТ писать тест на чистом Dart.
 
 Это особенно относится к:
 
-* ACP protocol;
-* serialization;
-* transport abstractions;
+* протоколу ACP;
+* сериализации;
+* абстракциям транспорта;
 * `codelab_client_acp`;
-* state machines;
-* permission policy;
-* reconnect logic;
-* streaming reducers;
-* error mapping.
+* автоматам состояний;
+* политике разрешений;
+* логике переподключения;
+* редьюсерам потоков;
+* маппингу ошибок.
 
-Не следует поднимать Flutter binding без необходимости.
+Поднимать Flutter binding без необходимости НЕ СЛЕДУЕТ.
+
+В коде Dart-пакеты под `packages/dart/` тестируются на `package:test` без Flutter binding. Скрипт `melos run test` запускает их тем же раннером `fvm flutter test`, что и Flutter-пакеты; через `fvm dart test` их гоняет `melos run test:dart` (в `check` не входит). Общий клиентский слой `codelab_client_core` и протокольный клиент `codelab_client_acp` тестируются без Flutter, хотя их потребитель — app.
 
 ---
 
-## 4. Flutter tests
+## 4. Flutter-тесты
 
 `flutter_test` используется для:
 
-* widgets;
-* BLoC/Cubit presentation behavior;
-* rendering;
-* navigation/presentation integration;
-* Fluent UI components;
+* виджетов;
+* поведения BLoC/Cubit, обслуживающего представление;
+* отрисовки;
+* связки навигации и представления;
+* компонентов Fluent UI;
 * `codelab_ui`.
 
-Flutter test не должен быть единственным способом проверки core behavior.
+Flutter-тест НЕ ДОЛЖЕН быть единственным способом проверки поведения ядра.
 
 ---
 
-## 5. Integration tests
+## 5. Интеграционные тесты
 
-`integration_test` используется для сценариев, где важно проверить несколько реальных layers вместе.
+`integration_test` используется для сценариев, где важно проверить несколько реальных слоёв вместе.
 
-Например:
+Например (иллюстративные схемы):
 
 ```text
 UI
@@ -127,7 +139,7 @@ BLoC
   ↓
 application
   ↓
-fake ACP agent
+поддельный ACP-агент
 ```
 
 или:
@@ -135,59 +147,63 @@ fake ACP agent
 ```text
 codelab_desktop
   ↓
-ACP client
+ACP-клиент
   ↓
-stdio transport
+stdio-транспорт
   ↓
-test process
+тестовый процесс
 ```
 
-Integration test не должен заменять unit coverage.
+Интеграционный тест НЕ ДОЛЖЕН заменять модульное покрытие.
+
+В коде пакет `integration_test` подключён только в `apps/codelab_desktop`; эти тесты идут на macOS и запускаются только в ветке `release/<version>` (корневой `AGENTS.md` §21). Интеграционные тесты на Dart VM — с реальными процессами, сокетами и временными каталогами — лежат в обычных `test/` пакетов (`codelab_acp_transports`, `apps/codelab_agent`, `codelab_embedded` и др.) и входят в `melos run test`.
 
 ---
 
 ## 6. `codelab_acp_testing`
 
-Package:
+Пакет
 
 `packages/dart/codelab_acp_testing`
 
-предназначен для reusable ACP-specific testing infrastructure.
+предназначен для переиспользуемой тестовой инфраструктуры, специфичной для ACP.
 
-Он может содержать:
+Он МОЖЕТ содержать:
 
-* fake transports;
-* fake ACP agent;
-* fixtures;
-* builders;
-* protocol message factories;
-* request/session helpers;
-* deterministic stream controllers;
-* lifecycle assertions.
+* поддельные транспорты;
+* поддельного ACP-агента;
+* фикстуры;
+* билдеры;
+* фабрики протокольных сообщений;
+* помощники для запросов и сессий;
+* детерминированные контроллеры потоков;
+* проверки жизненного цикла.
 
-Production code НЕ ДОЛЖЕН зависеть от `codelab_acp_testing`.
+Рабочий код (production code) НЕ ДОЛЖЕН зависеть от `codelab_acp_testing`.
+
+В коде пакет содержит `FakeAcpTransport`, `FakeTerminalProcessRunner`, скриптовый stdio-агент для тестов с реальным процессом, корпус golden-фикстур `fixtures/acp/`, их загрузчик и сравнение кадров, драйверы проигрывания против клиента и агента и агента-повторителя (`README.md` пакета). Сам пакет не web-безопасен: загрузчик фикстур и скрипты агентов используют `dart:io`.
 
 ---
 
-## 7. Test dependency direction
+## 7. Направление тестовых зависимостей
 
-Допустимо:
+МОЖНО:
 
 ```text
-codelab_client_acp tests
+тесты codelab_client_acp
     ↓
 codelab_acp_testing
 ```
 
-Допустимо:
+МОЖНО:
 
 ```text
-codelab_desktop tests
+тесты codelab_desktop
     ↓
 codelab_acp_testing
 ```
 
-Недопустимо:
+ЗАПРЕЩЕНО:
 
 ```text
 codelab_client_acp/lib
@@ -195,95 +211,99 @@ codelab_client_acp/lib
 codelab_acp_testing
 ```
 
-Test infrastructure не должна проникать в production API.
+Тестовая инфраструктура НЕ ДОЛЖНА проникать в API рабочего кода.
 
 Единственное исключение — `apps/codelab_cli`: рабочая команда `codelab test-scenario` проигрывает
 golden-фикстуры против агента, поэтому `codelab_acp_testing` — её обычная зависимость. Импорт
 `package:codelab_acp_testing/` разрешён только из `apps/codelab_cli/lib/src/scenario/`, это
 проверяет сторож `melos run guard` (design.md change `add-codelab-cli`, D3).
 
----
-
-## 8. Protocol tests
-
-`codelab_acp_protocol` должен иметь focused tests на:
-
-* serialization;
-* deserialization;
-* required fields;
-* optional fields;
-* unknown fields;
-* invalid shape;
-* protocol version;
-* round-trip;
-* compatibility.
+В коде исключение CLI держат правило `rules.dart` для `apps/codelab_cli/lib/src` (`exclude: ['scenario/']`) и `cliAllowlist`; у остальных пакетов `codelab_acp_testing` не пускают в `dependencies` allowlist-ы сторожа, но не у всех пакетов allowlist есть (`layers-and-dependencies.md` §42). Отдельно от `codelab_acp_testing` у агентской стороны есть тестовые барели `testing.dart` (ядро, `codelab_agent_io`, `codelab_embedded`): сценарий модели нужен рабочему бинарю `codelab-agent --llm-script` (`apps/codelab_agent/lib/src/host/`) и драйверу `test-scenario`, а сторож держит `package:codelab_agent_io/testing.dart` внутри слоя `lib/src/testing/` моста `codelab_embedded` и запрещает `package:codelab_embedded/testing.dart` в `lib/` desktop (корневой `AGENTS.md` §5).
 
 ---
 
-## 9. Serialization tests
+## 8. Протокольные тесты
+
+`codelab_acp_protocol` ДОЛЖЕН иметь сфокусированные тесты на:
+
+* сериализацию;
+* десериализацию;
+* обязательные поля;
+* необязательные поля;
+* неизвестные поля;
+* неверную форму;
+* версию протокола;
+* преобразование туда-обратно (round-trip);
+* совместимость.
+
+В коде — `packages/dart/codelab_acp_protocol/test/` (например, `json_rpc_codec_test.dart`, `acp_method_codec_test.dart`, `session_update_test.dart`, `response_tolerance_test.dart`, `session_update_tolerance_test.dart`, `initialize_test.dart`); их запускает и `melos run protocol-conformance`.
+
+---
+
+## 9. Тесты сериализации
 
 Проверяют:
 
 ```text
-model
+модель
   ↓
-wire representation
+представление на проводе
 ```
 
-Следует проверять meaningful contract fields, а не случайный порядок map keys.
+СЛЕДУЕТ проверять значимые поля контракта, а не случайный порядок ключей map.
 
 ---
 
-## 10. Deserialization tests
+## 10. Тесты десериализации
 
 Проверяют:
 
 ```text
-wire representation
+представление на проводе
   ↓
-typed model
+типизированная модель
 ```
 
-Обязательные сценарии:
+ДОЛЖНЫ быть покрыты сценарии:
 
-* valid payload;
-* missing required field;
-* wrong field type;
-* unknown optional field;
-* unsupported shape.
+* корректный payload;
+* отсутствует обязательное поле;
+* неверный тип поля;
+* неизвестное необязательное поле;
+* неподдерживаемая форма.
 
 ---
 
-## 11. Round-trip tests
+## 11. Тесты туда-обратно
 
-Для stable protocol models полезно:
+Для стабильных протокольных моделей полезна проверка:
 
 ```text
-model
+модель
   ↓
-serialize
+сериализация
   ↓
-deserialize
+десериализация
   ↓
-equivalent model
+эквивалентная модель
 ```
 
-Round-trip не заменяет explicit schema tests.
+Проверка туда-обратно не заменяет явных тестов схемы.
 
 ---
 
-## 12. Golden protocol fixtures
+## 12. Golden-фикстуры протокола
 
-Для крупных protocol messages допустимо хранить JSON fixtures.
+Для крупных протокольных сообщений МОЖНО хранить JSON-фикстуры.
 
-Fixtures должны:
+Фикстуры ДОЛЖНЫ:
 
 * быть небольшими;
-* отражать реальные protocol cases;
-* не содержать secrets;
+* отражать реальные протокольные случаи;
+* не содержать секретов;
 * иметь понятное имя.
 
-Например:
+Например (иллюстративная раскладка):
 
 ```text
 test/fixtures/
@@ -292,75 +312,85 @@ test/fixtures/
 └── invalid_missing_id.json
 ```
 
----
-
-## 13. Compatibility tests
-
-Если поддерживается compatibility, обязательны тесты на:
-
-* older supported version;
-* unknown optional fields;
-* newer extension fields;
-* unsupported version behavior.
+В коде главный корпус — сценарии обмена кадрами, а не отдельные сообщения: `packages/dart/codelab_acp_testing/fixtures/acp/` — плоский каталог файлов `<область>-<сценарий>[-<исход>].json` с `id` `acp/<имя>`, формат — `fixtures/acp/_schema.json` и [`proposals/agent-core/14-golden-fixtures.md`](proposals/agent-core/14-golden-fixtures.md), требования — спецификация `acp-golden-fixtures` (`openspec/specs/acp-golden-fixtures/spec.md`). У каждой фикстуры поле `spec` содержит хотя бы одну ссылку `<файл>.md#<якорь>` на `docs/protocols/acp/protocol/`; существование файла и якоря проверяет `fixtures_load_test.dart` (FIX-1). Новая фикстура и изменение ожидаемого кадра сопровождаются ссылкой `spec`; менять кадр под поведение реализации без такой ссылки спецификация запрещает («Правила изменения фикстур»). Корпус играют `conformance:client`, `conformance:agent`, `conformance:embedded`, а транспортные фикстуры (`setup.transport`) — `apps/codelab_agent/test/transport_conformance_test.dart`; `protocol-conformance` корпус не проигрывает. Кроме корпуса, у пакетов есть свои фикстуры, например SSE-ответы провайдеров в `packages/dart/codelab_agent_core/test/fixtures/sse/`.
 
 ---
 
-## 14. Transport tests
+## 13. Тесты совместимости
 
-`codelab_acp_transports` следует тестировать отдельно от application semantics.
+Если совместимость поддерживается, ДОЛЖНЫ быть тесты на:
 
-Проверять:
+* более старую поддерживаемую версию;
+* неизвестные необязательные поля;
+* более новые поля расширений;
+* поведение при неподдерживаемой версии.
 
-* connect;
-* send;
-* receive;
-* framing;
-* disconnect;
-* stream close;
-* process exit;
-* transport errors.
-
-Transport tests не должны проверять Flutter UI.
+В коде используется одна версия протокола — 1 (`AcpAgentServer` отвечает `ProtocolVersion(1)`, `FakeAcpTransport` по умолчанию — тоже), поэтому тестов более старой версии нет. Неподдерживаемую версию задаёт `FakeAcpTransport.initializeProtocolVersion`: `codelab_client_acp/test/application_use_cases_test.dart` (`ProtocolVersion(9999)` → `UnsupportedProtocolVersionException`) и `codelab_client_core/test/workspace/superseded_attempt_test.dart`. Неизвестные поля и виды проверяют `response_tolerance_test.dart`, `session_update_tolerance_test.dart` (`codelab_acp_protocol`), `unsupported_session_updates_test.dart`, `unknown_tool_kind_test.dart` (`codelab_client_acp`) и фикстуры корпуса.
 
 ---
 
-## 15. Fake transport
+## 14. Тесты транспорта
 
-Fake transport должен позволять детерминированно:
+`codelab_acp_transports` СЛЕДУЕТ тестировать отдельно от семантики приложения.
 
-* inject inbound event;
-* capture outbound event;
-* close connection;
-* throw error;
-* delay completion;
-* replay event;
-* send malformed data.
+СЛЕДУЕТ проверять:
+
+* подключение;
+* отправку;
+* приём;
+* кадрирование (framing);
+* разрыв соединения;
+* закрытие потока;
+* выход процесса;
+* ошибки транспорта.
+
+Тесты транспорта НЕ ДОЛЖНЫ проверять Flutter UI.
+
+В коде — `packages/dart/codelab_acp_transports/test/`: `in_process_acp_transport_test.dart`, `stdio_acp_transport_start_failure_test.dart`, `io/stdio_acp_transport_close_test.dart`, `stdio_server_transport_test.dart`, `websocket_server_transport_test.dart`, `websocket_handshake_rejection_test.dart`, `web_safe_barrel_test.dart`.
 
 ---
 
-## 16. Client-core tests
+## 15. Поддельный транспорт
 
-`codelab_client_acp` должен иметь основную behavioral coverage ACP client semantics.
+Поддельный транспорт ДОЛЖЕН позволять детерминированно:
+
+* подать входящее событие;
+* перехватить исходящее событие;
+* закрыть соединение;
+* выбросить ошибку;
+* задержать завершение;
+* повторить событие;
+* отправить некорректные данные.
+
+В коде поддельный транспорт — `FakeAcpTransport` (`packages/dart/codelab_acp_testing/lib/src/fake_acp_transport.dart`): входящий кадр — `emitInbound` (повтор — тот же кадр ещё раз), исходящие — `sentMessages`, поток `sent` и `drainSentMessages`, закрытие — `close`, сбой транспорта — `fail`, сбой одной отправки — `failNextSend`, событие и диагностика транспорта — `emitEvent`, `emitDiagnostic`; на `initialize` он отвечает сам (`autoRespondToInitialize`). Средства задержать завершение `send` нет: отправка завершается сразу. Битый JSON подать нельзя: `emitInbound` принимает только типизированный `JsonRpcMessage`, разбор неверного JSON проверяется на уровне кодеков `codelab_acp_protocol` и транспортов. Сообщение ACP неверной или неизвестной формы подать можно — через сырые `params` уведомления (помощник `emitUpdate(Map)` в `codelab_client_acp/test/unsupported_session_updates_test.dart`).
+
+---
+
+## 16. Тесты ядра клиента
+
+`codelab_client_acp` ДОЛЖЕН нести основное поведенческое покрытие семантики ACP-клиента.
 
 Ключевые области:
 
-* connection lifecycle;
-* session lifecycle;
-* request lifecycle;
-* streaming;
-* cancellation;
-* reconnect;
-* stale event filtering;
-* permission flow;
-* error normalization.
+* жизненный цикл соединения;
+* жизненный цикл сессии;
+* жизненный цикл запроса;
+* потоки;
+* отмена;
+* переподключение;
+* отбрасывание устаревших событий;
+* поток разрешений;
+* нормализация ошибок.
+
+В коде — `packages/dart/codelab_client_acp/test/` (`application/` — гонки и жизненный цикл `AcpClientApplication`, например `superseded_connection_attempt_test.dart`, `approvals_dropped_on_replace_test.dart`, `request_timeout_test.dart`; `state_machines_test.dart`; `fixtures/` — прогон корпуса). Владелец переподключения и очереди промптов — `codelab_client_core`, его тесты — `packages/dart/codelab_client_core/test/` (например, `workspace/ensure_agent_test.dart`, `workspace/superseded_attempt_test.dart`).
 
 ---
 
-## 17. State machine tests
+## 17. Тесты автоматов состояний
 
-Для explicit state machine следует тестировать transitions.
+Для явного автомата состояний СЛЕДУЕТ тестировать переходы.
 
-Например:
+Например (иллюстративные переходы):
 
 ```text
 disconnected
@@ -380,13 +410,15 @@ reconnecting
   → ready/recovered
 ```
 
+В коде автоматы — `ConnectionStateMachine`, `SessionStateMachine`, `PromptTurnStateMachine` (`codelab_client_acp/lib/src/domain/state_machines.dart`, исход перехода `StateTransitionResult`: `applied | ignored | rejected`), тесты — `state_machines_test.dart`. У протокольного состояния `ClientConnectionState` состояния `reconnecting` нет: `disconnected`, `connecting`, `initializing`, `ready`, `failed`. Оно есть у проекции рабочего пространства `ConnectionView` (`codelab_client_core/lib/src/connection/connection_view.dart`): `ConnectionView.reconnecting({attempt})`, переход `reconnect()` → `Reconnecting` → `Connected` | `ConnectionFailed`; попытка одна, поэтому `attempt` всегда 1. Переподключение ведёт `DefaultClientWorkspace` только по вызову `reconnect()`, автоматического нет (`session-lifecycle.md` §38, §39); тесты — `codelab_client_core/test/workspace/connection_lost_and_retry_test.dart`, `workspace/client_workspace_test.dart`, `sessions/reconnect_reload_test.dart`.
+
 ---
 
-## 18. Invalid transition tests
+## 18. Тесты недопустимых переходов
 
-Нужно проверять запрещённые transitions.
+Запрещённые переходы ДОЛЖНЫ проверяться.
 
-Например:
+Например (иллюстративно):
 
 ```text
 disconnected
@@ -394,133 +426,143 @@ disconnected
   → rejected
 ```
 
-или другой expected result по API.
+или другой ожидаемый по API результат.
 
 ---
 
-## 19. Streaming tests
+## 19. Тесты потоков
 
-Минимум:
+Тесты потоков ДОЛЖНЫ покрывать как минимум:
 
-* one chunk;
-* multiple chunks;
-* completion;
-* duplicate chunk;
-* duplicate completion;
-* late chunk;
-* stale generation;
-* out-of-order event;
-* replay after reconnect;
-* cancellation during stream.
+* один фрагмент;
+* несколько фрагментов;
+* завершение;
+* повторный фрагмент;
+* повторное завершение;
+* поздний фрагмент;
+* устаревшее поколение;
+* событие не по порядку;
+* повтор после переподключения;
+* отмену во время потока.
 
 ---
 
-## 20. Deterministic streaming tests
+## 20. Детерминированные тесты потоков
 
-Не следует использовать реальные задержки:
+Использовать реальные задержки:
 
 ```dart
 await Future.delayed(const Duration(milliseconds: 500));
 ```
 
-для синхронизации теста.
+для синхронизации теста НЕ СЛЕДУЕТ.
 
-Использовать:
+СЛЕДУЕТ использовать:
 
 * `Completer`;
-* controlled `StreamController`;
-* fake clock;
-* explicit event injection.
+* управляемый `StreamController`;
+* поддельные часы;
+* явную подачу событий.
+
+В коде поддельные часы ядра агента — `FakeClock` (`package:codelab_agent_core/testing.dart`); в desktop время приходит параметром `clock` (например, `CodeLabShellParts.build` → `ActiveSessionCubit`), а виджет-тесты двигают поддельное время `testWidgets` (`tester.pump(duration)`). `fake_async` не используется. Реальные задержки оставлены там, где по реальным часам работает сам проверяемый код, — с объяснением в комментарии теста (например, `packages/dart/codelab_acp_testing/test/client_conformance_test.dart`, группа `a late client frame`).
 
 ---
 
-## 21. Concurrency tests
+## 21. Тесты конкурентности
 
-Обязательные race scenarios:
+ДОЛЖНЫ быть покрыты сценарии гонок:
 
 ```text
-completion vs cancel
-disconnect vs completion
-reconnect vs manual disconnect
-old result vs new request
-dispose vs callback
-duplicate connect
-duplicate cancel
+завершение против отмены
+разрыв против завершения
+переподключение против ручного отключения
+старый результат против нового запроса
+закрытие (dispose) против callback
+повторный connect
+повторная отмена
 ```
 
 ---
 
-## 22. Forced ordering
+## 22. Принудительный порядок
 
-Полезный pattern:
+Полезный приём:
 
 ```text
-start A
-start B
-complete B
-complete A
+старт A
+старт B
+завершение B
+завершение A
 ```
 
-и проверить, что stale A не перезаписал B.
+и проверка, что устаревший A не перезаписал B.
+
+В коде порядок задают `Completer`-ы двойников (например, резолвер транспорта в `codelab_client_core/test/workspace/superseded_attempt_test.dart`, гейт `test/support/gated_workspace.dart`).
 
 ---
 
-## 23. Permission tests
+## 23. Тесты разрешений
 
-Permission policy должна тестироваться pure Dart.
+Политика разрешений ДОЛЖНА тестироваться на чистом Dart.
 
-Обязательные scenarios:
+ДОЛЖНЫ быть покрыты сценарии:
 
-* safe → allow;
-* dangerous → ask user;
-* forbidden → deny;
-* unknown dangerous → deny;
-* stale decision ignored;
-* wrong tool call id rejected;
-* cancelled request cannot be approved.
+* безопасное → разрешить;
+* опасное → спросить пользователя;
+* запрещённое → отказать;
+* неизвестное опасное → отказать;
+* устаревшее решение игнорируется;
+* неверный id вызова инструмента отклоняется;
+* отменённый запрос нельзя одобрить.
 
----
-
-## 24. Permission UI tests
-
-Widget/BLoC tests должны проверять:
-
-* request отображается;
-* approve отправляет правильный decision;
-* deny отправляет правильный decision;
-* repeated click не создаёт duplicate decision;
-* stale request исчезает;
-* secrets не отображаются без необходимости.
+В коде политика разрешений агента — `PermissionPolicy` (`codelab_agent_core/lib/src/permissions/policy.dart`), её тесты — `packages/dart/codelab_agent_core/test/permissions/`; классификация риска на клиенте — `ApprovalPolicy` (`codelab_client_acp/lib/src/domain/approval_policy.dart`); связь запроса с вызовом инструмента на ACP-границе — `acp_permission_gate_test.dart` (`codelab_agent_acp`) и фикстуры `permission-*`, `prompt-tool-permission-*` корпуса. Подробнее — `permissions.md`.
 
 ---
 
-## 25. BLoC tests
+## 24. Тесты UI разрешений
 
-BLoC tests проверяют:
+Виджет-тесты и тесты BLoC ДОЛЖНЫ проверять, что:
 
-* user intent;
-* interaction с application API;
-* resulting presentation state;
-* error mapping;
-* subscription lifecycle.
+* запрос отображается;
+* одобрение отправляет правильное решение;
+* отказ отправляет правильное решение;
+* повторный клик не создаёт повторного решения;
+* устаревший запрос исчезает;
+* секреты без необходимости не отображаются.
 
-Они НЕ ДОЛЖНЫ повторно тестировать protocol parsing.
-
----
-
-## 26. Cubit tests
-
-Cubit tests должны быть focused и быстрыми.
-
-Если для simple Cubit требуется запуск transport/process, dependency boundary следует проверить.
+В коде — `apps/codelab_desktop/test/features/workbench/` (например, `application/shell_cubit_characterization/permission_test.dart`, `application/approval_shortcut_decision_test.dart`, `presentation/approval_shortcuts_test.dart`) и для CLI — `apps/codelab_cli/test/repl/approval_prompt_test.dart`.
 
 ---
 
-## 27. BLoC dependencies
+## 25. Тесты BLoC
 
-В BLoC tests использовать fake/mock application-facing dependencies.
+Тесты BLoC проверяют:
 
-Например:
+* намерение пользователя;
+* взаимодействие с API приложения;
+* итоговое состояние представления;
+* маппинг ошибок;
+* жизненный цикл подписок.
+
+Они НЕ ДОЛЖНЫ повторно тестировать разбор протокола.
+
+В коде в desktop нет `Bloc` с событиями, только `Cubit` (`state-management.md` §8); тесты Cubit-ов пишутся на `flutter_test` без `bloc_test`: тест вызывает метод и проверяет `cubit.state` или поток `cubit.stream`.
+
+---
+
+## 26. Тесты Cubit
+
+Тесты Cubit ДОЛЖНЫ быть сфокусированными и быстрыми.
+
+Если простому Cubit для теста нужен запуск транспорта или процесса, СЛЕДУЕТ проверить границу зависимостей.
+
+---
+
+## 27. Зависимости в тестах BLoC
+
+В тестах BLoC СЛЕДУЕТ использовать поддельные зависимости или моки для API приложения.
+
+Например (иллюстративные имена):
 
 ```text
 FakeAcpClient
@@ -528,44 +570,48 @@ FakeSessionController
 FakePermissionService
 ```
 
-Не использовать real external process без причины.
+Запускать реальный внешний процесс без причины НЕ СЛЕДУЕТ.
+
+В коде двойники Cubit-тестов desktop — `FakeClientWorkspace` и `FakeSessionHandle` (`apps/codelab_desktop/test/support/fake_client_workspace.dart`), двойники портов платформы `Fake*` в той же папке, `FixedAppStrings` и `TestAppStrings` (`test/support/app_strings.dart`) и `FakeAcpTransport` (`codelab_acp_testing`).
 
 ---
 
-## 28. Widget tests
+## 28. Виджет-тесты
 
-Widget tests предназначены для проверки presentation behavior.
+Виджет-тесты предназначены для проверки поведения представления.
 
-Проверять:
+СЛЕДУЕТ проверять:
 
-* correct rendering;
-* controls enabled/disabled;
-* events/intents emitted;
-* error state;
-* loading state;
-* permission state;
-* reusable `codelab_ui` components.
-
----
-
-## 29. Не тестировать pixels без необходимости
-
-Golden/image tests следует использовать только там, где visual regression действительно важно.
-
-Обычный behavior лучше проверять semantic widget assertions.
+* правильную отрисовку;
+* доступность и недоступность элементов управления;
+* отправленные события и намерения;
+* состояние ошибки;
+* состояние загрузки;
+* состояние разрешения;
+* переиспользуемые компоненты `codelab_ui`.
 
 ---
 
-## 30. Fluent UI tests
+## 29. Не тестировать пиксели без необходимости
 
-Для `fluent_ui` components следует проверять:
+Golden-тесты изображений СЛЕДУЕТ использовать только там, где визуальная регрессия действительно важна.
 
-* наличие нужного control;
-* state;
+Обычное поведение предпочтительно проверять семантическими проверками виджетов.
+
+В коде golden-тестов изображений (`matchesGoldenFile`) нет (`packages/flutter/codelab_ui/README.md`).
+
+---
+
+## 30. Тесты Fluent UI
+
+Для компонентов `fluent_ui` СЛЕДУЕТ проверять:
+
+* наличие нужного элемента управления;
+* состояние;
 * callback;
-* text/semantic content.
+* текст и семантическое содержимое.
 
-Не следует привязывать test к внутренней реализации Fluent UI без необходимости.
+Привязывать тест к внутренней реализации Fluent UI без необходимости НЕ СЛЕДУЕТ.
 
 ### 30а. Локаль и язык интерфейса в тестах
 
@@ -594,88 +640,98 @@ Golden/image tests следует использовать только там, 
 
 ---
 
-## 31. Navigation tests
+## 31. Тесты навигации
 
-Navigation tests должны проверять route semantics, а не private router implementation.
+Тесты навигации ДОЛЖНЫ проверять семантику маршрутов, а не приватную реализацию роутера.
 
-Например:
+Например (иллюстративно):
 
 ```text
-when session selected
-then workbench route displayed
+когда выбрана сессия
+тогда показан маршрут рабочего места
 ```
+
+В коде навигация desktop — `NavigationCubit` (`apps/codelab_desktop/lib/app/navigation/`), тест — `test/app/navigation/navigation_cubit_test.dart`; приёмка переходов по страницам настроек — `integration_test/settings_navigation_flow_test.dart`.
 
 ---
 
-## 32. Integration tests
+## 32. Интеграционные тесты
 
-Integration tests покрывают critical user journeys.
+Интеграционные тесты покрывают критические пути пользователя.
 
 Минимальные кандидаты:
 
 ```text
-launch
-connect
-create session
-send prompt
-receive stream
-complete
+запуск
+подключение
+создание сессии
+отправка промпта
+приём потока
+завершение
 ```
+
+В коде такие пути покрывают `apps/codelab_desktop/integration_test/` (например, `stdio_connect_flow_test.dart`, `prompt_queue_flow_test.dart`, `session_list_load_flow_test.dart`); на устройстве они идут только в `release/<version>` (корневой `AGENTS.md` §21), в feature-ветке они только проходят статический анализ `fvm dart analyze` (`melos run analyze`). На Dart VM тот же путь проходят PTY-e2e CLI (§36) и контрактный тест `packages/dart/codelab_agent_acp/test/contract/client_application_contract_test.dart` (настоящий `AcpClientApplication` против `AcpAgentServer` через `InProcessAcpLink`).
 
 ---
 
-## 33. Reconnect integration
+## 33. Интеграционный тест переподключения
 
-Если reconnect является critical product behavior:
+Если переподключение — критическое поведение продукта, сценарий:
 
 ```text
-connect
-send prompt
-transport lost
-reconnect
-recover
+подключение
+отправка промпта
+транспорт потерян
+переподключение
+восстановление
 ```
 
-должен иметь integration coverage.
+ДОЛЖЕН иметь интеграционное покрытие.
+
+В коде автоматического переподключения нет (`session-lifecycle.md` §38); ручной `Reconnect` посреди хода проверяет `apps/codelab_desktop/integration_test/session_list_load_flow_test.dart` в режиме `CODELAB_E2E_AGENT=dart` (спецификация `testing-quality`, «Интеграционный тест Reconnect посреди хода»).
 
 ---
 
-## 34. Permission integration
+## 34. Интеграционный тест разрешений
 
-Critical flow:
+Критический путь:
 
 ```text
-agent requests tool
-permission shown
-user approves
-decision sent
-tool continues
+агент запрашивает инструмент
+показан запрос разрешения
+пользователь одобряет
+решение отправлено
+инструмент продолжает работу
 ```
 
-и deny variant.
+и вариант с отказом.
+
+В коде — `apps/codelab_desktop/integration_test/permission_flow_test.dart` и e2e CLI `apps/codelab_cli/test/e2e/repl_interaction_test.dart` (тесты `cli/repl-permission-*`).
 
 ---
 
-## 35. Platform integration tests
+## 35. Интеграционные тесты платформы
 
-Platform-specific adapters следует тестировать отдельно.
+Платформенные адаптеры СЛЕДУЕТ тестировать отдельно.
 
 Например:
 
-* filesystem;
-* secure storage;
-* process execution;
-* window APIs.
+* файловую систему;
+* защищённое хранилище;
+* запуск процессов;
+* API окна.
 
-Application tests должны использовать fake adapter.
+Тесты приложения ДОЛЖНЫ использовать поддельный адаптер.
+
+В коде адаптеры платформы desktop лежат в `apps/codelab_desktop/lib/core/platform/`, их тесты — в `test/core/platform/`; тесты приложения получают двойники `Fake*` из `test/support/` через `CodeLabTestBinding` (например, `FakeExternalLinkOpener`, `FakeUserShellLauncher`, `FakeThemeFilePicker`).
 
 ---
 
-## 36. Real process tests
+## 36. Тесты с реальным процессом
 
-Real process integration tests допустимы для `codelab_acp_transports`, если stdio/process transport критичен.
+Интеграционные тесты с реальным процессом МОЖНО писать для `codelab_acp_transports`, если stdio-транспорт или транспорт процесса критичен.
 
-Использовать controlled test executable/process, а не внешний production agent.
+СЛЕДУЕТ использовать управляемый тестовый исполняемый файл или процесс, а не внешний рабочий агент.
 
 Для терминального клиента `apps/codelab_cli` реальный процесс — приёмочный уровень (e2e
 `test/e2e/`, имена тестов — id строк матрицы `cli/*`):
@@ -690,114 +746,128 @@ Real process integration tests допустимы для `codelab_acp_transports
 Логика REPL, рендера, редактора строки и headless проверяется модульными тестами поверх портов
 без процессов и терминала; e2e их не заменяют (design.md change `add-codelab-cli`, D2, D11).
 
----
-
-## 37. Test agent
-
-Полезно иметь fake/test ACP agent, который умеет:
-
-* accept connection;
-* return session response;
-* stream chunks;
-* request tool;
-* disconnect;
-* replay events;
-* return malformed message.
-
-Он должен быть детерминированным.
+В коде агента для e2e CLI выбирает переменная `CODELAB_E2E_AGENT` (`test/e2e/support/e2e_agent.dart`): `scripted` — по умолчанию, скриптовый stdio-агент; `dart` — `codelab-agent serve --stdio` из kernel со сценарием `--llm-script` (`melos run test:e2e:cli:dart-agent`); `embedded` — CLI из тестовой точки входа `test/e2e/support/embedded_cli_main.dart` со встроенным агентом (`melos run test:e2e:cli:embedded`); `python` — Python-агент, только локально (`test:e2e:cli:python-agent`). В режимах `dart` и `embedded` тесты с тегом `scripted-only` исключаются. Тесты с реальным процессом есть и вне e2e: `codelab_acp_transports/test/` (§14) и `apps/codelab_agent/test/*_process_test.dart`.
 
 ---
 
-## 38. Error tests
+## 37. Тестовый агент
 
-Проверять не только happy path.
+Полезно иметь поддельного или тестового ACP-агента, который умеет:
 
-Минимальные failure classes:
+* принять соединение;
+* вернуть ответ сессии;
+* передать фрагменты потоком;
+* запросить инструмент;
+* разорвать соединение;
+* повторить события;
+* вернуть некорректное сообщение.
 
-* protocol error;
-* transport error;
-* permission denied;
-* timeout;
-* reconnect exhausted;
-* invalid state transition.
+Он ДОЛЖЕН быть детерминированным.
 
----
-
-## 39. Observability tests
-
-Следует проверять security-critical logging behavior:
-
-* token redacted;
-* full payload not logged in release;
-* correlation IDs present;
-* stale event diagnostic contains reason.
+В коде тестовых агентов три вида: скриптовый stdio-агент `codelabCompatibleStdioAgentSource` с режимами `CodelabCompatibleStdioAgentMode` (`normal`, `withPermissionRequest`, `withFsAccess`, `promptError` и др.), агент-повторитель фикстуры `FixtureReplayAgent` (`codelab_acp_testing`) и настоящий Dart-агент со сценарием модели вместо LLM (`ScriptedStreamFunction`, `codelab-agent --llm-script`, сценарный открыватель `codelab_embedded/testing.dart`).
 
 ---
 
-## 40. Secrets tests
+## 38. Тесты ошибок
 
-Если redaction code существует отдельно, оно должно иметь direct unit tests.
+СЛЕДУЕТ проверять не только успешный путь.
 
-Например:
+Минимальные классы сбоев:
+
+* протокольная ошибка;
+* ошибка транспорта;
+* отказ в разрешении;
+* таймаут;
+* исчерпаны попытки переподключения;
+* недопустимый переход состояния.
+
+---
+
+## 39. Тесты наблюдаемости
+
+СЛЕДУЕТ проверять поведение журнала, критичное для безопасности:
+
+* токен замаскирован;
+* полный payload не пишется в журнал в release;
+* идентификаторы корреляции присутствуют;
+* диагностика устаревшего события содержит причину.
+
+В коде — например, `structured_logging_test.dart` и `secret_redaction_test.dart` (`codelab_client_acp`), `apps/codelab_desktop/test/app_scope_logging_test.dart`, `apps/codelab_cli/test/cli_logger_test.dart`, `embedded_logger_test.dart`. Правила журнала — `observability.md`.
+
+---
+
+## 40. Тесты секретов
+
+Если код маскирования выделен отдельно, у него ДОЛЖНЫ быть прямые модульные тесты.
+
+Например (иллюстративно):
 
 ```text
-input:
+вход:
 Authorization: Bearer abc123
 
-output:
+выход:
 Authorization: ***redacted***
 ```
 
----
-
-## 41. Persistence tests
-
-Если persistence присутствует, проверять:
-
-* read/write;
-* migration;
-* corruption;
-* concurrent writes;
-* stale revision protection;
-* restore semantics.
+В коде — например, `config_redact_test.dart` и `mask_url_test.dart` (`codelab_agent_core/test/config/`), `secret_redaction_test.dart` (`codelab_client_acp`), `config_get_masking_test.dart` (`codelab_agent_io`); утечки секретов в машинные отчёты тестов ловит `report_leaks_test.dart` сторожа (§74.1).
 
 ---
 
-## 42. Migration tests
+## 41. Тесты хранения
 
-Persistence migration должна иметь fixture старой версии данных.
+Если есть хранение, СЛЕДУЕТ проверять:
 
-Проверить:
+* чтение и запись;
+* миграцию;
+* повреждённые данные;
+* конкурентную запись;
+* защиту от устаревшей ревизии;
+* семантику восстановления.
+
+В коде — например, `jsonl_session_store_test.dart`, `usage_ledger_store_test.dart`, `secrets/file_secret_store_test.dart` (`codelab_agent_io`), `shared_preferences_workspace_snapshot_store_test.dart` и `features/workbench/application/workspace_restore_test.dart` (`apps/codelab_desktop`).
+
+---
+
+## 42. Тесты миграции
+
+Для миграции хранимых данных ДОЛЖНА быть фикстура старой версии данных.
+
+СЛЕДУЕТ проверить:
 
 ```text
-old data
-  ↓ migrate
-current model
+старые данные
+  ↓ миграция
+текущая модель
 ```
+
+В коде — например, `secrets/secret_migrator_test.dart` и `cli/secret_migrate_command_test.dart` (`codelab_agent_io`).
 
 ---
 
-## 43. Test naming
+## 43. Имена тестов
 
-Имена тестов должны описывать behavior.
+Имена тестов ДОЛЖНЫ описывать поведение.
 
-Предпочтительно:
+СЛЕДУЕТ писать так (иллюстративно):
 
 ```text
 ignores late completion from previous connection generation
 ```
 
-вместо:
+а не так:
 
 ```text
 test reconnect 3
 ```
 
+Имя теста — доказательства строки Must начинается с id строки по правилу §74.1.
+
 ---
 
-## 44. Arrange / Act / Assert
+## 44. Дано / Когда / Тогда
 
-Для сложных tests полезна структура:
+Сложным тестам полезна структура:
 
 ```text
 Given
@@ -813,31 +883,31 @@ Act
 Assert
 ```
 
-Не обязательно формально использовать комментарии.
+Формально размечать её комментариями не обязательно.
 
 ---
 
-## 45. One behavior per test
+## 45. Одно поведение на тест
 
-Тест должен иметь одну понятную причину failure.
+У теста ДОЛЖНА быть одна понятная причина падения.
 
-Не следует создавать огромный test, проверяющий весь application lifecycle от запуска до shutdown, если это не integration scenario.
-
----
-
-## 46. Test fixtures
-
-Fixture должна быть минимальной.
-
-Не следует создавать full ACP session object, если test проверяет только один identifier.
+Создавать огромный тест, проверяющий весь жизненный цикл приложения от запуска до завершения, НЕ СЛЕДУЕТ, если это не интеграционный сценарий.
 
 ---
 
-## 47. Builders
+## 46. Тестовые фикстуры
 
-Test builders полезны для сложных immutable models.
+Фикстура ДОЛЖНА быть минимальной.
 
-Например:
+Создавать полный объект сессии ACP НЕ СЛЕДУЕТ, если тест проверяет только один идентификатор.
+
+---
+
+## 47. Билдеры
+
+Тестовые билдеры полезны для сложных неизменяемых моделей.
+
+Например (иллюстративные имена):
 
 ```text
 aSession()
@@ -845,292 +915,322 @@ aToolCall()
 anAcpMessage()
 ```
 
-Builders должны иметь sensible defaults и позволять переопределить relevant fields.
+Билдеры ДОЛЖНЫ иметь разумные значения по умолчанию и позволять переопределить нужные поля.
 
 ---
 
-## 48. Random data
+## 48. Случайные данные
 
-Randomness по умолчанию нежелательна.
+Случайность по умолчанию использовать НЕ СЛЕДУЕТ.
 
-Если property/fuzz testing используется, random seed должен быть воспроизводимым.
+Если используется property- или fuzz-тестирование, начальное значение генератора (seed) ДОЛЖНО быть воспроизводимым.
 
----
-
-## 49. Fuzzing
-
-Особенно полезно для:
-
-* protocol parser;
-* framing;
-* invalid payload;
-* ordering;
-* duplicate event processing.
-
-Но fuzzing дополняет, а не заменяет deterministic tests.
+В коде случайность в тестах ядра агента задаётся генератором с фиксированным seed (`Random(1)`, `Random(42)`; например, `codelab_agent_core/test/llm/decorators_test.dart`).
 
 ---
 
-## 50. Property-based invariants
+## 49. Фаззинг
 
-Полезные invariants:
+Особенно полезен для:
+
+* парсера протокола;
+* кадрирования;
+* некорректного payload;
+* порядка событий;
+* обработки повторных событий.
+
+Но фаззинг дополняет, а не заменяет детерминированные тесты.
+
+---
+
+## 50. Инварианты для property-тестов
+
+Полезные инварианты:
 
 ```text
-duplicate event does not change final state
+повторное событие не меняет итоговое состояние
 ```
 
 ```text
-old generation never changes current generation state
+старое поколение никогда не меняет состояние текущего поколения
 ```
 
 ```text
-terminal request never becomes running again
+терминальный запрос никогда не возвращается в running
 ```
 
 ---
 
-## 51. No real network by default
+## 51. По умолчанию без реальной сети
 
-Unit tests НЕ ДОЛЖНЫ зависеть от real network.
+Модульные тесты НЕ ДОЛЖНЫ зависеть от реальной сети.
 
-Использовать fake transport/network adapter.
+СЛЕДУЕТ использовать поддельный транспорт или сетевой адаптер.
 
----
-
-## 52. No real filesystem by default
-
-Unit tests application logic не должны писать в реальный user filesystem.
-
-Использовать temp directory или fake abstraction.
+В коде HTTP провайдеров и MCP подменяется `MockClient` из `package:http` и поддельными серверами `codelab_agent_mcp/testing.dart`; сокеты появляются только в интеграционных тестах на `localhost` (§58).
 
 ---
 
-## 53. Temp directories
+## 52. По умолчанию без реальной файловой системы
 
-Если test действительно требует filesystem:
+Модульные тесты логики приложения НЕ ДОЛЖНЫ писать в реальную файловую систему пользователя.
 
-* использовать isolated temp directory;
-* cleanup после test;
-* не использовать реальные user paths.
+СЛЕДУЕТ использовать временный каталог или поддельную абстракцию.
+
+В коде поддельная файловая система ядра агента — `MemoryExecutionEnv` (`codelab_agent_core/lib/src/env/memory_env.dart`).
 
 ---
 
-## 54. Time
+## 53. Временные каталоги
 
-Time-dependent logic должна зависеть от injectable/testable clock, если time существенно влияет на behavior.
+Если тесту действительно нужна файловая система, СЛЕДУЕТ использовать изолированный временный каталог и удалять его после теста; использовать реальные пути пользователя ЗАПРЕЩЕНО.
+
+В коде тесты агента и клиентов, которым нужен каталог настроек, получают временный `CODELAB_HOME` (например, `apps/codelab_agent/test/stdio_profile_boundary_test.dart`, интеграционные тесты desktop через `E2eLaunch`).
+
+---
+
+## 54. Время
+
+Логика, зависящая от времени, ДОЛЖНА получать внедряемые тестируемые часы, если время существенно влияет на поведение.
 
 Это особенно относится к:
 
-* retry;
-* timeout;
-* expiration;
-* permission scope expiry.
+* повторам;
+* таймаутам;
+* истечению срока;
+* истечению области действия разрешения.
+
+В коде порт часов ядра агента — `Clock` (`codelab_agent_core/lib/src/util/clock.dart`, реализация `SystemClock`, двойник `FakeClock`).
 
 ---
 
-## 55. Fake clock
+## 55. Поддельные часы
 
-Fake clock позволяет тестировать:
+Поддельные часы позволяют проверить:
 
 ```text
-retry after 1s
-retry after 2s
-retry after 4s
+повтор через 1 с
+повтор через 2 с
+повтор через 4 с
 ```
 
 без ожидания реальных секунд.
 
 ---
 
-## 56. Test isolation
+## 56. Изоляция тестов
 
-Каждый test должен иметь независимое state.
+У каждого теста ДОЛЖНО быть независимое состояние.
 
-Не использовать shared mutable singleton между tests без reset.
-
----
-
-## 57. Parallel tests
-
-Tests должны по возможности быть безопасны для parallel execution.
-
-Не использовать:
-
-* общий temp filename;
-* фиксированный port;
-* global mutable state.
+Общий изменяемый singleton между тестами без сброса использовать ЗАПРЕЩЕНО.
 
 ---
 
-## 58. Ports
+## 57. Параллельные тесты
 
-Если integration test требует socket, использовать dynamic/free port strategy.
+Тесты ДОЛЖНЫ по возможности быть безопасны для параллельного запуска.
 
-Не хардкодить порт, который может быть занят.
+НЕ СЛЕДУЕТ использовать:
 
----
+* общее имя временного файла;
+* фиксированный порт;
+* глобальное изменяемое состояние.
 
-## 59. Process cleanup
-
-Integration test обязан завершать child processes даже при failure.
-
-Cleanup должен находиться в `tearDown`.
+В коде `melos run test` идёт по пакетам последовательно (`melos exec -c 1`), `test:dart` — по четыре пакета (`-c 4`); внутри пакета файлы тестов параллельны по умолчанию раннера.
 
 ---
 
-## 60. Subscription cleanup
+## 58. Порты
 
-Tests должны закрывать:
+Если интеграционному тесту нужен сокет, СЛЕДУЕТ брать динамический свободный порт.
+
+Хардкодить порт, который может быть занят, НЕ СЛЕДУЕТ.
+
+В коде тесты WebSocket запускают агента с `--port 0` (например, `apps/codelab_agent/test/agent_host_skills_test.dart`).
+
+---
+
+## 59. Очистка процессов
+
+Интеграционный тест ДОЛЖЕН завершать дочерние процессы даже при падении.
+
+Очистка ДОЛЖНА находиться в `tearDown`.
+
+В коде очистку процесса регистрирует `addTearDown` сразу после запуска; временный каталог удаляют `tearDown` или `addTearDown` — обе формы выполняются и при падении теста.
+
+---
+
+## 60. Очистка подписок
+
+Тесты ДОЛЖНЫ закрывать:
 
 * `StreamController`;
-* subscriptions;
+* подписки;
 * BLoC;
-* client;
-* transport.
+* клиента;
+* транспорт.
 
-Dangling async resources приводят к flaky tests.
-
----
-
-## 61. Flaky tests
-
-Flaky test считается defect.
-
-Не исправлять flaky test увеличением arbitrary delay.
-
-Нужно найти race/ownership problem.
+Висящие асинхронные ресурсы приводят к флейкам.
 
 ---
 
-## 62. Retry tests в CI
+## 61. Флейки
 
-Не следует автоматически retry любой failed test, скрывая flaky behavior.
+Флейк считается дефектом.
 
-Retry допустим только как временная diagnostic measure.
+Исправлять флейк увеличением произвольной задержки ЗАПРЕЩЕНО.
 
----
-
-## 63. Snapshot/golden updates
-
-AI-agent НЕ ДОЛЖЕН массово обновлять golden/snapshot files только чтобы tests стали зелёными.
-
-Сначала нужно проверить, является ли изменение ожидаемым.
+ДОЛЖНА быть найдена проблема гонки или владения.
 
 ---
 
-## 64. Mocking
+## 62. Повтор тестов в CI
 
-Если mocking library утверждена проектом, использовать её последовательно.
+Автоматически повторять любой упавший тест, скрывая нестабильное поведение, НЕ СЛЕДУЕТ.
 
-Не добавлять второй mocking framework без причины.
+Повтор МОЖНО использовать только как временную диагностическую меру.
 
-Предпочитать fake для stateful protocols и transports, где fake даёт более реалистичное behavior.
+В коде автоматических повторов нет: ни `retry` в `dart_test.yaml`, ни повторов шагов в `.github/workflows/ci.yml`. Ручной перезапуск ночного прогона помечается в итоге `parity` и в счёт трёх ночей не идёт (§74.1).
 
 ---
 
-## 65. Fake vs mock
+## 63. Обновление снимков и golden-файлов
 
-Fake лучше для:
+AI-agent НЕ ДОЛЖЕН массово обновлять golden-файлы и снимки только ради того, чтобы тесты позеленели.
 
-* transport;
-* ACP agent;
-* storage;
-* lifecycle-heavy component.
+Сначала ДОЛЖНО быть проверено, ожидаемо ли изменение.
 
-Mock лучше для:
+В коде главный набор эталонов — корпус golden-фикстур ACP: изменение ожидаемого кадра без ссылки `spec` на раздел спецификации ACP запрещено спецификацией `acp-golden-fixtures`, а расхождение клиента со спецификацией исправляется в клиенте, а не в фикстуре (§12).
+
+---
+
+## 64. Моки
+
+Если библиотека моков утверждена проектом, её СЛЕДУЕТ использовать последовательно.
+
+Добавлять второй фреймворк моков без причины НЕ СЛЕДУЕТ.
+
+Для протоколов с состоянием и транспортов СЛЕДУЕТ предпочитать fake там, где он даёт более реалистичное поведение.
+
+В коде библиотеки моков нет (абзац «Где в коде» в начале документа): двойники — рукописные fake, часть из них реализует только нужные методы через `Fake` из `package:test`.
+
+---
+
+## 65. Fake или mock
+
+Fake лучше подходит для:
+
+* транспорта;
+* ACP-агента;
+* хранилища;
+* компонента с богатым жизненным циклом.
+
+Mock лучше подходит для:
 
 * простого взаимодействия;
 * проверки одного вызова;
-* stateless dependency.
+* зависимости без состояния.
 
 ---
 
-## 66. Не over-mock
+## 66. Не злоупотреблять моками
 
-Если test состоит из десятков `verify`, он часто тестирует implementation wiring, а не behavior.
+Если тест состоит из десятков `verify`, он часто проверяет связку реализации, а не поведение.
 
-Следует проверить architecture/API.
+СЛЕДУЕТ проверить архитектуру или API.
 
 ---
 
-## 67. Contract tests
+## 67. Контрактные тесты
 
-Для ports/adapters полезны shared contract tests.
+Для портов и адаптеров полезны общие контрактные тесты.
 
-Например:
+Например (иллюстративно):
 
 ```text
-FileStore contract:
-  write → read same content
-  missing file → expected failure
+контракт FileStore:
+  запись → чтение того же содержимого
+  отсутствующий файл → ожидаемый сбой
 ```
 
-Каждая implementation проходит один набор tests.
+Каждая реализация проходит один и тот же набор тестов.
+
+В коде так устроены `executionEnvContract` (`codelab_agent_core/test/env/execution_env_contract.dart`; его проходят `MemoryExecutionEnv`, локальное окружение `codelab_agent_io` и окружение поверх ACP-клиента в `codelab_agent_acp`) и `sessionStoreContract` (`codelab_agent_core/test/session/session_store_contract.dart`; память ядра и `JsonlSessionStore`). Общий контракт обеих сторон протокола — корпус golden-фикстур (§12).
 
 ---
 
-## 68. Transport contract tests
+## 68. Контрактные тесты транспортов
 
-Если несколько ACP transports, полезен общий contract:
+Если ACP-транспортов несколько, полезен общий контракт:
 
-* connect;
-* send;
-* receive;
-* disconnect;
-* error semantics.
+* подключение;
+* отправка;
+* приём;
+* разрыв соединения;
+* семантика ошибок.
 
----
-
-## 69. Public API tests
-
-Public package API следует проверять через public imports.
-
-Это помогает убедиться, что нужный API реально экспортирован.
+В коде общего набора тестов для всех реализаций `AcpTransport` нет: у каждого транспорта свои тесты (§14). Транспортных фикстур корпуса две, каждая для своего транспорта: `acp/stdio-framing-large-line` и `acp/ws-auth-bearer-required` (`apps/codelab_agent/test/transport_conformance_test.dart`). Одни и те же проверки через `--stdio` и `--ws` гоняют отдельные тесты хоста агента: `initialize` в `apps/codelab_agent/test/agent_host_test.dart` и ключ провайдера в `agent_host_secrets_test.dart`.
 
 ---
 
-## 70. Internal tests
+## 69. Тесты публичного API
 
-Internal implementation можно тестировать напрямую внутри package, но cross-package consumer tests не должны импортировать `src/`.
+Публичный API пакета СЛЕДУЕТ проверять через публичные импорты.
+
+Это помогает убедиться, что нужный API действительно экспортирован.
+
+В коде, например, `codelab_acp_transports/test/web_safe_barrel_test.dart` проверяет, что основной барель не тянет `dart:io`, а точки `test/web_smoke/main.dart` ядра агента, `codelab_embedded` и `codelab_setup` собирает `melos run web-compile`.
 
 ---
 
-## 71. Architecture tests
+## 70. Внутренние тесты
 
-Желательно автоматизировать critical dependency rules.
+Внутреннюю реализацию МОЖНО тестировать напрямую внутри пакета, но тесты пакетов-потребителей НЕ ДОЛЖНЫ импортировать `src/`.
 
-Проверять:
+В коде в тестах есть два межпакетных импорта `src/` (`layers-and-dependencies.md` §26); сторож их не проверяет.
 
-* pure Dart package не импортирует Flutter;
-* production code не импортирует `codelab_acp_testing`;
-* package не импортирует `src` другого package;
+---
+
+## 71. Архитектурные тесты
+
+Критические правила зависимостей СЛЕДУЕТ автоматизировать.
+
+СЛЕДУЕТ проверять, что:
+
+* пакет на чистом Dart не импортирует Flutter;
+* рабочий код не импортирует `codelab_acp_testing`;
+* пакет не импортирует `src` другого пакета;
 * `codelab_ui` не зависит от `codelab_desktop`;
-* forbidden dependency cycles отсутствуют.
+* запрещённых циклов зависимостей нет.
 
 Отдельная проверка того же пакета — `parity_evidence_test`: у каждой строки Must матрицы целей агента
 (`docs/architecture/proposals/agent-parity-goals.md`) есть доказательство, которое существует и проходит.
 Правила и статусы — §74.1.
 
----
-
-## 72. Static analysis как часть testing strategy
-
-`dart analyze` не заменяет tests, но является обязательной validation step.
-
-Lint/analyzer ловит:
-
-* type errors;
-* invalid imports;
-* dead code;
-* unsafe patterns.
+В коде сторож — `packages/dart/codelab_architecture_tests` (`melos run guard`): импорты (`import_guard_test.dart` по таблице `rules`), allowlist-ы зависимостей (`pubspec_allowlist_test.dart`), имена пакетов (`package_naming_test.dart`), сборка ядра через `buildAgentCore` (`host_assembly_guard_test.dart`), литералы интерфейса (`ui_literals_test.dart`), правовые документы (`legal_documents_test.dart`), доказательства матрицы целей (`parity_evidence_test.dart`), выбор затронутого CI (`ci_scope_test.dart`), утечки в отчётах (`report_leaks_test.dart`). Из пунктов списка выше сторож покрывает Flutter в части пакетов и `codelab_acp_testing` через allowlist-ы; общего запрета Flutter для всех `packages/dart/`, проверки `src` другого пакета, зависимости `codelab_ui` от `codelab_desktop` и циклов нет. Что сторож проверяет и чего нет — таблица `layers-and-dependencies.md` §42.
 
 ---
 
-## 73. Formatting
+## 72. Статический анализ как часть стратегии тестирования
 
-Formatting не является test, но является частью Definition of Done.
+`dart analyze` не заменяет тесты, но ДОЛЖЕН входить в проверку изменения.
 
-Changed Dart files должны соответствовать `dart format`.
+Анализатор и линтер ловят:
+
+* ошибки типов;
+* неверные импорты;
+* мёртвый код;
+* небезопасные паттерны.
+
+В коде набор правил — `package:lints/recommended.yaml` с дополнениями корневого `analysis_options.yaml` (`avoid_print`, `prefer_final_locals`, `require_trailing_commas`, `sort_pub_dependencies`); desktop — `package:flutter_lints/flutter.yaml` (`apps/codelab_desktop/analysis_options.yaml`).
+
+---
+
+## 73. Форматирование
+
+Форматирование — не тест, но часть Definition of Done.
+
+Изменённые Dart-файлы ДОЛЖНЫ соответствовать `dart format`.
 
 ---
 
@@ -1143,12 +1243,14 @@ CI разделён на два уровня (`.github/workflows/ci.yml`, `AGENT
   format             весь репозиторий (быстро)
   analyze, test      изменённые пакеты и все, кто от них зависит (MELOS_PACKAGES)
   guard              всегда; prompts:check — если изменено ядро агента
-  conformance        корпуса затронутых ACP-слоёв
+  conformance        корпуса затронутых ACP-слоёв; conformance:embedded — если
+                     затронуты codelab_cli или codelab_embedded
   l10n               l10n:check — если в codelab_desktop или codelab_ui изменены
                      l10n.yaml, pubspec.yaml, ARB или сгенерированный
                      *_localizations*.dart
   web-compile        если изменено ядро агента или его зависимость
   e2e-cli-dart       если затронуты codelab_cli или codelab_agent
+  e2e-cli-embedded   если затронуты codelab_cli или codelab_embedded
   site               если изменён site/ или источник страниц сайта (признак site)
   только документация — без Dart-джобов; site — если документ влияет на сайт
 
@@ -1163,8 +1265,9 @@ CI разделён на два уровня (`.github/workflows/ci.yml`, `AGENT
 изменёнными файлами и их зависимые по `dependencies` и `dev_dependencies`. Файл вне пакетов, вне
 документации и вне `site/` (`pubspec.lock`, `analysis_options.yaml`, `.github/`, `tool/`) включает
 полный прогон.
-Документацией внутри пакета считаются только `AGENTS.md`, `README.md` и `CHANGELOG.md`: остальные
-`*.md` там — данные, например промпты ядра агента. Файлы каталогов локализации для джоба `l10n`
+Документация вне пакетов — `docs/`, `openspec/`, `.claude/` и `*.md` в корне репозитория.
+Внутри пакетов (и вообще по любому пути) документацией считаются только `AGENTS.md`, `README.md` и
+`CHANGELOG.md`: остальные `*.md` там — данные, например промпты ядра агента. Файлы каталогов локализации для джоба `l10n`
 определяют `_l10nPackages` и `_isL10nFile` в `ci_scope.dart`; правка самого `tool/l10n_check.dart`
 лежит вне пакетов и даёт полный прогон (change `add-desktop-localization`, D3).
 
@@ -1190,7 +1293,7 @@ MVP (change `switch-default-agent-to-dart`, задача 4.1), а запуск �
 Ночь по `cron` стартует с задержкой GitHub, иногда на часы, поэтому окно «без merge» не задаётся.
 
 Обязательной проверкой в защите ветки СЛЕДУЕТ делать только итоговый джоб `ci`: пропущенные джобы
-матрицы не должны блокировать merge. Джоб `site` обязательный, но отдельным статусом в защиту ветки не
+матрицы НЕ ДОЛЖНЫ блокировать merge. Джоб `site` обязательный, но отдельным статусом в защиту ветки не
 добавляется: итоговый `ci` ждёт его вместе с `checks` и `parity` и принимает только `success` или
 `skipped`, поэтому красный `site` при зелёных Dart-джобах делает `ci` красным. Обязательный статус
 по-прежнему один.
@@ -1202,11 +1305,18 @@ MVP (change `switch-default-agent-to-dart`, задача 4.1), а запуск �
 добавляет джоб `guard` даже в «только документации» (`ci_scope.dart`, `ci_scope_test.dart`): иначе
 сломанный разбор матрицы нашла бы только ночь.
 
+В коде условие `web-compile` в суженном прогоне — изменён `codelab_agent_core` или пакет, от которого
+он зависит (`_webSmoke` и `_withDependencies` в `ci_scope.dart`). Скрипт `web-compile` при этом
+собирает ещё точки `codelab_embedded` и `codelab_setup`, но их правка сама по себе джоб `web-compile`
+не запускает — их проверяет полный прогон. Спецификация `testing-quality` (`openspec/specs/testing-quality/spec.md`,
+требование «Проверки workspace») описывает `web-compile` как компиляцию ядра агента — это описание
+устарело: скрипт компилирует ещё основные барели `codelab_embedded` и `codelab_setup`.
+
 ### 74.1. Доказательства строк Must: `parity_evidence_test`
 
 Почему: этап 9 закрыт, только когда у каждой строки Must матрицы целей есть доказательство, которое
-существует и проходит. Вручную сверять 77 строк с фикстурами и тестами нельзя — переименование ломает
-матрицу молча (design.md change `switch-default-agent-to-dart`, D2).
+существует и проходит. Вручную сверить 77 строк с фикстурами и тестами не получается: переименование
+ломает матрицу молча (design.md change `switch-default-agent-to-dart`, D2).
 
 Проверка — `packages/dart/codelab_architecture_tests/test/parity_evidence_test.dart`, логика — в
 `test/support/parity/` (`matrix_parser.dart`, `evidence.dart`, `reports.dart`, `verdict.dart`,
@@ -1223,7 +1333,7 @@ MVP (change `switch-default-agent-to-dart`, задача 4.1), а запуск �
 | шаблон | `acp/*`, `app:*` | `acp/*` — все фикстуры с ролью `agent`; `app:*` — все `integration_test/*_test.dart` |
 
 **Правило имени теста: id — первый литерал невложенного `test(` или `group(`.** Id `cli/<id>` и `core/<id>`
-должен быть началом **полного** имени теста в отчёте `package:test`, а оно начинается с имени самой
+ДОЛЖЕН быть началом **полного** имени теста в отчёте `package:test`, а оно начинается с имени самой
 внешней группы. Поэтому доказательством считается только вызов `test(` или `group(`, который лексически не
 вложен в другой `group(`, и его первый строковый литерал начинается с id; дальше идёт конец строки, `:`
 или пробел. Литерал, разбитый на соседние литералы, читается целиком. Вложенный
@@ -1234,7 +1344,7 @@ MVP (change `switch-default-agent-to-dart`, задача 4.1), а запуск �
 **Два слоя проверки (D4).**
 
 * Существование — группа `matrix evidence exists`. Не требует отчётов, идёт в каждом прогоне `guard` и
-  `test`. Ловит переименование фикстуры или теста без правки матрицы. Число строк Must обязано совпадать с
+  `test`. Ловит переименование фикстуры или теста без правки матрицы. Число строк Must ДОЛЖНО совпадать с
   итогом сводки §7 матрицы. Список известных пробелов (`knownGaps`) удалён: любое отсутствующее
   доказательство — `missing`, группа красная.
 * Статус — группа `matrix evidence passed`. Идёт только при `CODELAB_PARITY_RESULTS=<каталог отчётов>`;
@@ -1266,7 +1376,7 @@ MVP (change `switch-default-agent-to-dart`, задача 4.1), а запуск �
 (например, `setup.mcp` у `test-scenario`; `fs/*` и `terminal/*`, которых нет у встроенного агента;
 фикстура с ролью только `client` в агентском прогоне). Пропуск по перечню не считается ни `pass`, ни
 открытием строки: файл-доказательство, все тесты которого пропущены по перечню, — `not-run`. Расширять
-перечень можно только записью со ссылкой на требование спецификации; пропуск «чтобы позеленело» — `skipped`.
+перечень МОЖНО только записью со ссылкой на требование спецификации; пропуск «чтобы позеленело» — `skipped`.
 
 **Отчёты: `CODELAB_TEST_REPORT_DIR` (D6).** Если переменная задана и не пуста, скрипты Melos добавляют
 машинный репортёр; без неё команды, вывод и коды выхода прежние. Значение — **абсолютный** путь: `melos exec`
@@ -1307,9 +1417,9 @@ app, попадающие в репозиторий, проверяются ещ
 
 ---
 
-## 75. Targeted validation
+## 75. Точечная проверка
 
-Для локального изменения агент может запускать targeted tests.
+Для локального изменения агент МОЖЕТ запускать точечные тесты.
 
 Например:
 
@@ -1317,27 +1427,31 @@ app, попадающие в репозиторий, проверяются ещ
 fvm flutter test test/features/chat/
 ```
 
-или package-level command через Melos.
+или команду уровня пакета через Melos.
 
-Но shared/package-level изменения требуют более широкого validation scope.
+Но изменения общих пакетов и уровня пакета ДОЛЖНЫ проверяться шире.
+
+В коде состав проверки перед pull request из `feature/*` и `hotfix/*` задаёт корневой `AGENTS.md` §21 («Проверка перед pull request»): формат изменённых файлов, `fvm dart analyze` и тесты изменённых пакетов, при изменении публичного API — ещё и пакетов-потребителей, и скрипты Melos изменённой границы (`guard`, `protocol-conformance`, `conformance:*`, `test:e2e:cli:*`, `prompts:check`, `l10n:check`, `web-compile`).
 
 ---
 
 ## 76. Когда запускать весь monorepo
 
-Полный `melos test` особенно нужен при изменении:
+Полный `melos test` СЛЕДУЕТ запускать прежде всего при изменении:
 
-* public package API;
+* публичного API пакета;
 * `codelab_acp_protocol`;
 * `codelab_client_acp`;
-* shared test utilities;
-* dependency graph;
-* code generation;
-* cross-package models.
+* общих тестовых утилит;
+* графа зависимостей;
+* генерации кода;
+* моделей, общих для нескольких пакетов.
+
+В коде перед pull request из `feature/*` и `hotfix/*` полный `melos run check` агент запускает только по просьбе пользователя, а при изменении публичного API обязательны тесты пакетов, которые используют изменённые элементы; полностью репозиторий проверяет CI после merge в `develop` и ночью, а в `release/<version>` полный `check` идёт перед pull request в `master` всегда (корневой `AGENTS.md` §21).
 
 ---
 
-## 77. Validation honesty
+## 77. Честность проверки
 
 AI-agent НЕ ДОЛЖЕН писать:
 
@@ -1345,9 +1459,9 @@ AI-agent НЕ ДОЛЖЕН писать:
 all tests pass
 ```
 
-если tests не запускались.
+если тесты не запускались.
 
-Если command невозможно выполнить, нужно сообщить:
+Если команду выполнить невозможно, агент ДОЛЖЕН сообщить:
 
 * что не запускалось;
 * почему;
@@ -1355,128 +1469,136 @@ all tests pass
 
 ---
 
-## 78. Test coverage
+## 78. Покрытие тестами
 
-Numeric coverage target сам по себе не является целью, если он не определён проектом.
+Числовой порог покрытия сам по себе не цель, если проект его не задал.
 
-Приоритет — critical behavior coverage.
+Приоритет — покрытие критического поведения.
 
 Особенно:
 
-* lifecycle;
-* security;
-* protocol;
-* reconnect;
-* cancellation;
-* stale events.
+* жизненного цикла;
+* безопасности;
+* протокола;
+* переподключения;
+* отмены;
+* устаревших событий.
+
+В коде числового порога покрытия нет, и CI покрытие не измеряет.
 
 ---
 
-## 79. Critical code
+## 79. Критический код
 
-Для security/protocol-critical code expected coverage должна быть выше обычного UI glue.
+Для кода, критичного для безопасности и протокола, ожидаемое покрытие ДОЛЖНО быть выше, чем у обычного связующего кода UI.
 
 Например:
 
-* permission policy;
-* protocol parsing;
-* session state machine;
-* reconnect;
-* stale filtering.
+* политика разрешений;
+* разбор протокола;
+* автомат состояний сессии;
+* переподключение;
+* отбрасывание устаревших событий.
 
 ---
 
-## 80. Generated code
+## 80. Сгенерированный код
 
-Generated files обычно не нужно тестировать отдельно.
+Отдельные тесты сгенерированных файлов, как правило, не нужны.
 
-Тестируется behavior source abstraction, которая их использует.
+Тестируется поведение исходной абстракции, которая их использует.
 
----
-
-## 81. Freezed state tests
-
-Не нужно тестировать, что Freezed корректно реализовал `copyWith`.
-
-Нужно тестировать application state transitions.
+В коде сгенерированы `*.freezed.dart`, модуль Cherrypick `apps/codelab_desktop/lib/app/app_scope.module.cherrypick.g.dart`, константы промптов `codelab_agent_core/lib/src/prompts/prompts.g.dart` и код локализации (`app_localizations*.dart` desktop, `codelab_localizations*.dart` в `codelab_ui`); анализатор исключает `*.g.dart` и `*.freezed.dart` (`analysis_options.yaml`). Совпадение промптов с `prompts/**/*.md` проверяет `melos run prompts:check`, кода локализации с ARB — `melos run l10n:check` (§30а).
 
 ---
 
-## 82. Cherrypick tests
+## 81. Тесты состояний Freezed
 
-DI wiring следует проверять smoke/integration tests, а не unit test каждого binding.
+Тестировать, что Freezed правильно реализовал `copyWith`, НЕ СЛЕДУЕТ.
 
-Критично проверить, что composition root может построить graph.
+Переходы состояния приложения ДОЛЖНЫ тестироваться.
 
 ---
 
-## 83. Composition smoke test
+## 82. Тесты Cherrypick
+
+Связку DI СЛЕДУЕТ проверять дымовыми или интеграционными тестами, а не модульным тестом на каждую привязку.
+
+ДОЛЖНО быть проверено, что composition root может построить граф.
+
+В коде root scope desktop `createCodeLabRootScope` строят тесты `apps/codelab_desktop/test/app/` (например, `protocol_composition_test.dart`, `app_scope_embedded_test.dart`, `app_scope_profiles_test.dart`) и любой виджет-тест через `CodeLabTestBinding`; composition root CLI `buildCliRuntime` — тесты `apps/codelab_cli/test/`.
+
+---
+
+## 83. Дымовой тест сборки зависимостей
 
 Полезен тест:
 
 ```text
-build application dependency graph
-  → no missing bindings
+построить граф зависимостей приложения
+  → нет отсутствующих привязок
 ```
 
-если Cherrypick позволяет это делать без запуска real destructive resources.
+если Cherrypick позволяет это без запуска реальных разрушающих ресурсов.
 
 ---
 
-## 84. Не запускать external agent в unit tests
+## 84. Не запускать внешнего агента в модульных тестах
 
-Unit tests не должны зависеть от installed production AI agent.
+Модульные тесты НЕ ДОЛЖНЫ зависеть от установленного рабочего AI-агента.
 
-Использовать fake/test agent.
+СЛЕДУЕТ использовать поддельного или тестового агента.
+
+В коде единственный прогон против внешнего установленного агента — `melos run test:e2e:cli:python-agent`, только локально и вне `check`; без Python-агента тесты пропускаются с причиной.
 
 ---
 
-## 85. Version compatibility matrix
+## 85. Матрица совместимости версий
 
-Если ACP поддерживает несколько protocol versions, полезно иметь parameterized tests:
+Если ACP поддерживает несколько версий протокола, полезны параметризованные тесты:
 
 ```text
-v1 fixture
-v2 fixture
-future-fields fixture
+фикстура v1
+фикстура v2
+фикстура с будущими полями
 ```
 
 ---
 
-## 86. Regression tests
+## 86. Регрессионные тесты
 
-При исправлении bug следует по возможности сначала добавить test, который воспроизводит bug.
+При исправлении ошибки СЛЕДУЕТ по возможности сначала добавить тест, который её воспроизводит.
 
 Особенно для:
 
-* race;
-* stale event;
-* duplicate;
-* protocol incompatibility.
+* гонки;
+* устаревшего события;
+* повтора;
+* несовместимости протокола.
 
 ---
 
-## 87. Bug without test
+## 87. Ошибка без теста
 
-Если regression test невозможно/нецелесообразно добавить, это следует объяснить в task/change.
+Если регрессионный тест добавить невозможно или нецелесообразно, это СЛЕДУЕТ объяснить в задаче или change.
 
 ---
 
-## 88. OpenSpec и tests
+## 88. OpenSpec и тесты
 
-Behavior tests должны соответствовать `openspec/specs/`.
+Поведенческие тесты ДОЛЖНЫ соответствовать `openspec/specs/`.
 
-При изменении product behavior:
+При изменении поведения продукта:
 
 ```text
-spec
+спецификация
   ↓
-tests
+тесты
   ↓
-implementation
+реализация
 ```
 
-Не следует менять tests только для подгонки под случайное текущее behavior.
+Менять тесты только ради подгонки под случайное текущее поведение НЕ СЛЕДУЕТ.
 
 ### TDD и итерации ([план миграции §9.0](proposals/dart-agent-and-clients/09-00-migration-plan.md), п. 3 и п. 8)
 
@@ -1509,166 +1631,169 @@ implementation
 
 ---
 
-## 89. Acceptance tests
+## 89. Приёмочные тесты
 
-Для OpenSpec change полезно связывать tasks/spec scenarios с tests.
+Для OpenSpec change полезно связывать задачи и сценарии спецификации с тестами.
 
-Например:
+Например (иллюстративно):
 
 ```text
-Spec:
-When connection is lost during streaming,
-client reconnects and ignores stale events.
+Спецификация:
+Когда соединение теряется во время потока,
+клиент переподключается и игнорирует устаревшие события.
 
-Tests:
+Тесты:
 - reconnect_restores_stream_test
 - stale_generation_ignored_test
 ```
 
----
-
-## 90. Main test layers
-
-### Layer 1 — Protocol
-
-Проверяет wire correctness.
-
-### Layer 2 — Transport
-
-Проверяет I/O и framing.
-
-### Layer 3 — Client core
-
-Проверяет ACP client semantics.
-
-### Layer 4 — BLoC/Cubit
-
-Проверяет presentation orchestration.
-
-### Layer 5 — Widget
-
-Проверяет UI rendering/interactions.
-
-### Layer 6 — Integration
-
-Проверяет critical end-to-end flow.
+В коде связь задаётся именами: доказательства строк Must называются по id строки матрицы (`cli/<id>`, `core/<id>`, фикстура `acp/<id>`; §74.1), а пункты `tasks.md` ссылаются на сценарий или критерий (§88).
 
 ---
 
-## 91. Нежелительные patterns
+## 90. Основные уровни тестов
 
-### Всё тестируется integration test
+### Уровень 1 — протокол
 
-Медленно, сложно диагностировать.
+Проверяет корректность на проводе.
+
+### Уровень 2 — транспорт
+
+Проверяет ввод-вывод и кадрирование.
+
+### Уровень 3 — ядро клиента
+
+Проверяет семантику ACP-клиента.
+
+### Уровень 4 — BLoC/Cubit
+
+Проверяет оркестрацию представления.
+
+### Уровень 5 — виджеты
+
+Проверяет отрисовку UI и взаимодействие.
+
+### Уровень 6 — интеграция
+
+Проверяет критический сквозной путь.
+
+---
+
+## 91. Нежелательные паттерны
+
+### Всё тестируется интеграционным тестом
+
+Медленно, трудно диагностировать.
 
 ### `Future.delayed` для синхронизации
 
-Создаёт flaky tests.
+Порождает флейки.
 
-### Real network в unit test
+### Реальная сеть в модульном тесте
 
 Нестабильно.
 
-### Real user filesystem
+### Реальная файловая система пользователя
 
 Опасно.
 
-### Production agent в tests
+### Рабочий агент в тестах
 
 Невоспроизводимо.
 
-### Test implementation details
+### Тесты деталей реализации
 
-Ломается при любом refactor.
+Ломаются при любом рефакторинге.
 
-### Massive mocks
+### Массовые моки
 
-Признак слишком тесного coupling.
+Признак слишком тесной связанности.
 
 ---
 
-## 92. Checklist для новой feature
+## 92. Чек-лист для новой функции
 
-Перед завершением feature проверить:
+Перед завершением функции СЛЕДУЕТ проверить:
 
-1. Есть ли pure Dart logic?
-2. Нужны ли unit tests?
+1. Есть ли логика на чистом Dart?
+2. Нужны ли модульные тесты?
 3. Есть ли BLoC/Cubit?
-4. Нужны ли BLoC tests?
-5. Есть ли новый Widget behavior?
-6. Нужен ли widget test?
-7. Есть ли platform integration?
-8. Нужен ли adapter test?
+4. Нужны ли тесты BLoC?
+5. Есть ли новое поведение виджета?
+6. Нужен ли виджет-тест?
+7. Есть ли интеграция с платформой?
+8. Нужен ли тест адаптера?
 9. Затронут ли ACP?
-10. Нужны ли compatibility tests?
-11. Есть ли concurrency/race?
-12. Нужен ли regression/integration test?
+10. Нужны ли тесты совместимости?
+11. Есть ли конкурентность или гонка?
+12. Нужен ли регрессионный или интеграционный тест?
 
 ---
 
-## 93. Checklist для bug fix
+## 93. Чек-лист для исправления ошибки
 
-При bug fix:
+При исправлении ошибки:
 
 1. Воспроизвести проблему.
-2. Определить layer, где нарушен invariant.
-3. Добавить regression test, если возможно.
-4. Исправить минимальный owner component.
-5. Запустить targeted tests.
-6. Запустить analysis.
-7. При shared change — расширить validation.
+2. Определить уровень, где нарушен инвариант.
+3. Добавить регрессионный тест, если возможно.
+4. Исправить минимальный компонент-владелец.
+5. Запустить точечные тесты.
+6. Запустить анализ.
+7. При изменении общего кода — расширить проверку.
 
 ---
 
-## 94. Главные invariants
+## 94. Главные инварианты
 
-### TEST-001 — Core behavior тестируется без Flutter
+### TEST-001 — Поведение ядра тестируется без Flutter
 
-Protocol/client/state-machine logic остаётся pure Dart testable.
+Логика протокола, клиента и автоматов состояний остаётся тестируемой на чистом Dart.
 
-### TEST-002 — Race tests детерминированы
+### TEST-002 — Тесты гонок детерминированы
 
-Нет arbitrary sleeps как основного способа синхронизации.
+Произвольные паузы не служат основным способом синхронизации.
 
-### TEST-003 — Integration tests дополняют unit tests
+### TEST-003 — Интеграционные тесты дополняют модульные
 
-Не заменяют их.
+И не заменяют их.
 
-### TEST-004 — Production не зависит от test infrastructure
+### TEST-004 — Рабочий код не зависит от тестовой инфраструктуры
 
-`codelab_acp_testing` только test/dev dependency. Исключение — `apps/codelab_cli` с импортом только
-из `lib/src/scenario/` (§7).
+`codelab_acp_testing` — только `dev_dependency`. Исключение — `apps/codelab_cli` с импортом только
+из `lib/src/scenario/` (§7). Тестовые барели агентской стороны — отдельный случай, тоже описанный в §7: бинарь
+`codelab-agent` осознанно импортирует `package:codelab_agent_io/testing.dart` ради флага `--llm-script`.
 
-### TEST-005 — Security behavior имеет direct tests
+### TEST-005 — У поведения безопасности есть прямые тесты
 
-Permission deny-by-default и stale decision покрыты тестами.
+Отказ в разрешении по умолчанию и устаревшее решение покрыты тестами.
 
-### TEST-006 — Protocol compatibility проверяется
+### TEST-006 — Совместимость протокола проверяется
 
-Unknown/optional/versioned data имеет coverage.
+У неизвестных, необязательных и версионированных данных есть покрытие.
 
-### TEST-007 — Tests соответствуют specs
+### TEST-007 — Тесты соответствуют спецификациям
 
-Тест не является источником нового product behavior сам по себе.
+Тест сам по себе не является источником нового поведения продукта.
 
 ---
 
 ## 95. Основная модель
 
-Хорошая testing strategy выглядит так:
+Хорошая стратегия тестирования выглядит так:
 
 ```text
-Protocol correctness
+Корректность протокола
         ↓
-Transport correctness
+Корректность транспорта
         ↓
-Client lifecycle correctness
+Корректность жизненного цикла клиента
         ↓
-Presentation orchestration
+Оркестрация представления
         ↓
-Widget behavior
+Поведение виджетов
         ↓
-Critical end-to-end flows
+Критические сквозные пути
 ```
 
-Если большинство bugs можно поймать только тяжёлым desktop integration test, lower-level boundaries и testability следует пересмотреть.
+Если большинство ошибок можно поймать только тяжёлым интеграционным тестом desktop, СЛЕДУЕТ пересмотреть границы нижних уровней и их тестируемость.
