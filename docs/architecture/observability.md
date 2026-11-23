@@ -1,115 +1,125 @@
-# Observability в ACP Client
+# Наблюдаемость в CodeLab
 
-Этот документ определяет правила логирования, tracing, correlation и diagnostics в ACP Client.
+Документ задаёт правила журналирования, трассировки протокола, корреляции событий и диагностики в клиентах CodeLab (desktop, CLI) и в Dart-агенте.
 
 Цели:
 
-* сделать lifecycle ACP диагностируемым;
+* сделать жизненный цикл ACP диагностируемым;
 * быстро находить причины ошибок;
-* связывать события между transport, session, request и tool call;
-* не допускать утечки sensitive data;
-* отделить debug diagnostics от production logging;
-* сохранить разумный объём logs.
+* связывать события транспорта, сессии, запроса и вызова инструмента;
+* не допускать утечки чувствительных данных;
+* отделить отладочную диагностику от журнала рабочей сборки;
+* держать объём журналов разумным.
 
-Связанные документы:
+Общие правила — корневой `AGENTS.md` (§2, §9, §10, §12, §16), [`acp-boundary.md`](acp-boundary.md), [`session-lifecycle.md`](session-lifecycle.md), [`streaming.md`](streaming.md), [`concurrency.md`](concurrency.md), [`permissions.md`](permissions.md), [`error-handling.md`](error-handling.md), [`testing.md`](testing.md). Технология журнала — [`technology-stack.md`](technology-stack.md) §17. Журнал и трасса ядра агента — [`proposals/agent-core/12-observability-and-errors.md`](proposals/agent-core/12-observability-and-errors.md) (§12.3–§12.5).
 
-* `AGENTS.md`
-* `docs/architecture/acp-boundary.md`
-* `docs/architecture/session-lifecycle.md`
-* `docs/architecture/streaming.md`
-* `docs/architecture/concurrency.md`
-* `docs/architecture/permissions.md`
-* `docs/architecture/testing.md`
+Термины:
+
+* **Журналирование** (application logging) — структурные записи о значимых событиях приложения: событие, уровень, поля, корреляция (§7).
+* **Трассировка протокола** (protocol tracing) — запись каждого кадра ACP; у клиента — запись `protocol_message` и кадры `ProtocolFrame` (§10).
+* **Корреляционный идентификатор** (correlation identifier) — поле, связывающее записи одной сессии, запроса, вызова инструмента или соединения: `session_id`, `request_id`, `tool_call_id`, `connection_generation` и др. (§4, §61).
+* **Поколение соединения** (connection generation) — локальный номер экземпляра транспорта; растёт при каждой его замене (§5, `session-lifecycle.md` §15).
+* **Маскирование** (masking, redaction) — замена значения секрета на `<redacted>` до того, как запись попадёт в журнал (§13, §14).
+* **Политика payload** (payload policy) — решение, хранится ли полное содержимое кадра ACP (`full`) или только его метаданные (`metadataOnly`) (§48а).
+* **Кольцевой буфер** (ring buffer) — буфер с пределом размера, вытесняющий самые старые записи (§28).
+* **Sink** — получатель записей журнала: консоль, файл, буфер окна журнала, пересылка на dev-сервер.
+* **Отладочная / рабочая сборка** (debug / release build) — режим сборки desktop-клиента; у CLI его роль играет флаг `--verbose` (§48).
+
+Где в коде. Порт журнала клиента — `Logger` (`packages/dart/codelab_client_acp/lib/src/domain/logger.dart`: уровни `trace`, `debug`, `info`, `warning`, `error`, `critical`, связывание `bind`, корреляция `withCorrelation` с ключами `session_id`, `request_id`, `connection_generation`, `tool_call_id`, `message_id`, `operation_id`); адаптер на `structured_log` — `StructuredLogLogger`, процессор маскирования `secretRedactionProcessor`, настройка sinks `configureCodeLabLogging`, переключатель файла трассы `setProtocolTracingEnabled`, ключи `category` (`application`, `protocol`) и `component` (`protocol`, `transport`, `client`, `presentation`) (`lib/src/infrastructure/structured_log_logger.dart`). Маскирование — `SecretRedactor` (`lib/src/domain/secret_redaction.dart`). Протокольный клиент `AcpClientApplication` (`lib/src/application/acp_client_application.dart`): записи `connection_state_changed`, `event_ignored`, `protocol_message`, диагностика `DiagnosticEntry` (`lib/src/domain/domain_models.dart`) в кольцевом буфере на 500 записей (`_recordDiagnostic`, `_logDiagnosticEntry`), текст причины `_causeDetail`; кадры — `ProtocolFrame` и `ProtocolPayloadPolicy` (`lib/src/application/protocol_frame.dart`), их строит `ProtocolFrameRecorder` (`protocol_frame_recorder.dart`). Ядро клиента `codelab_client_core`: `ClientWorkspace` пишет в тот же порт `Logger` и публикует `WorkspaceDiagnostic` (`lib/src/diagnostics/diagnostics.dart`), буфер кадров — `ProtocolFrameLog` (`lib/src/protocol/protocol_frame_log.dart`), инспектор — `InspectorProjection` (`lib/src/inspector/inspector_projection.dart`). Desktop: модуль `CodeLabLoggingModule` (`apps/codelab_desktop/lib/app/app_scope.dart`) настраивает sinks — консоль в debug, `application.log` в release, `protocol.log` (выключен по умолчанию), буфер окна журнала `LogBuffer` (`structured_log_flutter`), необязательная пересылка `RemoteSyncLogOutput` на dev-сервер; окно журнала читает `LogBufferRecordSource` (`lib/app/log_buffer_record_source.dart`), панель Protocol — `ProtocolPaneCubit` и экспорт `protocol_export.dart` (`lib/features/protocol/application/`), журнал встроенного агента переводит `CodeLabEmbeddedLogger` (`lib/app/embedded_logger.dart`). CLI: `CliLogger` и `CliEmbeddedLogger` пишут в stderr только с `--verbose`, кроме событий `secrets.lookup` встроенного агента (имена и источник, без значений) при `--debug-secrets` или `CODELAB_DEBUG_SECRETS=1` (`apps/codelab_cli/lib/src/cli_logger.dart`, `embedded_logger.dart`). Агент: порт `Logger`, `LogLevel` (`trace` … `error`), `LogRecord`, `BoundLogger` (`packages/dart/codelab_agent_core/lib/src/util/logger.dart`), события вида `<область>.<действие>` (`llm.retry`, `permission.decided`); бинарь `codelab-agent` пишет журнал через `HostLogger` в stderr и, по `--log-file` или `CODELAB_LOG_FILE`, в файл JSON Lines (`apps/codelab_agent/lib/src/log/`).
 
 ---
 
 ## 1. Основной принцип
 
-Каждое значимое ACP/application событие должно быть диагностируемо без необходимости логировать весь payload целиком.
+Каждое значимое событие ACP и приложения ДОЛЖНО быть диагностируемым без записи всего payload целиком.
 
 Предпочтительный подход:
 
 ```text
-event
-  + correlation ids
-  + lifecycle state
-  + outcome
+событие
+  + корреляционные идентификаторы
+  + состояние жизненного цикла
+  + исход
 ```
 
 вместо:
 
 ```text
-dump everything
+выгрузить всё
 ```
 
 ---
 
-## 2. Уровни observability
+## 2. Виды наблюдаемости
 
-Следует различать:
+СЛЕДУЕТ различать:
 
 ```text
-application logging
-protocol tracing
-debug diagnostics
-security audit
-crash/error reporting
+журналирование приложения (application logging)
+трассировку протокола (protocol tracing)
+отладочную диагностику (debug diagnostics)
+журнал аудита безопасности (security audit)
+отчёты о сбоях и ошибках (crash/error reporting)
 ```
 
-Это разные concerns.
+Это разные задачи.
 
-Обычный logger НЕ ДОЛЖЕН автоматически считаться полноценным audit log или crash reporting system.
+Обычный логгер НЕ ДОЛЖЕН автоматически считаться полноценным журналом аудита или системой отчётов о сбоях.
+
+В коде есть первые три вида: журналирование — категория `application`, трассировка — категория `protocol` и кадры `ProtocolFrame` (§10), отладочная диагностика — `DiagnosticEntry`, `WorkspaceDiagnostic`, инспектор и панель Protocol (§27). Журнала аудита (§57) и системы отчётов о сбоях (§24) нет.
 
 ---
 
-## 3. Logging ownership
+## 3. Кто владеет журналированием
 
-Каждый layer логирует события своей ответственности.
+Каждый слой журналирует события своей ответственности.
 
 ### `codelab_acp_protocol`
 
-Может логировать:
+МОЖЕТ журналировать:
 
-* parse failure;
-* unsupported message;
-* invalid schema;
-* protocol version mismatch.
+* сбой разбора;
+* неподдерживаемое сообщение;
+* нарушение схемы;
+* несовпадение версии протокола.
 
 ### `codelab_acp_transports`
 
-Может логировать:
+МОЖЕТ журналировать:
 
-* connect/disconnect;
-* process start/exit;
-* stream closure;
-* transport error.
+* подключение и отключение;
+* запуск и завершение процесса;
+* закрытие потока;
+* ошибку транспорта.
 
 ### `codelab_client_acp`
 
-Может логировать:
+МОЖЕТ журналировать:
 
-* session transitions;
-* request lifecycle;
-* reconnect;
-* cancellation;
-* permission lifecycle;
-* stale/duplicate events.
+* переходы сессии;
+* жизненный цикл запроса;
+* переподключение;
+* отмену;
+* жизненный цикл разрешений;
+* устаревшие и повторные события.
 
 ### Presentation
 
-Может логировать:
+МОЖЕТ журналировать:
 
-* significant user intents;
-* UI-level failures;
-* navigation diagnostics при необходимости.
+* значимые намерения пользователя;
+* сбои уровня UI;
+* при необходимости — диагностику навигации.
 
-Presentation НЕ ДОЛЖНА дублировать весь ACP trace.
+Presentation НЕ ДОЛЖНА дублировать всю трассу ACP.
+
+В коде `codelab_acp_protocol` и `codelab_acp_transports` сами не журналируют и зависимости `structured_log` не имеют (`technology-stack.md` §17.1): протокол сообщает об ошибках исключениями (`JsonRpcProtocolException`, `AcpProtocolError`), транспорт — событиями `AcpTransportEvent` (`diagnostic`, `failure`). Записи о них пишет `AcpClientApplication` с ключом `component` — `protocol` или `transport` (константы `protocolComponent`, `transportComponent`); собственные события клиента — `component: client`. В app логгеры с `component` связывает composition root (`app_scope.dart`): `app`, `terminal`, `protocol`, `project_files`, `usage`, `onboarding`, `workbench`, `recent_projects`, `settings`, `secret_migration`; журнал встроенного агента получает `component: embedded` в адаптере `CodeLabEmbeddedLogger` (`embedded_logger.dart`). Ядро агента пишет в собственный порт `Logger`; куда идут записи, решает хост (`12-observability-and-errors.md` §12.3).
 
 ---
 
-## 4. Correlation identifiers
+## 4. Корреляционные идентификаторы
 
-Для связанных событий следует использовать explicit identifiers.
+Для связанных событий СЛЕДУЕТ использовать явные идентификаторы.
 
 По возможности:
 
@@ -129,25 +139,29 @@ request_id=r-42
 connection_generation=8
 ```
 
----
-
-## 5. Connection generation
-
-Local connection generation следует логировать при:
-
-* connect;
-* reconnect;
-* stale event;
-* disconnect;
-* transport replacement.
-
-Это помогает отличать late event старого transport от current connection.
+В коде клиент получает эти ключи через `Logger.withCorrelation` (`codelab_client_acp`): `StructuredLogLogger` передаёт их в `structured_log`, `CliLogger` кладёт в контекст под теми же именами в snake_case. Агент передаёт `session_id`, `tool_call_id`, `request_id` полями записи; постоянные поля связывает `BoundLogger`. Поля `messageId` в схеме ACP нет (`acp-boundary.md` §12), поэтому `message_id` в записях не заполняется.
 
 ---
 
-## 6. Lifecycle transitions
+## 5. Поколение соединения
 
-Significant state transitions следует логировать в structured form.
+Локальное поколение соединения СЛЕДУЕТ журналировать при:
+
+* подключении;
+* переподключении;
+* устаревшем событии;
+* отключении;
+* замене транспорта.
+
+Это помогает отличить позднее событие старого транспорта от событий текущего соединения.
+
+В коде `AcpClientApplication` связывает `connection_generation` с записями о соединении, кадрах, диагностике и устаревших событиях (`withCorrelation(connectionGeneration: …)`). Устаревшее событие помечается поколением, которому оно принадлежит, а не текущим (`_logStaleEvent`).
+
+---
+
+## 6. Переходы жизненного цикла
+
+Значимые переходы состояния СЛЕДУЕТ журналировать в структурном виде.
 
 Например:
 
@@ -168,11 +182,13 @@ reason=transport_closed
 generation=8
 ```
 
+В коде все переходы соединения проходят через одну точку — `AcpClientApplication._transitionConnection`: запись `connection_state_changed` с `component: client`, полями `from`, `to` (имена классов состояния `ClientConnectionState`) и `connection_generation`; уровень `info`, для перехода в `ClientConnectionFailed` — `warning`. Переходы сессии и хода общей записью не журналируются; есть отдельные события — `turn_interrupted`, `turn_interrupt_marked`, `turn_interrupt_mark_rolled_back` (`codelab_client_acp`) и диагностика ядра клиента, например `Cancelled prompt turn <id>.` (`ClientWorkspace`).
+
 ---
 
-## 7. Structured logging
+## 7. Структурное журналирование
 
-Следует предпочитать structured fields вместо построения длинной строки вручную.
+СЛЕДУЕТ предпочитать структурные поля длинной строке, собранной вручную.
 
 Предпочтительно:
 
@@ -188,64 +204,68 @@ reason=transport_lost
 "Request r-42 failed because transport was lost"
 ```
 
-Human-readable message может существовать дополнительно.
+Читаемое человеком сообщение МОЖЕТ существовать дополнительно.
+
+В коде события app называются `<область>.<действие>` (`project.drop`, `protocol_pane.trace`, `app.exit_timeout`), события протокольного клиента — в snake_case (`connection_state_changed`, `event_ignored`, `request_timeout`). Исключение — записи диагностики `DiagnosticEntry`: `_logDiagnosticEntry` пишет их с читаемым текстом вместо имени события (`Failed to send ACP request session/prompt.`), а различающие поля — `source` и контекст. Так же пишется предупреждение `Unknown ACP tool kind treated as other.`.
 
 ---
 
-## 8. Log levels
+## 8. Уровни журнала
 
-Рекомендуемая semantics:
+Уровням СЛЕДУЕТ придавать такую семантику.
 
 ### trace
 
-Очень подробные internal events.
+Очень подробные внутренние события.
 
 Например:
 
-* каждый streaming event;
-* reducer decisions;
-* deduplication details.
+* каждое потоковое событие;
+* решения редьюсера;
+* подробности устранения дублей.
 
 ### debug
 
-Диагностика development workflow.
+Диагностика для разработки.
 
 Например:
 
-* state transitions;
-* reconnect attempts;
-* protocol mapping details.
+* переходы состояния;
+* попытки переподключения;
+* подробности преобразования протокола.
 
 ### info
 
-Значимые нормальные lifecycle события.
+Значимые штатные события жизненного цикла.
 
 Например:
 
-* connected;
-* session created;
-* request completed.
+* соединение установлено;
+* сессия создана;
+* запрос завершён.
 
 ### warning
 
-Recoverable abnormal condition.
+Восстановимое нештатное состояние.
 
 Например:
 
-* reconnect attempt;
-* stale event;
-* unknown optional field;
-* retryable failure.
+* попытка переподключения;
+* устаревшее событие;
+* неизвестное необязательное поле;
+* сбой, который можно повторить.
 
 ### error
 
-Operation failed или нарушен expected flow.
+Операция не удалась или нарушен ожидаемый ход работы.
 
 ### fatal
 
-Application не может безопасно продолжать работу.
+Приложение не может безопасно продолжать работу.
 
-Конкретные levels должны соответствовать project logger.
+Конкретные уровни ДОЛЖНЫ соответствовать логгеру проекта.
+
+В коде уровень `fatal` у клиента называется `critical` (порт `Logger`, `LogLevel` пакета `structured_log`); у порта `Logger` агента уровни `trace` … `error`, без `critical`. Что попадает в sink, решает его минимальный уровень: у sinks `structured_log` по умолчанию — `debug`, буфер окна журнала (`debug-panel`) и файл трассы `protocol.log` принимают с `trace` (`configureCodeLabLogging`); CLI пишет с `info` (`CliLogger`, `CliEmbeddedLogger`); бинарь агента — с уровня из `--log-level` или `CODELAB_LOG_LEVEL`, по умолчанию `info`. Устаревшее событие клиент пишет на уровне `debug` (`event_ignored`, `response_ignored`), а не `warning`, как в примере выше.
 
 ---
 
@@ -259,60 +279,64 @@ Application не может безопасно продолжать работу
 reconnect attempt 1
 ```
 
-обычно warning/debug, а не error.
+обычно `warning` или `debug`, а не `error`.
 
-Иначе production logs становятся шумными.
-
----
-
-## 10. Protocol tracing
-
-ACP protocol tracing может существовать отдельно от обычного logging.
-
-Он полезен для:
-
-* debugging compatibility;
-* расследования malformed messages;
-* воспроизведения protocol flow.
-
-Protocol tracing НЕ ДОЛЖЕН быть включён в release по умолчанию.
+Иначе журнал рабочей сборки становится шумным.
 
 ---
 
-## 11. Full payload logging
+## 10. Трассировка протокола
 
-Полный ACP payload МОЖЕТ логироваться только в debug/diagnostic mode, если это безопасно.
+Трассировка протокола ACP МОЖЕТ существовать отдельно от обычного журналирования.
 
-В production по умолчанию следует логировать:
+Она полезна для:
 
-* method/type;
-* ids;
-* size;
-* sequence;
-* outcome;
+* отладки совместимости;
+* расследования некорректных сообщений;
+* воспроизведения хода обмена по протоколу.
 
-без полного content.
+Трассировка протокола НЕ ДОЛЖНА быть включена в release по умолчанию.
 
----
-
-## 12. Sensitive data
-
-Нельзя логировать без необходимости:
-
-* API keys;
-* auth tokens;
-* passwords;
-* credentials;
-* secret environment variables;
-* secure storage values;
-* private file contents;
-* user prompts целиком, если это чувствительные данные.
+В коде у клиента два канала трассировки. Запись `protocol_message` (уровень `trace`, категория `protocol`) идёт в буфер окна журнала и в файл `protocol.log`; файл выключен по умолчанию и включается только явно — `setProtocolTracingEnabled`. Кадры `ProtocolFrame` идут в буфер `ProtocolFrameLog` панели Protocol (§27а). Что именно они содержат, решает политика payload (§48а). У агента трасса ACP — после MVP: ключи `logging.trace` и `logging.trace_payload` читаются, но не применяются (`12-observability-and-errors.md` §12.5).
 
 ---
 
-## 13. Masking
+## 11. Запись полного payload
 
-Sensitive value должно быть masked ДО передачи logger.
+Полный payload ACP МОЖЕТ журналироваться только в режиме отладки или диагностики и только если это безопасно.
+
+В рабочей сборке по умолчанию СЛЕДУЕТ журналировать:
+
+* метод или тип;
+* идентификаторы;
+* размер;
+* порядковый номер;
+* исход;
+
+без полного содержимого.
+
+Как это устроено у клиента — §48а.
+
+---
+
+## 12. Чувствительные данные
+
+ЗАПРЕЩЕНО журналировать без необходимости:
+
+* API-ключи;
+* токены авторизации;
+* пароли;
+* учётные данные;
+* секретные переменные окружения;
+* значения из защищённого хранилища;
+* содержимое приватных файлов;
+* промпты пользователя целиком, если это чувствительные данные.
+
+---
+
+## 13. Маскирование
+
+Чувствительное значение ДОЛЖНО маскироваться ДО передачи логгеру.
 
 Например:
 
@@ -320,13 +344,15 @@ Sensitive value должно быть masked ДО передачи logger.
 token=sk-***redacted***
 ```
 
-Нельзя рассчитывать на то, что downstream log collector сам всё скроет.
+ЗАПРЕЩЕНО рассчитывать на то, что сборщик журналов дальше по цепочке сам всё скроет.
+
+В коде клиент маскирует в процессе: процессор `secretRedactionProcessor` стоит первым в цепочке `structured_log` и действует для всех sinks (`configureCodeLabLogging`); `CliLogger` и `CliEmbeddedLogger` прогоняют контекст через `SecretRedactor` сами; `_recordDiagnostic` маскирует текст и контекст `DiagnosticEntry` до хранения. Журнал бинаря `codelab-agent` (`HostLogger`) маскирования не делает — оно отложено до после 1.0 (`12-observability-and-errors.md` §12.4); до тех пор действует правило ядра (§12.3): значения секретов не пишутся ни в одно событие на любом уровне, а тексты сообщений и аргументы инструментов — только на уровне `debug`. У встроенного агента записи проходят маскирование журнала клиента (`CodeLabEmbeddedLogger`, `CliEmbeddedLogger`).
 
 ---
 
-## 14. Structured redaction
+## 14. Маскирование по схеме
 
-Если payload имеет known sensitive fields, redaction should be schema-aware.
+Если у payload есть известные чувствительные поля, маскированию СЛЕДУЕТ учитывать схему.
 
 Маскирование централизовано в `SecretRedactor` (`codelab_client_acp`); правила — требование spec `approval-safety` «Редактирование секретов», решения — design.md change `extend-secret-name-redaction` (D1–D7):
 
@@ -344,28 +370,30 @@ token=sk-***redacted***
 * Централизованное маскирование клиента — `SecretRedactor` (`codelab_client_acp`). Оно скрывает значение по имени **ключа**. В ACP заголовки HTTP и переменные окружения MCP-серверов — объекты `{name, value}` (`HttpHeader`, `EnvVariable`, `docs/protocols/acp/protocol/17-Schema.md`): имя секрета лежит в значении поля `name`, а сам секрет — под нейтральным ключом `value`. Правило по ключу такой секрет не видит.
 * Поэтому правило имён применяется и к паре: если у объекта есть строковое `name`, подпадающее под правило секретных имён (с тем же исключением для счётчиков токенов), и есть ключ `value`, значение `value` заменяется на `<redacted>`. Остальные поля объекта маскируются как раньше. Пример: `{"name": "Authorization", "value": "<redacted>"}`, `{"name": "GITHUB_TOKEN", "value": "<redacted>"}`, а `{"name": "PATH", "value": "/usr/bin"}` остаётся открытым.
 * Это расширение существующего правила, а не второй набор правил: оно действует везде, где уже работает `SecretRedactor`, — записи журнала, диагностика, кадры панели Protocol (§27а).
-* Пара выбрана по схеме ACP. Другие пары (`key`/`val`) не трогаются — в ACP их нет. Маскировать `value` любого объекта с `name` нельзя: кадры потеряли бы безвредные данные (`ResourceLink`, переменная `PATH`) и стали бы бесполезны для отладки.
+* Пара выбрана по схеме ACP. Другие пары (`key`/`val`) не трогаются — в ACP их нет. ЗАПРЕЩЕНО маскировать `value` любого объекта с `name`: кадры потеряли бы безвредные данные (`ResourceLink`, переменная `PATH`) и стали бы бесполезны для отладки.
 * Цена: слово из правила имён внутри безвредного имени (`AUTHOR` содержит `auth`) скрывает значение. Это свойство общего правила имён, отдельных исключений нет.
 
 ---
 
-## 15. Tool-call logging
+## 15. Журналирование вызовов инструментов
 
-Для tool calls полезно логировать:
+Для вызовов инструментов полезно журналировать:
 
-* tool name/capability;
-* tool call id;
-* session/request id;
-* lifecycle;
-* permission outcome.
+* имя инструмента или возможность;
+* id вызова инструмента;
+* id сессии и запроса;
+* жизненный цикл;
+* исход проверки разрешения.
 
-Не следует по умолчанию логировать полный arguments payload.
+НЕ СЛЕДУЕТ по умолчанию журналировать полный payload аргументов.
+
+В коде вызовы инструментов журналирует агент: события `permission.asked` и `permission.denied` (§16) несут `tool_call_id` и имя инструмента `tool`, `permission.decided` — `tool_call_id` и `decision`; аргументов нет. Клиент отдельных записей о вызовах инструментов не пишет — они видны в трассе протокола (`protocol_message`, кадры).
 
 ---
 
-## 16. Permission logging
+## 16. Журналирование разрешений
 
-Для permission flow полезно логировать:
+Для потока разрешений полезно журналировать:
 
 ```text
 permission_requested
@@ -376,42 +404,44 @@ permission_user_denied
 permission_stale
 ```
 
-с correlation identifiers.
+с корреляционными идентификаторами.
+
+В коде имена другие. Агент (`codelab_agent_core/lib/src/permissions/policy.dart`): `permission.asked` (`debug`; `tool_call_id`, `tool`, `tier`, `critical`), `permission.decided` (`debug`; `tool_call_id`, `decision`), `permission.denied` (`info`; `tool_call_id`, `tool`, `reason`). Клиент: диагностика `Pending permission request dropped: <reason>` (`warning`, `source: application.permission`) при снятии одобрения оборванного соединения и `Resolved approval <id> (<status>).` ядра клиента (`WorkspaceDiagnostic` с `source: approval`).
 
 ---
 
-## 17. Security-sensitive actions
+## 17. Действия, значимые для безопасности
 
-Для dangerous operations следует логировать минимум:
+Для опасных операций СЛЕДУЕТ журналировать минимум:
 
-* action type;
-* target summary;
-* decision;
-* correlation;
-* outcome.
+* тип действия;
+* краткое описание цели;
+* решение;
+* корреляцию;
+* исход.
 
-Но logs не должны превращаться в копию sensitive payload.
+Но журнал НЕ ДОЛЖЕН превращаться в копию чувствительного payload.
 
 ---
 
-## 18. User decision
+## 18. Решение пользователя
 
-User decision следует логировать как факт:
+Решение пользователя СЛЕДУЕТ журналировать как факт:
 
 ```text
 decision=allow
 scope=once
 ```
 
-без ненужных personal details.
+без лишних персональных подробностей.
 
 ---
 
-## 19. Streaming logs
+## 19. Журналирование потоков
 
-Не следует логировать каждый text token на обычном `debug/info`.
+НЕ СЛЕДУЕТ журналировать каждый текстовый токен на обычных уровнях `debug` и `info`.
 
-Для high-frequency stream полезнее:
+Для высокочастотного потока полезнее:
 
 ```text
 request_id=r-42
@@ -420,13 +450,15 @@ seq=18
 size=124
 ```
 
-на `trace`, если tracing включён.
+на уровне `trace`, если трассировка включена.
+
+В коде так устроена запись `protocol_message`: одна запись `trace` на кадр с `direction`, `kind`, `method`, `size` и корреляцией (§48а).
 
 ---
 
-## 20. Duplicate event
+## 20. Повторное событие
 
-Duplicate/stale event полезно логировать:
+Повторное или устаревшее событие полезно журналировать:
 
 ```text
 event=ignored
@@ -441,13 +473,15 @@ seq=18
 reason=stale_generation
 ```
 
-Это критично для диагностики reconnect races.
+Это критично для диагностики гонок при переподключении.
+
+В коде: `event_ignored` с `reason: stale_generation`, `kind` (например, `inbound_message`, `transport_event`, `send_prompt_result`, `operation_result`; для ответов на `terminal/*` — `terminal_create_result`, `terminal_response` с `method` и `request_id`) и поколением события; ответ без ожидающего запроса — `response_ignored` с `reason: no_pending_request`. Оба на уровне `debug` (§8).
 
 ---
 
-## 21. Error context
+## 21. Контекст ошибки
 
-Error log должен содержать context, достаточный для поиска причины.
+Запись об ошибке ДОЛЖНА содержать контекст, достаточный для поиска причины.
 
 Например:
 
@@ -466,45 +500,49 @@ Something went wrong
 
 ---
 
-## 22. Exception stack trace
+## 22. Стек исключения
 
-Stack trace следует сохранять для unexpected internal exceptions.
+Стек СЛЕДУЕТ сохранять для неожиданных внутренних исключений.
 
-Expected typed failure не всегда требует stack trace.
+Ожидаемый типизированный сбой не всегда требует стека.
+
+В коде порт `Logger` клиента параметра для стека не имеет; у порта агента он есть (`stack` в `Logger.log`, `LogRecord.stack`). Подробности — `error-handling.md` §21.
 
 ---
 
-## 23. Error normalization
+## 23. Разделение ошибок
 
-Logger должен различать:
+Логгер ДОЛЖЕН различать:
 
 ```text
-expected application failure
-unexpected exception
-programming error
+ожидаемый сбой приложения
+неожиданное исключение
+ошибку программиста
 ```
 
-Не следует писать stack trace для каждого validation failure.
+НЕ СЛЕДУЕТ писать стек для каждого сбоя проверки.
 
 ---
 
-## 24. Crash reporting
+## 24. Отчёты о сбоях
 
-Если используется crash reporting system, он должен получать:
+Если используется система отчётов о сбоях, она ДОЛЖНА получать:
 
-* normalized error;
-* stack trace;
-* app version;
-* platform;
-* non-sensitive correlation context.
+* нормализованную ошибку;
+* стек;
+* версию приложения;
+* платформу;
+* нечувствительный корреляционный контекст.
 
-Нельзя автоматически прикладывать full ACP payload.
+ЗАПРЕЩЕНО автоматически прикладывать полный payload ACP.
+
+В коде системы отчётов о сбоях нет.
 
 ---
 
-## 25. Breadcrumbs
+## 25. Хлебные крошки
 
-Полезные breadcrumbs:
+Полезные хлебные крошки (breadcrumbs):
 
 ```text
 connected
@@ -516,126 +554,136 @@ connection_lost
 reconnect_started
 ```
 
-помогают понять crash context без full trace.
+Они помогают понять контекст сбоя без полной трассы.
 
 ---
 
-## 26. Session correlation
+## 26. Корреляция с сессией
 
-Если crash происходит во время session, можно прикладывать session identifier, если это безопасно.
+Если сбой происходит во время сессии, к отчёту МОЖНО прикладывать идентификатор сессии, если это безопасно.
 
-Identifier не должен содержать sensitive data сам по себе.
+Идентификатор сам по себе НЕ ДОЛЖЕН содержать чувствительных данных.
 
 ---
 
-## 27. Debug diagnostics panel
+## 27. Панель отладочной диагностики
 
-В debug build может существовать diagnostics panel.
+В отладочной сборке МОЖЕТ существовать панель диагностики.
 
-Он может показывать:
+Она МОЖЕТ показывать:
 
-* connection state;
-* current session id;
-* request ids;
-* active tool calls;
-* connection generation;
-* recent protocol events.
+* состояние соединения;
+* id текущей сессии;
+* id запросов;
+* активные вызовы инструментов;
+* поколение соединения;
+* недавние события протокола.
 
-Не следует включать такой panel в release без product decision.
+НЕ СЛЕДУЕТ включать такую панель в release без решения продукта.
 
 ### 27а. Панель Protocol desktop-клиента: решение продукта
 
 Источник — change [`redesign-protocol-pane`](../../openspec/changes/redesign-protocol-pane/design.md), D3, D5, D17; решение пользователя 2026-11-22 (Q7).
 
-Панель Protocol (кадры ACP соединения и вид Log над журналом app) **есть в release-сборке**. Это и есть product decision, которого требует абзац выше. Его условия:
+Панель Protocol (кадры ACP соединения и вид Log над журналом app) **есть в release-сборке**. Это и есть решение продукта, которого требует абзац выше. Его условия:
 
 * **По умолчанию в release — только метаданные кадра**: направление, вид, метод, id, `session_id`, поколение соединения, краткая подробность из полей схемы, код ошибки, размер. Payload кадра не строится и в памяти не хранится; текст `error.message` агента тоже не хранится — в нём бывают пути и фрагменты данных. Политику задаёт хост (§48а).
 * **Полные payload кадров в release — только в режиме Trace**: явное включение в самой панели, не сохраняется между запусками (§49а). Debug-сборка хранит payload всегда.
 * **Секреты маскируются до хранения при любой политике** (§13, §14, §14а). Copy и Export берут только замаскированное.
-* **Память ограничена** (§28, §29): буфер кадров `ProtocolFrameLog` (`codelab_client_core`) — 2000 кадров и 8 MiB payload на соединение, payload больше 256 KiB не хранится. Буфер живёт только в памяти.
+* **Память ограничена** (§28, §29): буфер кадров `ProtocolFrameLog` (`codelab_client_core`) — 2000 кадров и 8 MiB payload; буфер один на рабочее пространство (`ClientWorkspace`), а не на сессию, и переподключение его не очищает — кадры несут поколение соединения (Q6). Payload больше 256 KiB не хранится. Буфер живёт только в памяти.
 * **Вид Log** показывает тот же `LogBuffer`, что и полноэкранный просмотр; содержимое записей `protocol_message` определяет базовая политика (§48а), Trace его не меняет.
 
 ---
 
-## 28. Ring buffer
+## 28. Кольцевой буфер
 
-Для recent debug events полезен bounded ring buffer.
+Для недавних отладочных событий полезен кольцевой буфер с пределом.
 
 Например:
 
 ```text
-last 500 events
+последние 500 событий
 ```
 
 вместо бесконечного списка.
 
----
-
-## 29. Memory limits
-
-Diagnostics buffer должен иметь bounded memory.
-
-Особенно нельзя хранить:
-
-* все streaming chunks;
-* все raw payload;
-* бесконечную history transport events.
+В коде: `AcpClientApplication` хранит последние 500 записей `DiagnosticEntry` (`_maxDiagnostics`), `LogBuffer` окна журнала app — 500 записей (ёмкость по умолчанию `structured_log_flutter`), `ProtocolFrameLog` — 2000 кадров и 8 MiB payload (§27а).
 
 ---
 
-## 30. Performance
+## 29. Пределы памяти
 
-Logging не должен заметно влиять на streaming/rendering performance.
+Буфер диагностики ДОЛЖЕН быть ограничен по памяти.
 
-Для high-frequency events следует:
+Особенно ЗАПРЕЩЕНО хранить:
 
-* снижать level;
-* aggregate;
-* sample;
-* lazy-format fields.
+* все потоковые чанки;
+* все сырые payload;
+* бесконечную историю событий транспорта.
+
+В коде, кроме буферов §28, есть неограниченный список: `_recordDiagnostic` дописывает каждую запись `DiagnosticEntry` в `AcpSession.diagnostics` всех известных сессий, и этот список не усекается. На диске: `protocol.log` ротируется (10 MiB, 5 копий), а `application.log` release-сборки desktop и файл `--log-file` бинаря агента дописываются без ротации.
 
 ---
 
-## 31. Lazy serialization
+## 30. Производительность
 
-Не следует сериализовать большой payload только для log, если текущий log level отключён.
+Журналирование НЕ ДОЛЖНО заметно влиять на производительность потоков и отрисовки.
+
+Для высокочастотных событий СЛЕДУЕТ:
+
+* понижать уровень;
+* агрегировать;
+* делать выборку;
+* форматировать поля лениво.
+
+---
+
+## 31. Ленивая сериализация
+
+НЕ СЛЕДУЕТ сериализовать большой payload только ради журнала, если текущий уровень журнала выключен.
 
 ---
 
 ## 32. `print` и `debugPrint`
 
-Production code НЕ ДОЛЖЕН использовать:
+Рабочий код НЕ ДОЛЖЕН использовать:
 
 ```dart
 print(...)
 debugPrint(...)
 ```
 
-как основной logging mechanism.
+как основной механизм журналирования.
 
-Использовать project logger.
+Использовать логгер проекта.
 
----
-
-## 33. Logger abstraction
-
-Logger должен предоставляться через shared/core abstraction или установленный project mechanism.
-
-Application code не должен зависеть от конкретного backend logger без необходимости.
+В коде правило `avoid_print` включено в корневом `analysis_options.yaml`.
 
 ---
 
-## 34. Logger DI
+## 33. Абстракция логгера
 
-Если logger является dependency, его следует передавать через DI/composition root.
+Логгер ДОЛЖЕН предоставляться через общую абстракцию ядра или установленный механизм проекта.
 
-Не следует создавать новый logger instance в каждом feature.
+Код приложения НЕ ДОЛЖЕН без необходимости зависеть от конкретной реализации журнала.
+
+В коде это порты `Logger` клиента (`codelab_client_acp`) и агента (`codelab_agent_core`); от `structured_log` зависят только `codelab_client_acp` (адаптер `StructuredLogLogger`) и `apps/codelab_desktop` (настройка sinks).
 
 ---
 
-## 35. Categories/components
+## 34. Внедрение логгера
 
-Useful log categories:
+Если логгер — зависимость, его СЛЕДУЕТ передавать через DI и composition root.
+
+НЕ СЛЕДУЕТ создавать новый экземпляр логгера в каждой feature.
+
+В коде `AcpClientApplication` и `ClientWorkspace` принимают `Logger` параметром; без него берут `StructuredLogLogger` (`codelab_client_acp`, `codelab_client_core`), который читает глобальную настройку `structured_log` — осознанное исключение из запрета глобального локатора (design.md change `add-structured-logging`, D7). Логгеры app с `component` создаёт composition root (`app_scope.dart`).
+
+---
+
+## 35. Категории и компоненты
+
+Полезные категории журнала:
 
 ```text
 protocol
@@ -650,7 +698,9 @@ ui
 terminal
 ```
 
-Это помогает фильтровать diagnostics.
+Это помогает фильтровать диагностику.
+
+В коде ключ `category` различает только два канала — `application` и `protocol` (по нему sinks выбирают записи, §48а); область записи задаёт ключ `component` (§3).
 
 `terminal` — панель Terminal десктопа (терминал пользователя; change [`add-integrated-terminal`](../../openspec/changes/archive/2026-11-22-add-integrated-terminal/design.md), D9), логгер `codelab_desktop.terminal`. Ввод и вывод терминала **не логируются вовсе**: их нет в журнале, `LogBuffer`, debug log, пересылке логов, диагностике рабочего места и инспекторе. Редакция секретов (§13–§14) к ним не применяется, потому что редактировать нечего — содержимое не покидает экран. События — только метаданные:
 
@@ -668,7 +718,7 @@ terminal
 * `app.exit_timeout` (компонент `app`, `warning`) — `timeout_ms`, `pending` (имена всех незавершённых шагов, в том числе не начатых, из закрытого набора `terminal`, `cubits`, `workspace`, `embedded`, `migration_offer`, `transport`, `client`, `language`; `language` — только если в root scope есть `AppLanguageCubit`, change `add-desktop-localization`, D2): предел выхода истёк, app всё равно выходит;
 * `app.shutdown_step_failed` (компонент `app`, `error`) — `step`, `error_type`: шаг закрытия root scope бросил, следующие шаги выполняются.
 
-События `app.exit_*` и `app.shutdown_step_failed` — change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D6. Ядро клиента пишет `terminal_processes_killed` — `count`, `reason` (`connection_closed` | `dispose`), без команд, путей и идентификаторов терминалов; событие пишется после отправки сигналов, сбой журнала не мешает завершению процессов. Ответ на `terminal/*`, не отправленный из-за смены соединения или закрытия ядра, виден как `event_ignored {reason: stale_generation, kind}` (`kind`: `terminal_create_result` или `terminal_response`; §20, D15 change).
+События `app.exit_*` и `app.shutdown_step_failed` — change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D6. Протокольный клиент (`AcpClientApplication`) пишет `terminal_processes_killed` — `count`, `reason` (`connection_closed` | `dispose`), без команд, путей и идентификаторов терминалов; событие пишется после отправки сигналов, сбой журнала не мешает завершению процессов. Ответ на `terminal/*`, не отправленный из-за смены соединения или закрытия ядра, виден как `event_ignored {reason: stale_generation, kind}` (`kind`: `terminal_create_result` или `terminal_response`; §20, D15 change).
 
 Уведомление `_codelab/session/usage` (change `add-usage-extension`, D14, D21 Т5, D22): клиентский слой `codelab_client_acp` пишет DEBUG `usage.received` — `session_id`, `seq`, `trigger` (только `step`, `turn` или `compaction`, любое другое значение — `other`; без токенов и денег; payload — только в трассировке `category=protocol`) и DEBUG `usage.dropped` — `reason` (уведомление без строкового `sessionId` отброшено до ядра клиента; без payload). Ядро клиента (`ClientWorkspace`, необязательный `Logger`) пишет DEBUG `usage.stale` — `session_id`, `seq`, `last_seq`, `connection_generation` (дубль или опоздание по правилу `seq`), DEBUG `usage.unknown_session` — `session_id`, `connection_generation` (снимок сессии, которой нет в рабочем пространстве) и WARNING `usage.decode_failed` — `session_id`, `field`, `reason`, `connection_generation`, не чаще раза на сессию и поле. Сумм, цен и текста уведомления в записях нет.
 
@@ -676,16 +726,16 @@ terminal
 
 ---
 
-## 36. Operation duration
+## 36. Длительность операций
 
-Для значимых операций полезно логировать duration:
+Для значимых операций полезно журналировать длительность:
 
-* connect;
-* session create;
-* reconnect;
-* request completion;
-* persistence;
-* process startup.
+* подключения;
+* создания сессии;
+* переподключения;
+* завершения запроса;
+* сохранения данных;
+* запуска процесса.
 
 Например:
 
@@ -695,26 +745,30 @@ duration_ms=482
 outcome=success
 ```
 
----
-
-## 37. Performance metrics
-
-Если metrics subsystem появится, его следует отделять от обычных logs.
-
-Metrics подходят для:
-
-* latency;
-* reconnect count;
-* failure rate;
-* request duration.
-
-Logs — для диагностического контекста.
+В коде `duration_ms` пишут, например, `app.exit_closed` (app), `acp.usage.ledger` и `acp.usage.seeded` (ACP-проекция агента).
 
 ---
 
-## 38. Retry logging
+## 37. Метрики производительности
 
-Retry следует логировать с attempt number.
+Если появится подсистема метрик, её СЛЕДУЕТ отделять от обычных журналов.
+
+Метрики подходят для:
+
+* задержек;
+* числа переподключений;
+* доли сбоев;
+* длительности запросов.
+
+Журналы — для диагностического контекста.
+
+В коде подсистемы метрик нет. Учёт токенов, стоимости и длительности хода (usage) агент передаёт клиенту не журналом, а расширением `_codelab/session/usage` (`12-observability-and-errors.md` §12.6).
+
+---
+
+## 38. Журналирование повторов
+
+Повтор СЛЕДУЕТ журналировать с номером попытки.
 
 Например:
 
@@ -724,13 +778,15 @@ attempt=2
 max_attempts=5
 ```
 
-Не следует логировать один и тот же stack trace на каждой retry попытке, если это создаёт шум.
+НЕ СЛЕДУЕТ записывать один и тот же стек на каждой попытке, если это создаёт шум.
+
+В коде у клиента автоматических повторов переподключения нет (`error-handling.md` §79). Агент пишет `llm.retry` (`info`; `attempt`, `class`, `delay_ms`, `provider`, `model`, без `max_attempts`).
 
 ---
 
-## 39. Final retry failure
+## 39. Окончательный сбой повторов
 
-Когда retry policy exhausted, final error должен быть явно виден.
+Когда политика повторов исчерпана, итоговая ошибка ДОЛЖНА быть явно видна.
 
 Например:
 
@@ -742,9 +798,9 @@ outcome=terminal
 
 ---
 
-## 40. Shutdown logging
+## 40. Журналирование завершения
 
-Orderly shutdown полезно логировать:
+Штатное завершение полезно журналировать:
 
 ```text
 shutdown_started
@@ -754,43 +810,43 @@ agent_process_terminated
 shutdown_completed
 ```
 
-Это помогает находить orphan resources.
+Это помогает находить ресурсы, оставшиеся без владельца.
 
 В CodeLab desktop эту роль играют `app.exit_requested` (shutdown_started), `terminal.close_all` и `terminal_processes_killed` (процессы закрыты), `embedded.close_timeout` и `app.exit_closed` / `app.exit_timeout {pending}` (shutdown_completed или что не успело); см. события компонента `app` выше.
 
 ---
 
-## 41. Unexpected shutdown
+## 41. Неожиданное завершение
 
-Unexpected process/transport exit должен отличаться от intentional shutdown.
+Неожиданное завершение процесса или транспорта ДОЛЖНО отличаться от намеренного завершения.
 
-Иначе diagnostics будет путать нормальное закрытие с failure.
-
----
-
-## 42. Platform context
-
-При platform error полезно включать:
-
-* OS;
-* operation;
-* capability;
-* adapter.
-
-Не нужно логировать лишние machine identifiers.
+Иначе диагностика будет путать штатное закрытие со сбоем.
 
 ---
 
-## 43. File paths
+## 42. Контекст платформы
 
-Filesystem path может содержать sensitive information.
+При ошибке платформы полезно включать:
 
-Следует решить, можно ли логировать:
+* ОС;
+* операцию;
+* возможность;
+* адаптер.
 
-* full path;
-* basename;
-* workspace-relative path;
-* redacted path.
+Лишние идентификаторы машины журналировать не нужно.
+
+---
+
+## 43. Пути файлов
+
+Путь в файловой системе может содержать чувствительную информацию.
+
+СЛЕДУЕТ решить, что можно журналировать:
+
+* полный путь;
+* базовое имя;
+* путь относительно рабочей папки;
+* замаскированный путь.
 
 По умолчанию предпочтителен минимально достаточный вариант.
 
@@ -805,38 +861,38 @@ Filesystem path может содержать sensitive information.
 
 ---
 
-## 44. Commands
+## 44. Команды
 
-Shell command logging может быть sensitive.
+Запись команд оболочки может раскрыть чувствительные данные.
 
-В production лучше логировать:
+В рабочей сборке лучше журналировать:
 
 ```text
 executable=git
 operation=process_run
 ```
 
-чем полный command line, если arguments могут содержать secrets.
+чем полную командную строку, если аргументы могут содержать секреты.
 
 ---
 
-## 45. Environment
+## 45. Окружение
 
-Environment variables целиком логировать запрещено.
-
----
-
-## 46. Network endpoints
-
-Host/port обычно можно логировать, если это не sensitive.
-
-Authorization headers, tokens и query secrets — нельзя.
+Журналировать переменные окружения целиком ЗАПРЕЩЕНО.
 
 ---
 
-## 47. ACP methods
+## 46. Сетевые адреса
 
-Method/type ACP обычно полезно логировать.
+Хост и порт обычно МОЖНО журналировать, если они не чувствительны.
+
+Заголовки авторизации, токены и секреты в строке запроса журналировать ЗАПРЕЩЕНО.
+
+---
+
+## 47. Методы ACP
+
+Метод или тип сообщения ACP обычно полезно журналировать.
 
 Например:
 
@@ -846,27 +902,29 @@ method=session/update
 request_id=r-42
 ```
 
-при условии, что method name сам по себе не sensitive.
+при условии, что имя метода само по себе не чувствительно.
 
 ---
 
-## 48. Debug vs release
+## 48. Debug и release
 
-Следует иметь явную разницу:
+СЛЕДУЕТ иметь явную разницу.
 
 ### Debug
 
-* более подробные logs;
-* protocol trace;
-* diagnostics panel;
-* state transitions.
+* более подробные журналы;
+* трасса протокола;
+* панель диагностики;
+* переходы состояния.
 
 ### Release
 
-* bounded structured logs;
-* masked payload;
-* без full protocol dump;
-* без developer-only diagnostics.
+* ограниченные структурные журналы;
+* замаскированный payload;
+* без полной выгрузки протокола;
+* без диагностики только для разработчиков.
+
+В коде desktop в debug пишет записи `application` в консоль, в release — в `application.log` (JSON Lines); файл трассы `protocol.log` выключен по умолчанию в обоих режимах; пересылка на dev-сервер создаётся, только если при сборке заданы `CODELAB_LOG_SERVER_URL` и `CODELAB_LOG_SERVER_KEY` (`CodeLabLoggingModule`, `technology-stack.md` §17.2). CLI без `--verbose` молчит, кроме `secrets.lookup` встроенного агента при `--debug-secrets` (§13).
 
 ### 48а. Политика payload протокола у хоста клиента
 
@@ -877,7 +935,7 @@ request_id=r-42
   * desktop — `full` только при `kDebugMode`, иначе `metadataOnly` (`apps/codelab_desktop/lib/app/app_scope.dart`);
   * CLI — `full` только с `--verbose`, иначе `metadataOnly` (`apps/codelab_cli/lib/src/composition_root.dart`); без `--verbose` логгер CLI и так молчит.
 * Одна базовая политика на процесс задаёт **и кадры, и запись журнала `protocol_message`** — во всех sinks категории `protocol`: во встроенном журнале app (`debug-panel`) и в файле `protocol.log` (пересылка на dev-сервер категорию `protocol` не получает). При `metadataOnly` запись несёт `direction`, `kind`, `method`, `request_id`, `size` и корреляцию `session_id`, `connection_generation`, но не `payload`. Sink встроенного журнала по-прежнему принимает категорию `protocol`: видимость — фильтр категории, содержимое — политика.
-* То же правило действует на диагностику ядра в ветках ошибок (сбой декодирования или обработки ответа и запроса, пропуск неподдерживаемого `sessionUpdate`): при `metadataOnly` в контексте только метаданные — метод, id, сессия, размер, класс ошибки, — без сырых `params`, `result` и `payload` (решение пользователя 2026-11-23). Текст причины сбоя (`cause`) при `metadataOnly` пишется только классом ошибки в любой записи диагностики ядра, включая вложенную причину сбоя транспорта в `context['inner_cause']` (`_causeDetail`; D3).
+* То же правило действует на диагностику ядра в ветках ошибок (сбой декодирования или обработки ответа и запроса, пропуск неподдерживаемого `sessionUpdate`): при `metadataOnly` в контексте только метаданные — метод, id, сессия, размер, класс ошибки, — без сырых `params`, `result` и `payload` (решение пользователя 2026-11-23). Текст причины сбоя (`cause`) при `metadataOnly` пишется только классом ошибки в любой записи диагностики ядра, включая вложенную причину сбоя транспорта в `context['inner_cause']` (`_causeDetail`; D3). Обычная запись журнала `attempt_superseded` (debug, `_requireCurrentAttempt`) при `metadataOnly` тоже несёт только `error_class` и `error_code`, без текста ошибки вытесненной попытки.
 * **Текст ответа-ошибки агента** (`error.message`, `error.data`) — тоже payload, и не только для кадров (§27а), но и для диагностики и журнала (D3, «Текст ошибки агента»). При `metadataOnly` `DiagnosticEntry` ядра, `WorkspaceDiagnostic` kit и записи `ShellDiagnostics` app о сбое несут метод, id, сессию, код ошибки (`error_code`), стандартное имя кода, класс ошибки (`error_class`) и постоянный текст CodeLab — по единому правилу `describeFailureMetadata` (`codelab_client_acp`); без `error.message`, `error.data` и текста исключения, в которое они вложены. При `full` — замаскированный текст, как прежде.
 * Текст для пользователя отделён от текста журнала: сообщение хода в транскрипте (`PromptTurn.failureMessage`), баннер соединения и вывод CLI (`describeFailure`) несут текст агента при любой политике, после `SecretRedactor`, — пользователь видит причину отказа. Это состояние, а не запись журнала.
 * Политику kit и app читают у ядра (`AcpClientApplication.protocolPayloads`, порт `AgentBackend.protocolPayloads`), а не получают вторым параметром: источник один.
@@ -886,11 +944,11 @@ request_id=r-42
 
 ---
 
-## 49. Runtime enabling diagnostics
+## 49. Включение диагностики во время работы
 
-Если full diagnostics можно включить в runtime, это должно быть explicit user/developer action.
+Если полную диагностику можно включить во время работы, это ДОЛЖНО быть явным действием пользователя или разработчика.
 
-Нельзя включать sensitive tracing автоматически после любой ошибки.
+ЗАПРЕЩЕНО автоматически включать трассировку чувствительных данных после любой ошибки.
 
 ### 49а. Режим Trace панели Protocol
 
@@ -909,107 +967,111 @@ Trace — единственный способ включить полные pa
 
 ---
 
-## 50. Export diagnostics
+## 50. Экспорт диагностики
 
-Если приложение позволяет экспортировать diagnostic bundle, необходимо:
+Если приложение позволяет экспортировать набор диагностики, оно ДОЛЖНО:
 
-* маскировать secrets;
-* предупреждать о возможных sensitive data;
+* маскировать секреты;
+* предупреждать о возможных чувствительных данных;
 * ограничивать объём;
-* включать app/platform version;
-* включать correlation data.
+* включать версию приложения и платформы;
+* включать корреляционные данные.
+
+В коде экспорт есть только у панели Protocol: файл JSON Lines с видимыми кадрами или записями журнала (`protocol_export.dart`, D10 change `redesign-protocol-pane`). Заголовок файла несёт `build`, `app_version`, `platform`, `session_id`; данные берутся из буферов уже замаскированными; объём ограничен буферами (§28); если среди кадров есть payload, экспорт сначала спрашивает подтверждение (`exportHasPayload`, `ProtocolPaneCubit.exportActive`).
 
 ---
 
-## 51. Diagnostic bundle
+## 51. Набор диагностики
 
-Potential contents:
+Возможное содержимое:
 
 ```text
-app version
-platform
-recent lifecycle events
-recent protocol metadata
-error summaries
-configuration summary
+версия приложения
+платформа
+недавние события жизненного цикла
+недавние метаданные протокола
+сводки ошибок
+сводка конфигурации
 ```
 
 не обязательно:
 
 ```text
-all prompts
-all file contents
-all environment variables
+все промпты
+содержимое всех файлов
+все переменные окружения
 ```
 
 ---
 
-## 52. Testing observability
+## 52. Тестирование наблюдаемости
 
-Следует тестировать минимум:
+СЛЕДУЕТ проверять тестами как минимум:
 
-* secrets masked;
-* stale event содержит correlation;
-* lifecycle transition emits expected structured event;
-* debug payload logging disabled in release configuration;
-* permission decision logs without secret payload.
+* секреты замаскированы;
+* устаревшее событие несёт корреляцию;
+* переход жизненного цикла даёт ожидаемое структурное событие;
+* запись отладочного payload выключена в конфигурации release;
+* решение о разрешении журналируется без секретного payload.
 
----
-
-## 53. Logger tests
-
-Не нужно проверять каждый log message дословно.
-
-Тестировать следует semantic fields, если они являются важным contract diagnostics.
+В коде такие проверки, например, в `secret_redaction_test.dart`, `structured_logging_test.dart` и `payload_policy_diagnostics_test.dart` (`codelab_client_acp`).
 
 ---
 
-## 54. Error reporting tests
+## 53. Тесты логгера
 
-Unexpected exception должна сохранять:
+Проверять каждое сообщение журнала дословно не нужно.
 
-* type;
-* stack trace;
-* correlation context.
-
-Expected denial не должен ошибочно считаться crash.
+Тестировать СЛЕДУЕТ смысловые поля, если они — важный контракт диагностики.
 
 ---
 
-## 55. Не логировать дважды
+## 54. Тесты отчётов об ошибках
 
-Если lower layer уже логирует transport error с полной technical context, upper layer может логировать application transition, но не обязательно повторять тот же stack trace.
+Неожиданное исключение ДОЛЖНО сохранять:
+
+* тип;
+* стек;
+* корреляционный контекст.
+
+Ожидаемый отказ НЕ ДОЛЖЕН ошибочно считаться аварийным сбоем.
+
+---
+
+## 55. Не журналировать дважды
+
+Если нижний слой уже записал ошибку транспорта с полным техническим контекстом, верхний слой МОЖЕТ записать переход состояния приложения, но повторять тот же стек не обязательно.
 
 Например:
 
 ```text
-transport:
+транспорт:
 ProcessExited(exitCode=1)
 
-application:
+приложение:
 SessionState → reconnecting
 ```
 
-Это полезнее двух одинаковых error logs.
+Это полезнее двух одинаковых записей об ошибке.
 
 ---
 
-## 56. Log ownership example
+## 56. Пример владения журналом
 
-Хороший flow:
+Хороший поток:
 
 ```text
 codelab_acp_transports
-    → transport closed
+    → транспорт закрыт
 
 codelab_client_acp
-    → connection state: connected → reconnecting
+    → состояние соединения: connected → reconnecting
 
 presentation
-    → reconnect banner shown
+    → показан баннер переподключения
 ```
 
-Не нужно, чтобы каждый слой логировал:
+Не нужно, чтобы каждый слой писал:
 
 ```text
 ERROR: CONNECTION LOST!!!
@@ -1017,51 +1079,51 @@ ERROR: CONNECTION LOST!!!
 
 ---
 
-## 57. Audit trail
+## 57. Журнал аудита
 
-Если продукту потребуется security audit trail, нужно создать отдельный документ/модель.
+Если продукту понадобится журнал аудита безопасности, для него ДОЛЖНЫ быть созданы отдельный документ и модель (или модель в документе).
 
-Audit trail должен определять:
+Журнал аудита ДОЛЖЕН определять:
 
 * какие действия фиксируются;
-* immutable ли записи;
-* retention;
-* export;
-* privacy;
-* integrity.
+* неизменяемы ли записи;
+* срок хранения;
+* экспорт;
+* приватность;
+* целостность.
 
-Обычный application log этого не гарантирует.
-
----
-
-## 58. PII и user data
-
-User-generated content следует считать потенциально sensitive.
-
-Не следует логировать:
-
-* prompts;
-* responses;
-* filenames;
-* tool output;
-
-целиком без явной diagnostic необходимости.
+Обычный журнал приложения этого не гарантирует.
 
 ---
 
-## 59. Sampling
+## 58. Персональные и пользовательские данные
 
-Sampling допустим для high-frequency informational events.
+Содержимое, созданное пользователем, СЛЕДУЕТ считать потенциально чувствительным.
 
-Не следует sampling critical errors или security decisions.
+НЕ СЛЕДУЕТ журналировать:
+
+* промпты;
+* ответы;
+* имена файлов;
+* вывод инструментов;
+
+целиком без явной диагностической необходимости.
 
 ---
 
-## 60. Correlation consistency
+## 59. Выборка
 
-Один identifier должен иметь одинаковое имя во всех layers.
+Выборку (sampling) МОЖНО применять к высокочастотным информационным событиям.
 
-Например, не следует использовать одновременно:
+НЕ СЛЕДУЕТ применять выборку к критическим ошибкам и решениям безопасности.
+
+---
+
+## 60. Согласованность корреляции
+
+Один идентификатор ДОЛЖЕН называться одинаково во всех слоях.
+
+Например, НЕ СЛЕДУЕТ использовать одновременно:
 
 ```text
 req
@@ -1070,15 +1132,17 @@ requestId
 request_id
 ```
 
-в structured logs.
+в структурных журналах.
 
-Project logger должен иметь согласованный naming convention.
+Логгер проекта ДОЛЖЕН иметь согласованное соглашение об именах.
+
+В коде ключи `withCorrelation` согласованы (snake_case, §61), но контекст части записей диагностики `AcpClientApplication` использует camelCase рядом с ними: `sessionId`, `approvalId`, `toolCallId` (снятие одобрения), `sessionUpdate`, `toolKind` (незнакомый вид инструмента).
 
 ---
 
-## 61. Suggested field naming
+## 61. Рекомендуемые имена полей
 
-Рекомендуется snake_case:
+СЛЕДУЕТ использовать snake_case:
 
 ```text
 session_id
@@ -1095,71 +1159,71 @@ duration_ms
 
 ---
 
-## 62. Main invariants
+## 62. Основные инварианты
 
-### OBS-001 — Significant lifecycle диагностируем
+### OBS-001 — Значимый жизненный цикл диагностируем
 
-Connection/session/request transitions имеют structured context.
+Переходы соединения, сессии и запроса имеют структурный контекст.
 
-### OBS-002 — Secrets masked
+### OBS-002 — Секреты замаскированы
 
-Sensitive values не записываются в logs в открытом виде.
+Чувствительные значения не попадают в журнал в открытом виде.
 
-### OBS-003 — Correlation explicit
+### OBS-003 — Корреляция явная
 
-Events можно связать через stable IDs/generation.
+События можно связать через стабильные идентификаторы и поколение соединения.
 
-### OBS-004 — Debug trace bounded
+### OBS-004 — Отладочная трасса ограничена
 
-Detailed tracing не создаёт unbounded memory/log growth.
+Подробная трассировка не приводит к неограниченному росту памяти или журнала.
 
-### OBS-005 — Release не содержит full protocol dump по умолчанию
+### OBS-005 — Release не содержит полной выгрузки протокола по умолчанию
 
-Raw payload tracing developer-only.
+Трассировка сырого payload — только для разработчика.
 
-### OBS-006 — Layers логируют свою semantics
+### OBS-006 — Слои журналируют свою семантику
 
-Transport не логирует UX, UI не дублирует protocol internals.
+Транспорт не журналирует UX, UI не дублирует внутренности протокола.
 
 ---
 
-## 63. Checklist перед добавлением logging
+## 63. Чек-лист перед добавлением записи в журнал
 
-Перед новым log event определить:
+Перед новым событием журнала определить:
 
-1. Зачем он нужен?
-2. Какой layer владеет событием?
-3. Какой level правильный?
-4. Какие correlation fields нужны?
-5. Есть ли sensitive data?
-6. Нужен ли stack trace?
-7. Может ли event происходить часто?
-8. Нужен ли sampling/throttling?
-9. Дублирует ли он lower-level log?
-10. Полезен ли он для реальной диагностики?
+1. Зачем оно нужно?
+2. Какой слой владеет событием?
+3. Какой уровень правильный?
+4. Какие корреляционные поля нужны?
+5. Есть ли чувствительные данные?
+6. Нужен ли стек?
+7. Может ли событие происходить часто?
+8. Нужны ли выборка или ограничение частоты?
+9. Дублирует ли оно запись нижнего уровня?
+10. Полезно ли оно для реальной диагностики?
 
 ---
 
 ## 64. Основная модель
 
-Хорошая observability позволяет восстановить flow:
+Хорошая наблюдаемость позволяет восстановить поток:
 
 ```text
-connect
+подключение
   ↓
-session created
+сессия создана
   ↓
-request started
+запрос начат
   ↓
-streaming
+поток обновлений
   ↓
-tool call
+вызов инструмента
   ↓
-permission allowed
+разрешение получено
   ↓
-completion
+завершение
 ```
 
-через structured events и correlation IDs без необходимости хранить полный sensitive payload.
+через структурные события и корреляционные идентификаторы, без хранения полного чувствительного payload.
 
-Если для расследования любой ошибки приходится добавлять `print()` в десяток мест, observability architecture недостаточна.
+Если для расследования любой ошибки приходится добавлять `print()` в десяток мест, архитектура наблюдаемости недостаточна.
