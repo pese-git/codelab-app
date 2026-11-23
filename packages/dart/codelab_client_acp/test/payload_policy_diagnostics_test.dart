@@ -325,6 +325,55 @@ void main() {
       expect(failure().cause, contains(_marker));
     });
   });
+
+  group('внутренняя причина сбоя транспорта (D3, observability.md §48а)', () {
+    // Внутренняя причина `AcpTransportException` — `SocketException`,
+    // `JsonRpcProtocolException` с фрагментом кадра, путь процесса агента:
+    // её текст не должен уходить в `context` диагностики при `metadataOnly`
+    // (observability.md §48а; D3 change `redesign-protocol-pane`).
+    void failTransport() => transport.fail(
+      AcpTransportException(
+        code: AcpTransportErrorCode.protocolViolation,
+        message: 'Agent wrote invalid ACP JSON-RPC to stdout.',
+        cause: _FrameFailure(),
+      ),
+    );
+
+    DiagnosticEntry failure() =>
+        client.diagnostics.singleWhere((d) => d.source == 'transport');
+
+    test('metadataOnly: code и класс причины, без её текста', () async {
+      await start(ProtocolPayloadPolicy.metadataOnly);
+      failTransport();
+      await pumpEventQueue();
+
+      final diag = failure();
+      expect(
+        diag.context['code'],
+        AcpTransportErrorCode.protocolViolation.name,
+      );
+      expect(diag.context['cause'], '_FrameFailure');
+      expect(observable(), isNot(contains(_marker)));
+    });
+
+    test('full: замаскированный текст причины, как прежде', () async {
+      await start(ProtocolPayloadPolicy.full);
+      failTransport();
+      await pumpEventQueue();
+
+      final diag = failure();
+      expect(
+        diag.context['code'],
+        AcpTransportErrorCode.protocolViolation.name,
+      );
+      expect(diag.context['cause'], contains(_marker));
+    });
+  });
+}
+
+final class _FrameFailure implements Exception {
+  @override
+  String toString() => '_FrameFailure: frame fragment $_marker';
 }
 
 final class _ReaderFailure implements Exception {
