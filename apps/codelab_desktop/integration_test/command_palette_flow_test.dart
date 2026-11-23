@@ -84,6 +84,27 @@ Finder _paletteRow(String slash) => find.descendant(
   matching: find.text(slash),
 );
 
+/// Прокручивает список палитры до заголовка секции команд агента.
+///
+/// Почему: пункты хоста (в том числе «Files» и «Usage») занимают больше
+/// высоты списка (260 px), и у Dart-агента (режимы `dart` и `embedded`)
+/// заголовок секции лежит за границей построенной части ленивого списка:
+/// `find.byKey` его не находит, пока список не прокручен (тот же эффект, что
+/// у `_scrollToPaletteRow`; пункты «Files» и «Usage» удлинили список).
+Future<void> _scrollToAgentSection(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+    find.byKey(CodeLabCommandPaletteSurface.agentSectionHeaderKey),
+    80,
+    scrollable: find
+        .descendant(
+          of: find.byKey(CodeLabCommandPaletteSurface.listKey),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
+  await tester.pumpAndSettle();
+}
+
 /// Прокручивает список палитры, пока строка [slash] не окажется построена и
 /// видна: список ленивый, и строка ниже видимой части (после пункта «Files» и
 /// команд агента это `/plan`) в дереве ещё не существует, так что
@@ -169,6 +190,7 @@ void main() {
 
       // Палитра: `/compact` агента вместо заглушки клиента.
       await _openPalette(tester);
+      await _scrollToAgentSection(tester);
       expect(
         find.byKey(CodeLabCommandPaletteSurface.agentSectionHeaderKey),
         findsOneWidget,
@@ -229,6 +251,7 @@ void main() {
       // 1. Палитра: команды агента в своей секции, заглушки клиента с теми
       // же именами нет, `/permissions` по-прежнему недоступна.
       await _openPalette(tester);
+      await _scrollToAgentSection(tester);
       expect(
         find.byKey(CodeLabCommandPaletteSurface.agentSectionHeaderKey),
         findsOneWidget,

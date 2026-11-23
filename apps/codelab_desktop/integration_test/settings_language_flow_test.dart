@@ -35,7 +35,14 @@ Future<void> _openSettingsGeneral(WidgetTester tester) async {
 }
 
 Future<void> _chooseLanguage(WidgetTester tester, String optionKey) async {
-  await tester.tap(find.byKey(ValueKey(optionKey)));
+  // Выбор языка лежит ниже блока «Agent defaults» страницы General: у
+  // агента с реестром настроек (Dart-агент, встроенный) он за краем
+  // области прокрутки, и `tap` без прокрутки не попадает по кнопке
+  // (ряды настроек агента на странице General).
+  final option = find.byKey(ValueKey(optionKey));
+  await tester.ensureVisible(option);
+  await tester.pumpAndSettle();
+  await tester.tap(option);
   await tester.pumpAndSettle();
 }
 
@@ -99,12 +106,18 @@ void main() {
       expect(find.text('Connected'), findsWidgets);
 
       // Черновик, который не должен пропасть при смене языка (D2, D5).
+      // Явный tap на поле перед `enterText`: после нажатия «Send» фокус
+      // остаётся на кнопке, и `enterText` без него молча ничего не вводит
+      // (тот же обход, что в prompt_queue_flow_test.dart).
       const draft = 'draft that must survive';
+      await tester.tap(find.byKey(const ValueKey('composer-text-box')));
+      await tester.pump();
       await tester.enterText(
         find.byKey(const ValueKey('composer-text-box')),
         draft,
       );
       await tester.pump();
+      expect(_composerText(tester), draft, reason: 'черновик не введён');
 
       // English → Русский.
       await _openSettingsGeneral(tester);
