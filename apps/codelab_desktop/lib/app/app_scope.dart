@@ -309,7 +309,59 @@ Scope createCodeLabRootScope({
   return scope;
 }
 
-Future<void> closeCodeLabRootScope() => CherryPick.closeRootScope();
+/// Идущее закрытие root scope; `null`, пока закрытие не начато или уже
+/// завершилось.
+Future<void>? _rootScopeClosing;
+
+/// Закрывает root scope CherryPick один раз на параллельные вызовы.
+///
+/// Почему: `CherryPick.closeRootScope` обнуляет scope только после
+/// `await dispose()`, и второй вызов во время закрытия заново закрыл бы те же
+/// `Disposable` (снятие `CodeLabBootstrap`, teardown тестов).
+///
+/// Для чего: единственная точка закрытия root scope app.
+///
+/// Как использовать: параллельные вызовы получают один и тот же `Future`;
+/// после его завершения следующий вызов закрывает уже новый root scope (тесты
+/// открывают его заново). Сбой `Scope.dispose` пробрасывается вызывающему —
+/// fire-and-forget вызов оборачивается [closeScopeLogged].
+Future<void> closeCodeLabRootScope() => _rootScopeClosing ??=
+    CherryPick.closeRootScope().whenComplete(() => _rootScopeClosing = null);
+
+/// Закрывает scope, записывая сбой в журнал вместо проброса.
+///
+/// Почему: `CodeLabBootstrap.dispose` закрывает scope fire-and-forget, а
+/// `Scope.dispose` пробрасывает ошибку любого `Disposable` (например, сброса
+/// файловых журналов `CodeLabLoggingLifecycle`) — без перехвата она ушла бы
+/// необработанной в корневую зону (AGENTS.md §12). Шаги `CodeLabRootLifecycle`
+/// изолированы своим `_step`, но сам scope закрывает и других владельцев.
+///
+/// Для чего: сбой пишется так же, как сбой шага закрытия, —
+/// `app.shutdown_step_failed {step: root_scope, error_type}` только с типом
+/// ошибки (текст может нести пути, D6 `add-client-process-shutdown-on-exit`).
+///
+/// Как использовать: `unawaited(closeScopeLogged(close, logger))`; `Future`
+/// завершается без ошибки.
+Future<void> closeScopeLogged(
+  Future<void> Function() close,
+  Logger logger,
+) async {
+  try {
+    await close();
+  } on Object catch (error) {
+    try {
+      logger.error(
+        'app.shutdown_step_failed',
+        context: {
+          'step': 'root_scope',
+          'error_type': error.runtimeType.toString(),
+        },
+      );
+    } on Object {
+      // Журнал не должен мешать закрытию: писать о сбое журнала некуда.
+    }
+  }
+}
 
 CodeLabDependencies codeLabDependenciesOf(BuildContext context) =>
     CodeLabDependenciesScope.of(context);
@@ -2225,7 +2277,7 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
       onExitRequested: AppExitHandler(
         closeRoot: rootLifecycle.dispose,
         pendingSteps: () => rootLifecycle.pendingSteps,
-        logger: codeLabAppLogger(),
+        logger: widget.appLogger ?? codeLabAppLogger(),
         flushLogs: _scope.resolve<CodeLabLoggingLifecycle>().flushed,
       ).onExitRequested,
     );
@@ -2236,11 +2288,12 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     _exitListener.dispose();
     _menuBridge.dispose();
     final providedScope = widget.scope;
-    if (providedScope == null) {
-      unawaited(closeCodeLabRootScope());
-    } else {
-      unawaited(providedScope.dispose());
-    }
+    unawaited(
+      closeScopeLogged(
+        providedScope == null ? closeCodeLabRootScope : providedScope.dispose,
+        widget.appLogger ?? codeLabAppLogger(),
+      ),
+    );
     super.dispose();
   }
 
