@@ -2,8 +2,9 @@
 // уходит необработанным в зону, а пишется как `app.shutdown_step_failed`
 // со `step: root_scope` (AGENTS.md §12 — ошибки fire-and-forget не теряются;
 // событие — `observability.md`, change `add-client-process-shutdown-on-exit`,
-// D6). Параллельные вызовы `closeCodeLabRootScope()` закрывают root scope
-// один раз: `CherryPick.closeRootScope` обнуляет scope только после
+// D6). Параллельные закрытия root scope — `closeCodeLabRootScope()` и снятие
+// `CodeLabBootstrap`, которому передан сам root scope, — закрывают его один
+// раз: `CherryPick.closeRootScope` обнуляет scope только после
 // `await dispose()`.
 import 'dart:async';
 
@@ -85,6 +86,34 @@ void main() {
     );
   });
 
+  testWidgets('снятие CodeLabBootstrap с root scope и teardown закрывают '
+      'его один раз', (tester) async {
+    final binding = CodeLabTestBinding();
+    final disposable = _GatedDisposable();
+    binding.scope.openSubScope('gated')
+      ..installModules([_InstanceModule(disposable)])
+      ..resolve<_GatedDisposable>();
+
+    await tester.pumpWidget(
+      CodeLabBootstrap(
+        scope: binding.scope,
+        appLogger: RecordingLogger(),
+        child: const SizedBox.shrink(),
+      ),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    // Закрытие от снятия дерева ещё ждёт ворота; teardown теста закрывает
+    // тот же root scope параллельно.
+    final teardown = closeCodeLabRootScope();
+    expect(disposable.disposeCalls, 1);
+
+    disposable.gate.complete();
+    // Закрытие доводится в теле теста: после него fake-зона не прокачивается,
+    // и `Future`, созданный в теле, в teardown не завершился бы.
+    await closeCodeLabRootScopeInTest();
+    await teardown;
+  });
+
   test(
     'параллельные closeCodeLabRootScope закрывают root scope один раз',
     () async {
@@ -92,6 +121,7 @@ void main() {
       CherryPick.openRootScope()
         ..installModules([_InstanceModule(disposable)])
         ..resolve<_GatedDisposable>();
+      addTearDown(closeCodeLabRootScope);
 
       final first = closeCodeLabRootScope();
       final second = closeCodeLabRootScope();
@@ -99,6 +129,29 @@ void main() {
       await Future.wait([first, second]);
 
       expect(disposable.disposeCalls, 1);
+
+      // После завершения закрытия следующий вызов закрывает новый root
+      // scope, а не возвращает старый `Future`.
+      final next = _GatedDisposable()..gate.complete();
+      CherryPick.openRootScope()
+        ..installModules([_InstanceModule(next)])
+        ..resolve<_GatedDisposable>();
+      await closeCodeLabRootScope();
+
+      expect(next.disposeCalls, 1);
     },
   );
+
+  test('после сбоя закрытия следующий вызов закрывает scope заново, '
+      'а не возвращает отклонённый Future', () async {
+    final failing = _FailingDisposable();
+    CherryPick.openRootScope()
+      ..installModules([_InstanceModule(failing)])
+      ..resolve<_FailingDisposable>();
+    addTearDown(closeCodeLabRootScope);
+
+    await expectLater(closeCodeLabRootScope(), throwsStateError);
+    // Второй `dispose` у `_FailingDisposable` проходит чисто.
+    await expectLater(closeCodeLabRootScope(), completes);
+  });
 }
