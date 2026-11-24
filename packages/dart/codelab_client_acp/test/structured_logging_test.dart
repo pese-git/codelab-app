@@ -134,6 +134,27 @@ void main() {
     },
   );
 
+  // structured-logging «Ограниченная (bounded) история diagnostic-событий»,
+  // сценарий «Диагностика не меняет снимок сессии» (задача 2.1 change
+  // `align-cross-cutting-specs`, D3): единственный буфер — `client.diagnostics`.
+  test('diagnostics do not change the session snapshot', () async {
+    await _createSession(client, transport);
+    final before = client.sessionById(const SessionId('session-1'))!;
+    final changes = <AcpSession>[];
+    final subscription = client.sessionChanges.listen(changes.add);
+    addTearDown(subscription.cancel);
+
+    transport.emitDiagnostic(message: 'stderr line', source: 'stderr');
+    await _pump();
+
+    expect(client.diagnostics.map((e) => e.message), contains('stderr line'));
+    expect(
+      identical(client.sessionById(const SessionId('session-1')), before),
+      isTrue,
+    );
+    expect(changes, isEmpty);
+  });
+
   test('protocol tracing sink is off by default', () async {
     await _createSession(client, transport);
 
