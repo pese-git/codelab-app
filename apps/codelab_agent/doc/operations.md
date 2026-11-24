@@ -217,6 +217,8 @@ codelab-agent: defaults: agent.default_model: no model is configured; add a prov
 |---|---|
 | `host.config.loaded` | конфигурация загружена; поля — слои, число предупреждений, корень проекта, транспорт, модели |
 | `host.plan` | выбранный профиль, список инструментов и что отключено в этом режиме |
+| `secrets.backend.selected` | выбран бэкенд секретов (`backend`) и причина (`reason`); без `secrets.backend` в конфигурации это `env` |
+| `config.watch.fallback` | наблюдатель за файлами конфигурации не нашёл каталог (например, нет `.codelab/`) и перевёл файл на опрос; сообщение, а не ошибка |
 | `serve.stdio.start` | запущен режим `--stdio` |
 | `serve.ws.listening` | порт открыт |
 | `serve.ws.non_loopback` | предупреждение: `--host` не loopback-адрес |

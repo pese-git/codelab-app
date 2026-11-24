@@ -130,6 +130,10 @@ fvm dart test
 
 Сервер в тестах — `FakeMcpServer` из `lib/testing.dart`: он умеет эпохи `modern`, `legacy`, `dualEra` и записывает вызовы и отмены. Реального процесса и сети нет; stdio-процесс проверяет `apps/codelab_agent`. Время — `FakeClock`, HTTP — `MockClient`. Тесты супервизора лежат в `test/supervisor/`.
 
+## Руководство разработчика
+
+Устройство пакета по частям — клиент протокола, streamable HTTP, супервизор серверов, тестирование, рецепты расширения и частые проблемы — описано в [`doc/README.md`](doc/README.md).
+
 ## Правила пакета
 
 Правила для изменений — в [`AGENTS.md`](AGENTS.md). Главное: пакет не импортирует `dart:io`, Flutter, ACP и клиентские пакеты, а секреты (`env`, `headers`) не попадают в логи и в `lastError`.
