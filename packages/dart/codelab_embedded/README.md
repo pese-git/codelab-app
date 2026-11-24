@@ -139,7 +139,7 @@ fvm dart run melos run web-compile
 
 ## Смотрите также
 
-- [`codelab_agent_core`](../codelab_agent_core/README.md) и [порты хоста](../codelab_agent_core/doc/host-ports.md) — ядро и `AgentCoreServices`;
+- [`codelab_agent_core`](../codelab_agent_core/README.md) и [сборка ядра и порты хоста](../codelab_agent_core/doc/02-assembly-and-hosts.md) — ядро и `AgentCoreServices`;
 - [`codelab_agent_io`](../codelab_agent_io/README.md) — `dart:io`-реализации портов, `ConfigLoader`;
 - [`codelab_agent_mcp`](../codelab_agent_mcp/README.md) — MCP-клиент;
 - [`codelab_agent_acp`](../codelab_agent_acp/README.md) — `AcpAgentServer`;
