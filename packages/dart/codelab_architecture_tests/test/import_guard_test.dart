@@ -1533,6 +1533,22 @@ void main() {
     );
   });
 
+  // workspace-architecture «Плагин перетаскивания из ОС только в адаптере
+  // платформы», сценарий «Плагин в ките» (задача 3.6 change
+  // `align-cross-cutting-specs`, D6): `desktop_drop` запрещён в
+  // `codelab_ui/lib`; разрешён только `core/platform/os_drop_region.dart` app.
+  test('reports the OS drag-and-drop plugin imported by the UI kit', () {
+    final violations = scanMarkdownRules('packages/flutter/codelab_ui/lib', {
+      'src/x.dart': "import 'package:desktop_drop/desktop_drop.dart';\n",
+    });
+
+    expect(violations, hasLength(1), reason: violations.join('\n'));
+    expect(
+      violations.single,
+      endsWith('lib/src/x.dart:1 -> package:desktop_drop/desktop_drop.dart'),
+    );
+  });
+
   test('forbids Material, Cupertino, highlight/latex widgets and SVG in '
       'codelab_ui and the desktop app, even in the rendering layer', () {
     const import =
