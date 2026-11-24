@@ -63,7 +63,7 @@ flowchart LR
 | `session` | `session.append.failed`, `session.leaf.healed`, `session.cycle`, `session.broken_link`, `session.compaction.lost_anchor`, `session.origin.unknown`, `session.model.selected`, `session.model.not_restored` | `lib/src/session/`, `lib/src/runtime/` |
 | `compaction` | `compaction.done`, `compaction.skipped`, `compaction.failed`, `compaction.anchor` | `lib/src/compaction/`, `agent_runtime.dart` |
 | `llm` | `llm.retry`, `llm.stream.failed`, `llm.finish_reason.unknown`, `llm.stream.event_ignored`, `llm.catalog.default_used` | `lib/src/llm/` |
-| `loop`, `tool` | `loop.empty_response`, `loop.empty_response.stopped`, `tool.validate.error`, `tool.present.error`, `tool.misuse.warned`, `tool.misuse.blocked`, `tool.lock.cancelled`, `tool.abandon.error` | `lib/src/loop/`, `lib/src/tools/executor.dart` |
+| `loop`, `tool` | `loop.empty_response`, `loop.empty_response.stopped`, `tool.validate.error`, `tool.present.error`, `tool.misuse.warned`, `tool.misuse.blocked`, `tool.lock.wait` (`debug`), `tool.lock.cancelled`, `tool.abandon.error` | `lib/src/loop/`, `lib/src/tools/executor.dart` |
 | `permission` | `permission.asked` (`debug`), `permission.decided` (`debug`), `permission.denied` (`info`) | `lib/src/permissions/policy.dart` |
 | `config` | `config.reload.applied`, `config.reload.noop`, `config.reload.failed`, `config.reload.restart_required`, `config.key.not_applied`, `config.project.untrusted_key`, `config.secret.in_file`, `config.provider.key_missing`, `config.session.*` | `lib/src/config/`, `agent_runtime.dart` |
 | `secrets` | `secrets.lookup`, `secrets.backend.unavailable` | `lib/src/secrets/secret_resolver.dart` |
@@ -79,6 +79,37 @@ flowchart LR
 ### Корреляция
 
 Связывают записи поля `session_id`, `tool_call_id` и, у вызовов инструментов, `tool`. Запросы `request_id` и номер поколения соединения `connection_generation` живут на стороне клиента ([`docs/architecture/observability.md`](../../../../docs/architecture/observability.md)): у агента один запрос идёт в одном соединении, и ход определяется `session_id`. Записи о вызове инструмента (`permission.*`, `tool.*`) несут `tool_call_id`; вызов потомка получает составной id с префиксом цепочки (`<префикс>/<id>`), по нему видно, чей вызов.
+
+### Пример: журнал одного хода
+
+Ниже — записи, которые пишет хост `codelab-agent` на одном ходе: модель сначала отвечает ошибкой сервера, цикл повторяет запрос, затем модель зовёт `edit`, политика спрашивает разрешение, шлюз разрешает. Записи получил временный тест: он собирает ядро через `buildAgentCore` (профиль `embedded-cli`, сценарная модель `ScriptedStreamFunction` под `withTransientRetry`) и подставляет настоящий `HostLogger` с уровнем `debug`, `StderrLogSink` и `FileLogSink` из `apps/codelab_agent/lib/src/log/`. Это тот же код, что пишет лог бинаря; запись ведёт не процесс `codelab-agent`, а тест. Запись `host.plan` опущена, идентификатор сессии заменён на `<session-id>`, остальное записано как есть.
+
+Основной приёмник — stderr, одна строка на запись:
+
+```text
+2026-11-24T14:04:11.896580Z info session.model.selected {session_id: <session-id>, model: test/model-1, source: config}
+2026-11-24T14:04:11.931694Z info llm.retry {attempt: 1, class: server, delay_ms: 789, provider: test, model: model-1}
+2026-11-24T14:04:12.747704Z debug permission.asked {tool_call_id: c1, tool: edit, tier: write, critical: false}
+2026-11-24T14:04:12.748424Z debug permission.decided {tool_call_id: c1, decision: allowOnce}
+2026-11-24T14:04:12.748621Z debug tool.lock.wait {tool: edit, tool_call_id: c1}
+```
+
+Те же записи в файле `--log-file` (JSON Lines; `ts`, `level`, `event` и поля записи на одном уровне):
+
+```jsonl
+{"ts":"2026-11-24T14:04:11.896580Z","level":"info","event":"session.model.selected","session_id":"<session-id>","model":"test/model-1","source":"config"}
+{"ts":"2026-11-24T14:04:11.931694Z","level":"info","event":"llm.retry","attempt":1,"class":"server","delay_ms":789,"provider":"test","model":"model-1"}
+{"ts":"2026-11-24T14:04:12.747704Z","level":"debug","event":"permission.asked","tool_call_id":"c1","tool":"edit","tier":"write","critical":false}
+{"ts":"2026-11-24T14:04:12.748424Z","level":"debug","event":"permission.decided","tool_call_id":"c1","decision":"allowOnce"}
+{"ts":"2026-11-24T14:04:12.748621Z","level":"debug","event":"tool.lock.wait","tool":"edit","tool_call_id":"c1"}
+```
+
+Что здесь видно:
+
+- Событие `llm.*` в этом ходе одно: `llm.retry` с номером попытки, классом ошибки (`server`), задержкой и моделью. Записи об успешном запросе к модели ядро не пишет: ход и шаги видны в событиях `AgentEvent`, а не в логе.
+- `permission.asked` и `permission.decided` — события `debug`: при уровне `info` по умолчанию их нет. Они связаны полем `tool_call_id`; в `asked` — уровень вызова (`tier`) и признак критичной команды (`critical`), в `decided` — решение (`allowOnce`).
+- `tool.lock.wait` (`debug`) — вызов дошёл до захвата пути; та же пара `tool` и `tool_call_id` позволяет связать запись с `permission.*` и с `tool_call` в ACP. Путь в поля не пишется.
+- Поле `session_id` есть не у каждой записи: его несут события сессии (`session.model.selected`), а `llm.retry`, `permission.*` и `tool.*` связываются с вызовом через `tool_call_id`. `llm.retry` принадлежит запросу к модели, а не вызову, поэтому корреляционных идентификаторов у него нет: его связывает с ходом только время.
 
 ### Маскирование
 

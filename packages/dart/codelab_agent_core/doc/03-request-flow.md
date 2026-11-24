@@ -166,6 +166,39 @@ sequenceDiagram
 - **Клиент видит один `ToolCallStarted` и один `ToolCallFinished`.** Проекция `ToolCallFinished` даёт `completed` только для исхода `completed`; `failed`, `cancelled`, `rejected` и прерванный вызов реплея дают `failed`, а детали исхода идут в `_meta.codelab.outcome` ("cancelled", "rejected", "interrupted").
 - **Ответ на `session/prompt` — после `TurnEnded`.** Он приходит последним кадром хода (`ACP-3`).
 
+### Кадры хода на проводе
+
+Ниже — настоящие кадры хода из схемы выше. Источник — golden-фикстура [`prompt-tool-permission-allow.json`](../../codelab_acp_testing/fixtures/acp/prompt-tool-permission-allow.json): модель по сценарию просит `edit` файла `README.md`, политика режима `standard` спрашивает разрешение, клиент выбирает «разрешить один раз». Кадры сняты драйвером фикстур на агенте `AcpAgentServer` с обычным (не встроенным) окружением: каждое направление помечено `c2a` (клиент → агент) или `a2c` (агент → клиент). Кадры `initialize` и `session/new` опущены, остальное идёт в порядке, в каком кадры вышли из транспорта. Замаскированы идентификатор сессии (`<session-id>`) и временный рабочий каталог (`/work/demo`); текст JSON не менялся.
+
+```text
+c2a {"jsonrpc":"2.0","id":"fixture-promptId","method":"session/prompt","params":{"sessionId":"<session-id>","prompt":[{"type":"text","text":"Замени в README.md слово foo на bar"}]}}
+a2c {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"<session-id>","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Заменю слово."}}}}
+a2c {"jsonrpc":"2.0","id":"fs-1","method":"fs/read_text_file","params":{"sessionId":"<session-id>","path":"/work/demo/README.md"}}
+c2a {"jsonrpc":"2.0","id":"fs-1","result":{"content":"# foo\n"}}
+a2c {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"<session-id>","update":{"sessionUpdate":"tool_call","toolCallId":"call_1","title":"Edit README.md","kind":"edit","status":"pending","locations":[{"path":"/work/demo/README.md","line":1}],"rawInput":{"path":"README.md","oldText":"foo","newText":"bar"}}}}
+a2c {"jsonrpc":"2.0","id":"perm-2","method":"session/request_permission","params":{"sessionId":"<session-id>","toolCall":{"toolCallId":"call_1","title":"Edit README.md","kind":"edit","status":"pending","content":[{"type":"diff","path":"/work/demo/README.md","oldText":"# foo\n","newText":"# bar\n"}],"locations":[{"path":"/work/demo/README.md","line":1}],"rawInput":{"path":"README.md","oldText":"foo","newText":"bar"}},"options":[{"optionId":"allow_once","name":"Allow once","kind":"allow_once"},{"optionId":"allow_always","name":"Always allow README.md","kind":"allow_always"},{"optionId":"reject_once","name":"Reject","kind":"reject_once"},{"optionId":"reject_always","name":"Always reject README.md","kind":"reject_always"}]}}
+c2a {"jsonrpc":"2.0","id":"perm-2","result":{"outcome":{"outcome":"selected","optionId":"allow_once"}}}
+a2c {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"<session-id>","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_1","status":"in_progress"}}}
+a2c {"jsonrpc":"2.0","id":"fs-3","method":"fs/read_text_file","params":{"sessionId":"<session-id>","path":"/work/demo/README.md"}}
+c2a {"jsonrpc":"2.0","id":"fs-3","result":{"content":"# foo\n"}}
+a2c {"jsonrpc":"2.0","id":"fs-4","method":"fs/write_text_file","params":{"sessionId":"<session-id>","path":"/work/demo/README.md","content":"# bar\n"}}
+c2a {"jsonrpc":"2.0","id":"fs-4","result":null}
+a2c {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"<session-id>","update":{"sessionUpdate":"tool_call_update","toolCallId":"call_1","status":"completed","content":[{"type":"content","content":{"type":"text","text":"Edited README.md: replaced lines 1-1.\n@@ -1,1 +1,1 @@\n-# foo\n+# bar"}},{"type":"diff","path":"/work/demo/README.md","oldText":"# foo\n","newText":"# bar\n"}]}}}
+a2c {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"<session-id>","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Готово: README.m"}}}}
+a2c {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"<session-id>","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"d обновлён."}}}}
+a2c {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"<session-id>","update":{"sessionUpdate":"session_info_update","title":"Замени в README.md слово foo на bar","updatedAt":"2026-01-01T00:00:00.000Z"}}}
+a2c {"jsonrpc":"2.0","id":"fixture-promptId","result":{"stopReason":"end_turn"}}
+```
+
+Что видно в трассе:
+
+- `tool_call` (`pending`) идёт раньше `session/request_permission`, а `in_progress` — после ответа клиента; это порядок из раздела выше.
+- Запрос разрешения самодостаточен: в нём `rawInput`, `locations` и `diff` (`PERM-6`), а четыре варианта ответа имеют `optionId`, равный виду варианта.
+- Агент запрашивает `fs/read_text_file` дважды: первый раз — чтобы показать diff в вопросе, второй — когда `edit` перечитывает файл под блокировкой пути перед записью. Идентификаторы запросов агента (`fs-1`, `perm-2`, `fs-3`, `fs-4`) выдаёт общий счётчик соединения.
+- Ответ клиента на `fs/write_text_file` — `null`; агент принимает и `null`, и `{}`.
+- Строка «Готово: README.md обновлён.» пришла двумя дельтами: границы дельт задаёт сценарная модель фикстуры, у настоящего провайдера они другие.
+- Ответ на `session/prompt` — последний кадр хода, после `session_info_update` с автозаголовком (`ACP-3`).
+
 ## Проекция событий в `session/update`
 
 `projectEvent` — чистая функция с исчерпывающим `switch` по запечатанному `AgentEvent` (`ACP-6`): новое событие ядра не скомпилируется, пока для него не выбрано соответствие. Таблица `projectionTable` в том же файле хранит это соответствие в виде текста; её полноту проверяют тесты `test/projection/` пакета.
