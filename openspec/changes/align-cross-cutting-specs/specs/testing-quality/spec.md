@@ -20,7 +20,7 @@ CodeLab SHALL предоставлять Melos-скрипты проверок. 
 
 #### Scenario: Полный прогон CI совпадает с check
 - **WHEN** тест сторожа сравнивает шаги `check` из `pubspec.yaml` со скриптами джобов полного прогона `fullJobs` (`tool/ci/ci_scope.dart`)
-- **THEN** множества скриптов совпадают, а ни одного скрипта `test:e2e:app:*` и `test:e2e:cli:python-agent` в них нет (`ci_scope_test.dart`, тест задачи 3.1 change `align-cross-cutting-specs`)
+- **THEN** множества скриптов совпадают, а ни одного скрипта `test:e2e:app:*` и `test:e2e:cli:python-agent` в них нет (`ci_scope_test.dart`, «Полный прогон CI совпадает с check»)
 
 #### Scenario: Один источник конфигурации Melos
 - **WHEN** выполняется `fvm dart run melos list` или любой скрипт из прежнего `melos.yaml`
@@ -116,7 +116,7 @@ CodeLab SHALL запускать CI (`.github/workflows/ci.yml`) на push в `m
 
 #### Scenario: Джобов на macOS нет
 - **WHEN** тест сторожа читает `.github/workflows/ci.yml`
-- **THEN** у каждого джоба `runs-on` — `ubuntu-latest` (`ci_scope_test.dart`, тест задачи 3.3 change `align-cross-cutting-specs`), а скрипты джобов `checks` — только скрипты `fullJobs` без `test:e2e:app:*` (сценарий «Полный прогон CI совпадает с check»)
+- **THEN** у каждого джоба `runs-on` — `ubuntu-latest` (`ci_scope_test.dart`, «Джобов на macOS нет»), а скрипты джобов `checks` — только скрипты `fullJobs` без `test:e2e:app:*` (сценарий «Полный прогон CI совпадает с check»)
 
 #### Scenario: Сайт в CI
 - **WHEN** CI запускается на pull request, который меняет `site/**` или опубликованную документацию

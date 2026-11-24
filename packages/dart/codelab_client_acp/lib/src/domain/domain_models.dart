@@ -292,6 +292,12 @@ enum SessionLifecycleStatus {
 /// Диагностики здесь нет намеренно: единственный (ограниченный) буфер —
 /// `AcpClientApplication.diagnostics`; копия в сессии росла без предела и
 /// шумела в `sessionChanges` (OBS-004, D3 change `align-cross-cutting-specs`).
+///
+/// Как использовать: снимок иммутабелен; создаёт и заменяет его только
+/// `AcpClientApplication` через `SessionStateMachine` (переходы — события
+/// машины, а не `copyWith` снаружи). Хосты читают его через
+/// `AcpClientApplication.sessionById` и подписываются на `sessionChanges`;
+/// диагностику берут из `AcpClientApplication.diagnostics`.
 @freezed
 sealed class AcpSession with _$AcpSession {
   const AcpSession._();

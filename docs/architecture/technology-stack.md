@@ -331,6 +331,8 @@ DI / сборка
 
 Виджеты НЕ ДОЛЖНЫ вручную создавать инфраструктурные зависимости.
 
+Root scope живёт до выхода из app и закрывается явно: запрос выхода от ОС принимает `AppExitHandler` (`apps/codelab_desktop/lib/app/app_exit_handler.dart`) и ждёт закрытия не дольше общего предела 5 с (`exitTimeout`), порядок закрытия шагов root scope задаёт `CodeLabRootLifecycle` (`apps/codelab_desktop/lib/app/app_scope.dart`) (`concurrency.md` §45, §46; `platform-integration.md` §23; change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md)). Раньше жизненный цикл root scope был нормой удалённого требования `workspace-architecture` «CherryPick как dependency injection» (change `align-cross-cutting-specs`, D5).
+
 ### 9.2. DI — не архитектура
 
 Наличие DI-контейнера не означает, что разрешена любая зависимость.

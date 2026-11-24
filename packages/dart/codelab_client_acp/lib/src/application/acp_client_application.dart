@@ -2828,11 +2828,18 @@ final class AcpClientApplication {
   /// `align-cross-cutting-specs`).
   ///
   /// Для чего: запись попадает только в ограниченный буфер
-  /// [AcpClientApplication.diagnostics], поток `diagnostics` и журнал;
-  /// снимки сессий не меняются.
+  /// [AcpClientApplication.diagnostics] (последние 500), поток
+  /// `diagnosticChanges` и журнал; снимки сессий не меняются. До потребителей
+  /// app и CLI запись доходит через журнал (`_logDiagnosticEntry` →
+  /// `Logger`); у `diagnosticChanges` в продукте подписчиков нет — это API
+  /// для хостов.
   ///
-  /// Как использовать: вызывать из любого места приложения; хосты читают
-  /// `diagnostics`/`diagnosticEvents`, а не состояние сессии.
+  /// Как использовать: вызывают обработчики ошибок транспорта и протокола
+  /// внутри [AcpClientApplication] (разбор ответа, входящие запросы, сбой
+  /// отправки, диагностика транспорта). `message`, `context` и причина
+  /// маскируются здесь же; `component`/`sessionId`/`requestId`/`toolCallId`
+  /// нужны для корреляции записи журнала. Хосты читают `diagnostics` или
+  /// подписываются на `diagnosticChanges`, а не берут данные из сессии.
   void _recordDiagnostic({
     required String message,
     required DiagnosticSeverity severity,

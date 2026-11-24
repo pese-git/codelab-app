@@ -11,10 +11,10 @@ CodeLab SHALL классифицировать действия агента п�
 
 #### Scenario: Деструктивная команда
 - **WHEN** агент присылает вызов вида `execute` с заголовком `Run git reset --hard`
-- **THEN** `ApprovalPolicy.classifyToolCall` даёт уровень `destructive`, а вызов `execute` без такой команды — `shell` (`codelab_client_acp_test.dart`)
+- **THEN** `ApprovalPolicy.classifyToolCall` даёт уровень `destructive`, а вызов `execute` без такой команды — `shell` (`codelab_client_acp_test.dart`, «classifies approval risk levels for tool calls»)
 
 ### Requirement: Поток разрешений ACP
-CodeLab SHALL отвечать на `session/request_permission`, выбирая предложенный агентом `PermissionOption` либо возвращая outcome `cancelled`. Запрос SHALL связываться с сессией, ходом и вызовом по id JSON-RPC запроса: решение для одного запроса SHALL NOT применяться к другому. Повторная доставка запроса с тем же id SHALL NOT создавать второе ожидающее одобрение. Ответ `cancelled` на запрос без активного хода и во время отмены хода — требование acp-protocol-client «Отмена prompt turn».
+CodeLab SHALL отвечать на `session/request_permission`, выбирая предложенный агентом `PermissionOption` либо возвращая outcome `cancelled`. Запрос SHALL связываться с сессией, ходом и вызовом по id JSON-RPC запроса: решение для одного запроса SHALL NOT применяться к другому. Повторная доставка запроса с тем же id SHALL NOT создавать второе ожидающее одобрение. Если обработка запроса внутри клиента завершилась ошибкой (например, параметры не разбираются), CodeLab SHALL ответить на запрос outcome `cancelled` (fail closed): запрос SHALL NOT оставаться без ответа и SHALL NOT считаться одобренным. Ответ `cancelled` на запрос, пришедший во время отмены хода, — требование acp-protocol-client «Отмена prompt turn» (сценарий «Запрос разрешения во время отмены»).
 
 #### Scenario: Пользователь одобряет опцию
 - **WHEN** пользователь выбирает опцию approval
@@ -28,11 +28,16 @@ CodeLab SHALL отвечать на `session/request_permission`, выбирая
 - **WHEN** агент дважды присылает `session/request_permission` с id `42`
 - **THEN** у хода одно ожидающее одобрение `permission-42`, а сессия один раз переходит в `awaitingApproval` (`application_use_cases_test.dart`, «ignores duplicate permission request ids»)
 
+#### Scenario: Внутренняя ошибка обработки запроса разрешения
+- **WHEN** агент присылает `session/request_permission` с id `77`, параметры которого клиент не может разобрать
+- **THEN** CodeLab отвечает на запрос `77` outcome `cancelled`, пишет диагностику уровня error с источником `application.permission` и не создаёт ход и ожидающее одобрение (`application_use_cases_test.dart`, «answers cancelled when handling a permission request fails internally»)
+
 ### Requirement: Редактирование секретов
 CodeLab SHALL редактировать секреты в данных клиента до того, как они попадут в:
 - записи журнала — во всех sinks (structured-logging «Маскирование секретов в structured-выводе»);
 - диагностику (`DiagnosticEntry` протокольного клиента, `WorkspaceDiagnostic` ядра клиента);
-- строки вызовов инструментов транскрипта.
+- строки вызовов инструментов транскрипта;
+- payload и текст ошибки кадров протокола клиента (`protocol_frame_recorder.dart`) — до показа в панели Protocol, копирования и экспорта. Состав кадра и политику его payload задаёт acp-protocol-client «Кадры ACP клиента»; распознавание секретов в кадре — по правилам этого требования.
 
 Какие данные протокола попадают в журнал вообще (payload сообщения, текст промпта), определяет политика payload (structured-logging «Protocol tracing выключен по умолчанию в release»). Маскирование действует при любой политике.
 
@@ -62,8 +67,8 @@ CodeLab SHALL редактировать секреты в данных клие
 Каждое правило маскирования текста SHALL работать за время, линейное по длине входа, в том числе на строках без разделителей и на повторах секретного слова (D5).
 
 #### Scenario: Отображаются переменные окружения
-- **WHEN** launch environment показан в диагностике
-- **THEN** значения, похожие на токены, пароли, API-ключи или приватные ключи, скрыты
+- **WHEN** launch environment `{PATH, API_KEY, GITHUB_TOKEN, DB_PASSWORD}` форматируется для диагностики ядра клиента (`formatRedactedJson`)
+- **THEN** значения `API_KEY`, `GITHUB_TOKEN` и `DB_PASSWORD` скрыты, а `PATH` показан как есть (`packages/dart/codelab_client_core/test/diagnostics/diagnostics_test.dart`, «launch environment in diagnostics masks secret-like values»)
 
 #### Scenario: Полный payload в журнале маскируется
 - **WHEN** ядро клиента с базовой политикой payload `full` отправляет `session/new` с заголовком MCP-сервера `{"name": "Authorization", "value": "ghp_abc123"}`
@@ -122,13 +127,13 @@ CodeLab SHALL редактировать секреты в данных клие
 - **THEN** каждая строка маскируется за время в пределах бюджета теста, а результат на коротких строках с секретами прежний (`secret_redaction_test.dart`)
 
 ### Requirement: Review-first изменения
-Когда агент запрашивает одобрение (`session/request_permission`) правки файла или команды терминала, CodeLab SHALL показывать пригодные для проверки детали вызова до ответа на запрос.
+Когда агент запрашивает одобрение (`session/request_permission`) правки файла или команды терминала, CodeLab SHALL показывать пригодные для проверки детали вызова до ответа на запрос: заголовок вызова, путь файла и команду, если агент их прислал, и варианты решения агента.
 
-Исключение (`AGENTS.md` §10): методы agent → client `fs/write_text_file` и `terminal/*` клиент выполняет без собственного шага одобрения; разрешение на них — ответственность агента (`docs/protocols/acp/protocol/08-Tool Calls.md#requesting-permission`, `09-File System.md`, `10-Terminal.md`). Для них CodeLab SHALL NOT вводить показ diff или команды с ожиданием решения пользователя. Компенсирующий контроль — ограничение путей и `cwd` рабочей папкой сессии (acp-fs-client, acp-terminal-client).
+Исключение (`AGENTS.md` §10): методы agent → client `fs/write_text_file` и `terminal/*` клиент выполняет без собственного шага одобрения; разрешение на них — ответственность агента (`docs/protocols/acp/protocol/08-Tool Calls.md#requesting-permission`, `09-File System.md`, `10-Terminal.md`). Для них CodeLab SHALL NOT вводить показ деталей с ожиданием решения пользователя. Компенсирующий контроль — ограничение путей и `cwd` рабочей папкой сессии (acp-fs-client, acp-terminal-client).
 
 #### Scenario: Запрошена правка файла
-- **WHEN** запрос одобрения относится к вызову, содержимое которого включает diff со старым и новым текстом
-- **THEN** CodeLab показывает diff до ответа на запрос
+- **WHEN** агент запрашивает одобрение вызова записи файла с заголовком `Write .codelab/config.yaml`
+- **THEN** до ответа на запрос блок одобрения app показывает заголовок вызова с путём файла без раскрытия сырого ввода (`subagent_approval_block_test.dart`, «the file path is visible without opening the raw input»), а для вызова с командой — команду и панель решения, и выбранный вариант отвечает именно на этот запрос (`subagent_approval_block_test.dart`, «shows path, command and the panel; Allow answers this request»)
 
 #### Scenario: Запрошена команда terminal
 - **WHEN** запрос одобрения относится к вызову вида `execute`
@@ -136,7 +141,7 @@ CodeLab SHALL редактировать секреты в данных клие
 
 #### Scenario: Запись файла без одобрения клиента
 - **WHEN** агент вызывает `fs/write_text_file` с путём внутри рабочей папки сессии без предшествующего `session/request_permission`
-- **THEN** CodeLab выполняет запись без показа diff и без вопроса пользователю, а путь вне рабочей папки отклоняет до записи (acp-fs-client)
+- **THEN** CodeLab выполняет запись без собственного шага одобрения и без вопроса пользователю, а путь вне рабочей папки отклоняет до записи (acp-fs-client)
 
 ### Requirement: Риск вызова неизвестного вида и смены режима
 CodeLab SHALL классифицировать вызов вида `switch_mode` (`docs/protocols/acp/protocol/17-Schema.md`, ToolKind) и вызов, чей строковый `kind` CodeLab не знает и разбирает как `other` (требование «Неизвестный вид вызова инструмента» acp-protocol-client), клиентским уровнем риска `unknown` (требование «Неизвестный уровень риска вызова» acp-client-kit). Такой вызов SHALL NOT получать уровень `readOnly`: одобрение смены режима может включить автоодобрение последующих действий (`12-Session Model.md`, «Exiting plan modes»). Автоматическая политика клиента SHALL NOT одобрять его: headless-политика `--approve read-only` отвечает `reject_once` (cli-headless «Политика одобрений headless»); в интерактивных клиентах решение принимает пользователь.
@@ -174,5 +179,5 @@ CodeLab SHALL классифицировать вызов вида `switch_mode`
 ## REMOVED Requirements
 
 ### Requirement: Режимы разрешений
-**Reason**: Клиентские режимы `readOnly`, `ask`, `plan`, `autoEdits` в продукте не используются: `ApprovalPolicy.decidePermission` вызывают только тесты, `readOnly` в коде не отличается от `ask`, а запрос разрешения клиент всегда отдаёт пользователю. Запрет режима `bypass` противоречит агенту: режимы разрешений — его ответственность, и у него есть `yolo` и `autopilot` (спека `agent-permissions`, `codelab_agent_core/lib/src/permissions/modes.dart`, опция `mode` в `codelab_agent_acp/lib/src/config_options.dart`). Требование описывало несуществующее поведение (design.md change `align-cross-cutting-specs`, D9).
-**Migration**: Режимы разрешений и их таблица решений — спека `agent-permissions`; выбор режима из клиента — опция конфигурации сессии ACP (`session/set_config_option`, acp-protocol-client «Исходящий session/set_config_option»). Автоматическая политика клиента — `--approve` CLI (cli-headless «Политика одобрений headless»). Мёртвые `PermissionMode`, `PermissionModeDecision`, `ApprovalPolicy.decidePermission` и `ApprovalPolicy.requiresExplicitApproval` удаляются из `codelab_client_acp` вместе с их тестами; `ApprovalRiskLevel` и `classifyToolCall*` остаются.
+**Reason**: Клиентские режимы `readOnly`, `ask`, `plan`, `autoEdits` в продукте не используются: `ApprovalPolicy.decidePermission` вызывают только тесты, `readOnly` в коде не отличается от `ask`, а запрос разрешения клиент всегда отдаёт пользователю. Запрет режима `bypass` противоречит агенту: режимы разрешений — его ответственность. Клиенту агент отдаёт режимы сессии `plan`, `ask`, `standard`, `accept-edits` и `bypass` (опция конфигурации сессии `mode` в `codelab_agent_acp/lib/src/config_options.dart`, `ModeId` в `codelab_agent_core/lib/src/permissions/modes.dart`); режим `autopilot` включается только флагом запуска агента (спека `agent-permissions`, «Режимы и уровни»). Требование описывало несуществующее поведение (design.md change `align-cross-cutting-specs`, D9).
+**Migration**: Режимы разрешений и их таблица решений — спека `agent-permissions` (режимы сессии `ModeId` и их отображение в `PermissionMode` политики ядра); выбор режима из клиента — опция конфигурации сессии ACP `mode` (`session/set_config_option`, acp-protocol-client «Исходящий session/set_config_option»). Автоматическая политика клиента — `--approve` CLI (cli-headless «Политика одобрений headless»). Мёртвые `PermissionMode`, `PermissionModeDecision`, `ApprovalPolicy.decidePermission` и `ApprovalPolicy.requiresExplicitApproval` удаляются из `codelab_client_acp` вместе с их тестами; `ApprovalRiskLevel` и `classifyToolCall*` остаются.

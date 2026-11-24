@@ -1544,6 +1544,37 @@ void main() {
     },
   );
 
+  // Fail-closed (approval-safety): внутренний сбой при обработке запроса
+  // разрешения отвечает `cancelled`, а не оставляет агента без ответа и не
+  // выдаёт разрешение. Ветка `catch` в `_handlePermissionRequest`.
+  test(
+    'answers cancelled when handling a permission request fails internally',
+    () async {
+      await _createSession(client, transport);
+      transport.drainSentMessages();
+
+      // Параметры без обязательных полей: декодирование бросает исключение.
+      transport.emitInbound(
+        JsonRpcMessage.request(
+              id: const JsonRpcId.integer(77),
+              method: sessionRequestPermissionMethod,
+              params: const {'sessionId': 'session-1'},
+            )
+            as JsonRpcRequest,
+      );
+      await _pump();
+
+      final response = transport.sentMessages.single as JsonRpcResponse;
+      expect(response.id, const JsonRpcId.integer(77));
+      expect(response.result, {
+        'outcome': {'outcome': 'cancelled'},
+      });
+      expect(client.diagnostics.single.severity, DiagnosticSeverity.error);
+      expect(client.diagnostics.single.source, 'application.permission');
+      expect(client.sessionById(const SessionId('session-1'))?.turns, isEmpty);
+    },
+  );
+
   test(
     'answers permission requests cancelled while the turn is cancelling',
     () async {

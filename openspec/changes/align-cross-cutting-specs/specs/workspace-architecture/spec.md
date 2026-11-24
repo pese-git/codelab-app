@@ -62,8 +62,8 @@ CodeLab SHALL проверять границы пакетов тестами `p
   - `lib/` вне `lib/testing.dart` и `lib/src/testing/` (запечатаны): `package:codelab_agent_io/testing.dart`, `package:codelab_agent_mcp/testing.dart`.
 - **Терминальный клиент `apps/codelab_cli`**:
   - весь `lib/`: `package:flutter/`, `package:fluent_ui/`, `package:codelab_ui/`, `package:codelab_agent_`;
-  - `package:codelab_acp_testing/` — только `lib/src/scenario/`;
-  - `package:dart_tui/` — только `lib/src/tui/`;
+  - в `lib/src/`: `package:codelab_acp_testing/` — только `lib/src/scenario/`; барель `lib/*.dart` и `bin/` этим правилом не охвачены;
+  - в `lib/src/`: `package:dart_tui/` — только `lib/src/tui/`; барель `lib/*.dart` и `bin/` этим правилом не охвачены;
   - `package:codelab_setup/io.dart` — только `lib/src/run.dart`;
   - `package:codelab_embedded/io.dart` — только `lib/src/composition_root.dart`;
   - `package:codelab_embedded/testing.dart` — только `lib/src/scenario/`;
@@ -149,7 +149,7 @@ Allowlist `dependencies` (`pubspec_allowlist_test.dart`, константы `*Al
 
 #### Scenario: IO-барель моста настроек вне run.dart CLI
 - **WHEN** файл `apps/codelab_cli/lib/codelab_cli.dart` или `apps/codelab_cli/bin/codelab.dart` импортирует `package:codelab_setup/io.dart`, а `apps/codelab_cli/lib/src/run.dart` — тоже
-- **THEN** сторож сообщает нарушения для бареля и `bin/`, но не для `run.dart`
+- **THEN** сторож сообщает нарушения для бареля и `bin/`, но не для `run.dart` (`import_guard_test.dart`, «the IO barrel of the setup bridge is forbidden in the barrel and bin/ of the terminal client, allowed only in run.dart»)
 
 #### Scenario: MCP-клиент импортирует dart:io
 - **WHEN** файл в `packages/dart/codelab_agent_mcp/lib/`, включая `lib/testing.dart`, импортирует `dart:io` или `package:codelab_acp_protocol/`
@@ -224,7 +224,7 @@ Allowlist `dependencies` (`pubspec_allowlist_test.dart`, константы `*Al
 
 #### Scenario: Плагин в ките
 - **WHEN** файл в `packages/flutter/codelab_ui/lib/` импортирует `package:desktop_drop/desktop_drop.dart`
-- **THEN** `melos run guard` сообщает нарушение и называет файл и импорт
+- **THEN** `melos run guard` сообщает нарушение и называет файл и импорт (`import_guard_test.dart`, «reports the OS drag-and-drop plugin imported by the UI kit»)
 
 ## REMOVED Requirements
 

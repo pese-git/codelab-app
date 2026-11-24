@@ -462,6 +462,15 @@ const rules = [
     'apps/codelab_desktop/lib/features/settings/presentation',
     forbidden: ['dart:io', 'package:codelab_setup/io.dart'],
   ),
+  // Плагин перетаскивания из ОС запрещён в kit целиком (`AGENTS.md` §11;
+  // design.md change `align-cross-cutting-specs`, D6): `codelab_ui` без
+  // нативных плагинов и платформенной логики, `desktop_drop` разрешён только
+  // адаптеру `apps/codelab_desktop/lib/core/platform/os_drop_region.dart`
+  // (правило app выше).
+  PackageRule(
+    'packages/flutter/codelab_ui/lib',
+    forbidden: ['package:desktop_drop/'],
+  ),
   // Markdown в ленте desktop (design.md change `add-desktop-markdown`, D2,
   // D10). Парсер `gpt_markdown` и движок подсветки `val_highlight` - только
   // слою `lib/src/rendering/` kit: при замене пакета меняется один каталог, а

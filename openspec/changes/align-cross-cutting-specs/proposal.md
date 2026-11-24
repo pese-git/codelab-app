@@ -44,9 +44,10 @@
 - REMOVED «Режимы разрешений»: режимы разрешений — у агента (`agent-permissions`); мёртвые `PermissionMode` и `decidePermission` удаляются из `codelab_client_acp` (`[client]`);
 - «Риск вызова неизвестного вида» и kit «Неизвестный уровень риска вызова»: вместо «решения режима разрешений клиента» — реальная автоматическая политика клиента, `--approve read-only` CLI;
 - «Уровни риска» — шесть уровней с `unknown`, сценарий классификации вместо неисполнимого «клиент требует одобрения»;
-- «Поток разрешений ACP» — дедупликация повторного запроса (есть тест);
-- «Редактирование секретов» — перечень мест маскирования без «персистентного состояния»; журналы сессий до 1.0 не маскируются (`codelab-cli`); видимость промптов в журнале задаёт политика payload (`structured-logging`);
-- «Review-first изменения» — явное исключение для `fs/*` и `terminal/*` (`AGENTS.md` §10).
+- «Поток разрешений ACP» — дедупликация повторного запроса и fail closed при внутренней ошибке обработки запроса (ответ `cancelled`); на оба есть тесты;
+- «Редактирование секретов» — перечень мест маскирования без «персистентного состояния», с кадрами протокола клиента (панель Protocol, Copy, экспорт); журналы сессий до 1.0 не маскируются (`codelab-cli`); видимость промптов в журнале задаёт политика payload (`structured-logging`);
+- «Review-first изменения» — явное исключение для `fs/*` и `terminal/*` (`AGENTS.md` §10);
+- agent-workbench-ui «Выбор значения селектора отправляется агенту» — ссылка на удалённые клиентские режимы заменена ссылкой на режимы агента (`agent-permissions`), иначе после REMOVED она повисла бы.
 
 **Документы и процесс** (задачи `[docs]`):
 - `observability.md`, `permissions.md`, `layers-and-dependencies.md`, `technology-stack.md`, `testing.md` вместо пересказа ссылаются на требования; в них переносится смысл удалённых требований, где его ещё нет;
@@ -56,12 +57,13 @@
 
 - Новые функции продукта, новые методы, поля и semantics ACP.
 - Изменение политики payload, кадров и панели Protocol: это change `redesign-protocol-pane`. Два его MODIFIED-требования `structured-logging` («Protocol tracing выключен по умолчанию в release», «Существующий контракт diagnostics-потока не меняется») здесь не трогаются.
-- Правила имён секретов: change `extend-secret-name-redaction`. Здесь меняются только первый абзац и сценарий debug-лога требования «Редактирование секретов». Текст правил переносится из его дельты без изменений.
+- Правила имён секретов: change `extend-secret-name-redaction`. Здесь меняются только первый абзац, сценарий debug-лога и сценарий «Отображаются переменные окружения» (сужен под тест задачи 5.2) требования «Редактирование секретов». Текст правил переносится из его дельты без изменений; при сверке 7.1 эти три места — правки этого change (design.md, D11).
 - Единые имена полей диагностики (camelCase-ключи в контексте, `observability.md` §60) и текст ошибки в `attempt_superseded` — отдельный change позже (решение пользователя 2026-11-24).
 - Замена повторов норм ссылками в соседних спеках (`acp-protocol-client`, `acp-client-kit`, `agent-workbench-ui`, `app-settings`, `acp-golden-fixtures`): таблица владельцев (design.md, D13) принята; замена — следующим change после архивации `redesign-protocol-pane`, `add-file-tree-ignore-watch-follow` и `remove-recent-projects-migration`.
 - Правка дельты активного change `switch-default-agent-to-dart` (`knownGaps`): не правится, только сверка перед его архивацией (задача 7.3).
 - Сужение `web-compile` по мостам в CI — открытый pull request #467; спека описывает `develop` без опоры на него.
-- Новые кандидаты без теста (fail closed при внутренней ошибке запроса разрешения, sink пересылки на dev-сервер без категории `protocol`, группы concurrency CI, абсолютный `CODELAB_TEST_REPORT_DIR`) в спеку не входят. Они перечислены в design.md (D14) как будущие требования.
+- Показ diff в карточке одобрения — отдельный change (расширение `ToolCallView`/`PendingApprovalView`, виджет diff в `codelab_ui`). Здесь сценарий «Запрошена правка файла» (approval-safety «Review-first изменения») описывает только проверенное тестами: заголовок вызова, путь файла и команду до ответа (design.md, D12).
+- Новые кандидаты без теста (ответ `cancelled` на запрос разрешения без активного хода, sink пересылки на dev-сервер без категории `protocol`, правила CLI для `codelab_acp_testing` и `dart_tui` на барель и `bin/`, группы concurrency CI, абсолютный `CODELAB_TEST_REPORT_DIR`) в спеку не входят. Они перечислены в design.md (D14) как будущие требования.
 
 ## Capabilities
 
@@ -77,6 +79,7 @@
 - `testing-quality` — MODIFIED «Проверки workspace», «Интеграционные тесты stdio», «Непрерывная интеграция», «Встроенный режим в e2e и conformance», «Проверка доказательств матрицы целей»; REMOVED «Соблюдение Definition of Done», «Характеризационные тесты фасада приложения».
 - `approval-safety` — MODIFIED «Уровни риска», «Поток разрешений ACP», «Редактирование секретов», «Review-first изменения», «Риск вызова неизвестного вида и смены режима»; REMOVED «Режимы разрешений».
 - `acp-client-kit` — MODIFIED «Неизвестный уровень риска вызова».
+- `agent-workbench-ui` — MODIFIED «Выбор значения селектора отправляется агенту» (только ссылка на режимы разрешений).
 
 ## Impact
 
@@ -84,5 +87,5 @@
   - `packages/dart/codelab_client_acp`: удаление поля `AcpSession.diagnostics` и копирования диагностики в сессии, перегенерация `domain_models.freezed.dart` (D3); удаление `PermissionMode`, `PermissionModeDecision`, `decidePermission`, `requiresExplicitApproval` и их тестов (D9). Это изменение публичного API пакета, в том числе типа `AcpSession`; потребителей вне тестов нет;
   - `packages/dart/codelab_architecture_tests`: два правила `rules.dart` (D6), тест «полный прогон CI = шаги `check`» и тест «в `ci.yml` нет macOS-джобов» (D7).
 - **Граф пакетов** (`README.md`) не меняется. Новых пакетов и зависимостей нет.
-- **Документы:** `docs/architecture/observability.md`, `permissions.md`, `layers-and-dependencies.md`, `technology-stack.md`, `testing.md`; `README.md` пакетов `codelab_client_acp` и `codelab_architecture_tests`; `AGENTS.md` §21 и `.github/pull_request_template.md` (одобрено пользователем 2026-11-24).
+- **Документы:** `docs/architecture/observability.md`, `permissions.md`, `acp-boundary.md`, `layers-and-dependencies.md`, `technology-stack.md`, `testing.md`; `README.md` пакетов `codelab_client_acp` и `codelab_architecture_tests`; `AGENTS.md` §21 и `.github/pull_request_template.md` (одобрено пользователем 2026-11-24).
 - **Порядок архивации** (D15): после `extend-secret-name-redaction` и `redesign-protocol-pane`; с `switch-default-agent-to-dart` (архивируется с `--skip-specs`) порядок свободный, но его задача 4.8 не должна возвращать `knownGaps` в главную спеку.
