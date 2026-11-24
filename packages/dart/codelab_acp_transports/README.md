@@ -2,7 +2,9 @@
 
 Заменяемые транспорты ACP (Agent Client Protocol): stdio, WebSocket и пара в памяти. Пакет переносит сообщения JSON-RPC между клиентом и агентом и ничего не знает о сессиях, разрешениях и UI. Клиент и агент работают с одним портом `AcpTransport` и не видят, что под ним: процесс, сокет или память.
 
-Типы сообщений (`JsonRpcMessage` и др.) приходят из [`codelab_acp_protocol`](../codelab_acp_protocol/README.md).
+Типы сообщений (`JsonRpcMessage` и др.) приходят из [`codelab_acp_protocol`](../codelab_acp_protocol/doc/README.md).
+
+Устройство пакета, тесты, рецепт нового транспорта и частые проблемы подробно описывает [руководство разработчика](doc/README.md).
 
 ## Место в архитектуре
 
@@ -102,28 +104,7 @@ final AcpTransport agent = link.agent;
 
 ## Жизненный цикл
 
-На схеме переходы `AcpTransportState` клиентских транспортов `StdioAcpTransport` и `WebSocketAcpTransport`. Каждый переход публикуется событием `AcpTransportStateChanged` в `events`.
-
-```mermaid
-stateDiagram-v2
-  [*] --> idle
-  idle --> connecting: "start()"
-  connecting --> connected: "процесс запущен / сокет открыт"
-  connecting --> failed: "startFailed"
-  connected --> failed: "disconnected, receiveFailed, protocolViolation"
-  connected --> closing: "close()"
-  connecting --> closing: "close() во время запуска"
-  closing --> closed
-  failed --> closing: "close()"
-  closed --> [*]
-```
-
-- `close()` закрывает потоки `inbound` и `events`; после него `start()` бросает ошибку.
-- `StdioAcpTransport.close()` действует по шагам: закрывает stdin, ждёт выхода процесса (по умолчанию 5 с), шлёт `SIGTERM`, ждёт до 2 с, затем `SIGKILL`. Повторный вызов возвращает то же закрытие и может только сократить срок ожидания.
-- У `StdioServerAcpTransport` конец входа (EOF) закрывает только `inbound`: ответы на уже прочитанные запросы ещё уходят до `close()`.
-- В паре в памяти закрытие одного конца переводит второй в `failed` с кодом `disconnected`. Недоставленные сообщения сбрасываются с диагностикой `warning`.
-
-Переподключение транспорт не делает: после `failed` прикладной слой создаёт новый транспорт (`docs/architecture/session-lifecycle.md`, `docs/architecture/streaming.md`, `docs/architecture/concurrency.md`).
+Транспорт проходит состояния `idle`, `connecting`, `connected`, `closing`, `closed` и `failed`; каждый переход публикуется событием `AcpTransportStateChanged`. Переподключения нет: после `failed` прикладной слой создаёт новый транспорт. Схемы переходов, порядок закрытия и ошибки запуска — в [руководстве](doc/01-design.md#жизненный-цикл).
 
 ## Тесты
 
@@ -140,6 +121,6 @@ fvm dart test
 
 ## Смотрите также
 
-- [`codelab_acp_protocol`](../codelab_acp_protocol/README.md) — типы сообщений и кодеки
+- [`codelab_acp_protocol`](../codelab_acp_protocol/doc/README.md) — типы сообщений и кодеки
 - `openspec/specs/agent-transports/` — спецификация транспортов
 - `docs/architecture/acp-boundary.md`, `docs/architecture/streaming.md`, `docs/architecture/concurrency.md`
