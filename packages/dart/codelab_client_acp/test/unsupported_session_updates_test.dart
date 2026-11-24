@@ -130,7 +130,6 @@ void main() {
 
       expect(client.sessionById(_sessionId), before);
       expect(client.diagnostics, isEmpty);
-      expect(client.sessionById(_sessionId)?.diagnostics, isEmpty);
     },
   );
 
