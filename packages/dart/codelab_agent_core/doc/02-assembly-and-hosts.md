@@ -105,7 +105,7 @@ Capabilities:
 
 | Capability | `agent-serve` | `embedded-cli`, `embedded-app-desktop` |
 |---|---|---|
-| `shellExec` | транспорт `acp-terminal`, `local`: клиент объявил `terminal` или задан `--local-exec` | транспорт `local`: процессы хоста |
+| `shellExec` | транспорты `acp-terminal` и `local`; бинарь её не сужает, выключить можно сужением профиля в конфигурации (`profile.agent-serve`). Флага `--local-exec` нет, он упомянут только в описании профиля (`host_profile.dart`) | транспорт `local`: процессы хоста |
 | `fileListing` | транспорт `local`: stdio-клиент всегда на той же машине | транспорт `local`: файлы хоста |
 | `interactiveApproval` | транспорт `acp`: вопрос через `session/request_permission` | транспорт `acp`: вопрос через встроенный ACP-клиент |
 | `compaction` | включена | включена |
