@@ -56,6 +56,29 @@ flowchart LR
 
 Записи `leaf` и `label` формат и дерево понимают, но рантайм их не пишет: ветвление сессий не реализовано, имена `/branch`, `/rewind`, `/fork`, `/label` только зарезервированы в `reservedCommandNames` (`lib/src/commands/command_template.dart`), чтобы шаблон не занял их раньше времени. Проект — в [`proposals/agent-core/17-6-session-management.md`](../../../../docs/architecture/proposals/agent-core/17-6-session-management.md).
 
+## Пример журнала
+
+Ниже — настоящие строки журнала сессии, записанные `JsonlSessionStore` на диск. Их получил временный тест, который собирает ядро через `buildAgentCore` (профиль `embedded-cli`, сценарная модель `ScriptedStreamFunction`, `FakeClock`, `SequentialIdGenerator`) и ведёт три хода: «Прочитай greeting.txt» (вызов `read`), «Что дальше?» и `/compact`. Показаны заголовок и записи `model_change`, `message` (слова пользователя, вызов инструмента, результат инструмента, текст ответа), `session_info` и `compaction`. Пропущены строки второго хода (кроме `session_info`) и длинный повтор в тексте ответа (`…`). Идентификатор сессии заменён на `<session-id>`, путь рабочей папки — на `~/projects/demo`; остальное записано как есть. Идентификаторы записей идут подряд (`00000002`, `00000003`, …), потому что тест использует `SequentialIdGenerator`; у настоящего хоста это случайные 8 символов (SES-3).
+
+```jsonl
+{"type":"session","version":1,"id":"<session-id>","cwd":"~/projects/demo","created":"2026-10-21T08:00:00.000Z","agent":{"name":"codelab-agent","version":"0.1.0"},"metadata":{"profile":"embedded-cli"}}
+{"type":"model_change","id":"00000002","parentId":null,"timestamp":"2026-10-21T08:00:00.000Z","provider":"test","modelId":"model-1","baseUrl":"http://localhost:8080/v1"}
+{"type":"message","id":"00000003","parentId":"00000002","timestamp":"2026-10-21T08:00:00.000Z","message":{"role":"user","content":[{"type":"text","text":"Прочитай greeting.txt"}],"timestamp":"2026-10-21T08:00:00.000Z"}}
+{"type":"message","id":"00000004","parentId":"00000003","timestamp":"2026-10-21T08:00:00.000Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"c1","name":"read","arguments":{"path":"greeting.txt"}}],"model":{"provider":"test","id":"model-1"},"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"cost":{"input":0.0,"output":0.0,"cacheRead":0.0,"cacheWrite":0.0}},"stopReason":"toolUse","timestamp":"2026-10-21T08:00:00.000Z"}}
+{"type":"message","id":"00000005","parentId":"00000004","timestamp":"2026-10-21T08:00:00.000Z","outcome":"completed","toolMeta":{"title":"Read greeting.txt","kind":"read","locations":[{"path":"~/projects/demo/greeting.txt"}]},"message":{"role":"toolResult","toolCallId":"c1","toolName":"read","content":[{"type":"text","text":"1| hello"}],"isError":false,"timestamp":"2026-10-21T08:00:00.000Z"}}
+{"type":"message","id":"00000006","parentId":"00000005","timestamp":"2026-10-21T08:00:00.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Подробное описание файла и выводов. …"}],"model":{"provider":"test","id":"model-1"},"usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"cost":{"input":0.0,"output":0.0,"cacheRead":0.0,"cacheWrite":0.0}},"stopReason":"stop","timestamp":"2026-10-21T08:00:00.000Z"}}
+{"type":"session_info","id":"00000007","parentId":"00000006","timestamp":"2026-10-21T08:00:00.000Z","title":"Прочитай greeting.txt","source":"auto"}
+{"type":"compaction","id":"0000000a","parentId":"00000009","timestamp":"2026-10-21T08:00:00.000Z","summary":"Пользователь просил прочитать greeting.txt.","firstKeptId":"00000007","tokensBefore":3427,"tokensAfter":2927,"details":{"readFiles":["greeting.txt"],"modifiedFiles":[],"splitTurn":false,"summaryModel":"test/model-1","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"cost":{"input":0.0,"output":0.0,"cacheRead":0.0,"cacheWrite":0.0}}}}
+```
+
+Что в нём видно:
+
+- Заголовок хранит `cwd` и профиль хоста (`metadata.profile`), а `id` — тот же ULID, что имя файла и `sessionId` в ACP.
+- Первая запись `model_change` имеет `parentId: null`, каждая следующая указывает на предыдущую — это ветка без ответвлений ([дерево записей](#дерево-записей)).
+- Сообщение ассистента с вызовом инструмента (`stopReason: toolUse`) и результат вызова — две записи. `outcome`, `toolMeta` лежат у результата на верхнем уровне, рядом с `message`; по ним реплей показывает вызов без повторного `present()`.
+- `session_info` с `source: auto` — автозаголовок после первого хода.
+- В записи `compaction` `firstKeptId` указывает на первую сохранённую запись: всё до неё заменяет резюме. В `details` — файлы, которые читала сессия, и модель суммаризатора; `tokensBefore` и `tokensAfter` — оценки, а не счёт провайдера.
+
 ## Дерево записей
 
 Журнал — не список, а дерево: у записи есть `parentId`, а «текущая позиция» — лист. Правила в `lib/src/session/tree.dart`:

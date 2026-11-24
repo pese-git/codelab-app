@@ -39,6 +39,8 @@ OpenSpec change нужен, когда меняется поведение пр�
 
 Эталон — `ls`: небольшой, без побочных эффектов, с описанием в промпте и секцией правил для модели.
 
+Полный путь с кодом, тестами и выводом команд — в [туториале «Новый встроенный инструмент с нуля»](tutorial-new-tool.md): на учебном инструменте `word_count` он проходит все шаги ниже. Ниже — те же шаги в виде справки.
+
 Хост не может подложить свой инструмент: у `AgentCoreServices` нет такого поля, а `ToolRegistry` не входит в публичный барель (`test/public_api_test.dart`). Встроенные инструменты регистрирует `buildAgentCore`. Инструменты других пакетов приходят портом: так `codelab_agent_mcp` отдаёт инструменты MCP-серверов через `McpConnector`.
 
 ```mermaid
@@ -163,6 +165,51 @@ flowchart LR
 5. Имя уже может быть зарезервировано в `reservedCommandNames` (там есть имена на вырост: `rename`, `branch`, `rewind`). Новое имя добавьте в этот список, иначе шаблон сможет его занять.
 6. Строки `/help` строятся из того же списка (`_help()`), отдельно их править не нужно.
 
+Скелет по шагам 1–3 и 6 для учебной команды `/ping` (ответ без вызова модели; в продукт её нет). Правки в `lib/src/commands/builtin_commands.dart`:
+
+```dart
+enum BuiltinName {
+  // …
+  mcp,
+  ping, // шаг 1: значение
+  help;
+
+  bool get changesState => switch (this) {
+    compact || mode || model => true,
+    status || usage || config || mcp || ping || help => false, // шаг 1
+  };
+}
+```
+
+```dart
+// BuiltinCommands.declare, шаг 2: перед `help`, в порядке §13.4
+const SlashCommand(
+  name: 'ping',
+  description: 'Check that the agent answers without calling the model',
+  source: SlashCommandSource.builtin,
+),
+```
+
+```dart
+// BuiltinCommands.match, шаг 3: слово в switch по имени…
+'ping' => BuiltinName.ping,
+// …и подкоманда для лога (исчерпывающий switch ниже по методу)
+BuiltinName.status || BuiltinName.ping || BuiltinName.help => 'show',
+
+// BuiltinCommands.run, шаг 3: ответ команды
+BuiltinName.ping => const BuiltinText('pong'),
+```
+
+В `lib/src/commands/command_template.dart` имя добавляется в `reservedCommandNames` (шаг 5): `'ping',`.
+
+Скелет проверен на текущем коде: `fvm dart analyze lib` без замечаний, а `session.prompt([TextContent('/ping')])` у собранного через `CoreHarness` ядра завершает ход как `completed` и отдаёт `MessageDelta` с текстом `pong`; в `session.commands` команда стоит перед `help`:
+
+```text
+TurnEndReason.completed [pong] (compact, mode, model, status, usage, ping, help)
+```
+
+Новая команда меняет и существующие тесты: падают проверки списка команд в `test/commands/builtin_commands_test.dart`, `skill_commands_test.dart`, `template_parse_test.dart` (число зарезервированных имён), `test/runtime/command_expansion_test.dart` и golden профиля `test/host/profiles/embedded-app-desktop.golden.json`. Это нормальный след новой команды: обновите их вместе с кодом, а клиентский список `available_commands_update` — во всех фикстурах корпуса, где он встречается. Полный список даёт `grep -rl available_commands_update ../../codelab_acp_testing/fixtures/acp`; сейчас это не только `slash-*`, но и `skill-*`, `available-commands-no-tools`, `prompt-template-command`, `session-new-*`, `session-load-*`, `set-config-option-*`, `mcp-*` и другие. Проверка `hasLength` у `reservedCommandNames` — `test/commands/template_parse_test.dart:217–218`.
+
 Тесты: `test/commands/builtin_commands_test.dart`, `test/runtime/builtin_slash_commands_test.dart`. Фикстуры — образцы `slash-help.json`, `slash-usage.json`, `slash-mode-plan.json`: клиенту команда видна как `available_commands_update`, и это проверяют обе стороны. Скрипты: `conformance:agent`, `conformance:embedded`, `conformance:client` (если фикстура новая).
 
 ## Рецепт 4. Хук `beforeToolCall` и `afterToolCall`
@@ -179,6 +226,53 @@ flowchart LR
 - потомкам (субагентам) корня передаются только хуки `before`, причём вызов приходит с идентификатором-цепочкой `<родитель>/<вызов>`; хуки `after` потомкам не подключаются (`test/subagents/subagent_host_hooks_test.dart`).
 
 Живой пример — ACP-адаптер. Метод `SessionBridge.markInProgress` (`codelab_agent_acp/lib/src/session_bridge.dart`) подключён хуком `before` в `agent_server.dart`: когда вызов разрешён, клиент получает статус `in_progress`. Хуку не нужны ни модель, ни файлы: он получает `ToolCall`, аргументы и `ToolContext`.
+
+Скелет: два хука хоста. `denyDotEnv` блокирует запись в `.env`, `markRead` дописывает пометку к результату чтения.
+
+```dart
+Future<Block?> denyDotEnv(
+  ToolCall call,
+  Map<String, Object?> args,
+  ToolContext ctx,
+) async {
+  final path = args['path'];
+  if (call.name == 'write' && path is String && path.endsWith('.env')) {
+    return const Block('Writing .env files is blocked by the host.');
+  }
+  return null; // null — пропустить вызов дальше по цепочке
+}
+
+Future<ResultOverride?> markRead(
+  ToolCall call,
+  ToolExecutionResult result,
+  bool isError,
+) async {
+  if (call.name != 'read' || isError) {
+    return null; // null — результат остаётся как есть
+  }
+  return ResultOverride(
+    content: [...result.content, const TextContent('[checked by host]')],
+  );
+}
+
+// Передача хуков при открытии сессии:
+final session = await runtime.createSession(
+  SessionSpec(
+    cwd: '/proj',
+    extraBeforeToolCall: [denyDotEnv],
+    extraAfterToolCall: [markRead],
+  ),
+);
+```
+
+Скелет проверен тестом на `CoreHarness` (модель вызывает `write` в `.env` и `read` файла `a.txt` за один шаг). В следующем запросе модель получила результаты вызовов; вывод теста:
+
+```text
+write isError=true Writing .env files is blocked by the host.
+read isError=false 1| a | [checked by host]
+```
+
+Файл `.env` не создан: хук остановил вызов до исполнения, а `reason` блока стал текстом результата.
 
 Что делать:
 
@@ -260,6 +354,53 @@ OpenSpec change нужен, если меняется контракт хуко�
 События хода — закрытая (`sealed`) иерархия `AgentEvent` в `lib/src/loop/agent_events.dart`. Новое событие — новая ветка, а не флаг в существующем. Образец — `CompactionDiscarded`: его завели отдельным событием, потому что флаг в `ContextCompacted` заставил бы ветвиться всех потребителей. Устройство событий — [04-turn-loop.md](04-turn-loop.md).
 
 OpenSpec change нужен всегда: иерархия публична, а событие затрагивает ACP-проекцию.
+
+Скелет учебного события `QuotaWarning` (в продукт его нет):
+
+```dart
+// lib/src/loop/agent_events.dart, шаг 1
+/// Предупреждение о близком пределе.
+///
+/// Почему: флаг в существующем событии заставил бы ветвиться всех
+/// потребителей. Для чего: сообщить, что `used` подходит к `limit`.
+/// Как использовать: цикл отправляет событие через `emit`; потребитель,
+/// которому оно не нужно, явно пропускает ветку.
+final class QuotaWarning extends AgentEvent {
+  const QuotaWarning(
+    super.sessionId, {
+    required this.used,
+    required this.limit,
+  });
+
+  /// Сколько израсходовано.
+  final int used;
+
+  /// Предел.
+  final int limit;
+}
+```
+
+```dart
+// codelab_agent_acp/lib/src/event_projection.dart, шаг 3
+const projectionTable = <Type, String>{
+  // …
+  QuotaWarning: 'not sent',
+  // …
+};
+
+// в switch projectEvent: событие не уходит клиенту
+  CompactionDiscarded() ||
+  QuotaWarning() ||
+  TurnEnded() ||
+```
+
+Проверено на текущем коде. Без правки `event_projection.dart` анализ `codelab_agent_acp` падает:
+
+```text
+error - src/event_projection.dart:97:7 - The type 'AgentEvent' isn't exhaustively matched by the switch cases since it doesn't match the pattern 'QuotaWarning()'. … - non_exhaustive_switch_expression
+```
+
+С правкой `fvm dart analyze lib` чист в `codelab_agent_acp`, `codelab_agent_io`, `codelab_embedded`, `codelab_setup` и `codelab_client_core`, а `fvm dart test test/projection` в `codelab_agent_acp` проходит (61 тест, включая сверку таблицы с подтипами).
 
 Что менять:
 
