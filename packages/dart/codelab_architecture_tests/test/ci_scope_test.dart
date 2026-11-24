@@ -467,4 +467,64 @@ flutter:
       isTrue,
     );
   });
+
+  // Требование «Проверки workspace», сценарий «Полный прогон CI совпадает с
+  // check» (change align-cross-cutting-specs, задача 3.1).
+  test('Полный прогон CI совпадает с check', () {
+    final lines = File(p.join(repoRoot(), 'pubspec.yaml')).readAsLinesSync();
+    // Строковый разбор без пакета yaml: блок `    check:` секции melos,
+    // внутри него `steps:` и элементы списка `- шаг`.
+    final checkAt = lines.indexOf('    check:');
+    expect(checkAt, isNonNegative, reason: 'скрипт check не найден');
+    final stepsAt = lines.indexOf('      steps:', checkAt);
+    expect(stepsAt, greaterThan(checkAt));
+    final steps = <String>{};
+    for (var i = stepsAt + 1; i < lines.length; i++) {
+      final match = RegExp(r'^\s+-\s+(\S+)\s*$').firstMatch(lines[i]);
+      if (match == null) break;
+      steps.add(match.group(1)!);
+    }
+    expect(steps, isNotEmpty);
+
+    final ciScripts = {for (final job in fullJobs) ...job.scripts.split(' ')};
+    expect(ciScripts, steps);
+    expect(
+      ciScripts.where(
+        (s) =>
+            s.startsWith('test:e2e:app:') || s == 'test:e2e:cli:python-agent',
+      ),
+      isEmpty,
+    );
+  });
+
+  // Требование «Непрерывная интеграция», сценарий «Джобов на macOS нет»
+  // (задача 3.3).
+  test('Джобов на macOS нет', () {
+    final lines = File(
+      p.join(repoRoot(), '.github', 'workflows', 'ci.yml'),
+    ).readAsLinesSync();
+    final runsOn = <String>[];
+    for (final line in lines) {
+      final match = RegExp(r'^\s*runs-on:\s*(.*)$').firstMatch(line);
+      if (match == null) continue;
+      final value = match.group(1)!.split('#').first.trim();
+      if (value.isNotEmpty) runsOn.add(value);
+    }
+    expect(
+      runsOn.every((v) => v == 'ubuntu-latest'),
+      isTrue,
+      reason: '$runsOn',
+    );
+
+    // Джобы — ключи с отступом в два пробела внутри секции `jobs:`.
+    final jobsAt = lines.indexOf('jobs:');
+    expect(jobsAt, isNonNegative);
+    final jobs = <String>{};
+    for (var i = jobsAt + 1; i < lines.length; i++) {
+      final match = RegExp(r'^  ([a-z][\w-]*):\s*$').firstMatch(lines[i]);
+      if (match != null) jobs.add(match.group(1)!);
+    }
+    expect(jobs, containsAll(['scope', 'checks', 'site', 'parity', 'ci']));
+    expect(runsOn.length, greaterThanOrEqualTo(5));
+  });
 }
