@@ -168,6 +168,10 @@ melos run conformance:agent
 
 Скрипт запускает `test/conformance_test.dart`: агент поднимается так же, как бинарь по stdio, и проигрывает корпус фикстур из [`codelab_acp_testing`](../codelab_acp_testing/README.md#golden-фикстуры). Расхождение с фикстурой — провал теста. С переменной `CODELAB_TEST_REPORT_DIR` скрипт пишет отчёт `dart/codelab_agent_acp.conformance.json`. Скрипт входит в `melos run check`.
 
+## Руководство разработчика
+
+Устройство пакета подробно описано в [`doc/README.md`](doc/README.md): модули `lib/src/`, мост сессии, проекция событий в `session/update`, запросы агента к клиенту, тестирование, рецепты расширения и частые проблемы.
+
 ## Правила пакета
 
 Правила для изменений — в [`AGENTS.md`](AGENTS.md). Главное: пакет не импортирует `dart:io`, Flutter и `package:codelab_acp_transports/io.dart`; методы, поля и значения ACP берутся только из `codelab_acp_protocol`, всё остальное — расширения `_codelab`, и каждое вводится отдельным OpenSpec change. Границы проверяет `melos run guard`.

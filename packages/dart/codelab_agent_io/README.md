@@ -102,6 +102,10 @@ Future<void> main() async {
 - Хост, который держит `FileConfigSource`, вызывает `close()` после `runtime.dispose()`.
 - Сценарий модели (`LlmScript`) в основной барель не входит. Его импортируют только `apps/codelab_agent`, `codelab_embedded/lib/src/testing/` и тесты: `package:codelab_agent_io/testing.dart`. Правило сторожа (`melos run guard`) охватывает `codelab_embedded/lib` и `codelab_setup`; бинарь и тесты оно не проверяет.
 
+## Руководство разработчика
+
+Устройство пакета, форматы файлов, рецепты расширения, тестирование и частые проблемы описаны в [руководстве разработчика](doc/README.md). Начните с [начала работы](doc/00-getting-started.md) и [обзора](doc/01-overview.md).
+
 ## Где лежат данные
 
 Расположение `CODELAB_HOME`, файлов конфигурации, секретов и журналов сессий описано один раз, в руководствах:
