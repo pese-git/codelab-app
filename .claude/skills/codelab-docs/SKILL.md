@@ -34,7 +34,8 @@ description: Стандарт продуктовой документации Co
 
 ```text
 apps/<app>/README.md                 вход: что это, кому какой документ, 5-минутный старт
-apps/<app>/doc/user-guide.md         пользователь
+apps/<app>/doc/user-guide.md         пользователь: оглавление руководства
+apps/<app>/doc/user/NN-<тема>.md     пользователь: главы руководства (00-overview, 01-…)
 apps/<app>/doc/operations.md         DevOps
 apps/<app>/doc/development.md        разработчик (если не помещается в README)
 apps/<app>/doc/images/*.png          скриншоты
@@ -70,7 +71,7 @@ docs/ops/                            сквозное руководство Dev
 Шаблоны — в `templates/` рядом с этим файлом:
 - `templates/package-readme.md` — README пакета (разработчик);
 - `templates/app-readme.md` — README приложения (вход для всех аудиторий);
-- `templates/user-guide.md` — руководство пользователя;
+- `templates/user-guide.md` — руководство пользователя: каркас одной главы `doc/user/NN-<тема>.md`; `doc/user-guide.md` — только оглавление (введение, кому, таблица глав «что внутри»). Возможности агента, общие для всех клиентов (инструменты, режимы разрешений, навыки, `AGENTS.md`, шаблоны команд, определения агентов, MCP, сессии), описываются только в `apps/codelab_agent/doc/user/`; руководства app и `codelab` описывают свой интерфейс и ссылаются туда за смыслом;
 - `templates/operations.md` — руководство DevOps;
 - `templates/development.md` — руководство разработчика приложения (`apps/*/doc/development.md`).
 

@@ -50,7 +50,7 @@ embedded · standard · lmstudio/qwen/qwen3-1.7b
        Custom Anthropic-compatible endpoint
    ```
 
-   Другие способы — в разделе [«Настроить провайдера модели»](doc/user-guide.md#настроить-провайдера-модели).
+   Другие способы — в разделе [«Настроить провайдера модели»](doc/user/06-providers.md).
 
 4. Проверьте настройки:
 

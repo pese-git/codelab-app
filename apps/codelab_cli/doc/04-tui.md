@@ -248,4 +248,4 @@ embedded · standard · local/demo-model · ctx 27%
 - [Глава 07: настройка агента](07-config-and-setup.md) — мастер и `/settings`
 - [Глава 10: расширение](10-extending.md#клавиша-tui) — новая клавиша и сообщение
 - Спецификация [`codelab-tui`](../../../openspec/specs/codelab-tui/spec.md), проектный документ [отображение и ввод CLI](../../../docs/architecture/proposals/dart-agent-and-clients/12-2-cli-display-and-input.md)
-- Что видит пользователь: [руководство пользователя](user-guide.md#работать-в-полноэкранном-режиме)
+- Что видит пользователь: [руководство пользователя](user/03-tui.md)

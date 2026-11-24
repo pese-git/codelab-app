@@ -24,7 +24,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { pageUrl } from '../../lib/urls';
 
 const base = import.meta.env.BASE_URL;
-const guide = 'apps/codelab_desktop/doc/user-guide.md';
+const guide = 'apps/codelab_desktop/doc/user';
 ---
 
 <BaseLayout
@@ -46,7 +46,7 @@ const guide = 'apps/codelab_desktop/doc/user-guide.md';
   <ul class="features">
     <Feature
       title="Проекты и сессии"
-      docPath={`${guide}#открыть-проект-и-переключаться-между-проектами`}
+      docPath={`${guide}/02-projects-and-sessions.md#открыть-проект-и-переключаться-между-проектами`}
       linkText="Как открыть проект и переключаться между проектами"
       image={sidebarProjects}
       alt="Боковая панель: список Projects с проектом demo, кнопки Open folder… и Settings"
@@ -57,7 +57,7 @@ const guide = 'apps/codelab_desktop/doc/user-guide.md';
     </Feature>
     <Feature
       title="Сессия с агентом"
-      docPath={`${guide}#вести-сессию-с-агентом`}
+      docPath={`${guide}/03-conversation.md#вести-сессию-с-агентом`}
       linkText="Как вести сессию с агентом"
       image={workbench}
       alt="Пустая сессия в проекте demo: поле ввода, под ним режим Standard и модель"
@@ -68,7 +68,7 @@ const guide = 'apps/codelab_desktop/doc/user-guide.md';
     </Feature>
     <Feature
       title="Разрешения на действия агента"
-      docPath={`${guide}#отвечать-на-запросы-разрешений`}
+      docPath={`${guide}/04-permissions.md#отвечать-на-запросы-разрешений`}
       linkText="Как отвечать на запросы разрешений"
     >
       Перед записью файла, командой оболочки или сетевым запросом агент спрашивает разрешение прямо в строке вызова в
@@ -77,7 +77,7 @@ const guide = 'apps/codelab_desktop/doc/user-guide.md';
     </Feature>
     <Feature
       title="Файлы проекта"
-      docPath={`${guide}#смотреть-файлы-проекта`}
+      docPath={`${guide}/05-workbench-tools.md#смотреть-файлы-проекта`}
       linkText="Как смотреть файлы проекта"
       image={filesPane}
       alt="Панель Files: дерево проекта demo и просмотр файла README.md с номерами строк"
@@ -88,7 +88,7 @@ const guide = 'apps/codelab_desktop/doc/user-guide.md';
     </Feature>
     <Feature
       title="Терминал в папке сессии"
-      docPath={`${guide}#работать-в-терминале`}
+      docPath={`${guide}/05-workbench-tools.md#работать-в-терминале`}
       linkText="Как работать в терминале"
       image={terminalPane}
       alt="Панель Terminal: вкладка Terminal 1 со статусом Running и напоминанием над ней"
@@ -99,7 +99,7 @@ const guide = 'apps/codelab_desktop/doc/user-guide.md';
     </Feature>
     <Feature
       title="Подключение провайдера модели"
-      docPath={`${guide}#подключить-провайдера-модели`}
+      docPath={`${guide}/07-providers-and-models.md#подключить-провайдера-модели`}
       linkText="Как подключить провайдера модели"
       image={providerWizard}
       alt="Мастер Add provider на шаге API type: OpenAI, Anthropic, OpenRouter, Ollama и совместимые серверы"
