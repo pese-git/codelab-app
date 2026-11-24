@@ -491,12 +491,14 @@ void main() {
 
     final violations = [
       for (final rule in rules.where(
-        (r) => r.dir == 'apps/codelab_cli/lib/src',
+        (r) =>
+            r.dir == 'apps/codelab_cli/lib' &&
+            r.forbidden.contains('package:codelab_setup/io.dart'),
       ))
         ...scan(
           tmp.path,
           PackageRule(
-            'lib/src',
+            'lib',
             forbidden: rule.forbidden,
             exclude: rule.exclude,
             sealExclude: rule.sealExclude,
@@ -509,6 +511,51 @@ void main() {
     expect(
       violations.single,
       endsWith('lib/src/repl/repl.dart:1 -> package:codelab_setup/io.dart'),
+    );
+  });
+
+  // workspace-architecture «Автоматический сторож границ пакетов», сценарий
+  // «IO-барель моста настроек вне run.dart CLI» (задача 3.4 change
+  // `align-cross-cutting-specs`, D6): барель `lib/codelab_cli.dart` и `bin/`
+  // не могут импортировать или реэкспортировать `codelab_setup/io.dart`.
+  test('the IO barrel of the setup bridge is forbidden in the barrel and bin/ '
+      'of the terminal client, allowed only in run.dart', () {
+    final tmp = Directory.systemTemp.createTempSync('guard_cli_setup_all_');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    const import = "import 'package:codelab_setup/io.dart';\n";
+    for (final file in [
+      'lib/codelab_cli.dart',
+      'bin/codelab.dart',
+      'lib/src/run.dart',
+    ]) {
+      File(p.join(tmp.path, file))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(import);
+    }
+
+    final violations = [
+      for (final rule in rules.where(
+        (r) =>
+            r.dir.startsWith('apps/codelab_cli') &&
+            r.forbidden.contains('package:codelab_setup/io.dart'),
+      ))
+        ...scan(
+          tmp.path,
+          PackageRule(
+            rule.dir.replaceFirst('apps/codelab_cli/', ''),
+            forbidden: rule.forbidden,
+            exclude: rule.exclude,
+            sealExclude: rule.sealExclude,
+          ),
+        ),
+    ];
+
+    expect(
+      violations,
+      unorderedEquals([
+        endsWith('lib/codelab_cli.dart:1 -> package:codelab_setup/io.dart'),
+        endsWith('bin/codelab.dart:1 -> package:codelab_setup/io.dart'),
+      ]),
     );
   });
 
@@ -1483,6 +1530,22 @@ void main() {
           'lib/src/feed/row.dart:2 -> package:val_highlight/val_highlight.dart',
         ),
       ]),
+    );
+  });
+
+  // workspace-architecture «Плагин перетаскивания из ОС только в адаптере
+  // платформы», сценарий «Плагин в ките» (задача 3.6 change
+  // `align-cross-cutting-specs`, D6): `desktop_drop` запрещён в
+  // `codelab_ui/lib`; разрешён только `core/platform/os_drop_region.dart` app.
+  test('reports the OS drag-and-drop plugin imported by the UI kit', () {
+    final violations = scanMarkdownRules('packages/flutter/codelab_ui/lib', {
+      'src/x.dart': "import 'package:desktop_drop/desktop_drop.dart';\n",
+    });
+
+    expect(violations, hasLength(1), reason: violations.join('\n'));
+    expect(
+      violations.single,
+      endsWith('lib/src/x.dart:1 -> package:desktop_drop/desktop_drop.dart'),
     );
   });
 

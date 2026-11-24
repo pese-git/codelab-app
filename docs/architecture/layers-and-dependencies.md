@@ -430,7 +430,9 @@ ConcreteStdioTransport
 
 Если компонент имеет смысл только внутри одной фичи `codelab_desktop`, его НЕ СЛЕДУЕТ автоматически переносить в `codelab_ui`.
 
-В коде `codelab_ui` не зависит ни от одного пакета `codelab_*` (`pubspec.yaml`): модели ACP и состояние клиента переводит в типы кита маппер app `apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart` (`README.md` пакета). Правила кита — `packages/flutter/codelab_ui/AGENTS.md` (§2 «Нет логики»: виджет не решает, опасно ли действие, и не разбирает протокольный текст). Сторож проверяет у кита только импорты: парсер `gpt_markdown` и подсветка `val_highlight` — лишь в `lib/src/rendering/`, их транзитивные пакеты (`material_ui`, `cupertino_ui`, `flutter_svg` и др.) запрещены везде; отсутствие бизнес-логики и зависимости от `codelab_desktop` сторож не проверяет. Текст интерфейса кита — `ui_literals_test.dart` (§54).
+В коде `codelab_ui` не зависит ни от одного пакета `codelab_*` (`pubspec.yaml`): модели ACP и состояние клиента переводит в типы кита маппер app `apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart` (`README.md` пакета). Правила кита — `packages/flutter/codelab_ui/AGENTS.md` (§2 «Нет логики»: виджет не решает, опасно ли действие, и не разбирает протокольный текст). Сторож проверяет у кита только импорты: парсер `gpt_markdown` и подсветка `val_highlight` — лишь в `lib/src/rendering/`, их транзитивные пакеты (`material_ui`, `cupertino_ui`, `flutter_svg` и др.) и плагин перетаскивания из ОС `desktop_drop` запрещены везде (нативный плагин — инфраструктура app, `AGENTS.md` §11); отсутствие бизнес-логики и зависимости от `codelab_desktop` сторож не проверяет. Текст интерфейса кита — `ui_literals_test.dart` (§54).
+
+Общие UI-примитивы — кнопки, текст, значки, бейджи, индикаторы, палитра и тоны (`CodeLabButton`, `CodeLabText`, `CodeLabBadge`, `CodeLabPalette` и др.) — живут в одном месте, `packages/flutter/codelab_ui/lib/src/atomics/`; составные виджеты — `molecules/` и `organisms/`. Новый примитив, нужный нескольким фичам app, СЛЕДУЕТ добавлять в `atomics/`, а не повторять в фичах (§46; раньше это была норма удалённого требования `workspace-architecture` «Ограничения SOLID, KISS и DRY», change `align-cross-cutting-specs`, D5).
 
 ---
 
@@ -1490,7 +1492,7 @@ Freezed — инструмент реализации и генерации ко
 
 Документация при этом остаётся источником смысла правила.
 
-В коде проверки — сторож `packages/dart/codelab_architecture_tests` (`melos run guard`; описание — `README.md` пакета). Что из правил этого документа и корневого `AGENTS.md` §5–§6 он покрывает:
+В коде проверки — сторож `packages/dart/codelab_architecture_tests` (`melos run guard`; описание — `README.md` пакета). Полный перечень его правил — таблица `rules` (`test/support/rules.dart`), константы `*Allowlist` и HOST-6; проверяемая норма — требование spec [`workspace-architecture`](../../openspec/specs/workspace-architecture/spec.md) «Автоматический сторож границ пакетов», здесь его правила второй раз не перечисляются. Таблица ниже сверяет правила этого документа и корневого `AGENTS.md` §5–§6 с охватом сторожа и называет то, чего он не проверяет:
 
 | Правило | Проверка |
 |---|---|
@@ -1509,7 +1511,8 @@ Freezed — инструмент реализации и генерации ко
 | `presentation` без транспорта, файлов, процессов (§15) | частично: `dart:io` запрещён в `settings/presentation/`, фичах `onboarding` и `project_files`; плагины платформы — только в адаптерах `lib/core/platform/`; IO-барели мостов — только в `lib/app/` |
 | Виджеты не создают репозитории и адаптеры (корневой `AGENTS.md` §6) | нет; ревью |
 | Web-безопасные барели (`codelab_acp_transports`, `codelab_embedded`, `codelab_setup`, ядро агента) | `rules.dart` (`webUnsafe`, `sealExclude`); компиляция ядра и основных барелей мостов — `melos run web-compile` |
-| `io.dart` и `testing.dart` мостов — только composition root и тесты (корневой `AGENTS.md` §5) | `rules.dart`: `codelab_embedded/io.dart` — только `lib/app/` desktop и `lib/src/composition_root.dart` CLI; `codelab_setup/io.dart` — только `lib/app/` desktop, в CLI запрещён в `lib/src/`, кроме `run.dart` (`bin/` и барели верхнего уровня `lib/` правилом не охвачены); `codelab_embedded/testing.dart` — только `lib/src/scenario/` CLI; `bin/` CLI — ни `codelab_embedded/io.dart`, ни `codelab_embedded/testing.dart` |
+| `io.dart` и `testing.dart` мостов — только composition root и тесты (корневой `AGENTS.md` §5) | `rules.dart`: `codelab_embedded/io.dart` — только `lib/app/` desktop и `lib/src/composition_root.dart` CLI; `codelab_setup/io.dart` — только `lib/app/` desktop; в CLI — только `lib/src/run.dart` (правило на весь `lib/`, включая барель `lib/codelab_cli.dart`); `codelab_embedded/testing.dart` — только `lib/src/scenario/` CLI; `bin/` CLI — ни `codelab_embedded/io.dart`, ни `codelab_embedded/testing.dart`, ни `codelab_setup/io.dart` (change `align-cross-cutting-specs`, D6) |
+| Нативные плагины — только в адаптерах платформы (корневой `AGENTS.md` §11) | `rules.dart`: в desktop — только `lib/core/platform/`; в `codelab_ui` `package:desktop_drop/` запрещён во всём `lib/` (требование [`workspace-architecture`](../../openspec/specs/workspace-architecture/spec.md) «Плагин перетаскивания из ОС только в адаптере платформы»; change `align-cross-cutting-specs`, D6) |
 | Запрет `package:codelab_agent_*` в приложениях-клиентах | `rules.dart` (`apps/codelab_desktop`, `apps/codelab_cli`), `desktopAllowlist`, `cliAllowlist` |
 | Имена пакетов по ADR-0002 | `package_naming_test.dart` |
 
@@ -1533,6 +1536,8 @@ Freezed — инструмент реализации и генерации ко
 Новый пакет не создаётся только ради уменьшения числа файлов в существующем пакете.
 
 В коде новый пакет получает имя по ADR-0002 и правило сторожа вместе с собой: `PackageRule` в `rules.dart`, при ограничении зависимостей — `*Allowlist` в `pubspec_allowlist_test.dart` и негативный тест (корневой `AGENTS.md` §5; порядок — `README.md` сторожа, «Как добавить правило для нового пакета»).
+
+Расширение allowlist (`*Allowlist`) существующего пакета ДОЛЖНО проходить через OpenSpec change: новая зависимость меняет архитектуру пакета (корневой `AGENTS.md` §4, §17), а сторож проверяет только, что `dependencies` — подмножество allowlist, и не видит, кто и зачем его расширил. Для ядра агента это ещё и PKG-2 (`coreAllowlist`).
 
 ---
 

@@ -1236,39 +1236,19 @@ Mock лучше подходит для:
 
 ## 74. CI levels
 
-CI разделён на два уровня (`.github/workflows/ci.yml`, `AGENTS.md` §21).
+CI разделён на два уровня: полный прогон и прогон затронутого (`.github/workflows/ci.yml`). Нормы — требования spec [`testing-quality`](../../openspec/specs/testing-quality/spec.md):
 
-```text
-Затронутое — pull request из feature/* и hotfix/* в develop:
-  format             весь репозиторий (быстро)
-  analyze, test      изменённые пакеты и все, кто от них зависит (MELOS_PACKAGES)
-  guard              всегда; prompts:check — если изменено ядро агента
-  conformance        корпуса затронутых ACP-слоёв; conformance:embedded — если
-                     затронуты codelab_cli или codelab_embedded
-  l10n               l10n:check — если в codelab_desktop или codelab_ui изменены
-                     l10n.yaml, pubspec.yaml, ARB или сгенерированный
-                     *_localizations*.dart
-  web-compile        если изменён пакет с web-smoke точкой входа (ядро агента,
-                     codelab_embedded, codelab_setup) или его зависимость
-  e2e-cli-dart       если затронуты codelab_cli или codelab_agent
-  e2e-cli-embedded   если затронуты codelab_cli или codelab_embedded
-  site               если изменён site/ или источник страниц сайта (признак site)
-  только документация — без Dart-джобов; site — если документ влияет на сайт
+* «Непрерывная интеграция» — события запуска, все джобы на `ubuntu-latest` (джобов на macOS и `test:e2e:app:*` нет), когда прогон полный, что запускает «только документация», какие джобы и для каких пакетов идут в затронутом, итоговый джоб `ci`;
+* «Проверки workspace» — полный прогон CI выполняет те же скрипты, что `melos run check`.
 
-Полностью — push в develop и master, pull request из release/* или в master,
-ночной запуск, workflow_dispatch:
-  все шаги melos run check
-  site               всегда
-```
+Их проверяет `codelab_architecture_tests/test/ci_scope_test.dart`, в том числе тесты «Полный прогон CI совпадает с check» и «Джобов на macOS нет». Этот раздел состав джобов не пересказывает: ниже — устройство, обоснования и то, чего спека не задаёт. Что запускать локально перед pull request — `AGENTS.md` §21.
 
-Матрицу считает `tool/ci/affected.dart` (логика — `tool/ci/ci_scope.dart`, тесты —
-`codelab_architecture_tests/test/ci_scope_test.dart`). Затронутое — пакеты pub workspace с
-изменёнными файлами и их зависимые по `dependencies` и `dev_dependencies`. Файл вне пакетов, вне
-документации и вне `site/` (`pubspec.lock`, `analysis_options.yaml`, `.github/`, `tool/`) включает
-полный прогон.
-Документация вне пакетов — `docs/`, `openspec/`, `.claude/` и `*.md` в корне репозитория.
-Внутри пакетов (и вообще по любому пути) документацией считаются только `AGENTS.md`, `README.md` и
-`CHANGELOG.md`: остальные `*.md` там — данные, например промпты ядра агента. Файлы каталогов локализации для джоба `l10n`
+Сужение по затронутому действует для любого pull request, кроме pull request в `master` и из `release/*`: причину полного прогона (`FULL_REASON`) `ci.yml` передаёт для любого события, кроме `pull_request`, и для этих двух видов pull request. По git flow (`AGENTS.md` §22) в `develop` идут pull request из `feature/*` и `hotfix/*`, поэтому на практике суженный прогон — это они (change `align-cross-cutting-specs`, D7).
+
+Матрицу считает `tool/ci/affected.dart` (логика — `tool/ci/ci_scope.dart`). Затронутые пакеты — пакеты pub workspace с
+изменёнными файлами и их зависимые по `dependencies` и `dev_dependencies`.
+Внутри пакетов документацией считаются только `AGENTS.md`, `README.md` и `CHANGELOG.md`, а не любые
+`*.md`: остальные `*.md` там — данные, например промпты ядра агента. Файлы каталогов локализации для джоба `l10n`
 определяют `_l10nPackages` и `_isL10nFile` в `ci_scope.dart`; правка самого `tool/l10n_check.dart`
 лежит вне пакетов и даёт полный прогон (change `add-desktop-localization`, D3).
 
@@ -1315,10 +1295,7 @@ dev-зависимости `codelab_embedded`), а дальше обход ид�
 (`WorkspacePackage.runtimeDependencies`): dev-зависимости зависимостей, например `codelab_acp_testing`
 у `codelab_agent_acp`, в web-сборку не входят и `web-compile` не запускают. Набор
 `webSmokePackages` сверяет `ci_scope_test.dart` с каталогами `test/web_smoke/` и с самим скриптом:
-новая точка входа без строки в наборе или в скрипте роняет сторож. Спецификация `testing-quality`
-(`openspec/specs/testing-quality/spec.md`, требование «Проверки workspace») описывает `web-compile`
-как компиляцию ядра агента — это описание устарело: скрипт компилирует ещё основные барели
-`codelab_embedded` и `codelab_setup`.
+новая точка входа без строки в наборе или в скрипте роняет сторож.
 
 ### 74.1. Доказательства строк Must: `parity_evidence_test`
 
@@ -1608,6 +1585,8 @@ all tests pass
 
 Менять тесты только ради подгонки под случайное текущее поведение НЕ СЛЕДУЕТ.
 
+Когда задача считается выполненной и что проверить перед pull request — процесс, а не норма спеки: корневой `AGENTS.md` §17–§21 (OpenSpec, проверка затронутого, полный `check` только в `release/*` или по просьбе) и TDD вложенных `AGENTS.md` пакетов. Требование `testing-quality` «Соблюдение Definition of Done» удалено, потому что его проверяет ревью, а не тест (change `align-cross-cutting-specs`, D8).
+
 ### TDD и итерации ([план миграции §9.0](proposals/dart-agent-and-clients/09-00-migration-plan.md), п. 3 и п. 8)
 
 **TDD (п. 3).** Каждая задача начинается с красного теста из критерия приёмки матрицы целей или из
@@ -1735,6 +1714,8 @@ all tests pass
 10. Нужны ли тесты совместимости?
 11. Есть ли конкурентность или гонка?
 12. Нужен ли регрессионный или интеграционный тест?
+
+Порядок работы над задачей и проверки перед pull request — корневой `AGENTS.md` §17–§21 (§88).
 
 ---
 

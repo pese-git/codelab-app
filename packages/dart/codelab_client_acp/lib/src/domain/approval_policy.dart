@@ -2,14 +2,6 @@ import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 
 import 'domain_models.dart';
 
-enum PermissionMode { readOnly, ask, plan, autoEdits }
-
-enum PermissionModeDecision {
-  allowWithoutApproval,
-  requireExplicitApproval,
-  unavailable,
-}
-
 final class ApprovalPolicy {
   const ApprovalPolicy._();
 
@@ -69,61 +61,6 @@ final class ApprovalPolicy {
     ApprovalRiskLevel second,
   ) {
     return _rank(first) >= _rank(second) ? first : second;
-  }
-
-  static PermissionModeDecision decidePermission({
-    required PermissionMode mode,
-    required ApprovalRiskLevel riskLevel,
-  }) {
-    return switch (mode) {
-      PermissionMode.readOnly => switch (riskLevel) {
-        ApprovalRiskLevel.readOnly =>
-          PermissionModeDecision.allowWithoutApproval,
-        ApprovalRiskLevel.unknown ||
-        ApprovalRiskLevel.localWrite ||
-        ApprovalRiskLevel.network ||
-        ApprovalRiskLevel.shell ||
-        ApprovalRiskLevel.destructive =>
-          PermissionModeDecision.requireExplicitApproval,
-      },
-      PermissionMode.ask => switch (riskLevel) {
-        ApprovalRiskLevel.readOnly =>
-          PermissionModeDecision.allowWithoutApproval,
-        ApprovalRiskLevel.unknown ||
-        ApprovalRiskLevel.localWrite ||
-        ApprovalRiskLevel.network ||
-        ApprovalRiskLevel.shell ||
-        ApprovalRiskLevel.destructive =>
-          PermissionModeDecision.requireExplicitApproval,
-      },
-      PermissionMode.plan => switch (riskLevel) {
-        ApprovalRiskLevel.readOnly =>
-          PermissionModeDecision.allowWithoutApproval,
-        ApprovalRiskLevel.localWrite ||
-        ApprovalRiskLevel.destructive => PermissionModeDecision.unavailable,
-        ApprovalRiskLevel.unknown ||
-        ApprovalRiskLevel.network ||
-        ApprovalRiskLevel.shell =>
-          PermissionModeDecision.requireExplicitApproval,
-      },
-      PermissionMode.autoEdits => switch (riskLevel) {
-        ApprovalRiskLevel.readOnly || ApprovalRiskLevel.localWrite =>
-          PermissionModeDecision.allowWithoutApproval,
-        ApprovalRiskLevel.unknown ||
-        ApprovalRiskLevel.network ||
-        ApprovalRiskLevel.shell ||
-        ApprovalRiskLevel.destructive =>
-          PermissionModeDecision.requireExplicitApproval,
-      },
-    };
-  }
-
-  static bool requiresExplicitApproval({
-    required PermissionMode mode,
-    required ApprovalRiskLevel riskLevel,
-  }) {
-    return decidePermission(mode: mode, riskLevel: riskLevel) ==
-        PermissionModeDecision.requireExplicitApproval;
   }
 }
 

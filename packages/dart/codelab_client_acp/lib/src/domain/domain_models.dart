@@ -125,8 +125,8 @@ sealed class PromptTurn with _$PromptTurn {
 /// D5, D9; AGENTS.md §10).
 ///
 /// Для чего: [unknown] по рангу между [readOnly] и [localWrite]
-/// (`ApprovalPolicy.max`), а `ApprovalPolicy.decidePermission` требует для
-/// него явного одобрения в любом режиме. Хосты показывают его отдельной
+/// (`ApprovalPolicy.max`), а решение об одобрении принимают агент и
+/// пользователь (клиент риск лишь классифицирует). Хосты показывают его отдельной
 /// меткой («unknown risk»).
 enum ApprovalRiskLevel {
   readOnly,
@@ -287,6 +287,17 @@ enum SessionLifecycleStatus {
   failed,
 }
 
+/// Снимок сессии: статус, ходы, режимы и опции.
+///
+/// Диагностики здесь нет намеренно: единственный (ограниченный) буфер —
+/// `AcpClientApplication.diagnostics`; копия в сессии росла без предела и
+/// шумела в `sessionChanges` (OBS-004, D3 change `align-cross-cutting-specs`).
+///
+/// Как использовать: снимок иммутабелен; создаёт и заменяет его только
+/// `AcpClientApplication` через `SessionStateMachine` (переходы — события
+/// машины, а не `copyWith` снаружи). Хосты читают его через
+/// `AcpClientApplication.sessionById` и подписываются на `sessionChanges`;
+/// диагностику берут из `AcpClientApplication.diagnostics`.
 @freezed
 sealed class AcpSession with _$AcpSession {
   const AcpSession._();
@@ -297,7 +308,6 @@ sealed class AcpSession with _$AcpSession {
     String? title,
     @Default(SessionLifecycleStatus.idle) SessionLifecycleStatus status,
     @Default([]) List<PromptTurn> turns,
-    @Default([]) List<DiagnosticEntry> diagnostics,
     SessionModeState? modes,
     List<SessionConfigOption>? configOptions,
 
