@@ -1,6 +1,6 @@
 # Backlog: находки при написании руководств разработчика, ревью 2026-11-25
 
-Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники:
+Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…21 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`, найдены позже в тот же день):
 - [#471](https://github.com/pese-git/codelab-app/pull/471) — ядро агента;
 - [#472](https://github.com/pese-git/codelab-app/pull/472) — слой ACP и сторож;
 - [#473](https://github.com/pese-git/codelab-app/pull/473) — агентская сторона;
@@ -31,6 +31,9 @@
 | REV-16 | P3 | docs | docs | Устаревшие `AGENTS.md`, архитектурные документы и комментарии кода | нет | [#489](https://github.com/pese-git/codelab-app/issues/489) |
 | REV-17 | P3 | docs | docs | Стандарт `codelab-docs` §7 запрещает снимки хода агента, хотя их можно честно снять на сценарной модели | нет | [#490](https://github.com/pese-git/codelab-app/issues/490) |
 | REV-18 | P3 | tech-debt | agent | Ядро агента: объявленное, но не подключённое (steering, `loop.*`, fallback, `grantForTurn`, `ToolTier.network`, Gemini) | да | [#491](https://github.com/pese-git/codelab-app/issues/491) |
+| REV-19 | P2 | bug | agent, config | `compaction.keep_recent_user_turns: 0` (или отрицательное) роняет сжатие с `StateError`; при аварийном сжатии падает весь ход | нет | [#493](https://github.com/pese-git/codelab-app/issues/493) |
+| REV-20 | P3 | bug | agent | Рантайм пишет причину пропуска MCP в лог по-русски («сервис MCP не передан») | нет | [#494](https://github.com/pese-git/codelab-app/issues/494) |
+| REV-21 | P3 | bug | agent, mcp | Серверы MCP с именами вроде `my.srv` и `my_srv` получают общий префикс инструментов; у агента с ограниченным набором `toolCount` считается суммой | нет | [#495](https://github.com/pese-git/codelab-app/issues/495) |
 
 ## Карточки
 
@@ -319,3 +322,56 @@
 
 **Что сделать:**
 - По каждому пункту решить: подключить (OpenSpec change) или убрать.
+
+### REV-19. `compaction.keep_recent_user_turns: 0` (или отрицательное) роняет сжатие с `StateError`; при аварийном сжатии падает весь ход (P2)
+
+Источник: раздел алгоритмов руководства ядра, проверено по коду. Issue: [#493](https://github.com/pese-git/codelab-app/issues/493).
+
+**Где:**
+- `packages/dart/codelab_agent_core/lib/src/compaction/cut_point.dart` (`findCutPoint`, шаг 5)
+- `packages/dart/codelab_agent_core/lib/src/config/resolve.dart` (проверка ключей `compaction.*`)
+- `packages/dart/codelab_agent_core/lib/src/config/settings_registry.dart` (дескриптор ключа без `min`)
+
+**Факт:**
+- При `keepRecentUserTurns == 0` выражение `userTurns.skip(userTurns.length)` пусто, и `lastUsers.first` бросает `StateError: No element`. Отрицательное значение ведёт к тому же. Воспроизведено временным тестом на `findCutPoint`.
+- У ключа нет проверки минимума: `resolve.dart` проверяет `> 0` только у `reserve_tokens`, `keep_recent_tokens` и `context_window_cap`; у дескриптора нет `min`.
+- Последствия: после хода — `compaction.failed` и `AgentError(compaction)`; при аварийном сжатии (`preflight`/`overflow`) `_compactEmergency` ловит только `CancelledException`, ход завершается `AgentError(hook)` и `TurnEnded(failed)`, по ACP — `-32603`; `/compact` — `command.builtin.failed`.
+
+**Почему важно:** Одно значение в конфигурации ломает сжатие, а при переполнении окна — каждый ход сессии.
+
+**Что сделать:**
+- Проверять ключ при разборе конфигурации (`min: 1` и ошибка значения) — красный тест на разбор.
+- Сделать `findCutPoint` устойчивым к пустому хвосту — красный тест.
+
+### REV-20. Рантайм пишет причину пропуска MCP в лог по-русски («сервис MCP не передан») (P3)
+
+Источник: раздел алгоритмов руководства ядра, проверено по коду. Issue: [#494](https://github.com/pese-git/codelab-app/issues/494).
+
+**Где:**
+- `packages/dart/codelab_agent_core/lib/src/runtime/agent_runtime.dart` (`_planMcp`, `skipped(server, …)`)
+
+**Факт:**
+- Причина пропуска сервера MCP передаётся в лог русским текстом.
+
+**Почему важно:** `AGENTS.md` §15: сообщения логов и ошибок пишутся на английском; лог читают инструменты и пользователи без русского.
+
+**Что сделать:**
+- Заменить текст на английский; проверить тест, который его фиксирует.
+
+### REV-21. Серверы MCP с именами вроде `my.srv` и `my_srv` получают общий префикс инструментов; у агента с ограниченным набором `toolCount` считается суммой (P3)
+
+Источник: раздел алгоритмов руководства ядра, проверено по коду. Issue: [#495](https://github.com/pese-git/codelab-app/issues/495).
+
+**Где:**
+- `packages/dart/codelab_agent_core/lib/src/runtime/agent_runtime.dart` (сборка `mcpServers` для промпта, фильтр по `mcpServerPrefix`)
+- `mcpServerPrefix`/`mcpToolName` (санитизация имени сервера)
+
+**Факт:**
+- Имена серверов приводятся к одному префиксу `mcp__my_srv__` (проверено прогоном с фейковым MCP-сервером).
+- Если у агента задан набор `tools` или это субагент, `toolCount` сервера считается по префиксу, поэтому каждый из двух серверов получает сумму инструментов обоих.
+
+**Почему важно:** Секция MCP системного промпта сообщает модели неверное число инструментов; префикс не идентифицирует сервер однозначно.
+
+**Что сделать:**
+- Считать инструменты по серверу-владельцу, а не по префиксу, или запретить имена серверов, совпадающие после санитизации (ошибка конфигурации).
+- Тест на два таких сервера.
