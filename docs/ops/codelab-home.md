@@ -24,7 +24,7 @@
 | `$CODELAB_HOME/secrets.yaml` | значения секретов открытым текстом, права `0600`; только при `secrets.backend: file` | `codelab secret set`, мастер провайдера, диалог профиля app |
 | `$CODELAB_HOME/sessions/` | журналы сессий встроенного агента, по подкаталогу на папку проекта; другой каталог задаёт `sessions.dir` в конфигурации | встроенный агент |
 | `$CODELAB_HOME/recent_projects.json` | недавние проекты: не больше 10 путей, последний открытый первым; формат `{"version":1,"projects":[…]}` | app при открытии проекта; `codelab` при запуске диалога или полноэкранного режима (в том числе с `--resume` и `--continue`) |
-| `$CODELAB_HOME/themes/<имя>.json` | цветовые темы app (до 64 КиБ каждая); `codelab` их пока не читает | вы; «Import JSON…» на странице «Appearance» app — [руководство](../../apps/codelab_desktop/doc/user-guide.md#своя-тема) |
+| `$CODELAB_HOME/themes/<имя>.json` | цветовые темы app (до 64 КиБ каждая); `codelab` их пока не читает | вы; «Import JSON…» на странице «Appearance» app — [руководство](../../apps/codelab_desktop/doc/user/09-settings.md#своя-тема) |
 
 - Профиль, сохранённый в app, сразу виден в `codelab -a <id>`, и наоборот: это один файл.
 - Встроенный агент в `profiles.json` не записывается. Запись с id `default` клиенты не используют: `default` — второе имя встроенного агента.

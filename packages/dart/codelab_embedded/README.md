@@ -76,7 +76,7 @@ await agent.dispose();
 - Переменная `CODELAB_TEST_SECRET_STORE` читается только в сборке с `-DCODELAB_ALLOW_TEST_SECRETS=true`.
 - Необязательные параметры `localEmbeddedAgentOpener`: `debugSecrets`, `httpClient`, `clock`.
 
-Профиль подключения `embedded` (и его алиас `default`) — профиль клиента по умолчанию; значение `hostProfile` в нём выбирает клиент: `embedded-cli` у `codelab`, `embedded-app-desktop` у приложения. Как пользователь выбирает агента — [руководство `codelab`](../../../apps/codelab_cli/doc/user-guide.md#выбрать-агента).
+Профиль подключения `embedded` (и его алиас `default`) — профиль клиента по умолчанию; значение `hostProfile` в нём выбирает клиент: `embedded-cli` у `codelab`, `embedded-app-desktop` у приложения. Как пользователь выбирает агента — [руководство `codelab`](../../../apps/codelab_cli/doc/user/05-folder-model-agent.md#выбрать-агента).
 
 ## Ключевой поток
 
