@@ -86,6 +86,32 @@ void main() {
     );
   });
 
+  testWidgets('сбой Disposable в scope не мешает закрыть процессы клиента '
+      '(CodeLabRootLifecycle)', (tester) async {
+    final binding = CodeLabTestBinding();
+    // Подскоуп закрывается раньше `CodeLabRootLifecycle`: его сбой обрывает
+    // `Scope.dispose` до владельца процессов.
+    binding.scope.openSubScope('failing')
+      ..installModules([_InstanceModule(_FailingDisposable())])
+      ..resolve<_FailingDisposable>();
+    final lifecycle = binding.scope.resolve<CodeLabRootLifecycle>();
+
+    await tester.pumpWidget(
+      CodeLabBootstrap(
+        scope: binding.scope,
+        appLogger: RecordingLogger(),
+        child: const SizedBox.shrink(),
+      ),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    // Закрытие владельцев процессов началось (шаги D10 стоят в очереди),
+    // хотя закрытие scope оборвалось на первом `Disposable`.
+    expect(lifecycle.pendingSteps, containsAll(['transport', 'client']));
+
+    await closeCodeLabRootScopeInTest();
+  });
+
   testWidgets('снятие CodeLabBootstrap с root scope и teardown закрывают '
       'его один раз', (tester) async {
     final binding = CodeLabTestBinding();

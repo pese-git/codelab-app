@@ -352,7 +352,8 @@ Future<void> closeCodeLabRootScope() => _rootScopeClosing ??=
 /// `app.shutdown_step_failed {step: root_scope, error_type}`. В отличие от
 /// шагов `CodeLabRootLifecycle`, закрытие scope после сбоя не продолжается:
 /// `Scope.dispose` CherryPick обрывается на первом бросившем `Disposable`, и
-/// оставшиеся владельцы не закрываются.
+/// оставшиеся владельцы не закрываются. Поэтому `CodeLabBootstrap` закрывает
+/// `CodeLabRootLifecycle` (процессы клиента) до scope и независимо от него.
 ///
 /// Как использовать: `unawaited(_closeScopeLogged(close, logger))`; `Future`
 /// завершается без ошибки.
@@ -2280,6 +2281,10 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
   /// тем же путём, что сочетание `open-settings`.
   late final AppMenuBridge _menuBridge;
 
+  /// Владелец процессов и подписок клиента; [dispose] закрывает его до
+  /// scope, см. там.
+  late final CodeLabRootLifecycle _rootLifecycle;
+
   @override
   void initState() {
     super.initState();
@@ -2290,7 +2295,8 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
         ),
       ),
     )..attach();
-    final rootLifecycle = _scope.resolve<CodeLabRootLifecycle>();
+    final rootLifecycle = _rootLifecycle = _scope
+        .resolve<CodeLabRootLifecycle>();
     _exitListener = AppLifecycleListener(
       onExitRequested: AppExitHandler(
         closeRoot: rootLifecycle.dispose,
@@ -2310,6 +2316,14 @@ class _CodeLabBootstrapState extends State<CodeLabBootstrap> {
     // свой: иначе teardown тестов закрыл бы его параллельно второй раз.
     final isRoot =
         providedScope == null || identical(providedScope, _codeLabRootScope);
+    // Владелец процессов закрывается первым и независимо от scope:
+    // `Scope.dispose` CherryPick обрывается на первом бросившем `Disposable`
+    // (порядок их обхода не задан), и без этого сбой, например, сброса
+    // журналов оставил бы `terminal/*`, stdio- и встроенного агента без
+    // сигналов (`add-client-process-shutdown-on-exit`, D1, D2; AGENTS.md §10).
+    // `dispose` идемпотентен — scope при закрытии получит тот же `Future` — и
+    // не бросает: каждый шаг изолирован `_step`, сбой уже в журнале.
+    unawaited(_rootLifecycle.dispose());
     unawaited(
       _closeScopeLogged(
         isRoot ? closeCodeLabRootScope : providedScope.dispose,
