@@ -2,6 +2,8 @@
 
 Общая тестовая инфраструктура ACP (Agent Client Protocol): fake-транспорт и fake-запуск процессов, golden-фикстуры (корпус JSON-сценариев обмена клиента и агента) и драйверы, которые проигрывают их против клиента или агента. Пакет отдельный, потому что одни и те же фикстуры проверяют обе стороны протокола, а тестам нескольких пакетов нужны одни и те же двойники.
 
+Устройство пакета подробно описывает [руководство разработчика](doc/README.md): формат фикстуры, драйверы, покрытие корпуса, рецепт новой фикстуры и частые проблемы.
+
 ## Место в архитектуре
 
 Тестовый пакет без стороны (`codelab_<назначение>`, ADR-0002). Чистый Dart, но не web-безопасен: загрузчик фикстур и скрипты агентов используют `dart:io`. В `lib/` приложений он не попадает, кроме одного исключения (см. ниже).
@@ -77,9 +79,9 @@ flowchart LR
 | `frames` | Кадры `c2a` (клиент → агент) и `a2c` (агент → клиент) по порядку |
 | `normalize`, `after` | Дополнительные замены перед сравнением; ожидаемое состояние файлов и вызовы MCP после сценария |
 
-Сравнение точное: лишний ключ в кадре — расхождение. Отступления задаются матчерами на месте значения (`$any`, `$absent`, `$capture`, `$regex`, `$contains`, `$partial`, `$oneOf`, `$text`, `$repeat`) и переменными `${cwd}`, `${sessionId}`. Время заменяется на `<ts>`. Полный список и семантика — в §14.5–§14.6 документа выше, реализация — `lib/src/fixtures/matcher.dart`.
+Сравнение точное: лишний ключ в кадре — расхождение. Отступления задаются матчерами на месте значения (`$any`, `$absent`, `$capture`, `$regex`, `$contains`, `$partial`, `$oneOf`, `$repeat`) и переменными `${cwd}`, `${sessionId}`. Склейку дельт текста проверяет поле `match.$text` кадра с `repeat`. Время заменяется на `<ts>`. Полный список и семантика — в §14.5–§14.6 документа выше, реализация — `lib/src/fixtures/matcher.dart`.
 
-Пример кадра с `repeat` и `$text` (из `fixtures/acp/prompt-text-end-turn.json`): агент присылает один или больше `agent_message_chunk`, а склейка текста должна дать заданную строку.
+Пример кадра с `repeat` и `match.$text` (из `fixtures/acp/prompt-text-end-turn.json`): агент присылает один или больше `agent_message_chunk`, а склейка текста должна дать заданную строку.
 
 ```json
 {
@@ -102,26 +104,19 @@ flowchart LR
 
 ### Как добавить фикстуру
 
-1. Выберите имя `<область>-<сценарий>[-<исход>]` в kebab-case и создайте `fixtures/acp/<имя>.json`. Поле `id` — `acp/<имя>`.
-2. Возьмите за образец близкую фикстуру, например `prompt-text-end-turn.json`. Заполните `spec` существующими файлами и якорями из `docs/protocols/acp/protocol/`, `description`, `setup`, `llm` и `frames`. Поле `roles` укажите, если сценарий нужен только одной стороне.
-3. Запустите тесты пакета: `fvm dart test`. Загрузчик отвергнет неверную структуру, а `fixtures_load_test.dart` проверит инварианты корпуса (в том числе существование ссылок `spec`).
-4. Прогоните фикстуру против обеих сторон: `melos run conformance:client`, `conformance:agent`, `conformance:embedded` (таблица ниже).
-5. Если фикстура закрывает метод или вид `sessionUpdate`, уберите его из `pendingCoverage` в `test/fixtures_coverage_test.dart` или `agentPendingCoverage` в `test/fixtures_agent_coverage_test.dart`: список только сокращается.
-6. Если меняется формат (новое поле), правьте вместе `fixtures/acp/_schema.json` и загрузчик `lib/src/fixtures/fixture.dart`: `fixtures_schema_sync_test.dart` следит, чтобы они не разошлись.
+Кратко: создайте `fixtures/acp/<область>-<сценарий>[-<исход>].json` (`id` — `acp/<имя>`) по образцу близкой фикстуры, заполните `spec` существующими разделами `docs/protocols/acp/protocol/` и прогоните её против обеих сторон. Новая фикстура также требует регистрации: запись в `_stateChecks` клиентского теста (для роли `client`), `id` в множествах `test/fixtures_load_test.dart` и, если она закрыла метод или вид `sessionUpdate`, правку списков `pendingCoverage`. Пошаговый рецепт с примером — [`doc/04-recipes-and-troubleshooting.md`](doc/04-recipes-and-troubleshooting.md#как-написать-новую-фикстуру); изменение формата (`_schema.json` и загрузчик вместе) — [там же](doc/04-recipes-and-troubleshooting.md#как-изменить-формат-фикстуры).
 
 ### Кто проигрывает корпус
 
-Корпус играют четыре места. Скрипты — из корневого `pubspec.yaml` (секция `melos`), запуск — `fvm dart run melos run <скрипт>`.
+Корпус играют четыре места; запуск — `fvm dart run melos run <скрипт>`, все скрипты входят в `melos run check`.
 
 | Скрипт Melos | Что проверяет |
 |---|---|
-| `conformance:client` | `AcpClientApplication` против корпуса (`packages/dart/codelab_client_acp/test/fixtures`, драйвер `runClientFixture`) |
-| `conformance:agent` | `AcpAgentServer` против корпуса (`packages/dart/codelab_agent_acp/test/conformance_test.dart`, драйвер `runAgentFixture`) |
-| `conformance:embedded` | встроенный агент в процессе CLI: `codelab test-scenario packages/dart/codelab_acp_testing/fixtures/acp --agent embedded` |
+| `conformance:client` | `AcpClientApplication` против корпуса (драйвер `runClientFixture`) |
+| `conformance:agent` | `AcpAgentServer` против корпуса (драйвер `runAgentFixture`) |
+| `conformance:embedded` | встроенный агент в процессе CLI: `codelab test-scenario … --agent embedded` |
 
-Транспортные фикстуры (с `setup.transport`: stdio или WebSocket) играет бинарь агента: `apps/codelab_agent/test/transport_conformance_test.dart` через `runAgentFixtureOver`. `melos run protocol-conformance` корпус фикстур не проигрывает: он запускает только тесты `codelab_acp_protocol`. Все скрипты входят в `melos run check`.
-
-Команда `codelab test-scenario` описана в [`apps/codelab_cli/doc/operations.md`](../../../apps/codelab_cli/doc/operations.md#проверка-агента-фикстурами-test-scenario), ограничения импорта — в [`apps/codelab_cli/doc/development.md`](../../../apps/codelab_cli/doc/development.md).
+Транспортные фикстуры (`setup.transport`) играет `apps/codelab_agent/test/transport_conformance_test.dart` через `runAgentFixtureOver`. `melos run protocol-conformance` корпус не проигрывает. Файлы тестов, запуск одной фикстуры и разбор отчёта о падении — [`doc/00-getting-started.md`](doc/00-getting-started.md#кто-проигрывает-корпус). Команда `codelab test-scenario` описана в [`apps/codelab_cli/doc/operations.md`](../../../apps/codelab_cli/doc/operations.md#проверка-агента-фикстурами-test-scenario), ограничения импорта — в [`apps/codelab_cli/doc/development.md`](../../../apps/codelab_cli/doc/development.md).
 
 ## Как использовать
 
