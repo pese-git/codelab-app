@@ -95,6 +95,62 @@ void main() {
     expect(out.single, isNot(contains('secret')));
   });
 
+  // change `redact-tool-row-text`, D4; spec codelab-tui «Кадр TUI»: тем же
+  // правилом, что в REPL.
+  test('a tool call row of the frame hides secrets of the title', () {
+    final out = lines([
+      TranscriptItem.toolCall(
+        id: 't1',
+        toolCallId: const ToolCallId('call-1'),
+        title: 'Fetch https://user:s3cr3t@host/x',
+        details: const ToolCallView(
+          kind: ToolKind.fetch,
+          status: ToolCallStatusView.succeeded,
+        ),
+      ),
+    ]);
+
+    expect(out.join('\n'), contains('https://<redacted>@host/x'));
+    expect(out.join('\n'), isNot(contains('s3cr3t')));
+  });
+
+  test('a nested call of a subagent hides secrets of the title', () {
+    final out = layout
+        .lines(
+          _view([
+            TranscriptItem.toolCall(
+              id: 't1',
+              toolCallId: const ToolCallId('call-1'),
+              title: 'Subagent explore: Map callers',
+              details: const ToolCallView(
+                kind: ToolKind.think,
+                status: ToolCallStatusView.succeeded,
+                subagentCall: SubagentCallView(id: 'sub_a1', type: 'explore'),
+              ),
+              children: [
+                TranscriptItem.toolCall(
+                  id: 't1/c2',
+                  toolCallId: const ToolCallId('call-2'),
+                  title: 'Fetch https://user:s3cr3t@host/x',
+                  details: const ToolCallView(
+                    kind: ToolKind.fetch,
+                    status: ToolCallStatusView.succeeded,
+                    parentToolCallId: 'call-1',
+                  ),
+                ),
+              ],
+            ),
+          ]),
+          width: 60,
+          expandDetails: true,
+        )
+        .map(_plain)
+        .join('\n');
+
+    expect(out, contains('https://<redacted>@host/x'));
+    expect(out, isNot(contains('s3cr3t')));
+  });
+
   test('thoughts follow the /thoughts mode', () {
     const items = [
       TranscriptItem.thought(id: 'th', text: 'pondering'),

@@ -117,7 +117,9 @@ void main() {
   test('control characters from the agent are removed', () {
     expect(
       toolRow(_call(ToolCallStatusView.running, title: 'Run \x1b[31mx')),
-      '… Run [31mx',
+      // CSI-последовательность заменяется пробелом целиком (D4, шаг 0
+      // change `redact-tool-row-text`): раньше оставался хвост `[31m`.
+      '… Run  x',
     );
   });
 
@@ -129,5 +131,86 @@ void main() {
     );
 
     expect(toolRow(item), '… Read file');
+  });
+
+  // change `redact-tool-row-text`, D4; spec codelab-cli «Рендер хода в REPL».
+  group('secrets in the row', () {
+    test('title and command hide the credentials of an address', () {
+      final row = toolRow(
+        _call(
+          ToolCallStatusView.succeeded,
+          title: 'Fetch https://user:s3cr3t@host/x',
+          command: 'curl https://user:s3cr3t@host/x?token=t0k3n',
+        ),
+      );
+
+      expect(row, startsWith('✓ '));
+      expect(row, contains('https://<redacted>@host/x'));
+      expect(row, isNot(contains('s3cr3t')));
+      expect(row, isNot(contains('t0k3n')));
+    });
+
+    test('a multi-line command is masked before the first line is taken', () {
+      final row = toolRow(
+        _call(
+          ToolCallStatusView.succeeded,
+          command:
+              'curl -H "Authorization: Bearer t0k3n" https://host/x\n  --retry 3',
+        ),
+      );
+
+      expect(row, isNot(contains('t0k3n')));
+      expect(row, contains(' …'));
+      expect(row, isNot(contains('--retry')));
+    });
+
+    test('an escape sequence inside the secret does not hide it', () {
+      final row = toolRow(
+        _call(
+          ToolCallStatusView.succeeded,
+          title: 'Bearer \x1b[0mt0k3n',
+          command: 'curl -H "Authorization: Bearer \x1b[0mt0k3n" https://h/x',
+        ),
+      );
+
+      expect(row, isNot(contains('t0k3n')));
+      expect(row, isNot(contains('[0m')));
+    });
+
+    // spec codelab-cli «ESC-последовательность не прячет токен».
+    test('an escape sequence between Bearer and the token hides nothing', () {
+      final row = toolRow(
+        _call(
+          ToolCallStatusView.succeeded,
+          command:
+              "curl -H 'Authorization: Bearer\u001b[0m t0k3n' https://host/x",
+        ),
+      );
+
+      expect(row, isNot(contains('t0k3n')));
+      expect(row, isNot(contains('[0m')));
+    });
+
+    test('the same secret in title and command is not repeated', () {
+      final row = toolRow(
+        _call(
+          ToolCallStatusView.succeeded,
+          title: 'curl https://user:s3cr3t@host/x',
+          command: 'curl https://user:s3cr3t@host/x',
+        ),
+      );
+
+      expect(row, '✓ curl https://<redacted>@host/x');
+    });
+
+    test('a row without secrets stays as it was', () {
+      expect(
+        toolRow(
+          _call(ToolCallStatusView.succeeded, command: 'npm test'),
+          elapsed: const Duration(milliseconds: 100),
+        ),
+        '✓ Run tests npm test 0.1s',
+      );
+    });
   });
 }

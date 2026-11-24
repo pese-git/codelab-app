@@ -65,6 +65,103 @@ void main() {
       expect(row.toString(), isNot(contains('token=abc')));
     });
 
+    test('a URL loses its userinfo', () {
+      final row = _format(
+        ToolKind.fetch,
+        rawInput: {'url': 'https://user:pass@example.com/x?t=1'},
+      );
+
+      expect(row, const ToolRowView(label: 'Fetch', detail: 'example.com/x'));
+      expect(row.toString(), isNot(contains('user')));
+      expect(row.toString(), isNot(contains('pass')));
+    });
+
+    test('a password with @ is dropped up to the last @', () {
+      final row = _format(
+        ToolKind.fetch,
+        rawInput: {'url': 'https://user:p@ss@example.com/x'},
+      );
+
+      expect(row, const ToolRowView(label: 'Fetch', detail: 'example.com/x'));
+      expect(row.toString(), isNot(contains('user')));
+      expect(row.toString(), isNot(contains('p@ss')));
+      expect(row.toString(), isNot(contains('ss@')));
+    });
+
+    test('an @ in the path is kept', () {
+      expect(
+        _format(ToolKind.fetch, rawInput: {'url': 'https://example.com/a@b'}),
+        const ToolRowView(label: 'Fetch', detail: 'example.com/a@b'),
+      );
+    });
+
+    test('a URL without a scheme loses its userinfo', () {
+      final row = _format(
+        ToolKind.fetch,
+        rawInput: {'url': 'user:pass@example.com/x'},
+      );
+
+      expect(row, const ToolRowView(label: 'Fetch', detail: 'example.com/x'));
+      expect(row.toString(), isNot(contains('pass')));
+    });
+
+    test('other URL shapes keep only host and path', () {
+      const cases = {
+        'https://ghp_token@github.com/org/repo': 'github.com/org/repo',
+        'https://example.com?u=a@b': 'example.com',
+        'ssh://git@host/repo': 'host/repo',
+        'https://example.com#a@b': 'example.com',
+        // Ведущие слэши снимаются, пустая authority не роняет форматирование.
+        '/docs/a@b': 'docs/a@b',
+        'https:///x': 'x',
+        // `\` границей authority не считается: по RFC 3986 `h\a` — userinfo,
+        // поэтому показываем меньше, а не больше (D2).
+        r'https://h\a@b/x': 'b/x',
+        // Двоеточие порта без слэша — не схема.
+        'localhost:8080/x': 'localhost:8080/x',
+      };
+      for (final MapEntry(key: url, value: detail) in cases.entries) {
+        expect(
+          _format(ToolKind.fetch, rawInput: {'url': url}),
+          ToolRowView(label: 'Fetch', detail: detail),
+          reason: url,
+        );
+      }
+    });
+
+    test('unusual spellings of a URL do not leak userinfo', () {
+      // Записи, которые парсер WHATWG (Node) или RFC 3986 (Python `urllib`,
+      // `requests`) принимает за адрес с userinfo, и пробелы по краям —
+      // юникодные и вперемешку с управляющими символами; design.md D2.
+      const urls = [
+        '//user:pass@host/x',
+        ' https://user:pass@host/x',
+        '\nhttps://user:pass@host/x',
+        'ht\ttps://user:pass@host/x',
+        'https:///user:pass@host/x',
+        'https:/user:pass@host/x',
+        r'https:/\user:pass@host/x',
+        r'https:\\user:pass@host/x',
+        'https:user:pass@host/x',
+        r'https://h\user:pass@host/x',
+        '\u00A0https://user:pass@host/x',
+        '\uFEFFhttps://user:pass@host/x',
+        '\u3000//user:pass@host/x',
+        'https:// /user:pass@host/x',
+        ' / /user:pass@host/x',
+        '\x01\u00A0https://user:pass@host/x',
+      ];
+      for (final url in urls) {
+        final row = _format(ToolKind.fetch, rawInput: {'url': url});
+        expect(
+          row,
+          const ToolRowView(label: 'Fetch', detail: 'host/x'),
+          reason: url,
+        );
+        expect(row.toString(), isNot(contains('pass')), reason: url);
+      }
+    });
+
     test('a tool without scalar fields shows no JSON', () {
       expect(
         _format(
@@ -226,6 +323,87 @@ void main() {
         isNull,
       );
     });
+
+    // change `redact-tool-row-text`, D1, D3.
+    test('a failed fetch hides the credentials of an address in the error', () {
+      final secondary = _format(
+        ToolKind.fetch,
+        status: ToolCallStatusView.failed,
+        textOutput: [
+          'Error: request to https://user:pass@host/x failed\n'
+              '    at fetch (node:internal)',
+        ],
+      ).secondary;
+
+      expect(secondary, 'Error: request to https://<redacted>@host/x failed');
+      expect(secondary, isNot(contains('user:pass')));
+      expect(secondary, isNot(contains('pass@')));
+    });
+
+    test('control characters of the second line become spaces', () {
+      expect(
+        _format(
+          ToolKind.read,
+          status: ToolCallStatusView.failed,
+          textOutput: ['\u001b[31mError:\tboom\u001b[0m'],
+        ).secondary,
+        'Error: boom',
+      );
+    });
+
+    test('a line of control characters only is skipped', () {
+      expect(
+        _format(
+          ToolKind.read,
+          status: ToolCallStatusView.failed,
+          textOutput: ['\u001b[0m\nreal error'],
+        ).secondary,
+        'real error',
+      );
+      expect(
+        _format(
+          ToolKind.read,
+          status: ToolCallStatusView.failed,
+          textOutput: ['\u001b[0m'],
+        ).secondary,
+        isNull,
+      );
+    });
+
+    test('a long second line is truncated after masking', () {
+      final secondary = _format(
+        ToolKind.fetch,
+        status: ToolCallStatusView.failed,
+        // Адрес целиком помещается до предела, усечение приходится на хвост
+        // после него: маска уже наложена, `@` на месте.
+        textOutput: ['${'a' * 130} https://user:password@host/x/${'b' * 40}'],
+      ).secondary!;
+
+      expect(secondary, hasLength(ToolRowFormatter.maxDetailLength));
+      expect(secondary, endsWith('…'));
+      expect(secondary, contains('https://<redacted>@'));
+      expect(secondary, isNot(contains('user')));
+      expect(secondary, isNot(contains('passw')));
+    });
+
+    test('the second line of a failed agent call is masked', () {
+      final row = ToolRowFormatter.format(
+        const ToolCallItem(
+          id: 'tool-1',
+          toolCallId: ToolCallId('call-1'),
+          title: 'Subagent explore: Map callers',
+          details: ToolCallView(
+            kind: ToolKind.think,
+            status: ToolCallStatusView.failed,
+            subagentCall: SubagentCallView(id: 'sub_a1', type: 'explore'),
+            textOutput: ['auth failed for https://user:pass@host/x'],
+          ),
+        ),
+        cwd: '/work/app',
+      );
+
+      expect(row.secondary, 'auth failed for https://<redacted>@host/x');
+    });
   });
 
   // Смена режима и вызов незнакомого вида (change `tolerate-unknown-tool-kind`,
@@ -245,6 +423,36 @@ void main() {
       );
     });
 
+    // change `redact-tool-row-text`, D2.
+    test('the label of a call of kind other hides credentials', () {
+      final row = _format(
+        ToolKind.other,
+        title: 'curl https://user:pass@host/x',
+      );
+
+      expect(row, const ToolRowView(label: 'curl https://<redacted>@host/x'));
+      expect(row.label, isNot(contains('pass')));
+    });
+
+    test('the label of a call of kind other has no control characters', () {
+      final row = _format(ToolKind.other, title: 'mcp\u001b[2J__db__stats');
+
+      expect(row.label, isNot(contains('\u001b')));
+      expect(row.detail, isEmpty);
+    });
+
+    test('a title with a secret of an unknown wire kind is masked', () {
+      // Незнакомый wire-вид проекция читает как `other` (D7 change
+      // `tolerate-unknown-tool-kind`).
+      final row = _format(
+        ToolKind.fromJson('future_kind'),
+        title: 'sync Authorization: Bearer t0k3n-value',
+      );
+
+      expect(row.label, isNot(contains('t0k3n-value')));
+      expect(row.detail, isEmpty);
+    });
+
     test('no row exposes wire names of kinds', () {
       for (final row in [
         _format(ToolKind.switchMode, title: 'Ready for implementation'),
@@ -254,6 +462,307 @@ void main() {
         expect(text, isNot(contains('switch_mode')));
         expect(text, isNot(contains('future_kind')));
       }
+    });
+  });
+
+  // change `redact-tool-row-text`, D7; acp-client-kit «Хвост вывода строки
+  // инструмента».
+  group('output tail', () {
+    ToolCallItem item({
+      required List<String> textOutput,
+      ToolCallStatusView status = ToolCallStatusView.succeeded,
+      ToolKind kind = ToolKind.read,
+      SubagentCallView? subagentCall,
+    }) => ToolCallItem(
+      id: 'tool-1',
+      toolCallId: const ToolCallId('call-1'),
+      title: 'x',
+      details: ToolCallView(
+        kind: kind,
+        status: status,
+        textOutput: textOutput,
+        subagentCall: subagentCall,
+      ),
+    );
+
+    test('secrets are masked and line breaks are kept', () {
+      expect(
+        ToolRowFormatter.outputTail(
+          item(
+            textOutput: [
+              'line 1\nDATABASE_URL=postgres://user:pass@db/app\nline 3',
+            ],
+          ),
+          maxLines: 20,
+        ),
+        'line 1\nDATABASE_URL=postgres://<redacted>@db/app\nline 3',
+      );
+    });
+
+    // change `redact-tool-row-text`, D7: секрет, начавшийся выше границы
+    // хвоста, не выходит в хвост открытой частью.
+    test('a private key cut by the tail boundary is masked to its END', () {
+      final key = [
+        '-----BEGIN RSA PRIVATE KEY-----',
+        for (var i = 1; i <= 25; i++) 'body-line-$i',
+        '-----END RSA PRIVATE KEY-----',
+      ];
+
+      final tail = ToolRowFormatter.outputTail(
+        item(textOutput: ['${key.join('\n')}\ndone']),
+        maxLines: 20,
+      )!;
+
+      expect(tail, isNot(contains('body-line')));
+      expect(tail, contains('<redacted>'));
+      expect(tail, endsWith('done'));
+    });
+
+    test('a token on the next line after Bearer at the boundary is masked', () {
+      final tail = ToolRowFormatter.outputTail(
+        item(textOutput: ['l1\nAuthorization: Bearer\ntok3n-value\nl4\nl5']),
+        maxLines: 3,
+      )!;
+
+      expect(tail, isNot(contains('tok3n-value')));
+      expect(tail.split('\n'), hasLength(lessThanOrEqualTo(3)));
+      expect(tail, endsWith('l4\nl5'));
+    });
+
+    test('a value on the line after "password:" at the boundary is masked', () {
+      final tail = ToolRowFormatter.outputTail(
+        item(textOutput: ['l1\npassword:\nhunter2\nl4\nl5']),
+        maxLines: 3,
+      )!;
+
+      expect(tail, isNot(contains('hunter2')));
+      expect(tail, endsWith('l4\nl5'));
+    });
+
+    // spec «Токен на границе хвоста».
+    test('Bearer one line above the tail start masks the token', () {
+      final tail = ToolRowFormatter.outputTail(
+        item(
+          textOutput: [
+            'ok1\nok2\nok3\nok4\nAuthorization: Bearer\nt0k3n-value\n'
+                'ok7\nok8\nok9\nok10',
+          ],
+        ),
+        maxLines: 5,
+      )!;
+
+      expect(tail, isNot(contains('t0k3n-value')));
+      expect(tail, contains('<redacted>'));
+      expect(tail, endsWith('ok10'));
+      expect(tail.split('\n'), hasLength(lessThanOrEqualTo(5)));
+    });
+
+    // spec «Приватный ключ длиннее хвоста».
+    test('a private key longer than the tail leaves only the mask', () {
+      final text = [
+        '-----BEGIN RSA PRIVATE KEY-----',
+        for (var i = 1; i <= 40; i++) 'MIIEow$i',
+        '-----END RSA PRIVATE KEY-----',
+        'done',
+      ].join('\n');
+
+      final tail = ToolRowFormatter.outputTail(
+        item(textOutput: [text]),
+        maxLines: 20,
+      )!;
+
+      expect(tail, isNot(contains('MIIEow')));
+      expect(tail, contains('<redacted>'));
+      expect(tail, endsWith('done'));
+    });
+
+    test('an END without BEGIN keeps the lines after it', () {
+      final text = [
+        for (var i = 1; i <= 30; i++) 'key-body-$i',
+        '-----END RSA PRIVATE KEY-----',
+        'after-1',
+        'after-2',
+      ].join('\n');
+
+      final tail = ToolRowFormatter.outputTail(
+        item(textOutput: [text]),
+        maxLines: 10,
+      )!;
+
+      expect(tail, isNot(contains('key-body')));
+      expect(tail, isNot(contains('PRIVATE KEY')));
+      expect(tail, endsWith('after-1\nafter-2'));
+    });
+
+    // Незакрытый PEM: `head -n 10 ~/.ssh/id_rsa` или поток ещё идёт.
+    test('a BEGIN without END masks everything to the end of the window', () {
+      final tail = ToolRowFormatter.outputTail(
+        item(
+          textOutput: [
+            'before\n-----BEGIN OPENSSH PRIVATE KEY-----\nbody-1\nbody-2',
+          ],
+        ),
+        maxLines: 10,
+      );
+
+      expect(tail, 'before\n<redacted>');
+    });
+
+    test('a key that is still streaming is not shown', () {
+      final tail = ToolRowFormatter.outputTail(
+        item(
+          textOutput: [
+            'ok\n-----BEGIN RSA PRIVATE KEY-----\nMIIEow-1',
+            'MIIEow-2\nMIIEow-3',
+          ],
+        ),
+        maxLines: 10,
+      )!;
+
+      expect(tail, isNot(contains('MIIEow')));
+      expect(tail, startsWith('ok\n'));
+    });
+
+    test('BEGIN and END both in the window are masked as a pair', () {
+      final tail = ToolRowFormatter.outputTail(
+        item(
+          textOutput: [
+            'before\n-----BEGIN PRIVATE KEY-----\nsecret-body\n'
+                '-----END PRIVATE KEY-----\nafter',
+          ],
+        ),
+        maxLines: 10,
+      );
+
+      expect(tail, 'before\n<redacted>\nafter');
+    });
+
+    test('a 5 MB output does not make the tail slow', () {
+      final big = StringBuffer();
+      for (var i = 0; i < 5 * 1024 * 1024 ~/ 4; i++) {
+        big.write('row\n');
+      }
+      for (var i = 1; i <= 20; i++) {
+        big.write('end $i\n');
+      }
+      final call = item(textOutput: [big.toString()]);
+
+      final watch = Stopwatch()..start();
+      final tail = ToolRowFormatter.outputTail(call, maxLines: 20);
+      watch.stop();
+
+      expect(tail, [for (var i = 1; i <= 20; i++) 'end $i'].join('\n'));
+      // Бюджет — как у тестов линейности `secret_redaction_test.dart`; сам
+      // вывод не разбивается и не копируется (D7, п. 2).
+      expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+    });
+
+    test('one huge element gives exactly its last lines', () {
+      final big = [for (var i = 1; i <= 10000; i++) 'row $i'].join('\n');
+
+      expect(
+        ToolRowFormatter.outputTail(item(textOutput: [big]), maxLines: 2),
+        'row 9999\nrow 10000',
+      );
+    });
+
+    test('trailing blank space of the output is not part of the tail', () {
+      expect(
+        ToolRowFormatter.outputTail(
+          item(textOutput: ['a\nb\n\n  \n', '', ' \n']),
+          maxLines: 5,
+        ),
+        'a\nb',
+      );
+    });
+
+    test('the last maxLines lines are taken', () {
+      final lines = [for (var i = 1; i <= 30; i++) 'line $i'];
+
+      final tail = ToolRowFormatter.outputTail(
+        item(textOutput: [lines.join('\n')]),
+        maxLines: 20,
+      );
+
+      expect(tail, [for (var i = 11; i <= 30; i++) 'line $i'].join('\n'));
+    });
+
+    test('the tail boundary may pass inside an element', () {
+      final tail = ToolRowFormatter.outputTail(
+        item(textOutput: ['a1\na2\na3', 'b1\nb2\nb3']),
+        maxLines: 4,
+      );
+
+      expect(tail, 'a3\nb1\nb2\nb3');
+    });
+
+    test('a one-line error repeating the second line gives null', () {
+      final call = item(
+        status: ToolCallStatusView.failed,
+        textOutput: ['Error:\tbad https://user:pass@host/x'],
+      );
+
+      expect(ToolRowFormatter.outputTail(call, maxLines: 20), isNull);
+      expect(
+        ToolRowFormatter.format(call, cwd: '/w').secondary,
+        'Error: bad https://<redacted>@host/x',
+      );
+    });
+
+    test('a multi-line error shows the whole output', () {
+      expect(
+        ToolRowFormatter.outputTail(
+          item(
+            status: ToolCallStatusView.failed,
+            textOutput: ['Error: boom\n    at main (a.dart:1)'],
+          ),
+          maxLines: 20,
+        ),
+        'Error: boom\n    at main (a.dart:1)',
+      );
+    });
+
+    test('a long single line is shown whole while the second is cut', () {
+      final text = 'x' * 300;
+      final call = item(status: ToolCallStatusView.failed, textOutput: [text]);
+
+      expect(ToolRowFormatter.outputTail(call, maxLines: 20), text);
+      expect(
+        ToolRowFormatter.format(call, cwd: '/w').secondary,
+        hasLength(ToolRowFormatter.maxDetailLength),
+      );
+    });
+
+    test('an agent call and an empty output give null', () {
+      expect(
+        ToolRowFormatter.outputTail(
+          item(
+            kind: ToolKind.think,
+            subagentCall: const SubagentCallView(id: 'sub_a1', type: 'explore'),
+            textOutput: ['report'],
+          ),
+          maxLines: 20,
+        ),
+        isNull,
+      );
+      expect(
+        ToolRowFormatter.outputTail(item(textOutput: []), maxLines: 20),
+        isNull,
+      );
+      expect(
+        ToolRowFormatter.outputTail(item(textOutput: ['\n  \n']), maxLines: 20),
+        isNull,
+      );
+    });
+
+    test('a successful call without a second line shows its single line', () {
+      expect(
+        ToolRowFormatter.outputTail(
+          item(textOutput: ['contents']),
+          maxLines: 20,
+        ),
+        'contents',
+      );
     });
   });
 }
