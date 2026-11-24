@@ -1,43 +1,60 @@
-# Слои и зависимости ACP Client
+# Слои и зависимости CodeLab
 
-Этот документ определяет архитектурные слои ACP Client, ответственность packages и допустимые направления зависимостей.
+Документ задаёт архитектурные слои CodeLab, ответственность пакетов и допустимые направления зависимостей между ними.
 
-Документ является обязательным при:
+Документ обязателен к прочтению при:
 
-* создании нового package;
-* создании новой feature;
-* переносе кода между packages;
-* добавлении cross-package dependency;
-* изменении ACP client architecture;
-* существенном refactoring.
+* создании нового пакета;
+* создании новой фичи;
+* переносе кода между пакетами;
+* добавлении зависимости между пакетами;
+* изменении архитектуры ACP-клиента;
+* существенном рефакторинге.
 
-Общие правила находятся в:
+Цели:
 
-`AGENTS.md`
+* закрепить за каждым пакетом и слоем одну ответственность;
+* задать допустимые направления зависимостей и запретить обратные;
+* сохранить чистый Dart там, где не нужен Flutter, и web-безопасность там, где она заявлена;
+* держать связанность (coupling) под контролем, а не умножать слои ради формы;
+* дать критерии, по которым выбирается место для нового кода.
 
-Технологический стек:
+Общие правила — корневой `AGENTS.md` (§4, §5, §6, §7, §11, §13, §14, §15, §17), [`technology-stack.md`](technology-stack.md), [`acp-boundary.md`](acp-boundary.md), [`state-management.md`](state-management.md), [`platform-integration.md`](platform-integration.md), [`permissions.md`](permissions.md), [`error-handling.md`](error-handling.md), [`testing.md`](testing.md). Решения: [ADR-0001](adr/0001-embed-dart-agent-core-behind-acp.md) (встраиваемое ядро агента за ACP), [ADR-0002](adr/0002-name-packages-codelab-side-layer.md) (имена пакетов `codelab_<сторона>_<слой>`). Слои и пакеты агента подробно — [`proposals/agent-core/01-layers-and-packages.md`](proposals/agent-core/01-layers-and-packages.md) (инварианты PKG-1…PKG-6).
 
-`docs/architecture/technology-stack.md`
+Термины:
+
+* **Слой** (layer) — уровень с одной ответственностью: протокол, транспорт, клиентская логика, представление; внутри приложения — `domain`, `application`, `infrastructure`, `presentation` (§2, §15–§18).
+* **Сторона** (side) — часть имени пакета по ADR-0002: `acp` (общий протокольный слой), `client` или `agent` (§53).
+* **Мост** (bridge) — пакет без префикса стороны, через который клиенты получают агентскую сторону: `codelab_setup`, `codelab_embedded` (§53).
+* **Барель** (barrel) — публичная точка входа пакета `lib/<пакет>.dart` или дополнительная `lib/io.dart`, `lib/testing.dart` (§25).
+* **Web-безопасный** (web-safe) — код, который собирается в JavaScript и WebAssembly: без `dart:io`, `dart:isolate`, `dart:ffi` и Flutter (§53).
+* **Порт** (port) — узкий интерфейс, через который внутренний слой получает внешнюю возможность; реализацию даёт адаптер (§18, §34).
+* **Composition root** — место, где собираются конкретные реализации: `apps/codelab_desktop/lib/app/`, `apps/codelab_cli/lib/src/composition_root.dart`, хост `apps/codelab_agent` (§24).
+* **Фича** (feature) — каталог `features/<имя>/` приложения, владеющий одной возможностью (§12).
+* **Allowlist** — допустимые `dependencies` пакета в `pubspec.yaml`, проверяемые сторожем (§42, §53).
+* **Сторож** (guard) — тесты `packages/dart/codelab_architecture_tests`, запуск — `melos run guard` (§42).
+
+Где в коде. Члены pub workspace перечислены в `workspace:` корневого `pubspec.yaml`; имя пакета совпадает с каталогом и следует схеме `codelab_<сторона>_<слой>` (ADR-0002, `package_naming_test.dart`). Общий протокольный слой: `codelab_acp_protocol` (модели и кодеки), `codelab_acp_transports` (основной барель web-безопасен: порт `AcpTransport`, `InProcessAcpLink`, конфигурации; IO-транспорты `StdioAcpTransport`, `WebSocketAcpTransport` и серверные — в `lib/io.dart`), `codelab_acp_testing` (фикстуры и двойники). Клиентская сторона: `codelab_client_acp` (`AcpClientApplication`, автоматы состояний, `ApprovalPolicy`; каталоги `lib/src/domain/`, `application/`, `infrastructure/`), `codelab_client_core` (`ClientWorkspace`, `SessionHandle`, порты `AgentBackend` и `TransportResolver`), `codelab_client_io` (адаптеры `dart:io`, `ioTransportResolver`), `codelab_ui` (`packages/flutter/`, виджеты Fluent; слои `atomics/`, `molecules/`, `organisms/`, `rendering/`, `l10n/`). Агентская сторона: `codelab_agent_core`, `codelab_agent_io`, `codelab_agent_acp`, `codelab_agent_mcp` (§53). Мосты: `codelab_setup` (основной барель и `lib/io.dart`), `codelab_embedded` (`codelab_embedded.dart`, `io.dart`, `testing.dart`). Приложения: `apps/codelab_desktop` — Flutter, feature-first: `lib/app/` (composition root `createCodeLabRootScope` в `app_scope.dart` на Cherrypick, корень app, навигация `NavigationCubit`), `lib/core/platform/` (адаптеры платформы), `lib/core/text/`, `lib/features/<фича>/{application,presentation}/` для `workbench`, `settings`, `onboarding`, `project_files`, `terminal`, `protocol`, `usage`; слоёв `domain/` и `infrastructure/` в фичах нет. `apps/codelab_cli` — чистый Dart, composition root `lib/src/composition_root.dart`. `apps/codelab_agent` — бинарь агента, хост ядра `lib/src/host/agent_host.dart`. Сторож `packages/dart/codelab_architecture_tests`: правила импортов `PackageRule` в таблице `rules` (`test/support/rules.dart`; web-небезопасные префиксы `webUnsafe`, пакеты языка интерфейса `uiLanguageForbidden`, запечатывание IO- и тестовых барелей `exclude`/`sealExclude`), allowlist-ы `*Allowlist` (`test/pubspec_allowlist_test.dart`; ядро агента — `coreAllowlist`: `http`, `meta`, `collection`, `async`, `crypto`, PKG-2), имена пакетов (`package_naming_test.dart`), сборка ядра только через `buildAgentCore` (`host_assembly_guard_test.dart`, HOST-6), литералы интерфейса (`ui_literals_test.dart`). Сборку ядра агента и основных барелей мостов в JavaScript и WebAssembly проверяет `melos run web-compile`. Что сторож проверяет, а что нет, — §42.
 
 ---
 
 ## 1. Цель
 
-Основная задача dependency rules — не формальное соблюдение Clean Architecture, а контроль coupling.
+Главная задача правил зависимостей — не формальное соблюдение Clean Architecture, а контроль связанности.
 
-Архитектура должна обеспечивать:
+Архитектура ДОЛЖНА обеспечивать:
 
-* независимость ACP protocol от Flutter;
-* независимость reusable client logic от Flutter;
-* изоляцию transports;
-* изоляцию platform-specific implementation;
-* переиспользуемый ACP UI;
-* тестируемость application logic;
-* явное владение state и side effects.
+* независимость протокола ACP от Flutter;
+* независимость переиспользуемой клиентской логики от Flutter;
+* изоляцию транспортов;
+* изоляцию реализаций, зависящих от платформы;
+* переиспользуемый UI для ACP;
+* тестируемость логики application;
+* явное владение состоянием и побочными эффектами.
 
-Наличие dependency в `pubspec.yaml` означает только техническую доступность package.
+Зависимость в `pubspec.yaml` означает только техническую доступность пакета.
 
-Оно НЕ означает, что любой слой может использовать этот package напрямую.
+Она не означает, что любой слой может использовать этот пакет напрямую.
 
 ---
 
@@ -47,50 +64,52 @@
 
 ```text id="ll6a2s"
 ┌─────────────────────────────────────────────┐
-│                codelab_desktop                  │
+│               codelab_desktop               │
 │                                             │
-│ presentation / app-specific orchestration   │
-│ composition root / desktop integration      │
+│ presentation, оркестрация приложения        │
+│ composition root, интеграция с desktop      │
 └──────────────────────┬──────────────────────┘
                        │
              ┌─────────┴─────────┐
              ▼                   ▼
 ┌───────────────────────┐  ┌───────────────────────┐
-│        codelab_ui         │  │    codelab_client_acp    │
+│      codelab_ui       │  │  codelab_client_acp   │
 │                       │  │                       │
-│ reusable Flutter UI   │  │ reusable ACP client  │
-│ presentation          │  │ application logic     │
+│ переиспользуемый UI   │  │ переиспользуемая      │
+│ на Flutter            │  │ логика ACP-клиента    │
 └───────────────────────┘  └───────────┬───────────┘
                                        │
-                           ┌───────────┴───────────┐
-                           ▼                       ▼
-                ┌──────────────────┐    ┌──────────────────┐
-                │  codelab_acp_transports  │    │   codelab_acp_protocol   │
-                │                  │    │                  │
-                │ transport layer  │    │ wire protocol    │
-                └────────┬─────────┘    └──────────────────┘
-                         │
-                         ▼
-                  External Agent
+                         ┌─────────────┴─────────────┐
+                         ▼                           ▼
+              ┌────────────────────────┐  ┌────────────────────────┐
+              │ codelab_acp_transports │  │  codelab_acp_protocol  │
+              │                        │  │                        │
+              │ транспортный слой      │  │ проводной протокол     │
+              └───────────┬────────────┘  └────────────────────────┘
+                          │
+                          ▼
+                    внешний агент
 ```
 
-Testing infrastructure находится отдельно:
+Тестовая инфраструктура находится отдельно:
 
 ```text id="55dykc"
 codelab_acp_testing
     │
-    └── используется только test/dev кодом
+    └── используется только тестовым и dev-кодом
 ```
+
+В коде клиентская сторона шире схемы: между приложениями и `codelab_client_acp` стоит общий клиентский слой `codelab_client_core` (владелец состояния рабочего пространства), его `dart:io`-адаптеры — `codelab_client_io`, а вторым клиентом рядом с `codelab_desktop` работает `apps/codelab_cli`. Фактические рёбра: `codelab_desktop` и `codelab_cli` → `codelab_client_core`, `codelab_client_io`, `codelab_client_acp`, `codelab_acp_protocol`, `codelab_acp_transports`, мосты `codelab_setup` и `codelab_embedded`; `codelab_desktop` → `codelab_ui`; `codelab_client_io` → `codelab_client_core` → `codelab_client_acp` → `codelab_acp_transports` → `codelab_acp_protocol` (`pubspec.yaml` пакетов; схема зависимостей app — `apps/codelab_desktop/doc/development.md`). Направление `codelab_client_core` → `codelab_client_acp` обратно агентскому `codelab_agent_acp` → `codelab_agent_core`: одинаковые имена слоёв у сторон не означают одинакового направления (ADR-0002, Consequences). `codelab_ui` не зависит ни от одного пакета `codelab_*`. Агентская сторона и мосты — §53.
 
 ---
 
-## 3. Главное правило dependencies
+## 3. Главное правило зависимостей
 
-Dependencies должны направляться от более высокоуровневых компонентов к более низкоуровневым либо к abstractions, определяющим boundary.
+Зависимости ДОЛЖНЫ быть направлены от более высокоуровневых компонентов к более низкоуровневым либо к абстракциям, задающим границу.
 
-Lower-level package НЕ ДОЛЖЕН зависеть от higher-level application package.
+Низкоуровневый пакет НЕ ДОЛЖЕН зависеть от высокоуровневого пакета приложения.
 
-Запрещено:
+ЗАПРЕЩЕНО:
 
 ```text id="ljd98u"
 codelab_acp_protocol
@@ -118,13 +137,15 @@ codelab_ui
     → codelab_desktop
 ```
 
+В коде ни одного из этих рёбер нет: в `pubspec.yaml` пакетов нет зависимостей от `apps/*`, а у `codelab_acp_protocol` и `codelab_ui` нет зависимостей от других пакетов `codelab_*`.
+
 ---
 
-## 4. Dependency matrix
+## 4. Матрица зависимостей
 
-Базовая dependency policy:
+Базовая политика зависимостей:
 
-| From ↓ / To →     | `codelab_acp_protocol` | `codelab_acp_transports` | `codelab_client_acp` | `codelab_ui` | `codelab_desktop` | `codelab_acp_testing` |
+| Откуда ↓ / Куда → | `codelab_acp_protocol` | `codelab_acp_transports` | `codelab_client_acp` | `codelab_ui` | `codelab_desktop` | `codelab_acp_testing` |
 | ----------------- | -------------: | ---------------: | ----------------: | -------: | ------------: | ------------: |
 | `codelab_acp_protocol`    |              — |                ❌ |                 ❌ |        ❌ |             ❌ |             ❌ |
 | `codelab_acp_transports`  |              ✅ |                — |                 ❌ |        ❌ |             ❌ |             ❌ |
@@ -135,46 +156,48 @@ codelab_ui
 
 Обозначения:
 
-* ✅ — dependency разрешена;
-* ❌ — dependency запрещена;
-* ⚠️ — dependency допустима только при архитектурной необходимости;
+* ✅ — зависимость разрешена;
+* ❌ — зависимость запрещена;
+* ⚠️ — зависимость МОЖНО добавить только при архитектурной необходимости;
 * `*` — см. отдельные правила ниже.
 
-Матрица описывает архитектурную policy.
+Матрица описывает архитектурную политику.
 
-Фактический `pubspec.yaml` должен быть не шире необходимого dependency graph.
+Фактический `pubspec.yaml` ДОЛЖЕН быть не шире необходимого графа зависимостей.
 
 Матрица относится к клиентской стороне. Пакеты агентской стороны (`codelab_agent_*`) и мосты `codelab_setup`, `codelab_embedded` описаны в разделе 53.
+
+В коде матрица не покрывает `codelab_client_core`, `codelab_client_io` и `apps/codelab_cli`: их границы заданы allowlist-ами сторожа (`kitAllowlist`, `clientIoAllowlist`, `cliAllowlist` в `pubspec_allowlist_test.dart`) и правилами импорта (`rules.dart`). Ячейки ⚠️ не использованы: `codelab_ui` не зависит ни от `codelab_acp_protocol`, ни от `codelab_client_acp`. `codelab_acp_testing` у `codelab_desktop` — только в `dev_dependencies`; ячейка ❌ касается рабочих зависимостей (§9, §41). Правило «не шире необходимого» в коде нарушено: `fpdart` объявлен в `dependencies` `codelab_acp_protocol`, `codelab_acp_transports`, `codelab_acp_testing` и `apps/codelab_desktop`, но ни один их файл `package:fpdart` не импортирует (импортирует только `codelab_client_acp`, `lib/src/application/use_cases.dart`); `flutter_bloc` объявлен в `codelab_ui`, но не импортируется. Сторож это не проверяет: у этих пакетов нет allowlist-а, а у `apps/codelab_desktop` проверяются только пакеты `codelab_*`.
 
 ---
 
 ## 5. `codelab_acp_protocol`
 
-Package:
+Пакет:
 
 `packages/dart/codelab_acp_protocol`
 
 ### Ответственность
 
-`codelab_acp_protocol` представляет wire-level ACP contract.
+`codelab_acp_protocol` представляет проводной контракт ACP.
 
 Может содержать:
 
-* request/response models;
-* notifications;
-* protocol DTO;
-* identifiers;
-* serialization;
-* deserialization;
-* protocol validation;
-* protocol-level errors;
-* version compatibility.
+* модели запросов и ответов;
+* уведомления;
+* протокольные DTO;
+* идентификаторы;
+* сериализацию;
+* десериализацию;
+* протокольную валидацию;
+* протокольные ошибки;
+* совместимость версий.
 
-### Разрешённые dependencies
+### Разрешённые зависимости
 
-Только pure Dart libraries, необходимые для реализации protocol.
+Только библиотеки на чистом Dart, необходимые для реализации протокола.
 
-### Запрещённые dependencies
+### Запрещённые зависимости
 
 `codelab_acp_protocol` НЕ ДОЛЖЕН зависеть от:
 
@@ -185,116 +208,120 @@ Package:
 * Flutter;
 * `flutter_bloc`;
 * `fluent_ui`;
-* platform UI.
+* UI платформы.
 
-### Invariant
+### Инвариант
 
 ```text id="k1fmlo"
-ACP wire contract
+проводной контракт ACP
       │
       ▼
 codelab_acp_protocol
 ```
 
-Ничто из application/presentation layer не должно быть необходимо для определения ACP message.
+Для определения сообщения ACP НЕ ДОЛЖНО требоваться ничего из слоёв application или presentation.
+
+В коде зависимости пакета — `fpdart`, `freezed_annotation`, `json_annotation`, `meta`; `fpdart` не используется (§4). Правила импорта для пакета в `rules.dart` нет: отсутствие Flutter держит состав `pubspec.yaml` (`acp-boundary.md` §3).
 
 ---
 
 ## 6. `codelab_acp_transports`
 
-Package:
+Пакет:
 
 `packages/dart/codelab_acp_transports`
 
 ### Ответственность
 
-Transport package отвечает за доставку ACP messages между client и agent.
+Транспортный пакет отвечает за доставку сообщений ACP между клиентом и агентом.
 
 Может содержать:
 
-* stdio transport;
-* process transport;
-* stream transport;
-* socket transport;
-* framing;
-* transport lifecycle;
-* transport errors.
+* транспорт stdio;
+* транспорт процесса;
+* потоковый транспорт;
+* транспорт сокета;
+* разбиение на кадры (framing);
+* жизненный цикл транспорта;
+* ошибки транспорта.
 
-### Разрешённые dependencies
+### Разрешённые зависимости
 
 `codelab_acp_transports` МОЖЕТ зависеть от:
 
 * `codelab_acp_protocol`;
 * Dart SDK;
-* transport-specific pure Dart libraries.
+* библиотек на чистом Dart, нужных конкретному транспорту.
 
-### Запрещённые dependencies
+### Запрещённые зависимости
 
 НЕ ДОЛЖЕН зависеть от:
 
 * `codelab_client_acp`;
 * `codelab_ui`;
 * `codelab_desktop`;
-* Flutter presentation;
+* presentation на Flutter;
 * `flutter_bloc`;
 * `fluent_ui`.
 
-### Transport boundary
+### Граница транспорта
 
-Transport отвечает за:
+Транспорт отвечает за:
 
 ```text id="fngjcp"
-bytes / streams
+байты / потоки
       ↕
-ACP messages
+сообщения ACP
 ```
 
-Transport НЕ отвечает за:
+Транспорт НЕ отвечает за:
 
 ```text id="sz1o87"
-session UI
-permission dialogs
-navigation
-business state
-presentation state
+UI сессии
+диалоги разрешений
+навигацию
+бизнес-состояние
+состояние представления
 ```
+
+В коде основной барель `package:codelab_acp_transports/codelab_acp_transports.dart` web-безопасен (порт `AcpTransport`, `InProcessAcpLink`, конфигурации транспортов); IO-транспорты (`StdioAcpTransport`, `WebSocketAcpTransport`, серверные `StdioServerAcpTransport` и `WebSocketServerAcpTransport`) экспортирует только `package:codelab_acp_transports/io.dart`. Сторож запрещает пакету `webUnsafe` (в том числе `package:flutter/`) везде, кроме `lib/io.dart` и `lib/src/io/`, и запрещает остальному коду пакета, включая основной барель, ссылаться на них (`sealExclude`). Зависимости — `codelab_acp_protocol`, `fpdart` (не используется, §4), `freezed_annotation`, `meta`, `web_socket_channel`.
 
 ---
 
 ## 7. `codelab_client_acp`
 
-Package:
+Пакет:
 
 `packages/dart/codelab_client_acp`
 
 ### Ответственность
 
-`codelab_client_acp` содержит reusable client-side application behavior ACP.
+`codelab_client_acp` содержит переиспользуемое клиентское поведение ACP уровня application.
 
 Может содержать:
 
-* ACP client orchestration;
-* connection coordination;
-* session lifecycle;
-* request lifecycle;
-* cancellation;
-* application-level ACP events;
-* permission abstractions;
-* client state machines;
-* mapping protocol → application concepts.
+* оркестрацию ACP-клиента;
+* координацию соединения;
+* жизненный цикл сессии;
+* жизненный цикл запроса;
+* отмену;
+* события ACP уровня application;
+* абстракции разрешений;
+* автоматы состояний клиента;
+* преобразование протокольных понятий в понятия application.
 
-### Разрешённые dependencies
+### Разрешённые зависимости
 
 `codelab_client_acp` МОЖЕТ зависеть от:
 
 * `codelab_acp_protocol`;
-* transport abstractions;
-* `codelab_acp_transports`, если concrete transport является осознанной частью client-core architecture;
-* pure Dart libraries.
+* абстракций транспорта;
+* `codelab_acp_transports`, если конкретный транспорт — осознанная часть архитектуры клиентского ядра;
+* библиотек на чистом Dart.
 
-### Предпочтительная boundary
+### Предпочтительная граница
 
-Если practical, `codelab_client_acp` СЛЕДУЕТ зависеть от transport abstraction, а concrete transport создавать выше — в composition root.
+Если это практично, `codelab_client_acp` СЛЕДУЕТ зависеть от абстракции транспорта, а конкретный транспорт создавать выше — в composition root.
 
 Предпочтительно:
 
@@ -302,13 +329,13 @@ Package:
 codelab_client_acp
        │
        ▼
-Transport interface
+интерфейс транспорта
        ▲
        │
 codelab_acp_transports
 ```
 
-вместо сильного coupling:
+вместо жёсткой связи:
 
 ```text id="3c0fr4"
 codelab_client_acp
@@ -317,9 +344,9 @@ codelab_client_acp
 ConcreteStdioTransport
 ```
 
-Это особенно важно, если существуют или планируются несколько transports.
+Это особенно важно, если транспортов несколько или они планируются.
 
-### Запрещённые dependencies
+### Запрещённые зависимости
 
 `codelab_client_acp` НЕ ДОЛЖЕН зависеть от:
 
@@ -328,38 +355,40 @@ ConcreteStdioTransport
 * `fluent_ui`;
 * `codelab_ui`;
 * `codelab_desktop`;
-* widgets;
+* виджетов;
 * `BuildContext`;
-* navigation;
-* dialogs.
+* навигации;
+* диалогов.
 
-### Invariant
+### Инвариант
 
-Если ACP client behavior можно полностью протестировать обычным Dart test без Flutter binding, это сильный кандидат для `codelab_client_acp`.
+Если поведение ACP-клиента можно полностью проверить обычным Dart-тестом без Flutter binding, это сильный кандидат для `codelab_client_acp`.
+
+В коде пакет зависит от основного бареля `codelab_acp_transports` ради порта `AcpTransport`: `AcpClientApplication({required AcpTransport transport, ...})` получает транспорт снаружи, а конкретный создаёт composition root (`_createStdioTransport` в `apps/codelab_desktop/lib/app/app_scope.dart`, `ioTransportResolver` в `codelab_client_io`). Остальные зависимости — `codelab_acp_protocol`, `fpdart`, `freezed_annotation`, `meta`, `path`, `structured_log`. Сторож запрещает пакету `webUnsafe` (в том числе `package:flutter/` и `package:codelab_acp_transports/io.dart`) и пакеты языка интерфейса `uiLanguageForbidden`; `flutter_bloc` и `fluent_ui` отдельно не перечислены, но без Flutter SDK в `pubspec.yaml` их импорт не разрешится. Allowlist-а у пакета нет.
 
 ---
 
 ## 8. `codelab_ui`
 
-Package:
+Пакет:
 
 `packages/flutter/codelab_ui`
 
 ### Ответственность
 
-`codelab_ui` содержит reusable ACP-specific Flutter presentation.
+`codelab_ui` содержит переиспользуемое presentation на Flutter для ACP.
 
 Может содержать:
 
-* ACP widgets;
-* reusable conversation UI;
-* tool-call UI;
-* status UI;
-* permission presentation;
-* reusable presentation models;
-* BLoC-aware components.
+* виджеты ACP;
+* переиспользуемый UI разговора;
+* UI вызовов инструментов;
+* UI статусов;
+* показ запросов разрешения;
+* переиспользуемые модели представления;
+* компоненты, знающие о BLoC.
 
-### Разрешённые dependencies
+### Разрешённые зависимости
 
 `codelab_ui` МОЖЕТ зависеть от:
 
@@ -368,99 +397,105 @@ Package:
 * `flutter_bloc`;
 * `flutter_localizations` и `intl` — только для собственного каталога сообщений кита (`CodeLabLocalizations`, раздел 54; change `add-desktop-localization`, D4).
 
-Dependency на `codelab_client_acp` или `codelab_acp_protocol` допустима только если reusable UI действительно должен понимать соответствующий public model.
+Зависимость от `codelab_client_acp` или `codelab_acp_protocol` МОЖНО добавить, только если переиспользуемый UI действительно должен понимать соответствующую публичную модель.
 
 ### Предпочтение
 
-Следует предпочитать:
+СЛЕДУЕТ предпочитать:
 
 ```text id="37e1mo"
-ACP/application model
+модель ACP / application
         │
         ▼
-presentation mapping
+преобразование для presentation
         │
         ▼
-codelab_ui model/widget
+модель / виджет codelab_ui
 ```
 
-вместо распространения raw protocol DTO по widget tree.
+вместо распространения сырых протокольных DTO по дереву виджетов.
 
-### Запрещённые dependencies
+### Запрещённые зависимости
 
 `codelab_ui` НЕ ДОЛЖЕН зависеть от:
 
 * `codelab_desktop`;
-* concrete ACP transport;
-* application composition root;
-* desktop application-specific services.
+* конкретного транспорта ACP;
+* composition root приложения;
+* сервисов, специфичных для desktop-приложения.
 
-### Invariant
+### Инвариант
 
-`codelab_ui` должен оставаться reusable.
+`codelab_ui` ДОЛЖЕН оставаться переиспользуемым.
 
-Если component имеет смысл только внутри одной feature `codelab_desktop`, его не следует автоматически переносить в `codelab_ui`.
+Если компонент имеет смысл только внутри одной фичи `codelab_desktop`, его НЕ СЛЕДУЕТ автоматически переносить в `codelab_ui`.
+
+В коде `codelab_ui` не зависит ни от одного пакета `codelab_*` (`pubspec.yaml`): модели ACP и состояние клиента переводит в типы кита маппер app `apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart` (`README.md` пакета). Правила кита — `packages/flutter/codelab_ui/AGENTS.md` (§2 «Нет логики»: виджет не решает, опасно ли действие, и не разбирает протокольный текст). Сторож проверяет у кита только импорты: парсер `gpt_markdown` и подсветка `val_highlight` — лишь в `lib/src/rendering/`, их транзитивные пакеты (`material_ui`, `cupertino_ui`, `flutter_svg` и др.) и плагин перетаскивания из ОС `desktop_drop` запрещены везде (нативный плагин — инфраструктура app, `AGENTS.md` §11); отсутствие бизнес-логики и зависимости от `codelab_desktop` сторож не проверяет. Текст интерфейса кита — `ui_literals_test.dart` (§54).
+
+Общие UI-примитивы — кнопки, текст, значки, бейджи, индикаторы, палитра и тоны (`CodeLabButton`, `CodeLabText`, `CodeLabBadge`, `CodeLabPalette` и др.) — живут в одном месте, `packages/flutter/codelab_ui/lib/src/atomics/`; составные виджеты — `molecules/` и `organisms/`. Новый примитив, нужный нескольким фичам app, СЛЕДУЕТ добавлять в `atomics/`, а не повторять в фичах (§46; раньше это была норма удалённого требования `workspace-architecture` «Ограничения SOLID, KISS и DRY», change `align-cross-cutting-specs`, D5).
 
 ---
 
 ## 9. `codelab_acp_testing`
 
-Package:
+Пакет:
 
 `packages/dart/codelab_acp_testing`
 
 ### Ответственность
 
-Reusable testing infrastructure.
+Переиспользуемая тестовая инфраструктура.
 
 Может содержать:
 
-* fake ACP agent;
-* fake transport;
-* fixtures;
-* protocol message builders;
-* test factories;
-* lifecycle test utilities;
-* assertion helpers.
+* фейкового ACP-агента;
+* фейковый транспорт;
+* фикстуры;
+* построители протокольных сообщений;
+* тестовые фабрики;
+* утилиты для тестов жизненного цикла;
+* помощники проверок.
 
-### Dependencies
+### Зависимости
 
-`codelab_acp_testing` МОЖЕТ зависеть от pure Dart ACP packages:
+`codelab_acp_testing` МОЖЕТ зависеть от ACP-пакетов на чистом Dart:
 
 * `codelab_acp_protocol`;
 * `codelab_acp_transports`;
 * `codelab_client_acp`.
 
-Production code НЕ ДОЛЖЕН зависеть от `codelab_acp_testing`.
+Рабочий код НЕ ДОЛЖЕН зависеть от `codelab_acp_testing`.
 
-Если появляются reusable Flutter-specific test helpers, следует рассмотреть отдельный Flutter testing package вместо добавления Flutter dependency в pure Dart `codelab_acp_testing`.
+Если появятся переиспользуемые тестовые помощники для Flutter, СЛЕДУЕТ рассмотреть отдельный тестовый пакет для Flutter вместо добавления Flutter в чистый Dart-пакет `codelab_acp_testing`.
+
+В коде пакет зависит от `codelab_acp_protocol`, `codelab_acp_transports`, `codelab_client_acp` и `fpdart` (не используется, §4). У всех пакетов и у `apps/codelab_desktop` он в `dev_dependencies`. Единственное исключение из запрета для рабочего кода — `apps/codelab_cli`: команда `test-scenario` проигрывает фикстуры в рабочем бинаре, поэтому пакет — обычная зависимость, а импорт разрешён только из `lib/src/scenario/` (корневой `AGENTS.md` §5; правило `apps/codelab_cli/lib/src` в `rules.dart`; change `add-codelab-cli`, D3).
 
 ---
 
 ## 10. `codelab_desktop`
 
-Application:
+Приложение:
 
 `apps/codelab_desktop`
 
 ### Ответственность
 
-`codelab_desktop` является конечным desktop application и composition root.
+`codelab_desktop` — конечное desktop-приложение и composition root.
 
 Отвечает за:
 
-* application bootstrap;
-* dependency composition;
-* desktop-specific features;
-* routing;
-* top-level state;
-* application presentation;
-* связывание ACP core с Flutter UI;
-* platform adapters.
+* запуск приложения;
+* сборку зависимостей;
+* возможности, специфичные для desktop;
+* навигацию;
+* состояние верхнего уровня;
+* presentation приложения;
+* связывание ядра ACP с UI на Flutter;
+* адаптеры платформы.
 
-### Разрешённые dependencies
+### Разрешённые зависимости
 
-Application МОЖЕТ зависеть от:
+Приложение МОЖЕТ зависеть от:
 
 * `codelab_acp_protocol`;
 * `codelab_acp_transports`;
@@ -470,9 +505,11 @@ Application МОЖЕТ зависеть от:
 * `flutter_bloc`;
 * Cherrypick;
 * `fpdart`;
-* approved platform packages.
+* утверждённых пакетов платформы.
 
-Однако dependency должна использоваться только соответствующим слоем.
+Однако каждую зависимость ДОЛЖЕН использовать только соответствующий слой.
+
+В коде к этому списку добавлены `codelab_client_core`, `codelab_client_io` и мосты `codelab_setup`, `codelab_embedded`; это весь допустимый набор пакетов `codelab_*` (`desktopAllowlist`). Пакеты `codelab_agent_*` в зависимостях и импортах app запрещены сторожем (корневой `AGENTS.md` §5). Сторонние зависимости app и правила их изоляции в `lib/core/platform/` — `apps/codelab_desktop/doc/development.md` и `platform-integration.md` §8.
 
 ---
 
@@ -489,7 +526,7 @@ lib/
 │   └── ...
 │
 ├── core/
-│   └── app-specific shared code
+│   └── общий код, специфичный для приложения
 │
 └── features/
     ├── chat/
@@ -498,7 +535,7 @@ lib/
     └── ...
 ```
 
-Feature МОЖЕТ быть простой:
+Фича МОЖЕТ быть простой (пример иллюстративный):
 
 ```text id="87uazp"
 features/settings/
@@ -516,13 +553,15 @@ features/chat/
 └── presentation/
 ```
 
-Не создавать `domain/application/infrastructure/presentation` автоматически.
+НЕ СЛЕДУЕТ создавать `domain/application/infrastructure/presentation` автоматически.
+
+В коде `lib/app/` не разбит на `bootstrap/`, `di/` и `routing/`: сборка и запуск — `app_scope.dart` (`createCodeLabRootScope`, `CodeLabBootstrap`), корневой виджет — `codelab_app_widget.dart`, рядом подкаталоги `appearance/`, `language/`, `navigation/` (`NavigationCubit`, `AppDestination`; пакета маршрутизации нет), `onboarding/`. `lib/core/` — `platform/` (адаптеры платформы и хранилища настроек) и `text/`. Фичи — `workbench`, `settings`, `onboarding`, `project_files`, `terminal`, `protocol`, `usage`; у каждой только `application/` и `presentation/`: доменная логика живёт в `codelab_client_core` и `codelab_client_acp`, адаптеры — в `lib/core/platform/` и `lib/app/` (`apps/codelab_desktop/doc/development.md`). Каталогов `chat/` и `sessions/` нет: их роль играет `workbench`.
 
 ---
 
-## 12. Feature boundaries
+## 12. Границы фич
 
-Feature должна владеть поведением, специфичным для своей capability.
+Фича ДОЛЖНА владеть поведением, специфичным для своей возможности.
 
 Например:
 
@@ -534,9 +573,9 @@ features/
 └── workbench/
 ```
 
-Одна feature НЕ ДОЛЖНА импортировать private implementation другой feature.
+Одна фича НЕ ДОЛЖНА импортировать закрытую реализацию другой фичи.
 
-Запрещённый pattern:
+Запрещённый шаблон:
 
 ```text id="pd29v2"
 features/chat/internal/foo.dart
@@ -545,312 +584,302 @@ features/chat/internal/foo.dart
 features/settings/bar.dart
 ```
 
-Если functionality действительно shared:
+Если функциональность действительно общая:
 
-1. определить её semantic owner;
-2. выделить public feature API;
-3. либо перенести в app-level `core`;
-4. либо вынести в reusable package, если она нужна нескольким applications/packages.
+1. определить её смыслового владельца;
+2. выделить публичный API фичи;
+3. либо перенести её в `core` уровня приложения;
+4. либо вынести в переиспользуемый пакет, если она нужна нескольким приложениям или пакетам.
+
+В коде у фич нет разделения на публичный API и закрытую реализацию (каталогов `internal/` или `src/` нет): фичи импортируют файлы `application/` и `presentation/` друг друга напрямую. Так `workbench` импортирует `settings/application/`, `usage/application/`, `protocol/application/`, `terminal/application/`, а `onboarding` — `settings/application/` и `workbench/application/`. Связь через узкий интерфейс application — например, `ConnectionCommands` (`features/settings/application/connection_commands.dart`), его реализует `ConnectionCubit` фичи `workbench` (§27). Сторож границы фич не проверяет.
 
 ---
 
 ## 13. `app/`
 
-`app/` содержит application-level composition.
+`app/` содержит сборку уровня приложения.
 
-Типичные responsibilities:
+Типичные обязанности:
 
-* bootstrap;
-* DI composition;
-* routing;
-* top-level window/application lifecycle;
-* global BLoC wiring;
-* app configuration.
+* запуск;
+* сборка DI;
+* навигация;
+* жизненный цикл окна и приложения верхнего уровня;
+* связывание глобальных BLoC;
+* конфигурация приложения.
 
-`app/` НЕ ДОЛЖЕН превращаться в место хранения feature business logic.
+`app/` НЕ ДОЛЖЕН превращаться в место хранения бизнес-логики фич.
 
 ---
 
-## 14. App-level `core/`
+## 14. `core/` уровня приложения
 
-`apps/codelab_desktop/lib/core/` предназначен только для действительно shared application-specific code.
+`apps/codelab_desktop/lib/core/` предназначен только для действительно общего кода, специфичного для приложения.
 
 Примеры:
 
-* app-level abstractions;
-* shared presentation primitives;
-* cross-feature adapters;
-* common application errors, если они действительно cross-feature.
+* абстракции уровня приложения;
+* общие примитивы presentation;
+* адаптеры, нужные нескольким фичам;
+* общие ошибки приложения, если они действительно нужны нескольким фичам.
 
-`core/` НЕ ДОЛЖЕН быть dumping ground.
+`core/` НЕ ДОЛЖЕН становиться свалкой.
 
-Перед переносом кода в `core` необходимо определить минимум два независимых consumers либо другую ясную cross-cutting responsibility.
+Перед переносом кода в `core` ДОЛЖНЫ быть определены минимум два независимых потребителя либо другая ясная сквозная ответственность.
+
+В коде этому правилу следуют порты `lib/core/platform/`: например, `ConnectionPreferences` нужен странице «Connection», рабочему месту и composition root, поэтому лежит в `core/platform/`, а `SettingsPageStore` с одним потребителем (`NavigationCubit`) — рядом с ним в `lib/app/navigation/` (doc-комментарии этих портов).
 
 ---
 
-## 15. Presentation layer
+## 15. Слой presentation
 
 Presentation включает:
 
-* Flutter widgets;
-* pages;
-* dialogs;
+* виджеты Flutter;
+* страницы;
+* диалоги;
 * BLoC/Cubit;
-* presentation state;
-* presentation mapping;
-* navigation integration.
+* состояние представления;
+* преобразование для presentation;
+* интеграцию с навигацией.
 
-Presentation МОЖЕТ зависеть от application API.
+Presentation МОЖЕТ зависеть от API уровня application.
 
 Presentation НЕ ДОЛЖЕН напрямую:
 
-* управлять low-level transport;
-* выполнять ACP serialization;
-* создавать processes;
-* обращаться к filesystem implementation;
-* принимать security policy decisions.
+* управлять низкоуровневым транспортом;
+* выполнять сериализацию ACP;
+* создавать процессы;
+* обращаться к реализации файловой системы;
+* принимать решения политики безопасности.
 
 Правильный поток:
 
 ```text id="uvokq4"
-User
+пользователь
  │
  ▼
-Widget
+виджет
  │
  ▼
 BLoC / Cubit
  │
  ▼
-Application API
+API application
 ```
+
+В коде Cubit-ы desktop лежат в `features/*/application/`, а не в `presentation/`; в `presentation/` — только виджеты (`apps/codelab_desktop/doc/development.md`, `state-management.md`). В `presentation/` нет импортов `dart:io`, `codelab_acp_transports` и `codelab_client_io`. Сторож запрещает `dart:io` в `features/settings/presentation/`, во всей фиче `onboarding` и во всей фиче `project_files`, IO-барели мостов `codelab_embedded/io.dart` и `codelab_setup/io.dart` — во всём `lib/` app, кроме `lib/app/`, а пять плагинов платформы (`file_selector`, `url_launcher`, `pty2`, `desktop_drop`, `system_theme`) — вне своих адаптеров в `lib/core/platform/`. Общего запрета `dart:io` и транспортов для `presentation/` остальных фич в стороже нет.
 
 ---
 
-## 16. Application layer
+## 16. Слой application
 
-Application layer определяет действия системы.
+Слой application определяет действия системы.
 
 Например:
 
-* connect;
-* create session;
-* send prompt;
-* cancel request;
-* reconnect;
-* resolve permission;
-* process ACP event.
+* подключиться;
+* создать сессию;
+* отправить промпт;
+* отменить запрос;
+* переподключиться;
+* ответить на запрос разрешения;
+* обработать событие ACP.
 
-Application layer:
+Слой application:
 
-* координирует dependencies;
-* определяет application state transitions;
-* применяет application policies.
+* координирует зависимости;
+* определяет переходы состояния application;
+* применяет политики application.
 
 Он НЕ ДОЛЖЕН зависеть от:
 
-* Flutter widgets;
+* виджетов Flutter;
 * `BuildContext`;
-* dialogs;
-* concrete visual components.
+* диалогов;
+* конкретных визуальных компонентов.
 
-Для reusable ACP behavior предпочтительным владельцем является `codelab_client_acp`.
+Для переиспользуемого поведения ACP предпочтительный владелец — `codelab_client_acp`.
+
+В коде `BuildContext` в `features/*/application/` не используется. Часть файлов application импортирует типы Flutter, не являющиеся виджетами: `ImageProvider` из `package:flutter/painting.dart` (`workbench/application/shell_cubit.dart`), `listEquals`, `mapEquals` из `package:flutter/foundation.dart` (`settings/application/legal_page_state.dart`), `FluentIcons`, `FluentThemeData`, `AccentColor` из `fluent_ui` (`ui_mappers.dart`, `contrast_checks.dart`, `appearance_settings_cubit.dart`), модели кита `codelab_ui` и сгенерированный `AppLocalizations`; сами Cubit-ы — из `flutter_bloc`. Сторож запрещает `package:flutter/` только в `features/terminal/application/`, `features/usage/application/` и `features/protocol/application/`. Переиспользуемое поведение лежит ниже: `AcpClientApplication` (`codelab_client_acp`) и `ClientWorkspace` (`codelab_client_core`).
 
 ---
 
-## 17. Domain layer
+## 17. Слой domain
 
-Отдельный domain layer создаётся только там, где существует реальная domain model или invariants.
+Отдельный слой domain создаётся только там, где есть реальная доменная модель или инварианты.
 
 Domain может содержать:
 
-* entities;
-* value objects;
-* state machines;
-* policies;
-* domain errors.
+* сущности;
+* объекты-значения;
+* автоматы состояний;
+* политики;
+* доменные ошибки.
 
-Не следует создавать domain layer только потому, что архитектурный шаблон содержит слово `domain`.
+НЕ СЛЕДУЕТ создавать слой domain только потому, что архитектурный шаблон содержит слово `domain`.
 
 Domain НЕ ДОЛЖЕН зависеть от Flutter или infrastructure.
 
+В коде слой domain есть только в `codelab_client_acp` (`lib/src/domain/`: автоматы `state_machines.dart`, модели `domain_models.dart`, `ApprovalPolicy`, порты `fs_access.dart` и `terminal_access.dart`); Flutter ему запрещает правило пакета в `rules.dart`. В фичах desktop каталогов `domain/` нет (§11).
+
 ---
 
-## 18. Infrastructure layer
+## 18. Слой infrastructure
 
 Infrastructure реализует взаимодействие с внешним миром.
 
 Примеры:
 
-* ACP transport;
-* filesystem;
-* secure storage;
-* persistence;
-* native APIs;
-* external process;
-* network.
+* транспорт ACP;
+* файловая система;
+* защищённое хранилище;
+* хранение данных;
+* нативные API;
+* внешний процесс;
+* сеть.
 
-Предпочтительный pattern:
+Предпочтительный шаблон:
 
 ```text id="7gk75k"
-Application
+application
     │
     ▼
-Port / abstraction
+порт / абстракция
     ▲
     │
-Infrastructure adapter
+адаптер infrastructure
     │
     ▼
-External system
+внешняя система
 ```
 
-Concrete infrastructure dependencies должны создаваться в composition root.
+Конкретные зависимости infrastructure ДОЛЖНЫ создаваться в composition root.
+
+В коде так устроены, например, порт `TextFileReader` (`codelab_client_acp/lib/src/domain/fs_access.dart`) и его адаптер `IoTextFileIo` (`codelab_client_io`), порт `ExecutionEnv` ядра агента и `LocalExecutionEnv` (`codelab_agent_io`), порты `lib/core/platform/` desktop (`ProjectFolderPicker`, `ExternalLinkOpener`, `UserShellLauncher` и др.). Подробно — `platform-integration.md`.
 
 ---
 
-## 19. ACP model boundaries
+## 19. Границы моделей ACP
 
-Следует различать минимум три типа моделей:
+СЛЕДУЕТ различать минимум три вида моделей:
 
 ```text id="vvtl2s"
-Protocol model
-     ↓ mapping
-Application model
-     ↓ mapping
-Presentation model
+протокольная модель
+     ↓ преобразование
+прикладная модель
+     ↓ преобразование
+модель представления
 ```
 
 Не каждый переход требует отдельного класса.
 
-Mapping нужен тогда, когда модели имеют разные semantics или lifecycle.
+Преобразование нужно тогда, когда у моделей разные смысл или жизненный цикл.
 
-### Protocol model
+### Протокольная модель
 
-Описывает wire representation.
+Описывает проводное представление.
 
 Владелец:
 
 `codelab_acp_protocol`
 
-### Application model
+### Прикладная модель
 
-Описывает понятия ACP client.
+Описывает понятия ACP-клиента.
 
 Владелец:
 
-`codelab_client_acp` или соответствующая application feature.
+`codelab_client_acp` или соответствующая фича application.
 
-### Presentation model
+### Модель представления
 
 Описывает данные в форме, удобной UI.
 
 Владелец:
 
-`codelab_ui` или presentation конкретной feature.
+`codelab_ui` или presentation конкретной фичи.
+
+В коде вызов инструмента проходит уровни `ToolCall` (`codelab_acp_protocol`) → `ToolCallRecord` (`codelab_client_acp`) → `ToolCallItem` транскрипта (`codelab_client_core`) → `CodeLabToolCallRow` (`codelab_ui`); последний шаг делает `ui_mappers.dart` в `features/workbench/application/` (`acp-boundary.md`).
 
 ---
 
-## 20. Когда НЕ нужен mapping
+## 20. Когда преобразование НЕ нужно
 
-Не следует создавать отдельные модели только ради layers.
+НЕ СЛЕДУЕТ создавать отдельные модели только ради слоёв.
 
-Если immutable value object:
+Если неизменяемый объект-значение:
 
-* имеет одинаковую semantics;
-* не содержит protocol-specific details;
-* не создаёт unwanted dependency;
-* не требует отдельного lifecycle;
+* имеет одинаковый смысл;
+* не содержит протокольных деталей;
+* не создаёт нежелательной зависимости;
+* не требует отдельного жизненного цикла;
 
-его можно переиспользовать.
+его МОЖНО переиспользовать.
 
-Цель — контролировать coupling, а не увеличивать число DTO.
+Цель — контролировать связанность, а не увеличивать число DTO.
 
 ---
 
-## 21. State ownership
+## 21. Владение состоянием
 
-Каждый state должен иметь одного понятного owner.
+У каждого состояния ДОЛЖЕН быть один понятный владелец.
 
 Например:
 
 ```text id="zunq6e"
-Transport state
-    → transport
+состояние транспорта
+    → транспорт
 
-ACP client/session state
+состояние клиента и сессии ACP
     → codelab_client_acp
 
-Presentation state
+состояние представления
     → BLoC/Cubit
 
-Ephemeral widget state
-    → Widget
+эфемерное состояние виджета
+    → виджет
 ```
 
-Не следует хранить один authoritative state одновременно в нескольких layers.
+НЕ СЛЕДУЕТ хранить одно авторитетное состояние одновременно в нескольких слоях.
 
-Derived presentation state допустим, но source of truth должен быть понятен.
+Производное состояние представления МОЖНО хранить, но источник истины ДОЛЖЕН быть понятен.
+
+В коде между клиентом ACP и Cubit-ами есть ещё один владелец — `ClientWorkspace` (`codelab_client_core`): ему принадлежат соединение, сессии, транскрипт, очередь промптов и одобрения, общие для app и CLI. Подробно — `state-management.md` (абзац «Где в коде», §1).
 
 ---
 
-## 22. Side-effect ownership
+## 22. Владение побочными эффектами
 
-Каждый side effect должен иметь определённый architectural owner.
+У каждого побочного эффекта ДОЛЖЕН быть определённый архитектурный владелец.
 
-| Side effect           | Owner                  |
+| Побочный эффект | Владелец |
 | --------------------- | ---------------------- |
-| ACP serialization     | `codelab_acp_protocol`         |
-| ACP transport I/O     | `codelab_acp_transports`       |
-| Session orchestration | `codelab_client_acp`      |
-| Permission policy     | application/core       |
-| Dialog                | presentation           |
-| Navigation            | presentation/app       |
-| Filesystem            | infrastructure adapter |
-| Secure storage        | infrastructure adapter |
-| Process execution     | infrastructure adapter |
-| Rendering             | Flutter presentation   |
+| сериализация ACP | `codelab_acp_protocol` |
+| ввод-вывод транспорта ACP | `codelab_acp_transports` |
+| оркестрация сессий | `codelab_client_acp` |
+| политика разрешений | application / ядро |
+| диалог | presentation |
+| навигация | presentation / app |
+| файловая система | адаптер infrastructure |
+| защищённое хранилище | адаптер infrastructure |
+| запуск процессов | адаптер infrastructure |
+| отрисовка | presentation на Flutter |
 
-Feature не должна выполнять side effect только потому, что соответствующий package технически доступен.
+Фича НЕ ДОЛЖНА выполнять побочный эффект только потому, что соответствующий пакет технически доступен.
+
+В коде адаптеры файловой системы, процессов и хранилищ — `codelab_client_io`, `lib/core/platform/` desktop и `codelab_agent_io`; классификация риска одобрения — `ApprovalPolicy` (`codelab_client_acp`), политика разрешений агента — `PermissionPolicy` (`codelab_agent_core/lib/src/permissions/policy.dart`); навигация desktop — `NavigationCubit` (`lib/app/navigation/`).
 
 ---
 
-## 23. Dependency Injection boundary
+## 23. Граница внедрения зависимостей
 
-Cherrypick используется для composition, но НЕ отменяет dependency rules.
-
-Неправильно:
-
-```text id="nh7b4u"
-Widget
-  │
-  └── resolve ConcreteTransport
-```
-
-Правильно:
-
-```text id="18isnr"
-Composition root
-      │
-      ├── ConcreteTransport
-      │
-      ├── ACP Client
-      │
-      └── Application API
-                 │
-                 ▼
-              BLoC
-                
-```
-
-## 23. Dependency Injection boundary
-
-Cherrypick используется для composition, но НЕ отменяет dependency rules.
+Cherrypick используется для сборки, но НЕ отменяет правила зависимостей.
 
 Неправильно:
 
 ```text
-Widget
+виджет
   │
   └── resolve ConcreteTransport
 ```
@@ -858,60 +887,62 @@ Widget
 Правильно:
 
 ```text
-Composition root
+composition root
       │
       ├── ConcreteTransport
       │
-      ├── ACP Client
+      ├── ACP-клиент
       │
-      └── Application API
+      └── API application
                  │
                  ▼
               BLoC/Cubit
                  │
                  ▼
-               Widget
+               виджет
 ```
 
-DI container должен использоваться для сборки object graph, а не как механизм получения произвольных dependencies из любой точки приложения.
+DI-контейнер ДОЛЖЕН использоваться для сборки графа объектов, а не как способ получить произвольную зависимость из любой точки приложения.
 
-Следует предпочитать constructor injection или установленный Cherrypick pattern.
+СЛЕДУЕТ предпочитать внедрение через конструктор или установленный шаблон Cherrypick.
 
-Не следует:
+НЕ СЛЕДУЕТ:
 
-* передавать DI container глубоко в application code;
-* использовать container как global service locator;
-* разрешать dependency непосредственно внутри domain;
-* разрешать infrastructure dependency непосредственно внутри widget.
+* передавать DI-контейнер глубоко в код application;
+* использовать контейнер как глобальный service locator;
+* разрешать зависимость прямо внутри domain;
+* разрешать зависимость infrastructure прямо внутри виджета.
+
+В коде desktop открывает один root scope `CherryPick.openRootScope()` в `createCodeLabRootScope` (`lib/app/app_scope.dart`); `resolve` вызывается только в `app_scope.dart` и сгенерированном `app_scope.module.cherrypick.g.dart`. Виджеты получают зависимости через типизированный `CodeLabDependencies` (`codeLabDependenciesOf(context)`, `InheritedWidget` `CodeLabDependenciesScope`): Cubit-ы процесса, фабрики Cubit-ов страниц и порты, а не сам scope (время жизни — `state-management.md`, абзац «Где в коде»). Глобальный `getLogger()`/`StructlogConfiguration` пакета `structured_log` — сознательное исключение из запрета на глобальный service locator (design.md change [`add-structured-logging`](../../openspec/changes/archive/2026-10-08-add-structured-logging/design.md), Decision 7; `technology-stack.md` §17.1).
 
 ---
 
 ## 24. Composition root
 
-`codelab_desktop` является главным composition root desktop-приложения.
+`codelab_desktop` — главный composition root desktop-приложения.
 
 Composition root отвечает за связывание:
 
-* concrete ACP transports;
-* ACP client;
-* platform adapters;
-* storage implementations;
-* application services;
+* конкретных транспортов ACP;
+* ACP-клиента;
+* адаптеров платформы;
+* реализаций хранилищ;
+* сервисов application;
 * BLoC/Cubit;
-* routing;
-* configuration.
+* навигации;
+* конфигурации.
 
-Composition root МОЖЕТ знать о concrete implementations.
+Composition root МОЖЕТ знать о конкретных реализациях.
 
-Нижележащие layers не должны получать эту ответственность.
+Нижележащие слои НЕ ДОЛЖНЫ получать эту ответственность.
 
-Пример:
+Пример (имена иллюстративные):
 
 ```text
-main/bootstrap
+main / bootstrap
       │
       ▼
-Cherrypick composition
+сборка Cherrypick
       │
       ├── StdioTransport
       ├── AcpClient
@@ -921,13 +952,15 @@ Cherrypick composition
       └── SessionBloc
 ```
 
-Создание нового concrete dependency следует выполнять в composition root либо в scoped composition module, если проект использует такую структуру.
+Создавать новую конкретную зависимость СЛЕДУЕТ в composition root либо в модуле сборки своей области, если проект использует такую структуру.
+
+В коде composition root desktop — `createCodeLabRootScope` (`apps/codelab_desktop/lib/app/app_scope.dart`): модули Cherrypick `CodeLabLoggingModule`, `CodeLabProtocolModule`, `CodeLabTransportRuntimeModule`, `CodeLabEmbeddedAgentModule`, `CodeLabLanguageModule`, `CodeLabOnboardingModule`, `CodeLabAppearanceModule`, `CodeLabPlatformModule`, `CodeLabConnectionModule`, `CodeLabPresentationModule` и сгенерированные `CodeLabTransportsModuleContract`, `CodeLabProtocolApplicationModuleContract`, `CodeLabRootLifecycleModuleContract`; закрытие — `CodeLabRootLifecycle`. IO-барели мостов (`codelab_embedded/io.dart`, `codelab_setup/io.dart`) в app разрешены только `lib/app/` (сторож). Composition root CLI — `buildCliRuntime` (`apps/codelab_cli/lib/src/composition_root.dart`), единственное место CLI, где разрешён `codelab_embedded/io.dart`; агент как процесс собирается в `apps/codelab_agent` (`lib/src/host/agent_host.dart`, `buildAgentCore`).
 
 ---
 
-## 25. Public API packages
+## 25. Публичный API пакетов
 
-Cross-package dependency должна проходить через public API package.
+Зависимость между пакетами ДОЛЖНА проходить через публичный API пакета.
 
 Предпочтительно:
 
@@ -935,19 +968,21 @@ Cross-package dependency должна проходить через public API p
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 ```
 
-вместо импорта внутренних implementation files другого package.
+вместо импорта внутренних файлов реализации другого пакета.
 
-Public API должен экспортировать только те сущности, которые действительно являются контрактом package.
+Публичный API ДОЛЖЕН экспортировать только те сущности, которые действительно составляют контракт пакета.
 
-Не следует экспортировать всё содержимое `lib/src/` ради удобства.
+НЕ СЛЕДУЕТ экспортировать всё содержимое `lib/src/` ради удобства.
 
-Package public API должен оставаться минимальным и осмысленным.
+Публичный API пакета ДОЛЖЕН оставаться минимальным и осмысленным.
+
+В коде у части пакетов несколько барелей с разной областью: `codelab_acp_transports` (`codelab_acp_transports.dart`, `io.dart`), `codelab_setup` (`codelab_setup.dart`, `io.dart`), `codelab_embedded` (`codelab_embedded.dart`, `io.dart`, `testing.dart`), `codelab_agent_core`, `codelab_agent_io` и `codelab_agent_mcp` (основной барель и `testing.dart`). Кто какой барель может импортировать — корневой `AGENTS.md` §5 и `rules.dart`.
 
 ---
 
-## 26. Internal API
+## 26. Внутренний API
 
-Implementation details package должны находиться вне его public contract.
+Детали реализации пакета ДОЛЖНЫ находиться вне его публичного контракта.
 
 Предпочтительная структура:
 
@@ -960,152 +995,162 @@ lib/
     └── ...
 ```
 
-Код другого package НЕ ДОЛЖЕН импортировать:
+Код другого пакета НЕ ДОЛЖЕН импортировать:
 
 ```dart
 package:some_package/src/...
 ```
 
-если это не является осознанным и явно документированным исключением.
+если это не осознанное и явно документированное исключение.
 
-Если внешний consumer вынужден использовать `src`, следует проверить, не отсутствует ли необходимая сущность в public API.
+Если внешнему потребителю приходится использовать `src`, СЛЕДУЕТ проверить, не отсутствует ли нужная сущность в публичном API.
+
+В коде в `lib/` и `bin/` пакетов и приложений импортов `package:<другой пакет>/src/` нет. В тестах их два: `codelab_agent_acp/test/projection/event_projection_test.dart` → `package:codelab_agent_core/src/tools/pairing.dart` (без пояснения) и `codelab_embedded/test/fake_mcp_http_host_test.dart` → `package:codelab_agent_mcp/src/mcp_client.dart` (с комментарием и `// ignore_for_file: implementation_imports`). Сторож такие импорты не проверяет; `fvm dart analyze` на первом из них замечаний не выдаёт.
 
 ---
 
-## 27. Cross-feature communication
+## 27. Связь между фичами
 
-Features не должны связываться через private implementation друг друга.
+Фичи НЕ ДОЛЖНЫ связываться через закрытую реализацию друг друга.
 
 Предпочтительные варианты взаимодействия:
 
-### Через application-level API
+### Через API уровня application
 
 ```text
-Feature A
+фича A
    │
    ▼
-Application API
+API application
    ▲
    │
-Feature B
+фича B
 ```
 
-### Через shared state/event abstraction
+### Через общую абстракцию состояния или событий
 
-Если несколько features реагируют на одно application-level событие:
+Если несколько фич реагируют на одно событие уровня application:
 
 ```text
-          Application event
+        событие application
              /       \
             ▼         ▼
-      Feature A     Feature B
+        фича A     фича B
 ```
 
-### Через public feature facade
+### Через публичный фасад фичи
 
-Если одна feature явно предоставляет capability другой:
+Если одна фича явно предоставляет возможность другой:
 
 ```text
-Feature B
+фича B
    │
    ▼
-Feature A public API
+публичный API фичи A
 ```
 
-Не следует создавать глобальный event bus только ради устранения прямых imports.
+НЕ СЛЕДУЕТ создавать глобальную шину событий только ради устранения прямых импортов.
+
+В коде страница «Connection» получает узкий интерфейс `ConnectionCommands` (`features/settings/application/connection_commands.dart`), который реализует `ConnectionCubit` фичи `workbench`, а не обращается к его внутренностям (design.md change `add-app-settings-shell`, D4). Общее состояние фичи читают из проекций `ClientWorkspace`; глобальной шины событий нет. Публичных фасадов в отдельном файле у фич нет (§12).
 
 ---
 
-## 28. Events
+## 28. События
 
-Events должны принадлежать тому уровню, semantics которого они описывают.
+События ДОЛЖНЫ принадлежать тому уровню, смысл которого они описывают.
 
-Примеры:
+Примеры (имена иллюстративные):
 
 ```text
 AcpResponseReceived
-    → protocol/client level
+    → уровень протокола / клиента
 
 SessionConnected
-    → application/client level
+    → уровень application / клиента
 
 ChatScrolledToBottom
-    → presentation level
+    → уровень presentation
 ```
 
-Не следует использовать один event type одновременно как:
+НЕ СЛЕДУЕТ использовать один тип события одновременно как:
 
-* protocol message;
-* domain/application event;
-* BLoC event;
-* UI event;
+* протокольное сообщение;
+* событие domain/application;
+* событие BLoC;
+* событие UI;
 
-если эти уровни имеют различную semantics.
+если у этих уровней разный смысл.
+
+В коде событий с такими именами нет: транспорт публикует `AcpTransportEvent`, протокольный клиент — снимки `AcpSession` и `ClientConnectionState`, `ClientWorkspace` — проекции `WorkspaceState` и `SessionView`; desktop использует только `Cubit`, событий BLoC нет (`state-management.md`).
 
 ---
 
-## 29. Error boundaries
+## 29. Границы ошибок
 
-Ошибки также должны следовать архитектурным boundaries.
+Ошибки тоже ДОЛЖНЫ следовать архитектурным границам.
 
 Предпочтительный поток:
 
 ```text
-External exception
+внешнее исключение
       │
       ▼
-Infrastructure / transport error
+ошибка infrastructure / транспорта
       │
       ▼
-Application failure
+сбой application
       │
       ▼
-Presentation error state
+состояние ошибки в presentation
       │
       ▼
-User-visible message
+сообщение пользователю
 ```
 
-Не каждая ошибка требует отдельного класса на каждом уровне.
+Не каждой ошибке нужен отдельный класс на каждом уровне.
 
-Mapping нужен, если:
+Преобразование нужно, если:
 
-* меняется semantics;
-* нужно скрыть implementation details;
-* требуется нормализация нескольких внешних ошибок;
+* меняется смысл;
+* нужно скрыть детали реализации;
+* нужно привести к одному виду несколько внешних ошибок;
 * UI не должен знать техническую ошибку;
-* необходимо добавить application context.
+* нужно добавить контекст application.
+
+Типы ошибок по слоям — `error-handling.md` (абзац «Где в коде»).
 
 ---
 
-## 30. Protocol errors
+## 30. Ошибки протокола
 
-Protocol-level ошибки принадлежат `codelab_acp_protocol`.
+Ошибки уровня протокола принадлежат `codelab_acp_protocol`.
 
 Например:
 
-* invalid message;
-* unsupported protocol data;
-* serialization failure;
-* invalid protocol shape.
+* некорректное сообщение;
+* неподдерживаемые протокольные данные;
+* сбой сериализации;
+* некорректная форма протокольных данных.
 
-Они не должны содержать Flutter-specific behavior.
+Они НЕ ДОЛЖНЫ содержать поведение, специфичное для Flutter.
+
+В коде — `AcpProtocolError` с видом `AcpProtocolErrorKind` и `JsonRpcProtocolException` (`codelab_acp_protocol/lib/src/json_rpc/protocol_error.dart`).
 
 ---
 
-## 31. Transport errors
+## 31. Ошибки транспорта
 
-Transport errors принадлежат `codelab_acp_transports`.
+Ошибки транспорта принадлежат `codelab_acp_transports`.
 
 Например:
 
-* stream closed;
-* process terminated;
-* socket disconnected;
-* framing error;
-* transport unavailable.
+* поток закрыт;
+* процесс завершился;
+* сокет отключился;
+* ошибка разбиения на кадры;
+* транспорт недоступен.
 
-Transport error не должен автоматически определять UX.
+Ошибка транспорта НЕ ДОЛЖНА автоматически определять UX.
 
 Например:
 
@@ -1119,15 +1164,17 @@ SocketClosed
 ShowReconnectDialog
 ```
 
-Решение о reconnect и presentation принадлежит более высокому layer.
+Решение о переподключении и показе принадлежит более высокому слою.
+
+В коде — `AcpTransportException` с кодом `AcpTransportErrorCode` и событие `AcpTransportEvent.failure` (`codelab_acp_transports/lib/src/acp_transport.dart`).
 
 ---
 
-## 32. Application failures
+## 32. Сбои application
 
-Application layer может преобразовывать lower-level errors в более осмысленные failures.
+Слой application МОЖЕТ преобразовывать ошибки нижних уровней в более осмысленные сбои.
 
-Например:
+Например (имена иллюстративные):
 
 ```text
 TransportClosedUnexpectedly
@@ -1139,36 +1186,38 @@ SessionConnectionLost
 SessionState.reconnecting
 ```
 
-Это позволяет presentation реагировать на application semantics, а не на детали transport implementation.
+Так presentation реагирует на смысл уровня application, а не на детали реализации транспорта.
+
+В коде потеря транспорта становится `ClientConnectionState.failed` с `ConnectionFailureReason` (`codelab_client_acp`) и `ConnectionView.lost` (`codelab_client_core`); автоматического переподключения нет, его запускает пользователь через `ClientWorkspace.reconnect` (`error-handling.md` §79).
 
 ---
 
-## 33. Permission boundary
+## 33. Граница разрешений
 
-Permission policy должна находиться выше transport/protocol, но ниже presentation decision collection.
+Политика разрешений ДОЛЖНА находиться выше транспорта и протокола, но ниже сбора решения в presentation.
 
-Правильная dependency:
+Правильная зависимость:
 
 ```text
-ACP request
+запрос ACP
     │
     ▼
-Application permission policy
+политика разрешений application
     │
-    ├── allowed
+    ├── разрешено
     │
-    ├── denied
+    ├── запрещено
     │
-    └── requires user decision
+    └── нужно решение пользователя
                 │
                 ▼
-            Presentation
+            presentation
 ```
 
 Неправильно:
 
 ```text
-Transport
+транспорт
    │
    └── showDialog()
 ```
@@ -1176,20 +1225,22 @@ Transport
 или:
 
 ```text
-Widget
+виджет
    │
    └── if (tool.name == 'shell') ...
 ```
 
-Presentation не должна содержать authoritative security policy.
+Presentation НЕ ДОЛЖНА содержать авторитетную политику безопасности.
+
+В коде запрос агента `session/request_permission` становится `ApprovalRequest` в `codelab_client_acp`; его риск вычисляет `ApprovalPolicy` (`lib/src/domain/approval_policy.dart`), а app только переводит `ApprovalRiskLevel` в `CodeLabApprovalRisk` кита (`ui_mappers.dart`); ответ пользователя уходит через `respondToPermission`. Решение «спрашивать ли» принимает агент (`PermissionPolicy` в `codelab_agent_core`); для `fs/*` и `terminal/*` клиент вместо одобрения ограничивает пути рабочей папкой (`resolveWithinWorkingDirectory`, корневой `AGENTS.md` §10). Подробно — `permissions.md`.
 
 ---
 
-## 34. Platform boundary
+## 34. Граница платформы
 
-Platform-specific functionality должна находиться за abstraction boundary, если она влияет на application behavior.
+Функциональность, зависящая от платформы, ДОЛЖНА находиться за границей абстракции, если она влияет на поведение application.
 
-Например:
+Например (пример иллюстративный):
 
 ```dart
 abstract interface class AppWindow {
@@ -1199,10 +1250,10 @@ abstract interface class AppWindow {
 }
 ```
 
-Concrete implementation может использовать platform plugin:
+Конкретная реализация МОЖЕТ использовать плагин платформы:
 
 ```text
-Application
+application
     │
     ▼
 AppWindow
@@ -1211,18 +1262,20 @@ AppWindow
 FlutterDesktopWindowAdapter
     │
     ▼
-Platform plugin
+плагин платформы
 ```
 
 Это особенно важно для:
 
-* window management;
-* filesystem;
-* secure storage;
-* clipboard;
-* notifications;
-* external process execution;
-* platform paths.
+* управления окнами;
+* файловой системы;
+* защищённого хранилища;
+* буфера обмена;
+* уведомлений;
+* запуска внешних процессов;
+* путей платформы.
+
+В коде порта `AppWindow` нет; реальные порты платформы desktop — `lib/core/platform/` (`ProjectFolderPicker`, `ThemeFilePicker`, `ExternalLinkOpener`, `LocalFolderOpener`, `UserShellLauncher`, `SystemAccentSource` и др.), а плагины изолированы правилами сторожа (`platform-integration.md` §4, §8).
 
 ---
 
@@ -1230,77 +1283,81 @@ Platform plugin
 
 Использование `dart:io` само по себе не запрещено.
 
-Однако его использование должно соответствовать boundary.
+Однако оно ДОЛЖНО соответствовать границе.
 
-Допустимо:
+МОЖНО:
 
 ```text
 codelab_acp_transports
-desktop infrastructure adapters
-filesystem adapters
-process adapters
+адаптеры infrastructure desktop
+адаптеры файловой системы
+адаптеры процессов
 ```
 
-Не следует использовать `dart:io` непосредственно из:
+НЕ СЛЕДУЕТ использовать `dart:io` напрямую из:
 
-* widgets;
-* presentation BLoC, если это infrastructure operation;
+* виджетов;
+* BLoC слоя presentation, если это операция infrastructure;
 * domain;
-* reusable UI components.
+* переиспользуемых компонентов UI.
+
+В коде `dart:io` импортируют: `codelab_acp_transports` (`lib/src/io/`), `codelab_client_io`, `codelab_agent_io`, IO-слои мостов (`codelab_setup/lib/src/io/`, `codelab_embedded/lib/src/io/` и `lib/src/testing/`), `codelab_acp_testing`, приложения CLI и агента; в desktop — только `lib/main.dart`, `lib/app/app_scope.dart` и адаптеры `lib/core/platform/`. В `features/` и в `codelab_ui` импортов `dart:io` нет. Часть Cubit-ов (`shell_cubit.dart`, `settings_cubit.dart`, `terminal_tabs_cubit.dart`) импортирует `codelab_client_io` ради одного typedef `DirectoryExists`; правила, запрещающего `package:codelab_client_io/` в `application/`, нет, а `dart:io` приходит через него транзитивно, и сканер импортов этого не видит.
 
 ---
 
-## 36. BLoC boundary
+## 36. Граница BLoC
 
-`flutter_bloc` принадлежит Flutter/presentation side архитектуры.
+`flutter_bloc` принадлежит стороне архитектуры Flutter/presentation.
 
-BLoC/Cubit может зависеть от application-facing API.
+BLoC/Cubit МОЖЕТ зависеть от API, обращённого к application.
 
 Предпочтительно:
 
 ```text
-Widget
+виджет
    │
    ▼
 BLoC
    │
    ▼
-ACP Client/Application API
+API ACP-клиента / application
 ```
 
-Не рекомендуется:
+НЕ СЛЕДУЕТ:
 
 ```text
-Widget
+виджет
    │
    ▼
 BLoC
    │
    ▼
-Concrete transport
+конкретный транспорт
 ```
 
-BLoC НЕ ДОЛЖЕН становиться заменой application layer.
+BLoC НЕ ДОЛЖЕН подменять слой application.
 
 Если BLoC начинает содержать:
 
-* transport lifecycle;
-* ACP protocol parsing;
-* complex permission policy;
-* reusable session state machine;
-* significant retry/reconnect algorithms;
+* жизненный цикл транспорта;
+* разбор протокола ACP;
+* сложную политику разрешений;
+* переиспользуемый автомат состояний сессии;
+* значимые алгоритмы повтора и переподключения;
 
-следует проверить, не принадлежит ли эта логика `codelab_client_acp`.
+СЛЕДУЕТ проверить, не принадлежит ли эта логика `codelab_client_acp`.
+
+В коде Cubit-ы работают через `ClientWorkspace` и `SessionHandle` (`codelab_client_core`) поверх `AcpClientApplication`. Из `codelab_acp_transports` они берут только типы основного бареля: фабрики `CodeLabStdioTransportFactory` и `CodeLabWebSocketTransportFactory` (`connection_cubit.dart`) возвращают порт `AcpTransport`, а конкретный транспорт создаёт `app_scope.dart`.
 
 ---
 
 ## 37. `codelab_ui` и BLoC
 
-`codelab_ui` может содержать BLoC-aware widgets, поскольку package явно является Flutter presentation package.
+`codelab_ui` МОЖЕТ содержать виджеты, знающие о BLoC, поскольку пакет явно является пакетом presentation на Flutter.
 
-Однако reusable visual component следует по возможности отделять от конкретного state-management context.
+Однако переиспользуемый визуальный компонент СЛЕДУЕТ по возможности отделять от конкретного контекста управления состоянием.
 
-Предпочтительно:
+Предпочтительно (пример иллюстративный):
 
 ```dart
 ToolCallView(
@@ -1310,9 +1367,9 @@ ToolCallView(
 )
 ```
 
-когда component является чисто визуальным.
+когда компонент чисто визуальный.
 
-BLoC-aware wrapper допустим, если он действительно улучшает reuse:
+Обёртку, знающую о BLoC, МОЖНО добавить, если она действительно улучшает переиспользование:
 
 ```text
 ToolCallBlocView
@@ -1321,19 +1378,21 @@ ToolCallBlocView
 ToolCallView
 ```
 
-Это уменьшает coupling между reusable visual components и конкретным BLoC.
+Это уменьшает связанность переиспользуемых визуальных компонентов с конкретным BLoC.
+
+В коде виджетов, знающих о BLoC, в `codelab_ui` нет: виджеты кита (например, `CodeLabToolCallTile`, `CodeLabApprovalPrompt`) получают значения и колбэки, а `flutter_bloc` в `lib/` кита не импортируется (§4).
 
 ---
 
-## 38. Cherrypick dependencies
+## 38. Зависимость от Cherrypick
 
-Cherrypick относится прежде всего к composition/application bootstrap.
+Cherrypick относится прежде всего к сборке и запуску приложения.
 
-Наличие annotations не должно заставлять lower-level packages зависеть от DI framework без необходимости.
+Наличие аннотаций НЕ ДОЛЖНО без необходимости заставлять низкоуровневые пакеты зависеть от DI-фреймворка.
 
-Pure reusable package следует сохранять независимым от Cherrypick, если dependency injection может выполняться его consumer.
+Чистый переиспользуемый пакет СЛЕДУЕТ сохранять независимым от Cherrypick, если внедрение зависимостей может выполнить его потребитель.
 
-Предпочтительно:
+Предпочтительно (пример иллюстративный):
 
 ```dart
 class AcpClient {
@@ -1343,232 +1402,272 @@ class AcpClient {
 }
 ```
 
-а binding:
+а привязку:
 
 ```text
 AcpTransport → StdioAcpTransport
 ```
 
-определять в composition layer.
+определять в слое сборки.
 
 Это позволяет:
 
-* тестировать component без container;
-* переиспользовать package вне Flutter app;
-* заменять concrete implementation;
-* уменьшать framework coupling.
+* тестировать компонент без контейнера;
+* переиспользовать пакет вне приложения на Flutter;
+* заменять конкретную реализацию;
+* уменьшать связанность с фреймворком.
+
+В коде так устроен `AcpClientApplication({required AcpTransport transport, ...})`; Cherrypick (`cherrypick`, `cherrypick_annotations`) есть только в зависимостях `apps/codelab_desktop`, пакеты от него не зависят.
 
 ---
 
-## 39. `fpdart` boundary
+## 39. Граница `fpdart`
 
-`fpdart` может использоваться в pure Dart application packages.
+`fpdart` МОЖЕТ использоваться в пакетах application на чистом Dart.
 
-Однако public API package не следует делать зависимым от `fpdart` только ради внутренней implementation convenience, если это без необходимости заставляет всех consumers работать с `Either`, `Option` и другими типами библиотеки.
+Однако публичный API пакета НЕ СЛЕДУЕТ делать зависимым от `fpdart` только ради удобства внутренней реализации, если это без необходимости заставляет всех потребителей работать с `Either`, `Option` и другими типами библиотеки.
 
-Решение использовать `fpdart` types в public contract должно быть осознанным.
+Решение использовать типы `fpdart` в публичном контракте ДОЛЖНО быть осознанным.
 
-Если `Either<Failure, T>` является утверждённой частью application API, его использование допустимо.
+Если `Either<Failure, T>` — утверждённая часть API application, его МОЖНО использовать.
 
-Главное правило — consistency.
+Главное правило — единообразие.
 
----
-
-## 40. Freezed boundary
-
-Freezed является implementation/code-generation инструментом и может использоваться в разных layers.
-
-Однако generated API не должен случайно связывать layers.
-
-Например, Freezed state BLoC не должен импортироваться в `codelab_client_acp` только потому, что он удобен для UI.
-
-Тип должен жить на том уровне, semantics которого он представляет.
+В коде `fpdart` импортирует только `codelab_client_acp`: публичные результаты use case-ов — `TaskEither<AcpClientApplicationFailure, T>` (`lib/src/application/use_cases.dart`, экспортируется основным барелем). Объявления `fpdart` в других пакетах не используются (§4).
 
 ---
 
-## 41. Testing dependencies
+## 40. Граница Freezed
 
-Test code может иметь более широкий dependency graph, чем production code.
+Freezed — инструмент реализации и генерации кода, и его МОЖНО использовать в разных слоях.
+
+Однако сгенерированный API НЕ ДОЛЖЕН случайно связывать слои.
+
+Например, Freezed-состояние BLoC НЕ ДОЛЖНО импортироваться в `codelab_client_acp` только потому, что оно удобно для UI.
+
+Тип ДОЛЖЕН жить на том уровне, смысл которого он представляет.
+
+В коде Freezed подключён в `codelab_acp_protocol`, `codelab_acp_transports`, `codelab_client_acp`, `codelab_client_core` и `codelab_ui`; в `apps/codelab_desktop` — только в `dev_dependencies`, состояния Cubit-ов написаны вручную (`state-management.md`).
+
+---
+
+## 41. Тестовые зависимости
+
+У тестового кода граф зависимостей МОЖЕТ быть шире, чем у рабочего.
 
 Например:
 
 ```text
-codelab_client_acp tests
+тесты codelab_client_acp
        │
        └── codelab_acp_testing
 ```
 
-Допустимо.
+Это МОЖНО.
 
-Однако test dependency НЕ ДОЛЖНА создавать production dependency.
+Однако тестовая зависимость НЕ ДОЛЖНА создавать рабочую зависимость.
 
-Production source из `lib/` не должен импортировать test helpers.
+Рабочий код из `lib/` НЕ ДОЛЖЕН импортировать тестовые помощники.
 
-Test-only packages должны находиться в `dev_dependencies`, если нет отдельной причины.
+Пакеты только для тестов ДОЛЖНЫ находиться в `dev_dependencies`, если нет отдельной причины.
+
+В коде отдельная причина одна — `apps/codelab_cli` (§9). Тестовые барели пакетов агента клиентам недоступны вовсе (запрет `package:codelab_agent_`); `codelab_embedded/testing.dart` в `lib/` CLI разрешён только драйверу фикстур `lib/src/scenario/`, а в `lib/` `apps/codelab_desktop` запрещён целиком (сторож). Через `dev_dependencies` есть ожидаемые обратные рёбра: `codelab_acp_transports` и `codelab_client_acp` используют в тестах `codelab_acp_testing`, который сам зависит от них.
 
 ---
 
-## 42. Architecture tests
+## 42. Архитектурные тесты
 
-Критические dependency invariants следует по возможности проверять автоматически.
+Критические инварианты зависимостей СЛЕДУЕТ по возможности проверять автоматически.
 
 Полезно проверять:
 
 * `codelab_acp_protocol` не зависит от Flutter;
 * `codelab_client_acp` не зависит от Flutter;
-* `codelab_acp_transports` не зависит от Flutter presentation;
+* `codelab_acp_transports` не зависит от presentation на Flutter;
 * `codelab_ui` не зависит от `codelab_desktop`;
-* production packages не зависят от `codelab_acp_testing`;
-* запрещённые `package:*/src/*` imports отсутствуют между packages.
+* рабочие пакеты не зависят от `codelab_acp_testing`;
+* между пакетами нет запрещённых импортов `package:*/src/*`.
 
-Архитектурное правило, которое можно надёжно проверить автоматически, следует постепенно переносить из документации в static/CI verification.
+Архитектурное правило, которое можно надёжно проверить автоматически, СЛЕДУЕТ постепенно переносить из документации в статическую проверку или CI.
 
-Документация при этом остаётся источником semantics правила.
+Документация при этом остаётся источником смысла правила.
+
+В коде проверки — сторож `packages/dart/codelab_architecture_tests` (`melos run guard`; описание — `README.md` пакета). Полный перечень его правил — таблица `rules` (`test/support/rules.dart`), константы `*Allowlist` и HOST-6; проверяемая норма — требование spec [`workspace-architecture`](../../openspec/specs/workspace-architecture/spec.md) «Автоматический сторож границ пакетов», здесь его правила второй раз не перечисляются. Таблица ниже сверяет правила этого документа и корневого `AGENTS.md` §5–§6 с охватом сторожа и называет то, чего он не проверяет:
+
+| Правило | Проверка |
+|---|---|
+| `codelab_acp_protocol` без Flutter (§5) | нет; Flutter отсутствует в `pubspec.yaml`, правила в `rules.dart` нет |
+| `codelab_client_acp`, `codelab_client_core` без Flutter, `dart:io`, `intl` (§7) | `rules.dart`: `webUnsafe`, `uiLanguageForbidden`; allowlist — только у `codelab_client_core` (`kitAllowlist`) |
+| `codelab_acp_transports` без Flutter (§6) | `rules.dart`: `webUnsafe` для всего пакета, кроме `lib/io.dart` и `lib/src/io/` |
+| Пакеты `packages/dart/` на чистом Dart (корневой `AGENTS.md` §5) | общего правила нет; `package:flutter/` запрещён правилами `codelab_agent_*`, `codelab_client_*`, `codelab_setup`, `codelab_embedded` и основного бареля `codelab_acp_transports`; у `codelab_acp_protocol` и `codelab_acp_testing` правила нет |
+| `codelab_ui` не зависит от `codelab_desktop` (§8) | нет; у кита нет зависимостей `codelab_*` |
+| `codelab_ui` без бизнес-логики (§8) | нет; ревью по `codelab_ui/AGENTS.md` §2; литералы интерфейса — `ui_literals_test.dart` |
+| Пакеты не зависят от приложений, нет циклов (корневой `AGENTS.md` §5) | нет; в `dependencies` таких рёбер нет |
+| `codelab_acp_testing` только в `dev_dependencies` (§9, §41) | allowlist-ы пакетов агента, мостов, `codelab_client_core`, `codelab_client_io`, `apps/codelab_agent` и `desktopAllowlist` (пакеты `codelab_*` app); у `codelab_acp_protocol`, `codelab_acp_transports`, `codelab_client_acp`, `codelab_ui` allowlist-а нет |
+| Исключение CLI для `test-scenario` (§9) | `rules.dart`: `apps/codelab_cli/lib/src`, `exclude: ['scenario/']`; `cliAllowlist` |
+| Нет межпакетных импортов `package:*/src/*` (§26) | нет (§26) |
+| `domain` без Flutter (§17) | правило `codelab_client_acp`; в фичах desktop `domain/` нет |
+| `application` без Flutter-виджетов и `BuildContext` (§16) | частично: `package:flutter/` запрещён в `application/` фич `terminal`, `usage`, `protocol` |
+| `presentation` без транспорта, файлов, процессов (§15) | частично: `dart:io` запрещён в `settings/presentation/`, фичах `onboarding` и `project_files`; плагины платформы — только в адаптерах `lib/core/platform/`; IO-барели мостов — только в `lib/app/` |
+| Виджеты не создают репозитории и адаптеры (корневой `AGENTS.md` §6) | нет; ревью |
+| Web-безопасные барели (`codelab_acp_transports`, `codelab_embedded`, `codelab_setup`, ядро агента) | `rules.dart` (`webUnsafe`, `sealExclude`); компиляция ядра и основных барелей мостов — `melos run web-compile` |
+| `io.dart` и `testing.dart` мостов — только composition root и тесты (корневой `AGENTS.md` §5) | `rules.dart`: `codelab_embedded/io.dart` — только `lib/app/` desktop и `lib/src/composition_root.dart` CLI; `codelab_setup/io.dart` — только `lib/app/` desktop; в CLI — только `lib/src/run.dart` (правило на весь `lib/`, включая барель `lib/codelab_cli.dart`); `codelab_embedded/testing.dart` — только `lib/src/scenario/` CLI; `bin/` CLI — ни `codelab_embedded/io.dart`, ни `codelab_embedded/testing.dart`, ни `codelab_setup/io.dart` (change `align-cross-cutting-specs`, D6) |
+| Нативные плагины — только в адаптерах платформы (корневой `AGENTS.md` §11) | `rules.dart`: в desktop — только `lib/core/platform/`; в `codelab_ui` `package:desktop_drop/` запрещён во всём `lib/` (требование [`workspace-architecture`](../../openspec/specs/workspace-architecture/spec.md) «Плагин перетаскивания из ОС только в адаптере платформы»; change `align-cross-cutting-specs`, D6) |
+| Запрет `package:codelab_agent_*` в приложениях-клиентах | `rules.dart` (`apps/codelab_desktop`, `apps/codelab_cli`), `desktopAllowlist`, `cliAllowlist` |
+| Имена пакетов по ADR-0002 | `package_naming_test.dart` |
 
 ---
 
-## 43. Добавление нового package
+## 43. Добавление нового пакета
 
-Перед созданием нового package необходимо определить:
+Перед созданием нового пакета ДОЛЖНО быть определено:
 
-1. Какую конкретную responsibility он владеет.
-2. Почему существующий package не является правильным owner.
-3. Является ли код reusable.
-4. Должен ли package быть pure Dart или Flutter.
-5. Кто будет его consumer.
-6. От каких packages ему разрешено зависеть.
-7. Как выглядит его public API.
-8. Как package будет тестироваться.
-9. Не создаёт ли он новый dependency cycle.
-10. Не является ли package слишком маленькой abstraction без самостоятельного смысла.
+1. Какой конкретной ответственностью он владеет.
+2. Почему существующий пакет — неправильный владелец.
+3. Переиспользуем ли код.
+4. Должен ли пакет быть на чистом Dart или на Flutter.
+5. Кто будет его потребителем.
+6. От каких пакетов ему разрешено зависеть.
+7. Как выглядит его публичный API.
+8. Как пакет будет тестироваться.
+9. Не создаёт ли он новый цикл зависимостей.
+10. Не является ли пакет слишком мелкой абстракцией без самостоятельного смысла.
 
-Новый package не создаётся только ради уменьшения количества файлов в существующем package.
+Новый пакет не создаётся только ради уменьшения числа файлов в существующем пакете.
+
+В коде новый пакет получает имя по ADR-0002 и правило сторожа вместе с собой: `PackageRule` в `rules.dart`, при ограничении зависимостей — `*Allowlist` в `pubspec_allowlist_test.dart` и негативный тест (корневой `AGENTS.md` §5; порядок — `README.md` сторожа, «Как добавить правило для нового пакета»).
+
+Расширение allowlist (`*Allowlist`) существующего пакета ДОЛЖНО проходить через OpenSpec change: новая зависимость меняет архитектуру пакета (корневой `AGENTS.md` §4, §17), а сторож проверяет только, что `dependencies` — подмножество allowlist, и не видит, кто и зачем его расширил. Для ядра агента это ещё и PKG-2 (`coreAllowlist`).
 
 ---
 
 ## 44. Когда выносить код из `codelab_desktop`
 
-Код является кандидатом на reusable package, если выполняется одно или несколько условий:
+Код — кандидат на переиспользуемый пакет, если выполняется одно или несколько условий:
 
-* он нужен нескольким applications;
-* он представляет самостоятельную ACP capability;
-* он должен работать без Flutter application;
-* у него есть устойчивый public contract;
-* isolation заметно улучшает testing;
-* это явно отдельная technical boundary.
+* он нужен нескольким приложениям;
+* он представляет самостоятельную возможность ACP;
+* он должен работать без приложения на Flutter;
+* у него есть устойчивый публичный контракт;
+* изоляция заметно улучшает тестирование;
+* это явно отдельная техническая граница.
 
-Не следует выносить code в package только потому, что feature стала большой.
+НЕ СЛЕДУЕТ выносить код в пакет только потому, что фича стала большой.
 
-Большая feature может оставаться feature приложения, если её semantics application-specific.
+Большая фича МОЖЕТ оставаться фичей приложения, если её смысл специфичен для приложения.
+
+В коде по условиям «нужен нескольким приложениям» и «должен работать без приложения на Flutter» вынесен `codelab_client_core`: клиентский слой нужен и desktop, и CLI (change [`extract-acp-client-kit`](../../openspec/changes/archive/2026-10-26-extract-acp-client-kit/design.md)).
 
 ---
 
 ## 45. Когда код принадлежит `codelab_client_acp`
 
-Код следует рассматривать для `codelab_client_acp`, если он:
+Код СЛЕДУЕТ рассматривать для `codelab_client_acp`, если он:
 
-* относится к ACP client behavior;
+* относится к поведению ACP-клиента;
 * не требует Flutter;
-* должен быть reusable;
-* управляет session/request lifecycle;
-* реализует application-level ACP semantics;
-* нужен разным ACP clients или UI layers.
+* должен быть переиспользуемым;
+* управляет жизненным циклом сессии или запроса;
+* реализует смысл ACP уровня application;
+* нужен разным ACP-клиентам или слоям UI.
 
 Например:
 
 ```text
-session state machine
-request cancellation semantics
-ACP client event reduction
-reconnect policy abstraction
-permission request model
+автомат состояний сессии
+семантика отмены запроса
+свёртка событий ACP-клиента
+абстракция политики переподключения
+модель запроса разрешения
 ```
 
 могут быть хорошими кандидатами.
 
-Конкретное размещение должно учитывать существующую структуру package.
+Конкретное размещение ДОЛЖНО учитывать существующую структуру пакета.
+
+В коде поведение рабочего пространства, общее для app и CLI (транскрипт, очередь промптов, одобрения, восстановление), живёт уровнем выше — в `codelab_client_core`, а `codelab_client_acp` держит протокольного клиента, автоматы и доменные модели.
 
 ---
 
 ## 46. Когда код принадлежит `codelab_ui`
 
-Код следует рассматривать для `codelab_ui`, если он:
+Код СЛЕДУЕТ рассматривать для `codelab_ui`, если он:
 
-* является reusable ACP-specific Flutter presentation;
+* является переиспользуемым presentation на Flutter для ACP;
 * не зависит от `codelab_desktop`;
-* потенциально полезен в другом ACP Flutter application;
-* имеет стабильный presentation contract.
+* потенциально полезен в другом ACP-приложении на Flutter;
+* имеет стабильный контракт presentation.
 
 Например:
 
 ```text
-tool call card
-ACP status indicator
-permission prompt content
-conversation message renderer
+карточка вызова инструмента
+индикатор статуса ACP
+содержимое запроса разрешения
+отрисовка сообщения разговора
 ```
 
 могут быть кандидатами.
 
-Application-specific page или workflow следует оставить в `codelab_desktop`.
+Страницу или сценарий, специфичные для приложения, СЛЕДУЕТ оставить в `codelab_desktop`.
 
 ---
 
-## 47. Когда код принадлежит feature приложения
+## 47. Когда код принадлежит фиче приложения
 
-Код должен оставаться внутри `codelab_desktop/features/<feature>`, если он:
+Код ДОЛЖЕН оставаться внутри `codelab_desktop/features/<feature>`, если он:
 
-* специфичен только для CodeLab application;
-* определяет конкретный workflow приложения;
-* тесно связан с routing приложения;
-* не имеет самостоятельного reusable contract;
-* использует несколько reusable ACP packages для реализации app-specific capability.
+* специфичен только для приложения CodeLab;
+* определяет конкретный сценарий приложения;
+* тесно связан с навигацией приложения;
+* не имеет самостоятельного переиспользуемого контракта;
+* использует несколько переиспользуемых ACP-пакетов для реализации возможности, специфичной для приложения.
 
-Не следует преждевременно превращать каждую feature в package.
+НЕ СЛЕДУЕТ преждевременно превращать каждую фичу в пакет.
 
 ---
 
-## 48. Запрещённые shortcut patterns
+## 48. Запрещённые короткие пути
 
-Следующие shortcuts считаются архитектурно опасными.
+Следующие короткие пути считаются архитектурно опасными.
 
-### Widget → transport
+### Виджет → транспорт
 
 ```text
-Widget
+виджет
   ↓
 codelab_acp_transports
 ```
 
-ЗАПРЕЩЕНО для application behavior.
+ЗАПРЕЩЕНО для поведения application.
 
 ---
 
-### Widget → filesystem
+### Виджет → файловая система
 
 ```text
-Widget
+виджет
   ↓
 File(...)
 ```
 
-НЕ СЛЕДУЕТ для infrastructure operations.
+НЕ СЛЕДУЕТ для операций infrastructure.
 
 ---
 
-### Protocol → UI
+### Протокол → UI
 
 ```text
 codelab_acp_protocol
     ↓
-Flutter widget
+виджет Flutter
 ```
 
 ЗАПРЕЩЕНО.
 
 ---
 
-### Core → presentation
+### Ядро → presentation
 
 ```text
 codelab_client_acp
@@ -1580,7 +1679,7 @@ flutter_bloc / fluent_ui
 
 ---
 
-### Reusable package → application
+### Переиспользуемый пакет → приложение
 
 ```text
 codelab_ui
@@ -1592,7 +1691,7 @@ codelab_desktop
 
 ---
 
-### Production → testing
+### Рабочий код → тестовый
 
 ```text
 codelab_client_acp/lib
@@ -1604,7 +1703,7 @@ codelab_acp_testing
 
 ---
 
-### Feature → private feature internals
+### Фича → закрытые внутренности другой фичи
 
 ```text
 features/a
@@ -1616,14 +1715,14 @@ features/b/src/private
 
 ---
 
-## 49. Допустимые pragmatic shortcuts
+## 49. Допустимые прагматичные упрощения
 
-Не каждый direct dependency является нарушением архитектуры.
+Не каждая прямая зависимость нарушает архитектуру.
 
-Например, простой presentation-only feature может выглядеть так:
+Например, простая фича только для presentation может выглядеть так:
 
 ```text
-Widget
+виджет
    │
    ▼
 Cubit
@@ -1631,54 +1730,56 @@ Cubit
 
 без отдельного use case.
 
-Это допустимо, если Cubit не содержит infrastructure/application complexity.
+Это МОЖНО, если Cubit не содержит сложности infrastructure или application.
 
-Простой immutable value object может использоваться сразу в нескольких слоях, если его semantics не меняется.
+Простой неизменяемый объект-значение МОЖЕТ использоваться сразу в нескольких слоях, если его смысл не меняется.
 
-Не следует создавать mapper только ради того, чтобы существовал mapper.
-
----
-
-## 50. Правило изменения dependency graph
-
-При добавлении новой cross-package dependency агент ОБЯЗАН:
-
-1. Определить direction dependency.
-2. Проверить dependency matrix.
-3. Проверить отсутствие cycle.
-4. Проверить, не переносит ли dependency Flutter в pure Dart package.
-5. Проверить public API target package.
-6. Обосновать, почему dependency нужна.
-7. Обновить этот документ, если dependency graph действительно меняется архитектурно.
-
-Если новая dependency противоречит matrix, изменение требует архитектурного решения, а не просто изменения `pubspec.yaml`.
+НЕ СЛЕДУЕТ создавать маппер только ради того, чтобы маппер существовал.
 
 ---
 
-## 51. Целевая dependency model
+## 50. Правило изменения графа зависимостей
+
+При добавлении новой зависимости между пакетами агент ОБЯЗАН:
+
+1. Определить направление зависимости.
+2. Проверить матрицу зависимостей.
+3. Проверить отсутствие цикла.
+4. Проверить, не переносит ли зависимость Flutter в пакет на чистом Dart.
+5. Проверить публичный API целевого пакета.
+6. Обосновать, зачем зависимость нужна.
+7. Обновить этот документ, если граф зависимостей действительно меняется архитектурно.
+
+Если новая зависимость противоречит матрице, изменение требует архитектурного решения, а не просто правки `pubspec.yaml`.
+
+В коде расширение allowlist-а сторожа требует OpenSpec change (`README.md` сторожа; для ядра агента — PKG-2).
+
+---
+
+## 51. Целевая модель зависимостей
 
 Итоговый принцип:
 
 ```text
-                     APPLICATION
+                    ПРИЛОЖЕНИЕ
                          │
                          ▼
-                    codelab_desktop
+                  codelab_desktop
                     /          \
                    ▼            ▼
-              codelab_ui      ACP application API
-                               │
-                               ▼
-                       codelab_client_acp
-                          /          \
-                         ▼            ▼
-                codelab_acp_transports   codelab_acp_protocol
+              codelab_ui      API приложения ACP
+                                  │
+                                  ▼
+                          codelab_client_acp
+                            /           \
+                           ▼             ▼
+              codelab_acp_transports   codelab_acp_protocol
                        │
                        ▼
-                 External Agent
+                 внешний агент
 ```
 
-При наличии inversion через transport abstraction concrete graph может выглядеть так:
+При инверсии через абстракцию транспорта конкретный граф может выглядеть так:
 
 ```text
                    composition root
@@ -1687,39 +1788,41 @@ Cubit
           codelab_client_acp   codelab_acp_transports
                    │             │
                    ▼             │
-           Transport Port ◄──────┘
+           порт транспорта ◄─────┘
                    │
                    ▼
               codelab_acp_protocol
 ```
 
-Конкретный dependency direction должен минимизировать coupling и сохранять pure Dart boundaries.
+Конкретное направление зависимостей ДОЛЖНО минимизировать связанность и сохранять границы чистого Dart.
+
+В коде роль «API приложения ACP» играют `ClientWorkspace` и `SessionHandle` (`codelab_client_core`), а порт транспорта `AcpTransport` лежит в основном бареле `codelab_acp_transports`, поэтому `codelab_client_acp` зависит от пакета транспортов, но не от его `io.dart` (§2, §7).
 
 ---
 
 ## 52. Главный критерий размещения кода
 
-При выборе места для нового кода нужно отвечать не на вопрос:
+Выбирая место для нового кода, разработчик ДОЛЖЕН отвечать не на вопрос:
 
 > Где удобнее его положить?
 
 а на вопросы:
 
-> Кто владеет этой responsibility?
+> Кто владеет этой ответственностью?
 
-> На каком уровне существует её semantics?
+> На каком уровне существует её смысл?
 
-> Какие dependencies ей действительно необходимы?
+> Какие зависимости ей действительно необходимы?
 
-> Должна ли она быть reusable?
+> Должна ли она быть переиспользуемой?
 
 > Требует ли она Flutter?
 
-Если ответы определены правильно, расположение кода обычно становится очевидным.
+Если ответы найдены правильно, место кода обычно становится очевидным.
 
-Архитектурные boundaries важнее структуры директорий.
+Архитектурные границы важнее структуры каталогов.
 
-Структура директорий должна отражать архитектуру, а не заменять её.
+Структура каталогов ДОЛЖНА отражать архитектуру, а не заменять её.
 
 ---
 
@@ -1741,15 +1844,17 @@ Cubit
 
 * ядро не знает ни одного другого пакета проекта и не импортирует `dart:io`; всё внешнее приходит портами от хоста (PKG-1, PKG-6);
 * `codelab_agent_acp` и `codelab_agent_mcp` не импортируют `dart:io` и друг друга; IO-транспорты и процессы им передаёт хост;
-* ядро собирается только через `buildAgentCore` (HOST-6): `ToolRegistry(`, `Agent(`, `AgentRuntime(` в хостах запрещены;
+* ядро собирается только через `buildAgentCore` (HOST-6): `ToolRegistry(`, `Agent(`, `AgentRuntime(` в хостах ЗАПРЕЩЕНЫ;
 * `codelab_agent_*` не зависят от клиентских пакетов, `codelab_ui` и приложений.
+
+В коде запрет `dart:io` для `codelab_agent_acp` и `codelab_agent_mcp` проверяют правила `rules.dart` (PKG-3), а отсутствие зависимости друг от друга и от клиентских пакетов — их allowlist-ы (`acpAllowlist`, `mcpAllowlist`). В `dev_dependencies` `codelab_agent_acp` есть `codelab_client_acp` (контрактный тест `test/contract/client_application_contract_test.dart`), рабочие `dependencies` чисты.
 
 ### Мосты к клиентам
 
 Клиенты НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*` (`AGENTS.md` §5; allowlist сторожа). Агентская сторона приходит только через два моста:
 
 * `codelab_setup` — настройка агента: чистые типы конфигурации ядра (основной барель, web-безопасный) и общие подкоманды `config`, `secret`, `provider`, `mcp` из `codelab_agent_io` (`lib/io.dart`). Через него клиенты читают и редактируют `config.yaml`, не зная о `ConfigLoader`.
-* `codelab_embedded` — встроенный агент: хост ядра, который собирает агента через `buildAgentCore` и `AcpAgentServer` и соединяет его с клиентом парой `InProcessAcpLink` в процессе клиента. Точки входа: `codelab_embedded.dart` (web-безопасная), `io.dart` (настольный открыватель: конфигурация, секреты, журнал сессий, MCP), `testing.dart` (сценарный открыватель для тестов). Правила импорта `io.dart` и `testing.dart` — в `AGENTS.md` §5 и в сторже.
+* `codelab_embedded` — встроенный агент: хост ядра, который собирает агента через `buildAgentCore` и `AcpAgentServer` и соединяет его с клиентом парой `InProcessAcpLink` в процессе клиента. Точки входа: `codelab_embedded.dart` (web-безопасная), `io.dart` (настольный открыватель: конфигурация, секреты, журнал сессий, MCP), `testing.dart` (сценарный открыватель для тестов). Правила импорта `io.dart` и `testing.dart` — в `AGENTS.md` §5 и в стороже.
 
 ```text
 apps/codelab_desktop ─┐                      ┌─ codelab_setup ──── codelab_agent_core (типы)

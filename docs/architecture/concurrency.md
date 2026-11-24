@@ -1,107 +1,120 @@
-# Concurrency и async lifecycle в ACP Client
+# Конкурентность и асинхронный жизненный цикл в CodeLab
 
-Этот документ определяет правила конкурентного и асинхронного поведения в ACP Client.
+Документ задаёт правила конкурентного и асинхронного поведения клиентов CodeLab (desktop, CLI) и встроенного Dart-агента, который работает в процессе клиента: владение операциями и подписками, отмену, поздние результаты, таймауты, закрытие и тесты гонок.
 
 Цели:
 
-* избежать race conditions;
-* исключить stale async results;
-* корректно управлять subscriptions;
-* сделать cancellation предсказуемой;
-* не блокировать Flutter UI isolate;
-* обеспечить явное ownership long-lived операций;
-* сохранить тестируемость ACP client logic.
+* избежать гонок (race conditions);
+* исключить устаревшие асинхронные результаты;
+* корректно управлять подписками;
+* сделать отмену предсказуемой;
+* не блокировать UI isolate Flutter;
+* дать каждой долгоживущей операции явного владельца;
+* сохранить тестируемость логики ACP-клиента.
 
-Связанные документы:
+Общие правила — корневой `AGENTS.md` (§8, §9, §12, §13, §16), [`session-lifecycle.md`](session-lifecycle.md), [`streaming.md`](streaming.md), [`acp-boundary.md`](acp-boundary.md), [`state-management.md`](state-management.md), [`permissions.md`](permissions.md), [`platform-integration.md`](platform-integration.md), [`error-handling.md`](error-handling.md), [`observability.md`](observability.md), [`testing.md`](testing.md). Отмена в ядре агента — [`proposals/agent-core/03-cancellation.md`](proposals/agent-core/03-cancellation.md).
 
-* `AGENTS.md`
-* `docs/architecture/acp-boundary.md`
-* `docs/architecture/session-lifecycle.md`
-* `docs/architecture/streaming.md`
-* `docs/architecture/testing.md`
+Термины:
+
+* **Владелец** (owner) — объект, который запускает долгоживущую операцию или подписку и отвечает за её отмену и закрытие (§5, §6).
+* **Устаревший результат** (stale result) — результат асинхронной операции, после начала которой состояние ушло вперёд: началась новая попытка, сменилось поколение, владелец закрыт (§10).
+* **Токен операции** (operation token) — локальный номер перекрывающихся операций одного вида; результат операции с устаревшим номером не применяется (§11).
+* **Поколение соединения** (connection generation) — номер экземпляра транспорта; растёт при каждой замене, событие прежнего поколения отбрасывается (§12; `session-lifecycle.md` §15).
+* **Single-flight** — повторный вызов во время идущей операции получает её `Future`, а не запускает вторую (§29, §30, §55).
+* **Кооперативная отмена** (cooperative cancellation) — операция сама проверяет признак отмены в точках ожидания (§21, §22).
+* **Fire-and-forget** — запуск `Future` без ожидания результата, в Dart — `unawaited(...)` (§37, §38).
+* **Закрытие** (dispose, `close()`) — терминальный переход владельца: после него он не меняет состояние (§58, CON-005).
+
+Где в коде. Клиент: ядро `AcpClientApplication` (`packages/dart/codelab_client_acp/lib/src/application/acp_client_application.dart`) владеет транспортом и двумя подписками на него (`_inboundSubscription`, `_eventSubscription`, создаёт `_bindTransport`), ведёт поколение соединения `_generation` (растёт в `_replaceTransport` до первого `await`; кадр и событие прежнего поколения отбрасываются с `event_ignored {reason: stale_generation}`, продолжения после `await` проверяет `_requireCurrentGeneration`), снимает запрос по таймеру `defaultRequestTimeout` = 60 с (кроме `session/prompt`; исход — `AcpRequestTimeoutException`), держит реестр процессов `terminal/*` (`_terminals`) и закрывается мемоизированным `dispose({closeTimeout})` с флагом `_disposed`. `DefaultClientWorkspace` (`packages/dart/codelab_client_core/lib/src/workspace/client_workspace.dart`) — единственный владелец переподключения (`session-lifecycle.md` §39): номера попыток `_attempt` и `_backendAttempt`, single-flight `ensureAgent` через `_attemptFuture`, номер запроса `session/list` `_listRequest`, очередь промптов на сессию (`PromptQueue`, `lib/src/queue/prompt_queue.dart`; слив `_drainIfFree` после каждого хода) и запись снимка рабочего пространства со сворачиванием и `flush()` при закрытии (`WorkspaceRestorer`, `lib/src/restore/workspace_restorer.dart`). Потоки состояния ядра клиента и kit — `StreamController.broadcast(sync: true)`, например `sessionChanges` и `connectionStateChanges` у `AcpClientApplication`, `state`, `promptOutcomes` и поток `SessionView` у рабочего пространства: подписчик получает изменения в порядке кадров. Поток кадров `protocolFrames` асинхронный: подписчик не может войти обратно в ядро из обработчика транспорта. Автоматического переподключения и пауз между попытками нет (`session-lifecycle.md` §38). Транспорты и процессы: `StdioAcpTransport` (`packages/dart/codelab_acp_transports/lib/src/io/stdio_acp_transport.dart`; мемоизированный `close`: EOF → срок `timeout` → `SIGTERM` → 2 с → `SIGKILL`; выход процесса после `close` сбоем не считается) и `IoTerminalProcessRunner` (`packages/dart/codelab_client_io/lib/src/platform/terminal_process_runner.dart`; `kill()`: `SIGTERM` → 2 с → `SIGKILL`). Desktop: владельцы состояния — Cubit-ы, `Bloc` и `bloc_concurrency` не используются (`state-management.md` §8); выход из app принимает `AppExitHandler` (`apps/codelab_desktop/lib/app/app_exit_handler.dart`; `exitTimeout` = 5 с, `flushTimeout` = 500 мс), его `onExitRequested` вызывает `AppLifecycleListener` в `CodeLabBootstrap`; порядок закрытия задаёт `CodeLabRootLifecycle` (`lib/app/app_scope.dart`; шаги `terminal`, `cubits`, `workspace`, `embedded`, `migration_offer`, `transport`, `client`, `language`, `appearance`; `transportCloseTimeout` = 2 с, `defaultEmbeddedCloseTimeout` = 10 с); вкладки Terminal закрывает `TerminalTabsCubit` (`hangUpGrace` = 2 с, `closeAllGrace` = 3 с). CLI: закрытие — `CliRuntime.dispose` (`apps/codelab_cli/lib/src/composition_root.dart`), сигналы остановки — `watchStopSignals` (`signals.dart`). Isolate: журнал сессии при `session/load` разбирает `JsonlSessionStore` в `Isolate.run` (`packages/dart/codelab_agent_io/lib/src/session/jsonl_session_store.dart`), большие блоки кода подсвечивает `CodeLabCodeHighlighter` в `Isolate.spawn` с `kill` по таймауту `backgroundTimeout` = 5 с (`packages/flutter/codelab_ui/lib/src/rendering/codelab_code_highlighter.dart`); `compute` не используется. Агент: кооперативная отмена `CancelToken` и `CancelTokenSource` (`packages/dart/codelab_agent_core/lib/src/cancel/cancel_token.dart`); в сессии агента `AgentSession` (реализация `_Session`, `lib/src/runtime/agent_runtime.dart`) — отмена хода `cancel()` и очередь смен конфигурации `_serial`; mutex по пути `PathLock` (`lib/src/tools/path_lock.dart`); повтор запроса к LLM `withTransientRetry` (`lib/src/llm/decorators/retry.dart`); очередь исходящих кадров соединения `OutboundQueue` и `AcpAgentServer.shutdown(grace:)` (`packages/dart/codelab_agent_acp/lib/src/connection/outbound_queue.dart`, `lib/src/agent_server.dart`); очередь записи файлов `WriteQueue` (`codelab_agent_io/lib/src/session/write_queue.dart`), stdio-серверы MCP `StdioProcessTransport` (`codelab_agent_io/lib/src/mcp/stdio_process_transport.dart`), debounce наблюдателя конфигурации `configWatchDebounce` = 300 мс (`codelab_agent_io/lib/src/config/config_watcher.dart`). Встроенного агента собирает и закрывает `codelab_embedded` (`lib/src/assemble.dart`): охраняемая зона `runZonedGuarded`, закрытие — `server.shutdown(grace: 5 с)`, затем `runtime.dispose()`. Fire-and-forget — `unawaited(...)` с явным путём ошибки (§38); глобальных перехватчиков необработанных ошибок в `apps/*` нет (`error-handling.md`).
 
 ---
 
 ## 1. Основной принцип
 
-Любая async operation должна иметь понятный lifecycle.
+У любой асинхронной операции ДОЛЖЕН быть понятный жизненный цикл.
 
-Для каждой операции необходимо знать:
+Для каждой операции ДОЛЖНО быть известно:
 
 * кто её запустил;
-* кто является owner;
-* может ли она пережить owner;
+* кто её владелец;
+* может ли она пережить владельца;
 * можно ли её отменить;
-* что происходит при dispose;
-* что происходит при reconnect;
-* как обрабатываются late results;
-* какие ошибки она может завершить.
+* что происходит при закрытии владельца (dispose);
+* что происходит при переподключении;
+* как обрабатываются поздние результаты;
+* какими ошибками она может завершиться.
 
-Не следует запускать async работу без ответа на эти вопросы.
+Запускать асинхронную работу без ответа на эти вопросы НЕ СЛЕДУЕТ.
 
 ---
 
 ## 2. UI isolate
 
-Flutter UI isolate НЕ ДОЛЖЕН блокироваться длительными synchronous operations.
+UI isolate Flutter НЕ ДОЛЖЕН блокироваться долгими синхронными операциями.
 
-На UI isolate допустимы:
+На UI isolate МОЖНО выполнять:
 
-* короткие state transitions;
-* presentation mapping;
-* создание widgets;
-* лёгкие immutable transformations;
-* небольшие synchronous calculations.
+* короткие переходы состояния;
+* маппинг в модели представления;
+* создание виджетов;
+* лёгкие неизменяемые преобразования;
+* небольшие синхронные вычисления.
 
-Следует избегать:
+СЛЕДУЕТ избегать:
 
 * больших циклов;
-* тяжёлого parsing;
-* длительного filesystem I/O;
-* process waiting;
-* CPU-heavy transformations.
+* тяжёлого разбора;
+* долгого файлового ввода-вывода;
+* ожидания процессов;
+* преобразований, нагружающих процессор.
+
+В коде на UI isolate desktop работают встроенный агент (§4.1) и `pty2` терминала пользователя; синхронная запись в PTY — известное нарушение этого раздела, принятое для 1.0 (§4.2).
 
 ---
 
-## 3. Async I/O
+## 3. Асинхронный ввод-вывод
 
 Операции с:
 
-* ACP transport;
-* filesystem;
-* network;
-* process;
-* secure storage;
+* ACP-транспортом;
+* файловой системой;
+* сетью;
+* процессами;
+* защищённым хранилищем
 
-должны выполняться асинхронно, если API это поддерживает.
+ДОЛЖНЫ выполняться асинхронно, если API это поддерживает.
 
-Нельзя использовать blocking API только ради простоты реализации, если оно может заморозить UI.
+Использовать блокирующий API только ради простоты реализации, если он может заморозить UI, ЗАПРЕЩЕНО.
+
+В коде синхронный файловый ввод-вывод (`*Sync`-вызовы) есть в конфигурационном и секретном слое `codelab_agent_io`: писатель конфигурации `ConfigWriter` и его блокировка `ConfigWriteLocks`, загрузчик `ConfigLoader` (`readAsBytesSync`, `statSync`, `resolveSymbolicLinksSync`), хранилище секретов `FileSecretStore` и `ClientSecretAccess` (`lib/src/config/`, `lib/src/secrets/`), журнал usage (`lib/src/session/jsonl_usage_ledger_store.dart`); а также в `FileAgentConfigStore._pathForms` (`resolveSymbolicLinksSync`, `codelab_setup`). Файлы маленькие, но во встроенном режиме desktop всё это исполняется на UI isolate. В desktop ещё два синхронных вызова: `FileStat.statSync` при проверке shell в `PtyUserShellLauncher` и `existsSync` в функции `writeFileAtomically` (`apps/codelab_desktop/lib/core/platform/usage_csv_saver.dart`), которую вызывает `FileSelectorUsageCsvSaver`.
 
 ---
 
-## 4. CPU-heavy операции
+## 4. Операции, нагружающие процессор
 
-CPU-heavy работу следует выносить из UI isolate, если она способна заметно влиять на rendering responsiveness.
+Работу, нагружающую процессор, СЛЕДУЕТ выносить из UI isolate, если она может заметно ухудшить отзывчивость отрисовки.
 
 Возможные подходы:
 
 * isolate;
 * `compute`;
-* специализированный worker abstraction.
+* специализированная абстракция фонового исполнителя (worker).
 
-Не следует вводить isolate для любой небольшой операции.
+Вводить isolate для любой небольшой операции НЕ СЛЕДУЕТ.
+
+В коде фоновые isolate есть в двух местах: `JsonlSessionStore` разбирает журнал сессии в `Isolate.run` (§4.1), а `CodeLabCodeHighlighter` токенизирует в `Isolate.spawn` блоки кода сверх синхронного порога (300 строк, 16 К code units, строки не длиннее 150), но не больше 5000 строк, 256 К и строк не длиннее 1000, и убивает isolate по таймауту 5 с; больший блок не подсвечивается. `compute` не используется.
 
 ### 4.1. Встроенный агент в UI isolate (решение 7.8)
 
 Встроенный Dart-агент (`codelab_embedded`) работает в процессе клиента, в том же isolate, что и UI: агентский и клиентский концы соединены парой `InProcessAcpLink`, без отдельного isolate. Решение принято по замеру задачи 7.8 ([design.md change `add-embedded-agent-mode`](../../openspec/changes/archive/2026-11-02-add-embedded-agent-mode/design.md), D11, «Решение 7.8»; решение пользователя 2026-11-02):
 
-* критерий переноса ядра в `IsolateAcpLink` — p99 задержки цикла событий больше 8 мс или максимум больше 50 мс на 10 000 чанков ответа (AOT, эталонная машина);
+* критерий переноса ядра в `IsolateAcpLink` — 99-й перцентиль (p99) задержки цикла событий больше 8 мс или максимум больше 50 мс на 10 000 чанков ответа (AOT, эталонная машина);
 * критерии выполняются, пока провайдер отдаёт не больше 7 SSE-событий на одно чтение сокета; задержка растёт примерно на 1 мс на каждое событие в пачке. Это граница пачек: при пачках от 8 событий (занятый цикл событий, буферизующий прокси, провайдер без flush) p99 превышает 8 мс;
 * больше половины стоимости чанка — клиентская проекция kit (`AcpClientApplication`, `ClientWorkspace`), а не ядро, поэтому isolate ядра сдвинул бы границу ненамного; `IsolateAcpLink` не делается;
 * разбор журнала сессии при открытии (`JsonlSessionStore.open`) выполняется в `Isolate.run` независимо от замера; сжатие контекста остаётся в главном isolate — оно ждёт ответа LLM, его CPU-часть мала (D11; замер его не измерял);
 * на web isolate нет — там всегда `InProcessAcpLink`.
 
-Остаточный риск и follow-up — [`docs/backlog/perf-2026-11-02-stream-latency.md`](../backlog/perf-2026-11-02-stream-latency.md): PERF-1 — удешевить клиентскую проекцию потока чанков в kit; PERF-2 — замерить реальный размер пачки SSE у LM Studio и облачного провайдера; если пачки от 8 событий встречаются на практике, решение 7.8 пересматривается. Синхронный бесконечный цикл в ядре зависнет вместе с UI: охраняемая зона встроенного агента его не прерывает.
+Остаточный риск и последующие задачи — [`docs/backlog/perf-2026-11-02-stream-latency.md`](../backlog/perf-2026-11-02-stream-latency.md): PERF-1 — удешевить клиентскую проекцию потока чанков в kit; PERF-2 — замерить реальный размер пачки SSE у LM Studio и облачного провайдера; если пачки от 8 событий встречаются на практике, решение 7.8 пересматривается. Синхронный бесконечный цикл в ядре зависнет вместе с UI: охраняемая зона встроенного агента его не прерывает.
 
 
 ### 4.2. Терминал пользователя: isolate вкладки (решение Q24) — план после 1.0
@@ -118,42 +131,44 @@ CPU-heavy работу следует выносить из UI isolate, если
 
 ---
 
-## 5. Ownership
+## 5. Владение
 
-Каждая long-lived operation должна иметь одного owner.
+У каждой долгоживущей операции ДОЛЖЕН быть один владелец.
 
-Например:
+Например (иллюстрация; `SessionBloc` в коде нет):
 
-```text id="ms8kqw"
-ACP transport connection
+```text
+соединение ACP-транспорта
     → codelab_client_acp
 
-transport subscription
+подписка на транспорт
     → codelab_client_acp
 
-client event subscription
+подписка на события клиента
     → SessionBloc
 
-temporary widget animation
+временная анимация виджета
     → Widget
 ```
 
-Если owner не определён, lifecycle операции почти наверняка станет проблемой.
+Если владелец не определён, жизненный цикл операции почти наверняка станет проблемой.
+
+В коде: транспорт и подписки на него — `AcpClientApplication`; подписки на ядро клиента через порт `AgentBackend` (`connectionStates`, `sessionChanges`, `usageNotifications`) — `DefaultClientWorkspace`; подписки на рабочее пространство и порты app — Cubit-ы рабочего места и настроек; анимации — `State` виджета.
 
 ---
 
-## 6. Subscription ownership
+## 6. Владение подпиской
 
-Каждый `StreamSubscription` должен быть:
+Каждый `StreamSubscription` ДОЛЖЕН быть:
 
 * сохранён;
-* привязан к owner;
-* отменён при завершении owner;
-* защищён от повторного создания без cleanup.
+* привязан к владельцу;
+* отменён при завершении владельца;
+* защищён от повторного создания без очистки прежнего.
 
 Нежелательно:
 
-```dart id="x4i54m"
+```dart
 client.events.listen(onEvent);
 ```
 
@@ -161,126 +176,140 @@ client.events.listen(onEvent);
 
 Предпочтительно:
 
-```dart id="mekdjt"
+```dart
 _subscription = client.events.listen(onEvent);
 ```
 
 с явным `cancel()`.
 
----
-
-## 7. Duplicate subscriptions
-
-Reconnect, rebuild или повторная инициализация не должны создавать duplicate subscriptions.
-
-Перед созданием новой subscription необходимо:
-
-* либо гарантировать, что старой нет;
-* либо явно отменить старую;
-* либо использовать abstraction, которая сама управляет единственной подпиской.
+В коде `AcpClientApplication` хранит обе подписки на транспорт в полях и отменяет их в `_replaceTransport` и `dispose`; `DefaultClientWorkspace` хранит `_connectionSubscription`, `_sessionSubscription`, `_usageSubscription` и отменяет их в `dispose`.
 
 ---
 
-## 8. Widget lifecycle
+## 7. Дублирующие подписки
 
-Widget НЕ ДОЛЖЕН владеть critical ACP lifecycle, если этот lifecycle должен переживать rebuild.
+Переподключение, перестроение (rebuild) или повторная инициализация НЕ ДОЛЖНЫ создавать дублирующие подписки.
 
-Rebuild widget не должен:
+Перед созданием новой подписки ДОЛЖНО выполняться одно из условий:
 
-* переподключать transport;
-* пересоздавать ACP client;
-* повторно отправлять request;
-* создавать duplicate subscriptions.
+* гарантировано, что прежней подписки нет;
+* прежняя подписка явно отменена;
+* используется абстракция, которая сама управляет единственной подпиской.
 
-Long-lived state должен принадлежать BLoC/application/client layer.
-
----
-
-## 9. BLoC lifecycle
-
-BLoC/Cubit может владеть presentation-level subscriptions.
-
-При `close()` он должен:
-
-* отменить subscriptions;
-* остановить presentation timers;
-* перестать принимать external callbacks;
-* безопасно игнорировать late results.
-
-BLoC не должен владеть reusable low-level ACP transport lifecycle, если тот относится к `codelab_client_acp`.
+В коде `_replaceTransport` отменяет подписки прежнего транспорта до `_bindTransport` нового; подписка Cubit-а на смену языка создаётся один раз в конструкторе и не зависит от соединения (§47а).
 
 ---
 
-## 10. Stale async result
+## 8. Жизненный цикл виджета
 
-Типичный race:
+Виджет НЕ ДОЛЖЕН владеть критичным жизненным циклом ACP, если тот должен переживать перестроение.
 
-```text id="3wz0mt"
-load A started
-load B started
-load B completed
-load A completed late
+Перестроение виджета НЕ ДОЛЖНО:
+
+* переподключать транспорт;
+* пересоздавать ACP-клиент;
+* повторно отправлять запрос;
+* создавать дублирующие подписки.
+
+Долгоживущее состояние ДОЛЖНО принадлежать BLoC, слою application или клиентскому слою.
+
+В коде транспорт, ядро клиента, рабочее пространство и Cubit-ы создаёт composition root (`createCodeLabRootScope`, `apps/codelab_desktop/lib/app/app_scope.dart`); виджеты получают готовые зависимости.
+
+---
+
+## 9. Жизненный цикл BLoC
+
+BLoC или Cubit МОЖЕТ владеть подписками уровня представления.
+
+При `close()` он ДОЛЖЕН:
+
+* отменить подписки;
+* остановить таймеры представления;
+* перестать принимать внешние колбэки;
+* безопасно игнорировать поздние результаты.
+
+BLoC НЕ ДОЛЖЕН владеть переиспользуемым низкоуровневым жизненным циклом ACP-транспорта, если тот относится к `codelab_client_acp`.
+
+В коде Cubit-ы после `await` проверяют `isClosed` и выходят без `emit` (например, `SessionsCubit.createSession`, `ConnectionCubit.restart`); транспортом владеет `AcpClientApplication`.
+
+---
+
+## 10. Устаревший асинхронный результат
+
+Типичная гонка:
+
+```text
+начата загрузка A
+начата загрузка B
+загрузка B завершена
+загрузка A завершена поздно
 ```
 
-Late result A не должен перезаписать актуальный state B.
+Поздний результат A НЕ ДОЛЖЕН перезаписать актуальное состояние B.
 
-Нужно использовать:
+Для этого ДОЛЖЕН использоваться хотя бы один из механизмов:
 
-* request token;
-* generation;
-* revision;
-* cancellation;
-* sequence;
-* ownership check.
+* токен запроса (request token);
+* поколение (generation);
+* ревизия (revision);
+* отмена (cancellation);
+* порядковый номер (sequence);
+* проверка владения (ownership check).
+
+В коде: ответ `session/list` с устаревшим `_listRequest` не трогает список; попытка подключения с устаревшим `_attempt` не публикует состояние (`_isStale`); `AppAppearanceCubit.reloadTheme` применяет результат только с актуальным номером операции (§47б); `TerminalTabsCubit` завершает shell, вернувшийся из старта для уже закрытой вкладки.
 
 ---
 
-## 11. Operation token
+## 11. Токен операции
 
-Для операций, которые могут перекрываться, полезно использовать local operation token.
+Для операций, которые могут перекрываться, полезен локальный токен операции.
 
 Например:
 
-```text id="rn8dwc"
-search generation 10
-search generation 11
+```text
+поиск, поколение 10
+поиск, поколение 11
 ```
 
-Результат generation 10 не применяется после начала generation 11.
+Результат поколения 10 не применяется после начала поколения 11.
 
 ---
 
-## 12. Connection generation
+## 12. Поколение соединения
 
-Connection generation является частным случаем operation token.
+Поколение соединения — частный случай токена операции.
 
-Каждый новый connection instance получает generation.
+Каждый новый экземпляр соединения получает поколение.
 
-Callback должен проверять, принадлежит ли он актуальной generation.
+Колбэк ДОЛЖЕН проверять, принадлежит ли он актуальному поколению.
 
----
-
-## 13. Request correlation
-
-Async result request должен быть связан минимум с:
-
-* request id;
-* session id;
-* connection generation,
-
-если эти concepts применимы.
-
-Не следует применять result только потому, что callback "пришёл последним".
+В коде `AcpClientApplication._generation` растёт в `_replaceTransport` до первого `await`; `_bindTransport` запоминает поколение подписки и отбрасывает кадры и события прежнего поколения (`event_ignored`, `reason: stale_generation`), а продолжения после `await` проверяет `_requireCurrentGeneration` (`streaming.md` §6).
 
 ---
 
-## 14. Mutable shared state
+## 13. Корреляция запросов
 
-Следует минимизировать mutable state, к которому обращаются несколько async handlers.
+Асинхронный результат запроса ДОЛЖЕН быть связан как минимум с:
+
+* id запроса;
+* id сессии;
+* поколением соединения,
+
+если эти понятия применимы.
+
+Применять результат только потому, что колбэк «пришёл последним», НЕ СЛЕДУЕТ.
+
+В коде ответ находит ожидающий запрос по JSON-RPC id (`_pendingRequests`); при замене транспорта все ожидающие запросы завершаются ошибкой. Ответ клиента на `terminal/*` уходит только в соединение того поколения, в котором пришёл запрос (D15 change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md)).
+
+---
+
+## 14. Изменяемое общее состояние
+
+Изменяемое состояние, к которому обращаются несколько асинхронных обработчиков, СЛЕДУЕТ сводить к минимуму.
 
 Плохо:
 
-```dart id="2j3pqi"
+```dart
 final messages = <Message>[];
 
 stream.listen((event) async {
@@ -290,72 +319,76 @@ stream.listen((event) async {
 });
 ```
 
-если несколько handlers способны interleave.
+если несколько обработчиков могут чередоваться (interleave).
 
-Предпочтительнее immutable state transitions через одного owner.
+Предпочтительнее — неизменяемые переходы состояния через одного владельца.
 
 ---
 
-## 15. Sequential event processing
+## 15. Последовательная обработка событий
 
-Events одного logical state machine обычно следует обрабатывать последовательно.
+События одного логического автомата состояний СЛЕДУЕТ, как правило, обрабатывать последовательно.
 
-Conceptual model:
+Концептуальная модель:
 
-```text id="y4dr9d"
-event A
+```text
+событие A
    ↓
 reduce
    ↓
-event B
+событие B
    ↓
 reduce
 ```
 
 вместо:
 
-```text id="zgp1uf"
-event A ── async mutate ─┐
-                         ├─ shared state
-event B ── async mutate ─┘
+```text
+событие A ── async-изменение ─┐
+                              ├─ общее состояние
+событие B ── async-изменение ─┘
 ```
+
+В коде входящий кадр обрабатывается синхронно в обработчике подписки (`_handleInboundMessage`), а переход делают редьюсеры `SessionStateMachine` и `PromptTurnStateMachine` (`streaming.md`); асинхронно, через `unawaited`, идут только обработчики запросов агента `fs/*` и `terminal/*` и ответ `-32601` на неподдерживаемый запрос (`_rejectUnsupportedRequest`).
 
 ---
 
-## 16. Event queue
+## 16. Очередь событий
 
-Для complex client lifecycle допустимо иметь internal serialized event queue.
+Для сложного жизненного цикла клиента МОЖНО иметь внутреннюю последовательную очередь событий.
 
 Она полезна, когда:
 
-* несколько transport callbacks меняют один state;
-* completion/cancel могут прийти одновременно;
-* reconnect меняет active subscriptions;
-* tool calls выполняются параллельно.
+* несколько колбэков транспорта меняют одно состояние;
+* завершение и отмена могут прийти одновременно;
+* переподключение меняет активные подписки;
+* вызовы инструментов выполняются параллельно.
 
-Queue не должна быть скрытым global event bus.
+Очередь НЕ ДОЛЖНА быть скрытой глобальной шиной событий (global event bus).
+
+В коде у клиента отдельной очереди событий нет: переходы синхронны (§15). У агента очереди есть: `OutboundQueue` — единая очередь исходящих кадров соединения (ответ на `session/prompt` уходит после последнего `session/update` хода), `_serial` сессии агента (`AgentSession`) — очередь смен конфигурации.
 
 ---
 
-## 17. Side effects после transition
+## 17. Побочные эффекты после перехода
 
-Предпочтительный pattern:
+Предпочтительный шаблон:
 
-```text id="g216oh"
-event
+```text
+событие
   ↓
-validate
+проверка
   ↓
-state transition
+переход состояния
   ↓
-side effect
+побочный эффект
   ↓
-result event
+событие результата
 ```
 
-Например:
+Например (иллюстрация; автоматического переподключения в CodeLab нет — `session-lifecycle.md` §38):
 
-```text id="gt7c0l"
+```text
 ConnectionLost
     ↓
 state = reconnecting
@@ -365,17 +398,17 @@ attemptReconnect()
 ReconnectSucceeded
 ```
 
-Это проще тестировать, чем side effect внутри state mutation.
+Это проще тестировать, чем побочный эффект внутри изменения состояния.
 
 ---
 
-## 18. Async side effect
+## 18. Асинхронный побочный эффект
 
-Async side effect не должен мутировать authoritative state напрямую после `await` без проверки актуальности context.
+Асинхронный побочный эффект НЕ ДОЛЖЕН напрямую менять основное (authoritative) состояние после `await` без проверки актуальности контекста.
 
 Пример:
 
-```dart id="sc77eq"
+```dart
 final generation = _generation;
 
 final result = await reconnect();
@@ -389,311 +422,345 @@ apply(result);
 
 Конкретная реализация может отличаться.
 
+В коде так устроены `_establishConnection` (`_requireCurrentGeneration` после каждого `await`) и попытки рабочего пространства (`_isStale(attempt)`).
+
 ---
 
-## 19. Cancellation как first-class concept
+## 19. Отмена как самостоятельное понятие
 
-Cancellation не должна означать только:
+Отмена НЕ ДОЛЖНА означать только
 
-```text id="vx1cgu"
-ignore result
+```text
+игнорировать результат
 ```
 
-если underlying operation можно реально остановить.
+если исходную операцию можно реально остановить.
 
-Следует различать:
+СЛЕДУЕТ различать:
 
-* cancel underlying operation;
-* mark local result stale;
-* detach consumer;
-* terminate transport/request.
+* отмену исходной операции;
+* пометку локального результата устаревшим;
+* отсоединение потребителя;
+* завершение транспорта или запроса.
+
+В коде отмена хода клиентом — `session/cancel` агенту и переход хода в `cancelling` (`streaming.md`, `session-lifecycle.md` §26); агент прерывает ход через `CancelToken`, а команды `exec` завершает `terminateTree`.
 
 ---
 
-## 20. Cancellation ownership
+## 20. Владение отменой
 
-Отменять operation должен её owner или компонент, которому owner явно делегировал cancellation.
+Отменять операцию ДОЛЖЕН её владелец или компонент, которому владелец явно делегировал отмену.
 
-Widget выражает intent:
+Виджет выражает намерение:
 
-```text id="bbtq95"
+```text
 Cancel
 ```
 
-Application/client layer выполняет actual cancellation semantics.
+Семантику отмены выполняет слой application или клиентский слой.
 
 ---
 
-## 21. Cooperative cancellation
+## 21. Кооперативная отмена
 
-Если API не поддерживает hard cancellation, следует использовать cooperative cancellation.
+Если API не поддерживает жёсткую отмену, СЛЕДУЕТ использовать кооперативную.
 
 Например:
 
-```text id="ezr23o"
-operation token
-cancellation flag
-generation check
+```text
+токен операции
+признак отмены
+проверка поколения
 ```
 
-Однако cancellation flag не должен быть глобальным mutable boolean для нескольких operations.
+Однако признак отмены НЕ ДОЛЖЕН быть глобальным изменяемым `bool` для нескольких операций.
 
 ---
 
-## 22. Cancellation token
+## 22. Токен отмены
 
-Для generic long-lived operations можно использовать cancellation abstraction.
+Для общих долгоживущих операций МОЖНО использовать абстракцию отмены.
 
-Conceptually:
+Концептуально:
 
-```dart id="c2bdlh"
+```dart
 abstract interface class CancellationToken {
   bool get isCancelled;
 }
 ```
 
-Не требуется создавать такую abstraction, если существующий API уже решает задачу.
+Создавать такую абстракцию не требуется, если существующий API уже решает задачу.
+
+В коде такая абстракция есть только в ядре агента: `CancelToken` (чтение) и `CancelTokenSource` (владелец) — слушатели `onCancel` не вызываются внутри `cancel()` (CAN-1), отменённый токен не становится неотменённым (CAN-2), отмена родителя отменяет детей (CAN-3). Клиент обходится поколениями и номерами попыток (§10–§12).
 
 ---
 
-## 23. Cancel after completion
+## 23. Отмена после завершения
 
-Если operation уже terminal, повторный cancel должен быть безопасным.
+Если операция уже в терминальном состоянии, повторная отмена ДОЛЖНА быть безопасной.
 
-Возможные outcomes:
+Возможные исходы:
 
-* ignore;
-* return completed result;
-* typed already-completed error.
+* игнорировать;
+* вернуть завершённый результат;
+* типизированная ошибка «уже завершено».
 
-Он не должен возвращать operation в active state.
+Отмена НЕ ДОЛЖНА возвращать операцию в активное состояние.
+
+В коде `PromptTurnStateMachine` для терминального хода возвращает `ignored`, а повторная отмена идущего хода возвращает тот же ход (`session-lifecycle.md` §29).
 
 ---
 
-## 24. Completion/cancel race
+## 24. Гонка завершения и отмены
 
-Race:
+Гонка:
 
-```text id="52ce6q"
-completion
+```text
+завершение
      ↘
-      state
+      состояние
      ↗
-cancel
+отмена
 ```
 
-должен иметь deterministic rule.
+ДОЛЖНА иметь детерминированное правило.
 
-Решение принадлежит lifecycle/state machine, а не callback order "как получилось".
+Решение принадлежит жизненному циклу или автомату состояний, а не порядку колбэков «как получилось».
+
+В коде правило для хода — `session-lifecycle.md` §27: после `session/cancel` ход ждёт ответа на `session/prompt`, итог задаёт его `stopReason`. Для `terminal/*` гонка естественного выхода и `kill` не меняет уже зафиксированный статус выхода (§44).
 
 ---
 
-## 25. Timeouts
+## 25. Таймауты
 
-Timeout является application policy, если он определяет пользовательское поведение.
+Таймаут — политика application, если он определяет поведение для пользователя.
 
-Transport-level timeout может существовать отдельно.
+Таймаут уровня транспорта может существовать отдельно.
 
-Следует различать:
+СЛЕДУЕТ различать:
 
-```text id="4q27l0"
-socket/connect timeout
-request timeout
-user-visible operation timeout
+```text
+таймаут сокета или подключения
+таймаут запроса
+таймаут видимой пользователю операции
 ```
 
-Они не обязаны иметь одинаковые значения или semantics.
+Они не обязаны иметь одинаковые значения или семантику.
+
+В коде: таймаут запроса — `AcpClientApplication.defaultRequestTimeout` (60 с, задаётся `requestTimeout` конструктора); у `session/prompt` таймаута нет — ход прерывается `session/cancel`. Сроки закрытия процессов и выхода из app — §46; чтение фактов onboarding — `kOnboardingFactsTimeout` = 5 с (§47в).
 
 ---
 
-## 26. Timeout ownership
+## 26. Владение таймаутом
 
-Timeout должен иметь owner.
+У таймаута ДОЛЖЕН быть владелец.
 
-Не следует создавать независимые timers в нескольких слоях для одной операции.
+Создавать независимые таймеры в нескольких слоях для одной операции НЕ СЛЕДУЕТ.
 
-Например одновременно:
+Например, одновременно:
 
-```text id="j2sg2p"
-transport timeout
-BLoC timeout
-widget timeout
+```text
+таймаут транспорта
+таймаут BLoC
+таймаут виджета
 ```
 
 без понятного отношения между ними.
 
----
-
-## 27. Timer lifecycle
-
-Каждый `Timer` должен:
-
-* иметь owner;
-* быть cancelled;
-* не вызывать callback после dispose owner;
-* не создавать duplicate retry.
+В коде вложенные сроки выхода из app связаны явно: общий предел держит только `AppExitHandler`, а сроки шагов подобраны под него (§46).
 
 ---
 
-## 28. Retry concurrency
+## 27. Жизненный цикл таймера
 
-Retry implementation должен гарантировать, что одновременно выполняется не больше допустимого числа retry attempts.
+Каждый `Timer` ДОЛЖЕН:
 
-Для обычного reconnect чаще всего это один attempt.
+* иметь владельца;
+* отменяться;
+* не вызывать колбэк после закрытия владельца;
+* не создавать дублирующий повтор.
+
+В коде таймер таймаута запроса отменяется в `finally` после ответа; таймер публикации `ProtocolPaneCubit` (`_cooldown`) отменяется в `close()`.
+
+---
+
+## 28. Конкурентность повторов
+
+Реализация повторов (retry) ДОЛЖНА гарантировать, что одновременно выполняется не больше допустимого числа попыток.
+
+Для обычного переподключения это чаще всего одна попытка.
 
 Нежелательно:
 
-```text id="h8yb8y"
-timer retry
-user retry
-transport retry
+```text
+повтор по таймеру
+повтор пользователя
+повтор транспорта
 ```
 
-запускающие три connection attempts.
+запускающие три попытки подключения.
+
+В коде у клиента автоматических повторов нет: попытку подключения начинает только явный вызов, а новая попытка вытесняет прежнюю (§29). У агента запрос к LLM повторяет `withTransientRetry`: попытки идут последовательно в одном цикле и только до первого блока ответа.
 
 ---
 
-## 29. Reconnect mutex
+## 29. Взаимное исключение переподключения
 
-Если reconnect может быть инициирован из нескольких intents/events, нужен механизм single-flight.
+Если переподключение могут начать несколько намерений или событий, ДОЛЖЕН быть механизм single-flight.
 
-Conceptually:
+Концептуально:
 
-```text id="epuw0h"
-reconnect requested
+```text
+запрошено переподключение
        │
        ▼
-existing reconnect?
-   yes ───► reuse/wait
-   no  ───► start
+переподключение уже идёт?
+   да  ───► переиспользовать или ждать
+   нет ───► начать
 ```
 
-Конкретная implementation может быть Future caching, state machine или queue.
+Конкретная реализация может быть кешированием `Future`, автоматом состояний или очередью.
+
+В коде `ClientWorkspace.ensureAgent()` во время идущей попытки возвращает её `Future` (`_attemptFuture`, D15 change `require-project-folder`). Явные `connect` и `reconnect` не ждут идущую попытку, а вытесняют её новым номером `_attempt`; в ядре клиента вытесненная замена транспорта закрывает свой транспорт, не привязывая его (`_replaceTransport`).
 
 ---
 
-## 30. Single-flight operation
+## 30. Операция single-flight
 
 Single-flight полезен для операций:
 
-* connect;
-* reconnect;
-* initialize;
-* refresh configuration;
+* подключения;
+* переподключения;
+* инициализации;
+* обновления конфигурации,
 
-когда duplicate invocation не имеет смысла.
+когда повторный вызов не имеет смысла.
+
+В коде мемоизированы закрытия: `AppExitHandler.onExitRequested`, `CodeLabRootLifecycle.dispose`, `TerminalTabsCubit.closeAll`, `AcpClientApplication.dispose`, `StdioAcpTransport.close`, `StdioProcessTransport.close`, `EmbeddedTransportResolver.close`; повторный вызов ждёт идущий проход.
 
 ---
 
-## 31. Parallelism
+## 31. Параллелизм
 
-Параллелизм должен быть осознанным.
+Параллелизм ДОЛЖЕН быть осознанным.
 
-Если две operations независимы:
+Если две операции независимы:
 
-```text id="a9zwu4"
-load settings
-load session history
+```text
+загрузка настроек
+загрузка истории сессий
 ```
 
-их можно выполнять параллельно.
+их МОЖНО выполнять параллельно.
 
-Если они меняют один lifecycle state, лучше serialized processing.
+Если они меняют одно состояние жизненного цикла, предпочтительнее последовательная обработка.
+
+В коде ветки закрытия `CodeLabRootLifecycle` параллельны, потому что независимы: терминал пользователя и ACP-сторона друг о друге не знают (§45).
 
 ---
 
-## 32. Concurrent tool calls
+## 32. Параллельные вызовы инструментов
 
-Если ACP допускает concurrent tool calls, каждый должен иметь independent:
+Если ACP допускает параллельные вызовы инструментов, у каждого ДОЛЖНЫ быть свои:
 
 * id;
-* state;
-* permission flow;
-* cancellation;
-* completion.
+* состояние;
+* поток разрешения;
+* отмена;
+* завершение.
 
-Нельзя использовать один global:
+Использовать один глобальный
 
-```text id="zxnc47"
+```text
 currentToolCall
 ```
 
-если protocol допускает несколько.
+ЗАПРЕЩЕНО, если протокол допускает несколько.
+
+В коде клиент хранит вызовы хода по `toolCallId` и сливает обновления по нему (`streaming.md`). Агент исполняет вызовы одного ответа модели параллельно; правки одного пути идут по очереди через `PathLock`, место в очереди занимается в порядке ответа (TOOL-7).
 
 ---
 
-## 33. Permission concurrency
+## 33. Параллельные запросы разрешений
 
-Несколько pending permission requests должны быть либо поддержаны явно, либо запрещены application invariant.
+Несколько ожидающих запросов разрешений ДОЛЖНЫ быть либо явно поддержаны, либо запрещены инвариантом application.
 
 Если поддержаны:
 
-```text id="a4w3be"
-permission A
-permission B
+```text
+разрешение A
+разрешение B
 ```
 
-decision A не должен завершить B.
+решение A НЕ ДОЛЖНО завершить B.
+
+В коде несколько запросов `session/request_permission` поддержаны: каждый хранится по своему `ApprovalRequestId` и привязан к своему вызову инструмента; при замене транспорта ожидающие одобрения снимаются (`_dropPendingApprovals`, D22 change `require-project-folder`); политика параллельных запросов — `permissions.md` §35.
 
 ---
 
-## 34. UI concurrency
+## 34. Конкурентность действий пользователя
 
-Несколько user intents могут приходить почти одновременно.
+Несколько намерений пользователя могут прийти почти одновременно.
 
 Например:
 
-```text id="9tks3r"
-double click Connect
-double click Send
+```text
+двойной клик Connect
+двойной клик Send
 Cancel + Disconnect
 ```
 
-Application API должна быть устойчива к повторным intents.
+API application ДОЛЖЕН быть устойчив к повторным намерениям.
+
+В коде повторный запуск агента ждёт идущую попытку (`ensureAgent`, §29); промпт во время хода встаёт в очередь сессии (`PromptQueue`); `ConnectionCubit.restart` игнорирует повтор, пока открыт диалог перезапуска (§62); `OnboardingCubit.finish` игнорирует повторное нажатие (§47в).
 
 ---
 
 ## 35. Debounce
 
-Debounce является presentation/application policy для частых не-критичных intents.
+Debounce — политика представления или application для частых некритичных намерений.
 
 Подходит для:
 
-* search input;
-* autosave;
-* UI filtering.
+* поискового ввода;
+* автосохранения;
+* фильтрации в UI.
 
-Не следует debounce critical protocol events.
+Применять debounce к критичным событиям протокола НЕ СЛЕДУЕТ.
+
+В коде debounce есть у наблюдателя конфигурации агента: `ConfigWatcher` сворачивает события файловой системы за `configWatchDebounce` = 300 мс. События протокола не сворачиваются.
 
 ---
 
 ## 36. Throttle
 
-Throttle допустим для:
+Throttle МОЖНО применять к:
 
-* UI progress;
-* frequent rendering updates;
-* telemetry.
+* прогрессу в UI;
+* частым обновлениям отрисовки;
+* телеметрии.
 
-Не применять throttle к:
+Применять throttle ЗАПРЕЩЕНО к:
 
-* completion;
-* permission request;
-* cancellation acknowledgement;
-* connection loss.
+* завершению;
+* запросу разрешения;
+* подтверждению отмены;
+* потере соединения.
+
+В коде `ClientWorkspace` публикует каждое изменение сессии (`streaming.md`). Ограничение частоты есть только у отображения: панель Protocol публикует не чаще раза в `ProtocolPaneCubit.publishInterval` = 100 мс, вывод вкладок Terminal сбрасывает на кадре `TerminalOutputFlusher`.
 
 ---
 
 ## 37. Fire-and-forget
 
-`unawaited(...)` допустим только если операция действительно не должна блокировать caller.
+`unawaited(...)` МОЖНО использовать, только если операция действительно не должна блокировать вызывающего.
 
-Перед использованием необходимо определить:
+Перед использованием ДОЛЖНО быть определено:
 
 * кто обрабатывает ошибку;
-* кто владеет lifecycle;
-* что происходит при shutdown;
-* важен ли result.
+* кто владеет жизненным циклом;
+* что происходит при завершении работы;
+* важен ли результат.
 
 ---
 
@@ -701,168 +768,158 @@ Throttle допустим для:
 
 Неправильно:
 
-```dart id="nwiqdw"
+```dart
 unawaited(saveState());
 ```
 
-если exception потеряется.
+если исключение потеряется.
 
-Нужно либо:
+ДОЛЖНА быть либо
 
-```text id="g1qfwk"
-handled async wrapper
+```text
+асинхронная обёртка с обработкой ошибки
 ```
 
-либо иной явный error path.
+либо иной явный путь ошибки.
+
+В коде так устроены, например: `DefaultClientWorkspace._begin` (производный `Future` глотает ошибку, её получает только вызывающий), обработчики запросов `fs/*` и `terminal/*` в `AcpClientApplication` (сбой — ответ `-32603`, `error-handling.md`), `_killAllTerminalProcesses` (сбои изолированы, метод не бросает), `AgentRuntimeImpl._onConfigSignal` (`onError` пишет `config.reload.failed`), `_Agent._failStop` встроенного агента (шаги в `try`). В presentation `unawaited` оборачивает вызовы методов Cubit-ов из обработчиков нажатий (например, `workbench_shell.dart`): путь ошибки — внутри метода; исключение, вышедшее из метода, без глобального перехватчика в журнал проекта не попадёт (§39).
 
 ---
 
-## 39. Async errors
+## 39. Асинхронные ошибки
 
-Ошибки `Future` и `Stream` не должны исчезать в unhandled zone.
+Ошибки `Future` и `Stream` НЕ ДОЛЖНЫ теряться в необработанной зоне.
 
-Все long-lived async boundaries должны иметь error handling.
+Все долгоживущие асинхронные границы ДОЛЖНЫ обрабатывать ошибки.
 
 Особенно:
 
-* transport streams;
-* process output;
-* reconnect loops;
-* persistence background tasks.
+* потоки транспорта;
+* вывод процессов;
+* циклы переподключения;
+* фоновые задачи хранения.
+
+В коде глобальных перехватчиков (`runZonedGuarded`, `FlutterError.onError`, `PlatformDispatcher.instance.onError`) в `apps/*` нет (`error-handling.md`); охраняемая зона `runZonedGuarded` есть только у встроенного агента — его ошибка даёт `embedded.agent.failed` и закрытие агента. Ошибки ловятся на границах операций: шаги закрытия (`_step`), обработчики запросов, подписки транспорта.
 
 ---
 
-## 40. Stream error handling
+## 40. Ошибки потоков
 
-`Stream.listen` должен явно определять, что происходит при:
+`Stream.listen` ДОЛЖЕН явно определять, что происходит при:
 
 * `onError`;
 * `onDone`.
 
-Critical stream не должен тихо завершаться.
+Критичный поток НЕ ДОЛЖЕН завершаться молча.
+
+В коде `StdioAcpTransport` слушает stdout и stderr процесса с `onError`, который переводит транспорт в `failed`, а выход процесса без `close` — сбой с кодом `disconnected`. `_bindTransport` подписывается на `inbound` и `events` транспорта без `onError` и `onDone`: по контракту `AcpTransport` сбой соединения приходит событием в `events`, а не ошибкой потока.
 
 ---
 
-## 41. Isolate boundary
+## 41. Граница isolate
 
-Если используется isolate, сообщения между isolates должны быть:
+Если используется isolate, сообщения между isolate ДОЛЖНЫ быть:
 
-* immutable/serializable;
+* неизменяемыми или сериализуемыми;
 * минимальными;
-* независимыми от Flutter UI objects.
+* независимыми от объектов Flutter UI.
 
-Не передавать:
+Передавать ЗАПРЕЩЕНО:
 
 * `BuildContext`;
-* widgets;
-* BLoC instances;
-* DI container.
+* виджеты;
+* экземпляры BLoC;
+* DI-контейнер.
+
+В коде `CodeLabCodeHighlighter` отправляет в isolate только язык и код, назад — простые токены, а ошибку isolate наружу передаёт без текста кода; `JsonlSessionStore._readAndParse` статический, чтобы замыкание `Isolate.run` не захватило хранилище с дескрипторами и логгером: в isolate уходят путь, `SessionId`, `cwd` и время создания, назад — `ParsedJournal`.
 
 ---
 
-## 42. Process I/O
+## 42. Ввод-вывод процесса
 
-ACP через child process может иметь независимые stdout/stderr streams.
+У ACP через дочерний процесс могут быть независимые потоки stdout и stderr.
 
-Следует определить:
+СЛЕДУЕТ определить:
 
-```text id="ua527y"
+```text
 stdout
-    → protocol transport
+    → протокольный транспорт
 
 stderr
-    → diagnostics/logging
+    → диагностика и журнал
 ```
 
-если именно это соответствует transport implementation.
+если именно это соответствует реализации транспорта.
 
-Нельзя смешивать stderr diagnostics с ACP messages без framing contract.
+Смешивать диагностику stderr с сообщениями ACP без договорённости о кадрировании (framing contract) ЗАПРЕЩЕНО.
+
+В коде `StdioAcpTransport` разбирает stdout как поток ACP, а каждую строку stderr публикует событием диагностики (`platform-integration.md` §21).
 
 ---
 
-## 43. Process shutdown race
+## 43. Гонка при завершении процесса
 
-При shutdown возможен race:
+При завершении возможна гонка:
 
-```text id="llz09q"
-close transport
-terminate process
-process exits
-onDone fires
+```text
+закрытие транспорта
+завершение процесса
+процесс вышел
+сработал onDone
 ```
 
-State machine должна воспринимать expected exit как intentional shutdown, а не unexpected reconnect trigger.
+Автомат состояний ДОЛЖЕН воспринимать ожидаемый выход как намеренное завершение, а не как повод для неожиданного переподключения.
+
+В коде `StdioAcpTransport._handleProcessExit` после `close` ничего не делает; при замене транспорта события прежнего отсекает поколение (§12).
 
 ---
 
-## 44. Terminal process lifecycle (`terminal/*`)
+## 44. Жизненный цикл процессов терминала (`terminal/*`)
 
-`terminal/create` управляет отдельным session-scoped реестром процессов
-(`SessionId → Map<TerminalId, TerminalProcessHandle>`), независимым от
-собственного child-процесса ACP transport (§42-43) и от
-процессов панели Terminal пользователя (порт `UserShellLauncher`, владелец
-`TerminalTabsCubit`; change `add-integrated-terminal`, D10) — разные
-owner'ы, разные lifecycle (`add-acp-terminal-client-support/design.md`,
-Decision 6). Разрыв соединения с агентом процессы панели Terminal не трогает.
+`terminal/create` управляет отдельным реестром процессов в рамках сессии (`SessionId → Map<TerminalId, TerminalProcessHandle>`). Он не зависит ни от собственного дочернего процесса ACP-транспорта (§42–§43), ни от процессов панели Terminal пользователя (порт `UserShellLauncher`, владелец `TerminalTabsCubit`; change `add-integrated-terminal`, D10): у них разные владельцы и разные жизненные циклы ([design.md change `add-acp-terminal-client-support`](../../openspec/changes/archive/2026-09-04-add-acp-terminal-client-support/design.md), решение 6). Разрыв соединения с агентом процессы панели Terminal не трогает.
 
 Правила:
 
-* `TerminalId` — owner: сессия, в рамках которой он был создан
-  (`terminal/create`'s `sessionId`), а не connection в целом.
-* `kill` (`terminal/kill`) переводит процесс в terminal state (`exited`),
-  но НЕ удаляет `TerminalId` из реестра — `output`/`wait_for_exit`/
-  `release` остаются валидными после него.
-* `release` (`terminal/release`) убивает процесс, если он ещё работает, И
-  удаляет `TerminalId` из реестра — с этого момента id неотличим от
-  никогда не существовавшего (единая "unknown terminal" ошибка для обоих
-  случаев).
-* И `kill`, и connection-level teardown ДОЛЖНЫ быть идемпотентны
-  относительно уже завершившегося процесса — race между естественным
-  exit и `kill` не должен менять уже зафиксированный exit-статус
-  (см. §24 Completion/cancel race).
-* При переходе connection в disconnected/failed или при dispose
-  приложения ВСЕ активные terminal-процессы всех сессий убиваются
-  (`kill`-семантика, не `release`) — это connection-level safety net, а
-  не graceful `terminal/release` от имени агента; реестр при этом
-  очищается полностью (§57 State after dispose).
-* Буферизация output (`outputByteLimit`, truncation с начала буфера по
-  границе UTF-8 символа) — ответственность infrastructure adapter, не
-  application layer, аналогично разделению для ACP transport's
-  stdout/stderr (§42).
+* Владелец `TerminalId` — сессия, в которой он создан (`sessionId` запроса `terminal/create`), а не соединение целиком.
+* `kill` (`terminal/kill`) переводит процесс в терминальное состояние (`exited`), но НЕ удаляет `TerminalId` из реестра — `output`, `wait_for_exit` и `release` после него остаются допустимыми.
+* `release` (`terminal/release`) убивает процесс, если он ещё работает, И удаляет `TerminalId` из реестра — с этого момента id неотличим от никогда не существовавшего (одна и та же ошибка «unknown terminal» для обоих случаев).
+* И `kill`, и закрытие на уровне соединения ДОЛЖНЫ быть идемпотентны относительно уже завершившегося процесса — гонка естественного выхода и `kill` НЕ ДОЛЖНА менять уже зафиксированный статус выхода (см. §24).
+* При переходе соединения в `disconnected` или `failed` и при закрытии приложения ВСЕ активные terminal-процессы всех сессий убиваются (семантика `kill`, не `release`) — это страховка на уровне соединения, а не штатный `terminal/release` от имени агента; реестр при этом очищается полностью (§58).
+* Буферизация вывода (`outputByteLimit`, обрезка с начала буфера по границе символа UTF-8) — ответственность адаптера infrastructure, а не слоя application, так же как разделение stdout и stderr ACP-транспорта (§42).
 
-Полное обоснование: `openspec/changes/add-acp-terminal-client-support/design.md`.
+В коде реестр — `AcpClientApplication._terminals`; при переходе в `disconnected` или `failed` и в `dispose` его очищает `_killAllTerminalProcesses`. `release` удаляет запись, только если в ней всё ещё тот же handle: за время `kill()` переподключение могло очистить реестр, а новый агент — создать процесс с тем же `terminalId` (D15 change `add-client-process-shutdown-on-exit`). Буфер и обрезку делает `IoTerminalProcessRunner`.
 
 ---
 
-## 45. App shutdown
+## 45. Закрытие приложения
 
-При закрытии приложения новые user/application intents должны перестать приниматься до destruction resources.
+При закрытии приложения новые намерения пользователя и application ДОЛЖНЫ перестать приниматься до освобождения ресурсов.
 
-Рекомендуемый conceptual flow:
+СЛЕДУЕТ придерживаться концептуальной последовательности:
 
-```text id="t7qedd"
-shuttingDown = begin
+```text
+начало закрытия (shuttingDown)
       │
       ▼
-stop new operations
+новые операции не принимаются
       │
       ▼
-cancel/complete active work
+активная работа отменяется или завершается
       │
       ▼
-close client/subscriptions
+закрываются клиент и подписки
       │
       ▼
-close transport/process
+закрываются транспорт и процесс
       │
       ▼
-dispose containers
+освобождаются контейнеры
 ```
 
 Терминал пользователя (панель Terminal, change `add-integrated-terminal`, D4) встроен в этот поток через `AppLifecycleListener.onExitRequested` composition root:
 
 ```text
-exit requested
+запрос выхода
       │
       ▼
 TerminalTabsCubit.closeAll()   — новые вкладки больше не создаются
@@ -874,14 +931,14 @@ SIGHUP всем shell → ожидание до 3 с → принудитель�
 AppExitResponse.exit
 ```
 
-Shell, вернувшийся из асинхронного старта после начала `closeAll`, сразу завершается и в реестр не попадает (stale result, §10). Повторный `closeAll` из закрытия root scope ничего не делает.
+Shell, вернувшийся из асинхронного старта после начала `closeAll`, сразу завершается и в реестр не попадает (устаревший результат, §10). Повторный `closeAll` из закрытия root scope ничего не делает.
 
-Опираться только на `dispose containers` терминал не может: при штатном завершении app (macOS `terminate:`) дерево виджетов не размонтируется, и `AppScope.dispose` не выполняется. Dart VM при остановке движка ждёт все isolate, а isolate `pty2` каждого живого shell стоит в блокирующем FFI `waitpid` — без `closeAll()` в `onExitRequested` выход зависает (решение пользователя 2026-11-12; change, D4, D15 п. 9). Тот же вывод для любого будущего isolate с блокирующим FFI-вызовом: его владелец обязан снять блокировку до `AppExitResponse.exit`, `Isolate.kill` её не прерывает.
+Опираться только на освобождение контейнеров терминал не может: при штатном завершении app (macOS `terminate:`) дерево виджетов не размонтируется, и `AppScope.dispose` не выполняется. Dart VM при остановке движка ждёт все isolate, а isolate `pty2` каждого живого shell стоит в блокирующем FFI `waitpid` — без `closeAll()` в `onExitRequested` выход зависает (решение пользователя 2026-11-12; change, D4, D15 п. 9). Тот же вывод для любого будущего isolate с блокирующим FFI-вызовом: его владелец ДОЛЖЕН снять блокировку до `AppExitResponse.exit`, `Isolate.kill` её не прерывает.
 
-По той же причине (`dispose containers` при штатном выходе не выполняется) обработчик выхода закрывает не только терминал, а весь `CodeLabRootLifecycle.dispose()` — иначе процессы ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента остаются сиротами (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D1, D2):
+По той же причине (освобождение контейнеров при штатном выходе не выполняется) обработчик выхода закрывает не только терминал, а весь `CodeLabRootLifecycle.dispose()` — иначе процессы ACP `terminal/*`, внешний stdio-агент, процессы `exec` и stdio-серверы MCP встроенного агента остаются сиротами (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D1, D2):
 
 ```text
-exit requested ─────────────────────────────── app.exit_requested
+запрос выхода ──────────────────────────────── app.exit_requested
       │
       ├──► ветка терминала: TerminalTabsCubit.closeAll() (hangUp → 3 с → kill)
       │
@@ -903,49 +960,57 @@ exit requested ─────────────────────�
 AppExitResponse.exit
 ```
 
-Ветки параллельны: терминал пользователя и ACP-сторона независимы (§44). Ветка языка (шаг `language`, change `add-desktop-localization`, D2) отделена от шага `cubits` клиентской ветки: ожидание записи выбора языка не задерживает рабочее пространство, встроенного агента и транспорт. Так же отделена ветка оформления (шаг `appearance`, change [`add-app-appearance-page`](../../openspec/changes/archive/2026-11-20-add-app-appearance-page/design.md), D13): она ждёт запись выбора режима и тем и параллельна ветке языка. Внутри клиентской ветки Cubit-ы и рабочее пространство закрываются первыми (§42 `session-lifecycle.md`). Дальше встроенный агент и ядро клиента закрываются параллельно: закрытие клиентского конца само запускает тот же `dispose` встроенного агента, а ожидание встроенного агента (до 10 с) не должно задерживать сигналы `terminal/*` и stdio-агенту (D11 change). Повторный запрос выхода и последующее закрытие root scope ждут тот же проход: `dispose()` мемоизирован, сигналы повторно не шлются.
+Ветки параллельны: терминал пользователя и ACP-сторона независимы (§44). Ветка языка (шаг `language`, change `add-desktop-localization`, D2) отделена от шага `cubits` клиентской ветки: ожидание записи выбора языка не задерживает рабочее пространство, встроенного агента и транспорт. Так же отделена ветка оформления (шаг `appearance`, change [`add-app-appearance-page`](../../openspec/changes/archive/2026-11-20-add-app-appearance-page/design.md), D13): она ждёт запись выбора режима и тем и параллельна ветке языка. Внутри клиентской ветки Cubit-ы и рабочее пространство закрываются первыми (`session-lifecycle.md` §42). Дальше встроенный агент и ядро клиента закрываются параллельно: закрытие клиентского конца само запускает тот же `dispose` встроенного агента, а ожидание встроенного агента (до 10 с) НЕ ДОЛЖНО задерживать сигналы `terminal/*` и stdio-агенту (D11 change). Повторный запрос выхода и последующее закрытие root scope ждут тот же проход: `dispose()` мемоизирован, сигналы повторно не шлются.
 
-Закрытие владельца во время идущего подключения — отдельная гонка (§9 `AGENTS.md`). Операция подключения после каждого `await` проверяет, не закрыт ли владелец. Если закрыт, полученный ресурс закрывается, не привязывается и не запускается, а операция завершается ошибкой. Иначе процесс, запущенный после `dispose`, остаётся без владельца. В CodeLab это `AcpClientApplication` (флаг `_disposed`, проверки в `reconnect`, `_replaceTransport`, `_establishConnection`, `terminal/create`) и `StdioAcpTransport` (`close` во время `start` дожидается запуска и закрывает процесс), D12, D13 change.
+Закрытие владельца во время идущего подключения — отдельная гонка (`AGENTS.md` §9). Операция подключения после каждого `await` проверяет, не закрыт ли владелец. Если закрыт, полученный ресурс закрывается, не привязывается и не запускается, а операция завершается ошибкой. Иначе процесс, запущенный после `dispose`, остаётся без владельца. В CodeLab это `AcpClientApplication` (флаг `_disposed`, проверки в `reconnect`, `_replaceTransport`, `_establishConnection`, `terminal/create`) и `StdioAcpTransport` (`close` во время `start` дожидается запуска и закрывает процесс), D12, D13 change.
+
+В коде CLI закрывается своей цепочкой: `CliRuntime.dispose` закрывает рабочее пространство, затем встроенного агента с пределом (по умолчанию 10 с, событие `embedded.close_timeout` и строка в stderr по истечении) и затем ядро клиента; первый `SIGINT` или `SIGTERM` отменяет ход и закрывает транспорт вместе с процессом агента, второй, пока это идёт, выходит сразу (`watchStopSignals`, design.md change `add-codelab-cli`, D13).
 
 ---
 
-## 46. Shutdown timeout
+## 46. Таймаут закрытия
 
-Если external process не завершается, application может иметь bounded shutdown timeout.
+Если внешний процесс не завершается, у application МОЖЕТ быть ограниченный таймаут закрытия.
 
-После timeout возможен force termination, если это соответствует policy.
+После таймаута возможно принудительное завершение, если это соответствует политике.
 
-Такой behavior должен быть централизован.
+Такое поведение ДОЛЖНО быть централизовано.
 
 Политика CodeLab desktop (change [`add-client-process-shutdown-on-exit`](../../openspec/changes/archive/2026-11-13-add-client-process-shutdown-on-exit/design.md), D2–D4):
 
 * общий предел выхода — 5 с от запроса ОС, держит его один владелец — `AppExitHandler`; по истечении ответ всё равно `exit`, отмены выхода нет;
 * второго реестра процессов для «добить оставшихся» нет: каждый владелец сам эскалирует до принудительного завершения в пределах своего бюджета, а бюджеты подобраны так, чтобы уложиться в общий предел. Это работает, только если шаг, посылающий сигналы, начинается рано: шаг, не начатый к пределу, не послал ничего. Поэтому шаги с сигналами не ставятся в очередь за долгими шагами без сигналов (встроенный агент), а `pending` в `app.exit_timeout` перечисляет и не начатые шаги (D10, D11 change) (`StdioAcpTransport.close`: `timeout` → `SIGTERM` → 2 с → `SIGKILL`; `IoTerminalProcessRunner.kill()`: `SIGTERM` → 2 с → `SIGKILL`; терминал пользователя: `hangUp` → 3 с → `kill`; `exec` агента: `terminateTree`, 2 с);
-* ожидание выхода процесса без предела запрещено ни на одном шаге закрытия;
+* ожидание выхода процесса без предела ЗАПРЕЩЕНО ни на одном шаге закрытия;
 * повторное закрытие владельца ждёт идущее (мемоизированный `Future`), а не возвращается сразу: иначе вызывающий с более коротким пределом считает ресурс закрытым, пока тот ещё ждёт. У `StdioAcpTransport.close` более ранний предел повторного вызова сокращает ожидание EOF (D13 change);
 * шаги закрытия изолированы: сбой одного (`app.shutdown_step_failed`) не отменяет следующие;
-* шаг без сигналов процессам, который ждёт запись (`language` — запись выбора языка до 3 с, §47а; `appearance` — запись оформления до 3 с, §47б), идёт своей параллельной ветвью и не стоит в очереди перед шагами с сигналами; он последний в закрытом наборе шагов и есть в `pending`, только если у lifecycle есть его владелец.
+* шаг без сигналов процессам, который ждёт запись (`language` — запись выбора языка до 3 с, §47а; `appearance` — запись оформления до 3 с, §47б), идёт своей параллельной ветвью и не стоит в очереди перед шагами с сигналами; он последний в закрытом наборе шагов и есть в `pending`, только если у `CodeLabRootLifecycle` есть его владелец.
+
+В коде сроки: `AppExitHandler.exitTimeout` = 5 с и `flushTimeout` = 500 мс (`apps/codelab_desktop/lib/app/app_exit_handler.dart`); `transportCloseTimeout` = 2 с — срок EOF для `StdioAcpTransport.close` в шаге `client` (без него — 5 с), после `SIGTERM` — `_termGracePeriod` = 2 с; `_termGracePeriod` = 2 с у `_IoTerminalProcessHandle` (`terminal_process_runner.dart`) для `kill()`; `TerminalTabsCubit` `closeAllGrace` = 3 с; шаг `embedded` ограничен `defaultEmbeddedCloseTimeout` = 10 с (`apps/codelab_desktop/lib/app/app_scope.dart`) — больше общего предела, поэтому он вынесен в параллельную подветвь (D11).
+
+Общий предел не покрывает худший случай закрытия stdio-серверов MCP встроенного агента. Закрытие встроенного агента (`_Agent._dispose`, `packages/dart/codelab_embedded/lib/src/assemble.dart`) начинается с `AcpAgentServer.shutdown(grace: 5 с)` (`packages/dart/codelab_agent_acp/lib/src/agent_server.dart`): он отменяет ходы, ждёт их не дольше `grace`, затем по очереди закрывает сессии — `SessionBridge.close()` → `_Session.close()`, который ждёт простоя агента (`waitForIdle`) и закрывает MCP-серверы сессии (`_mcp.close()`, `packages/dart/codelab_agent_core/lib/src/runtime/agent_runtime.dart`). Следующий шаг, `runtime.dispose()`, закрывает только оставшиеся сессии. Каждый сервер закрывает `StdioProcessTransport.close` (`packages/dart/codelab_agent_io/lib/src/mcp/stdio_process_transport.dart`): EOF → `_exitAfterEof` = 2 с → `SIGTERM` дереву → `_exitAfterTerm` = 5 с → `SIGKILL` → ожидание кода выхода до `_exitAfterKill` = 2 с, затем потомкам, пережившим корень, `SIGTERM` → 5 с → `SIGKILL` (`platform-integration.md` §22). Сервер, игнорирующий EOF и `SIGTERM`, получает `SIGKILL` не раньше чем через 7 с после EOF, а EOF приходит только после ожидания ходов и закрытия предыдущих сессий; вместе это больше общего предела выхода 5 с (`AppExitHandler.exitTimeout`). По истечении предела ответ всё равно `exit`, и такой сервер может остаться сиротой (`platform-integration.md` §23). design.md change записывает это в Risks («Встроенный агент с зависшим ходом»; в таблице владельцев худший случай MCP — около 14 с, сессии закрываются по очереди), смягчение — параметр grace у `EmbeddedAgent.dispose` — отложено в отдельный change (Q3). Обычно MCP-сервер выходит по EOF сразу: в ручной проверке change выход с MCP-сервером и `exec` посреди хода занял 0,5 с. Процессы `exec` при этом завершаются: отмена хода приходит в начале `shutdown`, `terminateTree` укладывается в 2 с.
 
 ---
 
-## 47. Persistence concurrency
+## 47. Конкурентность хранения
 
-Concurrent writes должны иметь определённую strategy.
+У параллельных записей ДОЛЖНА быть определённая стратегия.
 
 Например:
 
-* serialized writes;
-* last-write-wins;
-* transaction;
-* revision check.
+* последовательные записи;
+* побеждает последняя запись (last-write-wins);
+* транзакция;
+* проверка ревизии.
 
-Не следует позволять старой async write завершиться после новой и перезаписать актуальные данные.
+Позволять старой асинхронной записи завершиться после новой и перезаписать актуальные данные НЕ СЛЕДУЕТ.
+
+В коде: журнал сессии агента пишет `WriteQueue` — одна цепочка `Future` на путь, сбой не наследуется следующей операцией; снимок рабочего пространства пишет `WorkspaceRestorer` — одна запись в полёте, следующая берёт последний снимок (§49); выбор языка и оформления app — §47а, §47б.
 
 ### 47а. Язык интерфейса app: запись выбора и подписки на смену языка
 
 Источник — change [`add-desktop-localization`](../../openspec/changes/archive/2026-11-20-add-desktop-localization/design.md), D2, D5, D9, риски R3 и R4; владелец языка — `state-management.md` §63а.
 
-**Запись выбора (§47, §48).** `AppLanguageCubit.select(preference)` синхронно публикует новый язык, затем ставит запись ключа `codelab.app.language` в очередь. Стратегия — serialized writes + last-write-wins:
+**Запись выбора (§47, §48).** `AppLanguageCubit.select(preference)` синхронно публикует новый язык, затем ставит запись ключа `codelab.app.language` в очередь. Стратегия — последовательные записи и «побеждает последняя запись» (last-write-wins):
 
 ```text
 select(ru)  → emit ru → запись ru начата
@@ -956,13 +1021,13 @@ select(en)  → emit en → запись en в очереди
 
 Обогнанная запись НЕ ДОЛЖНА публиковать состояние — ни `saveFailed`, ни сброс признака. Ошибка записи не теряется (§38): последняя запись при сбое ставит `saveFailed`, в журнал пишется `settings.language_save_failed {error_class}` (только `runtimeType`). Повторный `select` того же значения без сбоя новой записи не ставит и завершается вместе с идущей записью; после сбоя он повторяет запись (кнопка `Retry` страницы «General»).
 
-**Закрытие (§58).** `close()` сначала ставит флаг закрытия: новые `select` и подписки на `changes` не принимаются, а записи в полёте состояние не публикуют. Затем слушатели `changes` закрываются без ожидания `done`: у подписчика на паузе `done` не приходит, и закрытие root scope повисло бы. Потом `close()` ждёт запись в полёте не дольше `closeWriteTimeout` (по умолчанию 3 с), чтобы последний выбор дошёл до хранилища до выхода из app, и только после этого закрывает Cubit. Если срок истёк, пишется warning `settings.language_save_timeout {timeout_ms}` — без значения выбора: выбор мог не дойти до хранилища. Результат записи после `close()` не применяется. В закрытии root scope это отдельная ветвь `CodeLabRootLifecycle` (шаг `language`, §45, §46), параллельная веткам терминала и клиента.
+**Закрытие (§58).** `close()` сначала ставит флаг закрытия: новые `select` и подписки на `changes` не принимаются, а записи в полёте состояние не публикуют. Затем слушатели `changes` закрываются без ожидания `done`: у подписчика на паузе `done` не приходит, и закрытие root scope повисло бы. Потом `close()` ждёт запись в полёте не дольше `closeWriteTimeout` (по умолчанию 3 с), чтобы последний выбор дошёл до хранилища до выхода из app, и только после этого закрывает Cubit. Если срок истёк, пишется предупреждение `settings.language_save_timeout {timeout_ms}` — без значения выбора: выбор мог не дойти до хранилища. Результат записи после `close()` не применяется. В закрытии root scope это отдельная ветвь `CodeLabRootLifecycle` (шаг `language`, §45, §46), параллельная веткам терминала и клиента.
 
 **Подписки на смену языка (§6, §7, §9).** Cubit с производным текстом в состоянии (`layers-and-dependencies.md` §54) подписывается на `AppStrings.changes`:
 
 * ровно одна подписка на Cubit, создаётся в конструкторе — владелец подписки Cubit, а не сессия и не соединение. Поэтому переподключение и смена сессии новых подписок не добавляют;
 * подписка отменяется в `close()`; событие языка после `close` игнорируется (`isClosed`) и `emit` не даёт;
-* обработчик пересобирает проекцию синхронно из последних входов Cubit-а, без async-работы: гонки «старый вход + новый язык» нет, а поздний вход старой сессии по-прежнему отсекает существующая stale-защита Cubit-а (§10, §12);
+* обработчик пересобирает проекцию синхронно из последних входов Cubit-а, без асинхронной работы: гонки «старый вход + новый язык» нет, а поздний вход старой сессии по-прежнему отсекает существующая защита Cubit-а от устаревших результатов (§10, §12);
 * других источников языка у Cubit-а нет: `PlatformDispatcher.onLocaleChanged` не слушается (D2), язык системы читается при старте и при повторном выборе `System`.
 
 Диагностика утечки или пропуска подписки — debug-событие `app.locale_applied {locale, subscribers}` после каждой смены языка (D13). Тесты (§68, §69): `hasListener == false` после `close`; число подписчиков равно числу живых Cubit-ов с текстом и не растёт после переподключения; два быстрых выбора с управляемым завершением записи (`testing.md`, раздел о локали).
@@ -972,8 +1037,8 @@ select(en)  → emit en → запись en в очереди
 
 Источник — change [`add-app-appearance-page`](../../openspec/changes/archive/2026-11-20-add-app-appearance-page/design.md), D5, D7, D13; spec `app-settings` «Хранение оформления». Владелец — `AppAppearanceCubit` (`state-management.md` §63б).
 
-* **Запись выбора** — как §47а: `setMode`, `useTheme`, `resetTheme`, `setSystemAccent` синхронно публикуют новое состояние, затем ставят запись документа `codelab.app.appearance` в очередь. Стратегия — serialized writes + last-write-wins. Обогнанная запись состояние не публикует, сбой последней ставит `saveFailed` и пишет `appearance.save_failed {error_class}`.
-* **Перечитывание темы** (`reloadTheme`, «Reload» страницы) — асинхронное чтение файла через порт `ThemeLibrary`. Результат применяется, только если номер операции не устарел: новый `reloadTheme` или `useTheme` того же режима и `close()` делают его поздним (stale result, §10). «Последний выбор побеждает» для `useTheme`: счётчик выборов растёт в начале каждого `useTheme`, `resetTheme` и `setMode`, до чтения файла; чтение, после начала которого был другой выбор, результат не применяет. Номер операции режима проверяет только `reloadTheme`: у каждого режима он свой, а применённый `useTheme` или `resetTheme` увеличивает номер своего режима, так что идущее перечитывание этого режима становится поздним.
+* **Запись выбора** — как §47а: `setMode`, `useTheme`, `resetTheme`, `setSystemAccent` синхронно публикуют новое состояние, затем ставят запись документа `codelab.app.appearance` в очередь. Стратегия — последовательные записи и «побеждает последняя запись». Обогнанная запись состояние не публикует, сбой последней ставит `saveFailed` и пишет `appearance.save_failed {error_class}`.
+* **Перечитывание темы** (`reloadTheme`, «Reload» страницы) — асинхронное чтение файла через порт `ThemeLibrary`. Результат применяется, только если номер операции не устарел: новый `reloadTheme` или `useTheme` того же режима и `close()` делают его поздним (устаревший результат, §10). «Последний выбор побеждает» для `useTheme`: счётчик выборов растёт в начале каждого `useTheme`, `resetTheme` и `setMode`, до чтения файла; чтение, после начала которого был другой выбор, результат не применяет. Номер операции режима проверяет только `reloadTheme`: у каждого режима он свой, а применённый `useTheme` или `resetTheme` увеличивает номер своего режима, так что идущее перечитывание этого режима становится поздним.
 * **Каталог страницы.** `AppearanceSettingsCubit` читает каталог тем с номером чтения; результат после нового «Reload» или `close()` отбрасывается (`appearance.catalog_discarded {reason}`). Импорт не запускается повторно, пока идёт предыдущий.
 * **Системный акцент (§6, §7).** Подписка на смены акцента — одна, её владелец `AppAppearanceCubit`; создаётся в конструкторе, если порт сообщил поддержку, отменяется в `close()`. Ошибка потока не теряется (§38): применяется `accent` темы, пишется `appearance.system_accent_failed {error_class}`. Плагин `system_theme` держит собственную подписку на свой канал до конца процесса; адаптер создаёт его объект акцента один раз, поэтому такая подписка одна (D7 change).
 * **Закрытие (§58)** — как §47а: флаг закрытия, отмена подписки на акцент, ожидание записи в полёте не дольше 3 с (`appearance.save_timeout {timeout_ms}` по истечении), шаг `appearance` в `CodeLabRootLifecycle` (§45, §46).
@@ -985,182 +1050,200 @@ select(en)  → emit en → запись en в очереди
 
 * **Чтение фактов (§10, §12).** `OnboardingCubit` один раз, в конструкторе, вызывает `OnboardingProbe.read()` (снимок конфига, `checkProviderReadiness`, бэкенд секретов, действующий режим) под таймаутом 5 с. Чтение одно, номера попытки нет: итог принимается один раз — признак `_factsResolved` ставит первый из исходов (факты, ошибка, таймаут). Поздний итог после него не меняет состояние и пишется только событием `onboarding.facts_late` уровня debug; после `close()` итог отбрасывается по `isClosed` (CON-002). Снимок зонда — с `cwd` = `CODELAB_HOME` доступа, как у мастера, без проектного слоя папки процесса. Таймаут и исключение дают `Unavailable` и шаг «Choose a model» с пояснением. Повторного чтения нет.
 * **Ожидание на «Next» шага 2.** Пока шаг модели `Pending`, переход ждёт итога чтения, но не дольше его таймаута; повторное нажатие во время ожидания игнорируется.
-* **Мастер.** Проверка `/models`, её отмена и поздние результаты — правила мастера (§47 и D21 change `add-provider-setup-ui`). Закрытие диалога закрывает `ProviderWizardCubit`; `OnboardingCubit` в проверку не вмешивается. Открытие мастера асинхронно (хранилище секретов, снимок), поэтому `OnboardingCubit` держит его фазу (`wizardStarted` → `wizardEnded`): пока мастер открывается или открыт, навигация шага модели игнорируется. Если открыватель вернул Cubit мастера, а шаг уже другой или onboarding закрыт, диалог не показывается и Cubit мастера сразу закрывается (stale-result protection, §10). Мастер открывается по тому же `EditableSettings`, что у зонда.
+* **Мастер.** Проверка `/models`, её отмена и поздние результаты — правила мастера (§47 и D21 change `add-provider-setup-ui`). Закрытие диалога закрывает `ProviderWizardCubit`; `OnboardingCubit` в проверку не вмешивается. Открытие мастера асинхронно (хранилище секретов, снимок), поэтому `OnboardingCubit` держит его фазу (`wizardStarted` → `wizardEnded`): пока мастер открывается или открыт, навигация шага модели игнорируется. Если открыватель вернул Cubit мастера, а шаг уже другой или onboarding закрыт, диалог не показывается и Cubit мастера сразу закрывается (защита от устаревшего результата, §10). Мастер открывается по тому же `EditableSettings`, что у зонда.
 * **Запись флага.** `finish()` ставит `finishing` (повторное нажатие игнорируется), ждёт `markDone()` и при любом исходе вызывает `NavigationCubit.finishOnboarding()` — кроме случая, когда после `await` Cubit уже закрыт: тогда метод выходит без колбэка и событий (§58). `finishOnboarding()` на закрытом `NavigationCubit` — no-op. Ошибка записи не теряется (§38): событие `onboarding.save_failed {error_type}`; при следующем запуске onboarding покажется снова.
 * **Отложенный старт агента (CON-001).** Пока назначение — `OnboardingDestination`, `_CodeLabHome` не вызывает `CodeLabShellCubit.startOnLaunch()`. Его вызывает первый переход в `WorkbenchDestination`, ровно один раз за жизнь app. Восстановление проекта из снимка идёт как раньше, но агента не запускает. Поэтому провайдер, сохранённый на onboarding, виден первому же старту агента, а гонки «агент стартовал без провайдера под onboarding» нет.
 * **Закрытие.** `close()` отменяет таймер фактов и завершает внутреннее ожидание фактов (`_factsDone`), чтобы `next()`, ждущий его на шаге 2, вышел по `isClosed`, а не висел. Запись флага в полёте `close()` не ждёт: её итог после закрытия не публикуется.
 
 ---
 
-## 48. Revision guard
+## 48. Защита ревизией
 
-Для persistence useful pattern:
+Для хранения полезен шаблон:
 
-```text id="4ubnlw"
-state revision 10 → save started
-state revision 11 → save started
-revision 11 saved
-revision 10 completes late
+```text
+ревизия состояния 10 → запись начата
+ревизия состояния 11 → запись начата
+ревизия 11 записана
+запись ревизии 10 завершилась поздно
 ```
 
-Late revision 10 не должна становиться authoritative.
+Поздняя ревизия 10 НЕ ДОЛЖНА становиться основной (authoritative).
 
 ---
 
-## 49. Autosave
+## 49. Автосохранение
 
-Autosave следует проектировать как отдельный lifecycle.
+Автосохранение СЛЕДУЕТ проектировать как отдельный жизненный цикл.
 
 Возможны:
 
 * debounce;
-* queued save;
-* coalescing;
-* explicit flush on shutdown.
+* запись через очередь;
+* сворачивание (coalescing);
+* явный сброс (flush) при завершении работы.
 
-Не следует запускать uncontrolled write на каждый streaming event.
+Запускать неконтролируемую запись на каждое потоковое событие НЕ СЛЕДУЕТ.
 
----
-
-## 50. Immutable snapshots
-
-Перед передачей state в async operation следует предпочитать immutable snapshot.
-
-Это уменьшает вероятность, что operation увидит half-mutated shared state.
+В коде `WorkspaceRestorer.observe` вызывается на каждое изменение `WorkspaceState`, но пишет только изменившийся снимок, держит одну запись в полёте (`_writing`), а следующая запись берёт последний желаемый снимок (`_wanted`); `ClientWorkspace.dispose` ждёт `flush()`, а ожидание идущего чтения снимка ограничено `readWaitLimit` = 2 с.
 
 ---
 
-## 51. Locks и mutex
+## 50. Неизменяемые снимки
 
-Locks следует использовать только при реальной shared mutable concurrency.
+Передавая состояние в асинхронную операцию, СЛЕДУЕТ предпочитать неизменяемый снимок.
 
-В Dart isolate model часто достаточно:
-
-* serialized event queue;
-* state machine;
-* single-flight Future;
-* ownership.
-
-Не следует вводить mutex abstraction автоматически.
+Так меньше вероятность, что операция увидит наполовину изменённое общее состояние.
 
 ---
 
-## 52. Deadlocks
+## 51. Блокировки и mutex
 
-Если появляются locks, необходимо документировать lock ordering.
+Блокировки СЛЕДУЕТ использовать только при реальной конкурентности над общим изменяемым состоянием.
 
-Лучше избегать нескольких nested locks.
+В модели isolate Dart часто достаточно:
 
-В большинстве application-level Dart code architecture через ownership предпочтительнее lock-based design.
+* последовательной очереди событий;
+* автомата состояний;
+* single-flight `Future`;
+* владения.
+
+Вводить абстракцию mutex автоматически НЕ СЛЕДУЕТ.
+
+В коде блокировки есть только у агента, и у каждой — узкая причина: `PathLock` — правки одного файла по очереди (TOOL-7), `WriteQueue` — записи одного файла журнала, `ConfigWriteLocks` — межпроцессная блокировка файла конфигурации (`<path>.lock`).
 
 ---
 
-## 53. Reentrancy
+## 52. Взаимные блокировки
 
-Event handler не должен случайно re-enter state transition до завершения текущего transition.
+Если появляются блокировки, порядок их захвата (lock ordering) ДОЛЖЕН быть задокументирован.
+
+Лучше избегать нескольких вложенных блокировок.
+
+В большинстве кода уровня application на Dart архитектура через владение предпочтительнее архитектуры на блокировках.
+
+В коде вложенных блокировок нет: вызов инструмента занимает в `PathLock` не больше одного пути.
+
+---
+
+## 53. Повторный вход
+
+Обработчик события НЕ ДОЛЖЕН случайно входить в переход состояния повторно (re-enter), пока текущий переход не завершён.
 
 Например:
 
-```text id="nuzvff"
-handle event
-  → emits callback
-      → callback sends new event synchronously
+```text
+обработка события
+  → вызывает колбэк
+      → колбэк синхронно отправляет новое событие
 ```
 
-State machine должна быть устойчива к такому behavior либо сериализовать events.
+Автомат состояний ДОЛЖЕН быть устойчив к такому поведению либо сериализовать события.
+
+В коде: потоки ядра клиента синхронные (`sync: true`), поэтому `ClientWorkspace` отправляет следующий промпт из очереди после завершения хода (`_dispatch`), а не из обработчика `sessionChanges` — иначе получилась бы вложенная публикация в тот же поток; поток кадров `protocolFrames` асинхронный ради той же защиты; слушатели `CancelToken.onCancel` не вызываются внутри `cancel()` (CAN-1).
 
 ---
 
 ## 54. Completer
 
-`Completer` полезен для bridge callback/event API к `Future`.
+`Completer` полезен как мост от колбэков или событий к `Future`.
 
-Но его необходимо завершать максимум один раз.
+Но он ДОЛЖЕН завершаться не больше одного раза.
 
-Перед:
+Перед
 
-```dart id="2mnl8k"
+```dart
 completer.complete(...)
 ```
 
-state machine должна гарантировать, что duplicate completion/cancel не вызовет second completion.
+автомат состояний ДОЛЖЕН гарантировать, что повторное завершение или отмена не вызовет второго завершения.
+
+В коде ожидающий запрос `_PendingAcpRequest` завершается один раз, потому что ответ и таймер сначала забирают его из `_pendingRequests` (таймер проверяет `identical`); `CodeLabCodeHighlighter` и `_cancelBuiltin` агента проверяют `isCompleted`.
 
 ---
 
-## 55. Cached Future
+## 55. Закешированный Future
 
-Для single-flight operation допустимо хранить current Future:
+Для операции single-flight МОЖНО хранить текущий `Future`:
 
-```text id="d1s27o"
+```text
 _connectFuture
 ```
 
-После terminal completion его нужно корректно сбросить.
+После терминального завершения закешированный `Future` ДОЛЖЕН корректно сбрасываться.
 
-Иначе новая legitimate operation может навсегда получать старый Future.
+Иначе новая законная операция может навсегда получать старый `Future`.
+
+В коде `DefaultClientWorkspace._begin` сбрасывает `_attemptFuture`, когда попытка завершилась и её не заменили. Мемоизированные закрытия (`_disposing`, `_closing`, `_closeAllFuture`, §30) не сбрасываются намеренно: закрытие терминально (§58).
 
 ---
 
-## 56. Backoff loop
+## 56. Цикл с нарастающей паузой
 
-Reconnect loop должен проверять актуальность intent после каждого `await`.
+Цикл переподключения ДОЛЖЕН проверять актуальность намерения после каждого `await`.
 
 Например:
 
-```text id="ruqwzu"
-wait backoff
+```text
+пауза
     ↓
-still reconnecting?
+всё ещё переподключаемся?
     ↓
-attempt
+попытка
 ```
 
-Если user уже нажал Disconnect, старый loop не должен снова подключиться.
+Если пользователь уже нажал Disconnect, старый цикл НЕ ДОЛЖЕН подключаться снова.
+
+В коде цикла переподключения с паузами нет (`session-lifecycle.md` §36–§38).
 
 ---
 
-## 57. Manual override
+## 57. Ручное вмешательство
 
-Manual user intent может инвалидировать background operation.
+Ручное намерение пользователя может сделать фоновую операцию недействительной.
 
 Например:
 
-```text id="zfsway"
-auto reconnect running
-user selects Disconnect
+```text
+идёт автоматическое переподключение
+пользователь выбрал Disconnect
 ```
 
-Disconnect должен отменить/инвалидировать reconnect loop.
+Disconnect ДОЛЖЕН отменить цикл переподключения или сделать его недействительным.
+
+В коде ручная попытка подключения делает идущую недействительной номером `_attempt` (§29).
 
 ---
 
-## 58. State after dispose
+## 58. Состояние после закрытия
 
-После dispose объект не должен:
+После закрытия (dispose) объект НЕ ДОЛЖЕН:
 
-* emit new BLoC state;
-* обращаться к closed controller;
-* вызывать UI callback;
-* запускать reconnect;
-* продолжать persistence loop.
+* выдавать новое состояние BLoC (`emit`);
+* обращаться к закрытому контроллеру;
+* вызывать колбэк UI;
+* запускать переподключение;
+* продолжать цикл записи.
 
-Late callbacks должны иметь guard.
+Поздние колбэки ДОЛЖНЫ быть защищены проверкой.
 
----
-
-## 59. Mounted checks
-
-`context.mounted` полезен только на Flutter presentation boundary.
-
-Он НЕ является заменой нормального application cancellation/stale-result handling.
-
-Нельзя решать lifecycle core logic через `context.mounted`.
+В коде: флаги `_disposed` у `AcpClientApplication`, `DefaultClientWorkspace`, `AgentRuntimeImpl`; `isClosed` у Cubit-ов; `dispose` рабочего пространства увеличивает `_attempt`, и события ядра после него отбрасываются.
 
 ---
 
-## 60. BLoC event transformers
+## 59. Проверки mounted
 
-Если используются BLoC event transformers, их semantics должны соответствовать operation.
+`context.mounted` полезен только на границе Flutter presentation.
+
+Он НЕ является заменой нормальной отмены и защиты от устаревших результатов в application.
+
+Решать жизненный цикл основной логики через `context.mounted` ЗАПРЕЩЕНО.
+
+---
+
+## 60. Трансформеры событий BLoC
+
+Если используются трансформеры событий BLoC, их семантика ДОЛЖНА соответствовать операции.
 
 Например:
 
@@ -1169,315 +1252,323 @@ Late callbacks должны иметь guard.
 * restartable;
 * concurrent.
 
-Не следует выбирать transformer только ради performance.
+Выбирать трансформер только ради производительности НЕ СЛЕДУЕТ.
 
-Он определяет concurrency semantics feature.
+Он определяет семантику конкурентности фичи.
+
+В коде трансформеров нет: `Bloc` с событиями и `bloc_concurrency` не используются (`state-management.md` §8). Та же семантика выражена в методах Cubit-ов явно: аналог droppable — игнорирование повтора, пока операция идёт (§62), аналог restartable — номер операции, делающий прежний результат поздним (`reloadTheme`, §47б).
 
 ---
 
-## 61. Restartable semantics
+## 61. Семантика restartable
 
-Restartable подходит для операций, где новый intent полностью заменяет старый.
+Restartable подходит для операций, где новое намерение полностью заменяет старое.
 
 Например:
 
-```text id="nwwbhv"
-search query changed
+```text
+изменился поисковый запрос
 ```
 
 Но опасен для:
 
-```text id="8n8zlf"
-send ACP prompt
+```text
+отправки ACP-промпта
 ```
 
-если отмена предыдущего handler не означает реальную cancellation ACP request.
+если отмена предыдущего обработчика не означает реальную отмену ACP-запроса.
 
 ---
 
-## 62. Droppable semantics
+## 62. Семантика droppable
 
-Droppable может подходить для duplicate UI intents:
+Droppable может подходить для повторных намерений UI:
 
-```text id="8fa9tf"
-Connect button pressed repeatedly
+```text
+кнопка Connect нажата несколько раз
 ```
 
-если current operation уже выполняется.
+если текущая операция уже выполняется.
 
-Не использовать droppable там, где каждое event имеет business meaning.
-
----
-
-## 63. Sequential semantics
-
-Sequential processing хорошо подходит для events, мутирующих один state machine.
-
-Но длинный async handler может блокировать последующие critical events.
-
-Поэтому side effects лучше превращать в отдельные result events.
+Использовать droppable там, где каждое событие имеет бизнес-смысл, ЗАПРЕЩЕНО.
 
 ---
 
-## 64. Concurrent semantics
+## 63. Семантика sequential
 
-Concurrent handler допустим только если operations действительно независимы или имеют безопасную correlation model.
+Последовательная обработка хорошо подходит для событий, меняющих один автомат состояний.
 
-Не использовать concurrent transformer для одного mutable session state без анализа races.
+Но долгий асинхронный обработчик может задерживать последующие критичные события.
+
+Поэтому побочные эффекты лучше превращать в отдельные события результата.
 
 ---
 
-## 65. Error recovery
+## 64. Семантика concurrent
 
-После async failure state должен оказаться в defined состоянии.
+Параллельный обработчик МОЖНО использовать, только если операции действительно независимы или имеют безопасную модель корреляции.
 
-Нельзя оставить:
+Использовать параллельный трансформер для одного изменяемого состояния сессии без анализа гонок ЗАПРЕЩЕНО.
 
-```text id="e7oeac"
-isLoading = true forever
+---
+
+## 65. Восстановление после ошибки
+
+После асинхронного сбоя состояние ДОЛЖНО оказаться в определённом состоянии.
+
+ЗАПРЕЩЕНО оставлять
+
+```text
+isLoading = true навсегда
 ```
 
-или request в бесконечном `cancelling`.
+или запрос в бесконечном `cancelling`.
 
-Любая операция должна иметь terminal/recoverable transition.
+У любой операции ДОЛЖЕН быть терминальный или восстановимый переход.
 
 ---
 
-## 66. Diagnostics
+## 66. Диагностика
 
-Для complex concurrency issues полезно логировать:
+Для сложных проблем конкурентности полезно журналировать:
 
-* operation id;
-* request id;
-* session id;
-* generation;
-* lifecycle state;
-* transition;
-* cancellation;
-* stale result ignored.
+* id операции;
+* id запроса;
+* id сессии;
+* поколение;
+* состояние жизненного цикла;
+* переход;
+* отмену;
+* игнорирование устаревшего результата.
 
 Например:
 
-```text id="alfj52"
+```text
 request=42 generation=8 result=ignored reason=stale_generation
 ```
 
----
-
-## 67. Не логировать task identity через object hash
-
-Не следует использовать runtime object hash как единственный correlation identifier.
-
-Использовать explicit IDs/generations.
+В коде: `event_ignored {reason: stale_generation, kind}` с поколением отброшенного события, `request_timeout {method, timeout_ms}`, `connection_state_changed {from, to}`, `app.exit_timeout {timeout_ms, pending}`, `app.shutdown_step_failed {step, error_type}` (`observability.md`).
 
 ---
 
-## 68. Deterministic testing
+## 67. Не логировать идентичность задачи через хеш объекта
 
-Concurrency tests должны по возможности избегать реального времени.
+Использовать хеш объекта времени выполнения как единственный идентификатор корреляции НЕ СЛЕДУЕТ.
 
-Использовать:
+СЛЕДУЕТ использовать явные идентификаторы и поколения.
+
+В коде корреляцию в журнале задаёт `withCorrelation` (`connectionGeneration`, `requestId`, `sessionId`).
+
+---
+
+## 68. Детерминированные тесты
+
+Тесты конкурентности ДОЛЖНЫ по возможности обходиться без реального времени.
+
+СЛЕДУЕТ использовать:
 
 * `Completer`;
-* fake transport;
-* controlled streams;
-* fake clock;
-* explicit event ordering.
+* поддельный транспорт (fake transport);
+* управляемые потоки;
+* поддельные часы (fake clock);
+* явный порядок событий.
 
-Тест:
+Тест
 
-```text id="qq1tta"
+```text
 sleep 500 ms and hope
 ```
 
-хуже, чем deterministic coordination.
+хуже, чем детерминированная координация.
+
+В коде поддельный транспорт — `FakeAcpTransport` (`codelab_acp_testing`), поддельные часы ядра агента — `FakeClock` (`codelab_agent_core/lib/src/testing/fake_clock.dart`); `fake_async` не используется. Правила тестов — `testing.md` §21–§22.
 
 ---
 
-## 69. Race tests
+## 69. Тесты гонок
 
-Обязательные категории:
+Тесты гонок ДОЛЖНЫ покрывать категории:
 
-* completion vs cancel;
-* disconnect vs completion;
-* reconnect vs manual disconnect;
-* old connection callback vs new connection;
-* old request result vs new request;
-* dispose vs callback;
-* duplicate connect;
-* duplicate cancel;
-* concurrent permission requests.
+* завершение против отмены;
+* отключение против завершения;
+* переподключение против ручного отключения;
+* колбэк старого соединения против нового соединения;
+* результат старого запроса против нового запроса;
+* закрытие против колбэка;
+* повторное подключение;
+* повторная отмена;
+* параллельные запросы разрешений.
 
 ---
 
-## 70. Forced ordering tests
+## 70. Тесты с заданным порядком
 
 Полезно вручную управлять последовательностью:
 
-```text id="4ffprm"
-start operation A
-start operation B
-complete B
-complete A
+```text
+начать операцию A
+начать операцию B
+завершить B
+завершить A
 ```
 
-и проверять, что final state корректен.
+и проверять, что итоговое состояние корректно.
 
 ---
 
-## 71. Stress tests
+## 71. Стресс-тесты
 
-Для сложных lifecycle полезно периодически запускать stress scenarios с разным ordering events.
+Для сложных жизненных циклов полезно периодически запускать стресс-сценарии с разным порядком событий.
 
-Однако deterministic unit tests остаются основой correctness.
+Однако основой корректности остаются детерминированные unit-тесты.
 
 ---
 
-## 72. Нежелательные patterns
+## 72. Нежелательные шаблоны
 
-### Async callback без lifecycle
+### Асинхронный колбэк без жизненного цикла
 
-```dart id="ev84h3"
+```dart
 Future.delayed(duration, () {
   emit(...);
 });
 ```
 
-без cancellation/owner checks.
+без проверок отмены и владельца.
 
 ---
 
-### Несколько reconnect loops
+### Несколько циклов переподключения
 
-```text id="acywvz"
-transport reconnect
-client reconnect
-BLoC reconnect
+```text
+переподключение транспорта
+переподключение клиента
+переподключение BLoC
 ```
 
 одновременно.
 
 ---
 
-### Mutable global flag
+### Изменяемый глобальный флаг
 
-```dart id="n8szxk"
+```dart
 bool cancelled = false;
 ```
 
-для unrelated operations.
+для несвязанных операций.
 
 ---
 
-### `context.mounted` как business cancellation
+### `context.mounted` как бизнес-отмена
 
-```dart id="3dyspm"
+```dart
 if (!context.mounted) return;
 ```
 
-не решает stale ACP request.
+не решает проблему устаревшего ACP-запроса.
 
 ---
 
-### Fire-and-forget без error handling
+### Fire-and-forget без обработки ошибок
 
-```dart id="6jjoh6"
+```dart
 unawaited(connect());
 ```
 
-если failure должен менять state.
+если сбой должен менять состояние.
 
 ---
 
-### Arbitrary delays
+### Произвольные задержки
 
-```dart id="0xet4u"
+```dart
 await Future.delayed(const Duration(milliseconds: 500));
 ```
 
-для "синхронизации" race.
+для «синхронизации» гонки.
 
 ---
 
-## 73. Checklist перед async реализацией
+## 73. Чек-лист перед асинхронной реализацией
 
-Перед добавлением нетривиальной async operation агент ОБЯЗАН определить:
+Перед добавлением нетривиальной асинхронной операции агент ОБЯЗАН определить:
 
-1. Кто owner?
-2. Какой у операции identifier?
+1. Кто владелец?
+2. Какой у операции идентификатор?
 3. Может ли операция перекрываться с другой?
-4. Может ли результат прийти stale?
-5. Есть ли cancellation?
-6. Что происходит при dispose?
-7. Что происходит при disconnect?
-8. Что происходит при reconnect?
-9. Нужен ли timeout?
-10. Кто обрабатывает exception?
+4. Может ли результат прийти устаревшим?
+5. Есть ли отмена?
+6. Что происходит при закрытии владельца?
+7. Что происходит при отключении?
+8. Что происходит при переподключении?
+9. Нужен ли таймаут?
+10. Кто обрабатывает исключение?
 11. Нужен ли single-flight?
-12. Может ли operation блокировать UI isolate?
-13. Какие race tests нужны?
+12. Может ли операция блокировать UI isolate?
+13. Какие тесты гонок нужны?
 
 ---
 
-## 74. Главные invariants
+## 74. Главные инварианты
 
-### CON-001 — Long-lived operation имеет owner
+### CON-001 — У долгоживущей операции есть владелец
 
-Нет orphan tasks/subscriptions.
+Нет задач и подписок без владельца.
 
-### CON-002 — Stale result не меняет current state
+### CON-002 — Устаревший результат не меняет текущее состояние
 
-Все потенциально late operations имеют correlation/generation guard.
+У всех операций, способных завершиться поздно, есть защита корреляцией или поколением.
 
-### CON-003 — Critical state mutation сериализована
+### CON-003 — Изменение критичного состояния сериализовано
 
-Один logical state machine не мутируется несколькими независимыми async callbacks без coordination.
+Один логический автомат состояний не меняется несколькими независимыми асинхронными колбэками без координации.
 
-### CON-004 — Cancellation явная
+### CON-004 — Отмена явная
 
-Cancel intent имеет определённую semantics.
+У намерения отмены определённая семантика.
 
-### CON-005 — Dispose terminal
+### CON-005 — Закрытие терминально
 
-После dispose owner не продолжает производить state changes.
+После закрытия владелец не продолжает менять состояние.
 
-### CON-006 — Reconnect single-owner
+### CON-006 — У переподключения один владелец
 
-В системе существует один authoritative reconnect mechanism.
+В системе один основной (authoritative) механизм переподключения.
 
 ### CON-007 — UI isolate не блокируется
 
-Heavy work выносится за пределы rendering-critical execution.
+Тяжёлая работа выносится за пределы исполнения, критичного для отрисовки.
 
 ---
 
 ## 75. Основная модель
 
-Предпочтительная mental model:
+Предпочтительная модель мышления:
 
-```text id="p8fem9"
-intent/event
+```text
+намерение или событие
      │
      ▼
-validate current generation/state
+проверка текущего поколения и состояния
      │
      ▼
-state transition
+переход состояния
      │
      ▼
-start side effect
+запуск побочного эффекта
      │
      ▼
-async result
+асинхронный результат
      │
      ▼
-validate ownership/generation again
+повторная проверка владения и поколения
      │
      ▼
-result event
+событие результата
      │
      ▼
-next state
+следующее состояние
 ```
 
-Если async correctness зависит от того, какой callback случайно завершится последним, необходимо добавить явную lifecycle/correlation model.
+Если асинхронная корректность зависит от того, какой колбэк случайно завершится последним, ДОЛЖНА быть добавлена явная модель жизненного цикла и корреляции.

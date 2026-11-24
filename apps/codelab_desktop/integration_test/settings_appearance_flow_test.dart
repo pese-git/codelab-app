@@ -88,7 +88,13 @@ void main() {
       final before = _accent(tester);
       await tester.tap(_key('settings-appearance-import'));
       await tester.pumpAndSettle();
-      expect(_key('settings-appearance-theme-acme-night'), findsOneWidget);
+      // Идентификатор карточки живёт в пространстве вида: у импортированной
+      // темы это `custom-<имя>`, у встроенных — `light`, `dark`,
+      // `high-contrast` (change `add-app-appearance-page`, D9а).
+      expect(
+        _key('settings-appearance-theme-custom-acme-night'),
+        findsOneWidget,
+      );
       expect(find.text('Use acme-night'), findsOneWidget);
       expect(
         File('$home/themes/acme-night.json').existsSync(),

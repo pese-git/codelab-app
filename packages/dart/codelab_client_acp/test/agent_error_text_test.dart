@@ -70,10 +70,6 @@ void main() {
       for (final d in client.diagnostics)
         {'m': d.message, 'c': d.context, 'cause': d.cause},
     ],
-    'session': [
-      for (final d in client.sessionById(_session)!.diagnostics)
-        {'m': d.message, 'c': d.context, 'cause': d.cause},
-    ],
   }, toEncodable: (o) => o.toString());
 
   /// Отправляет `session/prompt`, отвечает ошибкой агента [code] и возвращает

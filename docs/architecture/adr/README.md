@@ -1,26 +1,37 @@
 # Architecture Decision Records
 
-Этот каталог содержит Architecture Decision Records (ADR) проекта **ACP Client**.
+Каталог содержит Architecture Decision Records (ADR) CodeLab — записи значимых архитектурных решений: когда ADR нужен, как он оформляется, какие у него статусы и как он связан с OpenSpec и архитектурной документацией. В конце — реестр принятых решений (§27).
 
 ADR фиксируют значимые архитектурные решения, которые:
 
 * влияют на структуру системы;
-* меняют dependency boundaries;
+* меняют границы зависимостей (dependency boundaries);
 * вводят или заменяют ключевые технологии;
-* изменяют lifecycle, security или integration model;
+* изменяют модель жизненного цикла, безопасности или интеграции;
 * имеют долгосрочные последствия;
 * требуют понимания причин принятого решения.
 
 ADR не заменяют актуальную архитектурную документацию.
 
-Актуальное состояние системы описывается в:
+Актуальное состояние системы описывают:
 
-* `AGENTS.md`
-* `docs/architecture/`
+* `AGENTS.md`;
+* `docs/architecture/`.
 
 История значимых архитектурных решений хранится в:
 
 `docs/architecture/adr/`
+
+Общие правила — корневой `AGENTS.md` (§3, §4, §17, §18, §19), [`technology-stack.md`](../technology-stack.md) (§26 — когда технология требует ADR, §27 — добавление технологии в стек), [`docs/architecture/README.md`](../README.md) §7, §8. Шаблон нового ADR — [`template.md`](template.md).
+
+Термины:
+
+* **ADR** (Architecture Decision Record) — документ `NNNN-<решение>.md` в этом каталоге: контекст, решение, альтернативы и последствия одного архитектурного решения (§1, §4).
+* **Статус** — строка `Status:` в шапке ADR: `Proposed`, `Accepted`, `Deprecated` или `Superseded` (§5).
+* **OpenSpec change** — изменение поведения или контракта продукта в `openspec/changes/<change-id>/` (`AGENTS.md` §17); с ADR связано, но его не заменяет (§7).
+* **Реестр** — таблица всех ADR со статусами и датами (§27).
+
+Где в коде. ADR — файлы `docs/architecture/adr/NNNN-<решение>.md`; шаблон — `docs/architecture/adr/template.md`; реестр — §27 этого документа и перечень принятых решений в `docs/architecture/README.md` §3 (раздел `adr/`). Технологии, утверждённые без ADR, описаны в `docs/architecture/technology-stack.md`. ADR и архитектурную документацию в процессе команды пишет субагент `codelab-architect` (его зона по `CLAUDE.md` — `openspec/` и `docs/`). Проверки кода не связаны с ADR напрямую: правила границ, которые вводит решение, проверяет сторож `packages/dart/codelab_architecture_tests` (`test/support/rules.dart`, `test/pubspec_allowlist_test.dart`).
 
 ---
 
@@ -30,28 +41,28 @@ ADR отвечает на вопрос:
 
 > Почему было принято это архитектурное решение?
 
-Architecture documentation отвечает на вопрос:
+Архитектурная документация отвечает на вопрос:
 
 > Как система устроена сейчас?
 
 OpenSpec отвечает на вопрос:
 
-> Как система должна вести себя?
+> Как система должна себя вести?
 
 Связь документов:
 
 ```text
 OpenSpec
     │
-    └── product behavior / contracts
+    └── поведение и контракты продукта
 
-Architecture docs
+Архитектурная документация
     │
-    └── current system design
+    └── текущее устройство системы
 
 ADR
     │
-    └── history and rationale of significant decisions
+    └── история и обоснование значимых решений
 ```
 
 ---
@@ -60,65 +71,69 @@ ADR
 
 ADR СЛЕДУЕТ создавать при значимом изменении:
 
-* package boundaries;
-* dependency direction;
-* state-management strategy;
-* dependency injection strategy;
-* UI framework/design system;
-* ACP transport architecture;
-* session lifecycle architecture;
-* reconnect strategy;
-* permission/security model;
-* persistence technology;
-* networking stack;
-* error-handling model;
-* platform integration strategy;
-* testing strategy;
-* крупной cross-cutting abstraction.
+* границ пакетов (package boundaries);
+* направления зависимостей;
+* стратегии управления состоянием (state management);
+* стратегии внедрения зависимостей (dependency injection);
+* UI-фреймворка или дизайн-системы;
+* архитектуры ACP-транспортов;
+* архитектуры жизненного цикла сессии;
+* стратегии переподключения (reconnect);
+* модели разрешений и безопасности;
+* технологии хранения данных (persistence);
+* сетевого стека;
+* модели обработки ошибок;
+* стратегии интеграции с платформой;
+* стратегии тестирования;
+* крупной сквозной (cross-cutting) абстракции.
+
+Для технологий перечень уточняет [`technology-stack.md`](../technology-stack.md) §26.
 
 ---
 
 ## 3. Когда ADR не нужен
 
-ADR обычно НЕ требуется для:
+ADR обычно не требуется для:
 
-* локального refactoring;
+* локального рефакторинга;
 * переименования;
-* небольшого bug fix;
-* добавления отдельного Widget;
-* implementation detail;
-* patch/minor upgrade dependency без архитектурного влияния;
+* небольшого исправления ошибки;
+* добавления отдельного виджета;
+* детали реализации;
+* patch- или minor-обновления зависимости без архитектурного влияния;
 * мелкой оптимизации;
-* изменения formatting/lints.
+* изменения форматирования или правил линтера.
 
 ---
 
 ## 4. Нумерация
 
-Файлы ADR должны иметь последовательную нумерацию.
+Файлы ADR ДОЛЖНЫ иметь последовательную нумерацию.
 
 Формат:
 
 ```text
-0001-short-decision-name.md
-0002-another-decision.md
+NNNN-short-decision-name.md
 ```
 
-Пример:
+Номер — четыре цифры, следующий за последним в реестре (§27); название — kebab-case, на английском, описывает решение (§17).
+
+Текущий каталог:
 
 ```text
 docs/architecture/adr/
 ├── README.md
-├── 0001-use-flutter-bloc.md
-├── 0002-use-cherrypick-for-di.md
-└── 0003-separate-acp-protocol-and-transports.md
+├── template.md
+├── 0001-embed-dart-agent-core-behind-acp.md
+├── 0002-name-packages-codelab-side-layer.md
+└── 0003-build-project-site-with-astro-in-monorepo.md
 ```
 
 ---
 
 ## 5. Статус ADR
 
-Каждый ADR должен иметь статус.
+Каждый ADR ДОЛЖЕН иметь статус.
 
 Допустимые значения:
 
@@ -135,25 +150,25 @@ Status: Superseded by ADR-0012
 
 Старый ADR не удаляется.
 
+Статус в шапке ADR и в реестре (§27) меняется одновременно. Если ADR сопровождает OpenSpec change, `Accepted` ставится после одобрения change пользователем — по образцу ADR-0003 (`openspec/changes/archive/2026-11-18-add-astro-site/tasks.md`, задача 7.4).
+
 ---
 
 ## 6. Изменяемость ADR
 
-После принятия ADR его rationale не следует переписывать так, будто новое решение существовало всегда.
+После принятия ADR его обоснование НЕ СЛЕДУЕТ переписывать так, будто новое решение существовало всегда.
 
 Если решение существенно меняется:
 
 1. Создать новый ADR.
 2. Старый пометить как `Superseded`.
-3. Обновить актуальную architecture documentation.
+3. Обновить актуальную архитектурную документацию.
 
-Небольшие исправления:
+Небольшие исправления МОЖНО вносить:
 
-* typo;
-* broken link;
-* clarification, не меняющее смысл;
-
-допустимы.
+* опечатки;
+* битые ссылки;
+* уточнения, не меняющие смысла.
 
 ---
 
@@ -164,67 +179,71 @@ Status: Superseded by ADR-0012
 Например:
 
 ```text
-"Добавить persistent permissions"
+«Добавить постоянные разрешения»
 
 OpenSpec:
-    определяет product behavior
+    определяет поведение продукта
 
 ADR:
-    фиксирует storage/security architecture
+    фиксирует архитектуру хранения и безопасности
 
-Architecture docs:
-    описывают итоговую permission architecture
+Архитектурная документация:
+    описывает итоговую архитектуру разрешений
 ```
 
-ADR не должен становиться product specification.
+ADR НЕ ДОЛЖЕН становиться спецификацией продукта.
+
+Когда что нужно, определяет `AGENTS.md`: §17 — OpenSpec change требуется при изменении поведения продукта, ACP-контрактов, публичного API, семантики хранения, поведения безопасности или существенной архитектуры; §4 — технология, меняющая архитектуру приложения, требует явного архитектурного решения, а если она влияет и на поведение или контракт продукта — ещё и OpenSpec change. ADR и change ссылаются друг на друга: ADR — в разделе `Related` → `OpenSpec`, change — в `proposal.md` или `design.md` (пример — `openspec/changes/archive/2026-11-18-add-astro-site/` и ADR-0003).
 
 ---
 
-## 8. ADR и implementation
+## 8. ADR и реализация
 
-ADR может предшествовать implementation.
+ADR МОЖЕТ предшествовать реализации.
 
-Типичный flow:
+Типичный порядок:
 
 ```text
-problem
+проблема
   ↓
-ADR proposed
+ADR в статусе Proposed
   ↓
-decision accepted
+решение принято (Accepted)
   ↓
-OpenSpec/design updated if needed
+OpenSpec change или design.md обновлены, если нужно
   ↓
-implementation
+реализация
   ↓
-architecture docs updated
+архитектурная документация обновлена
 ```
 
 ---
 
 ## 9. Краткость
 
-ADR должен быть достаточно коротким.
+ADR ДОЛЖЕН быть достаточно коротким.
 
-Обычно достаточно:
+Обычно достаточно разделов:
 
 * Context
 * Decision
 * Alternatives
 * Consequences
 
-Не следует превращать ADR в многодесятковый design document.
+НЕ СЛЕДУЕТ превращать ADR в design document на десятки страниц.
 
-Подробный design можно хранить отдельно и ссылаться на него.
+Подробный дизайн МОЖНО хранить отдельно и ссылаться на него: ADR-0001 опирается на [`proposals/agent-core-architecture.md`](../proposals/agent-core-architecture.md), ADR-0003 — на `design.md` change `add-astro-site`.
 
 ---
 
 ## 10. Template
 
-Использовать следующий шаблон.
+Использовать шаблон [`template.md`](template.md): новый ADR начинается с его копии.
+
+Структура шаблона:
 
 ```md
-# ADR-XXXX: <Название решения>
+# ADR-XXXX: Название решения
 
 Status: Proposed
 
@@ -232,89 +251,66 @@ Date: YYYY-MM-DD
 
 ## Context
 
-Какую архитектурную проблему нужно решить?
-
-Почему существующая архитектура недостаточна?
-
-Какие constraints существуют?
-
 ## Decision
-
-Какое решение принято?
-
-Какие boundaries или технологии затрагиваются?
 
 ## Alternatives
 
-### Alternative A
-
-Описание.
-
-Почему не выбрана.
-
-### Alternative B
-
-Описание.
-
-Почему не выбрана.
+### Alternative 1 — <название>
+### Alternative 2 — <название>
 
 ## Consequences
 
 ### Positive
-
-- ...
-
 ### Negative
-
-- ...
-
 ### Risks
-
-- ...
 
 ## Migration
 
-Если требуется:
-
-- ...
+## Validation
 
 ## Related
 
-- OpenSpec: ...
-- Architecture: ...
-- ADR: ...
+### Architecture
+### OpenSpec
+### ADR
+### Code
 ```
+
+Подсказки к каждому разделу — в самом шаблоне. Разделы `Context`, `Decision`, `Alternatives`, `Consequences`, `Migration` и `Related` раскрыты в §11–§16. `Validation` перечисляет, чем проверяется решение: тесты, архитектурные проверки (сторож), интеграционные тесты, метрики, ручная проверка. Если миграция не нужна, в `Migration` пишется `Не требуется.`
 
 ---
 
 ## 11. Context
 
-Раздел `Context` должен описывать проблему, а не заранее оправдывать выбранное решение.
+Раздел `Context` ДОЛЖЕН описывать проблему, а не заранее оправдывать выбранное решение.
 
 Хорошо:
 
 ```text
-ACP client core должен использоваться и Flutter-приложением,
-и возможным CLI client. Текущий код зависит от Flutter.
+Протокольное ядро клиента нужно и Flutter-приложению,
+и терминальному клиенту. Сейчас оно зависит от Flutter.
 ```
 
 Плохо:
 
 ```text
-Нам нужен pure Dart package, потому что pure Dart лучше.
+Нам нужен пакет на чистом Dart, потому что чистый Dart лучше.
 ```
+
+Примеры в §11–§14 иллюстративные; образец реального ADR — [ADR-0001](0001-embed-dart-agent-core-behind-acp.md).
 
 ---
 
 ## 12. Decision
 
-Decision должен быть конкретным.
+Раздел `Decision` ДОЛЖЕН быть конкретным.
 
 Хорошо:
 
 ```text
-Session lifecycle размещается в codelab_client_acp.
-Flutter BLoC получает immutable session state через public API.
+Состояние сессий принадлежит codelab_client_core.
+Cubit-ы app получают неизменяемое состояние через публичный API пакета
+и только отображают его.
 ```
 
 Плохо:
@@ -327,82 +323,88 @@ Flutter BLoC получает immutable session state через public API.
 
 ## 13. Alternatives
 
-Следует перечислить реальные альтернативы, которые рассматривались.
+СЛЕДУЕТ перечислить реальные альтернативы, которые рассматривались.
 
-Не нужно создавать искусственные alternatives только ради шаблона.
+НЕ СЛЕДУЕТ придумывать искусственные альтернативы только ради шаблона.
 
 Пример:
 
 ```text
-1. Session lifecycle внутри BLoC
-2. Session lifecycle внутри codelab_client_acp
-3. Отдельный session package
+1. Жизненный цикл сессии внутри Cubit
+2. Жизненный цикл сессии внутри codelab_client_core
+3. Отдельный пакет сессий
 ```
 
 ---
 
 ## 14. Consequences
 
-ADR должен фиксировать не только преимущества, но и стоимость решения.
+ADR ДОЛЖЕН фиксировать не только преимущества, но и стоимость решения.
 
 Например:
 
 ```text
 Positive:
-- pure Dart testing
-- reusable session logic
+- тесты на чистом Dart
+- логика сессий переиспользуется в app и CLI
 
 Negative:
-- дополнительный mapping в Flutter layer
-- более строгий public API
+- дополнительное отображение состояния в слое Flutter
+- более строгий публичный API
 
-Risk:
-- codelab_client_acp может стать слишком большим
+Risks:
+- codelab_client_core может стать слишком большим
 ```
 
 ---
 
 ## 15. Migration
 
-Migration обязателен, если решение требует:
+ADR ДОЛЖЕН описать миграцию в разделе `Migration`, если решение требует:
 
 * перемещения существующего кода;
-* изменения public API;
-* migration persisted data;
+* изменения публичного API;
+* миграции сохранённых данных;
 * удаления старой технологии;
-* staged rollout.
+* поэтапного внедрения.
 
 ---
 
 ## 16. Related links
 
-ADR должен ссылаться на релевантные документы.
+ADR ДОЛЖЕН ссылаться на релевантные документы.
 
-Например:
+Пример — раздел `Related` ADR-0003 (сокращённо):
 
 ```text
-Architecture:
-docs/architecture/state-management.md
+### Architecture
+* AGENTS.md §5, §21, §22
+* docs/architecture/technology-stack.md §28
+* docs/architecture/testing.md §74
 
-OpenSpec:
-openspec/changes/session-reconnect/
+### OpenSpec
+* openspec/changes/archive/2026-11-18-add-astro-site/
 
-Related ADR:
-ADR-0004
+### ADR
+* ADR-0002
+
+### Code
+* site/
+* .github/workflows/ci.yml, tool/ci/ci_scope.dart
 ```
 
 ---
 
 ## 17. Naming
 
-Название ADR должно описывать решение.
+Название ADR ДОЛЖНО описывать решение.
 
-Хорошо:
+Хорошо (реальные ADR):
 
 ```text
-Use flutter_bloc for presentation state
-Use Cherrypick for dependency injection
-Keep ACP client core pure Dart
+Embed a pure-Dart agent core behind ACP for codelab-app and codelab_cli
+Name workspace packages by the codelab_<side>_<layer> scheme
+Build the CodeLab site with Astro in site/ of the monorepo
 ```
 
 Плохо:
@@ -417,66 +419,65 @@ New approach
 
 ## 18. ADR для dependency
 
-Не каждая dependency требует ADR.
+Не каждая зависимость требует ADR.
 
-ADR нужен, если dependency:
+ADR нужен, если зависимость:
 
-* определяет архитектурный style;
-* становится cross-cutting;
-* заменяет существующий framework;
-* создаёт долгосрочный lock-in;
-* влияет на public API.
+* определяет архитектурный стиль;
+* становится сквозной (cross-cutting);
+* заменяет существующий фреймворк;
+* создаёт долгосрочную привязку (lock-in);
+* влияет на публичный API.
 
 Например:
 
 ```text
 flutter_bloc
 Cherrypick
-persistence database
+база данных для хранения
 ```
 
 обычно достойны ADR.
 
-Небольшой utility package — обычно нет.
+Небольшой вспомогательный пакет — обычно нет.
+
+`flutter_bloc` и Cherrypick выбраны до первого ADR (ADR-0001, 2026-10-21), отдельных ADR у них нет; их выбор и правила использования описаны в [`technology-stack.md`](../technology-stack.md) §8 и §9. Их замена требует ADR (`technology-stack.md` §26).
 
 ---
 
 ## 19. ADR для package boundaries
 
-Новый package может требовать ADR, если он вводит новую долговременную boundary.
+Новый пакет может требовать ADR, если он вводит новую долговременную границу.
 
 Например:
 
-```text
-split codelab_client_acp into:
-- acp_session
-- acp_permissions
-```
+* ADR-0001 ввёл пакеты ядра Dart-агента (`codelab_agent_*`) и встраивание агента в процесс клиента;
+* ADR-0002 задал схему имён всех пакетов `codelab_<сторона>_<слой>` и переименовал пакеты `acp_*`.
 
-Это архитектурное изменение.
+Это архитектурные изменения. Если новый пакет называется по схеме ADR-0002 и не вводит новой долговременной границы, ADR ему не нужен; правило сторожа добавляется вместе с пакетом (`AGENTS.md` §5).
 
 ---
 
 ## 20. ADR для state management
 
-Следует создавать ADR при:
+ADR СЛЕДУЕТ создавать при:
 
-* выборе основного framework;
-* переходе с одного framework на другой;
+* выборе основного фреймворка;
+* переходе с одного фреймворка на другой;
 * введении второго подхода;
-* существенном изменении ownership state.
+* существенном изменении владельца состояния (ownership).
 
 ---
 
 ## 21. ADR для security
 
-Security-related ADR особенно важны для:
+ADR по безопасности особенно важны для:
 
-* persistent permissions;
-* credential storage;
-* trust model external agent;
-* sandboxing;
-* shell execution policy.
+* постоянных разрешений (persistent permissions);
+* хранения учётных данных;
+* модели доверия к внешнему агенту;
+* песочницы (sandboxing);
+* политики выполнения shell-команд.
 
 ---
 
@@ -484,24 +485,24 @@ Security-related ADR особенно важны для:
 
 ADR может понадобиться для:
 
-* выбора transport abstraction;
-* multiple transport strategy;
-* version compatibility architecture;
-* session recovery model.
+* выбора абстракции транспорта;
+* стратегии нескольких транспортов;
+* архитектуры совместимости версий;
+* модели восстановления сессии.
 
-Wire behavior при этом должен оставаться в OpenSpec.
+Поведение на проводе (wire behavior) при этом ДОЛЖНО оставаться в OpenSpec. ADR, как и любой документ проекта, НЕ ДОЛЖЕН придумывать методы, сообщения, поля, состояния или семантику ACP: источники истины — `openspec/specs/`, `packages/dart/codelab_acp_protocol/` и `docs/protocols/acp/` (`AGENTS.md` §3.4).
 
 ---
 
 ## 23. AI-agent workflow
 
-AI-agent должен рассмотреть необходимость ADR, если задача:
+AI-агент ДОЛЖЕН рассмотреть необходимость ADR, если задача:
 
-* меняет архитектурную boundary;
-* вводит новый framework;
-* меняет cross-cutting policy;
-* меняет dependency direction;
-* создаёт новый core package.
+* меняет архитектурную границу;
+* вводит новый фреймворк;
+* меняет сквозную политику;
+* меняет направление зависимостей;
+* создаёт новый основной (core) пакет.
 
 Агент НЕ ДОЛЖЕН автоматически создавать ADR для каждого изменения.
 
@@ -512,12 +513,12 @@ AI-agent должен рассмотреть необходимость ADR, е�
 Перед созданием ADR определить:
 
 1. Решение действительно долгоживущее?
-2. Есть несколько разумных alternatives?
+2. Есть несколько разумных альтернатив?
 3. Решение влияет на архитектуру?
 4. Будет ли через полгода полезно знать, почему оно принято?
 5. Можно ли описать проблему отдельно от решения?
-6. Нужно ли одновременно OpenSpec change?
-7. Какие architecture docs нужно обновить?
+6. Нужен ли одновременно OpenSpec change?
+7. Какие архитектурные документы нужно обновить?
 
 ---
 
@@ -525,20 +526,20 @@ AI-agent должен рассмотреть необходимость ADR, е�
 
 После `Accepted`:
 
-1. Обновить architecture docs.
-2. Обновить OpenSpec, если меняется behavior.
-3. Создать implementation tasks.
-4. Обновить dependency rules, если требуется.
-5. Добавить migration plan.
-6. Добавить/обновить tests.
+1. Обновить архитектурную документацию.
+2. Обновить OpenSpec, если меняется поведение.
+3. Создать задачи реализации.
+4. Обновить правила зависимостей, если требуется: сторож `codelab_architecture_tests` (`test/support/rules.dart`, `test/pubspec_allowlist_test.dart`).
+5. Добавить план миграции.
+6. Добавить или обновить тесты.
 
 ---
 
-## 26. Основной invariant
+## 26. Основной инвариант
 
 ADR хранит **историю причины решения**, но не является единственным местом, где описана текущая архитектура.
 
-После принятия решения developer или AI-agent должен иметь возможность понять текущую архитектуру через:
+После принятия решения разработчик или AI-агент ДОЛЖЕН иметь возможность понять текущую архитектуру через:
 
 `docs/architecture/`
 
@@ -548,10 +549,10 @@ ADR хранит **историю причины решения**, но не я�
 
 ## 27. Реестр ADR
 
-| ADR | Решение | Статус |
-|---|---|---|
-| [ADR-0001](0001-embed-dart-agent-core-behind-acp.md) | Встраиваемое ядро Dart-агента за ACP | Accepted |
-| [ADR-0002](0002-name-packages-codelab-side-layer.md) | Имена пакетов по схеме `codelab_<сторона>_<слой>` | Accepted |
-| [ADR-0003](0003-build-project-site-with-astro-in-monorepo.md) | Сайт CodeLab на Astro в `site/` monorepo, документация читается на месте | Accepted |
+| ADR | Решение | Статус | Дата |
+|---|---|---|---|
+| [ADR-0001](0001-embed-dart-agent-core-behind-acp.md) | Встраиваемое ядро Dart-агента за ACP для codelab-app и `codelab_cli` | Accepted | 2026-10-21 |
+| [ADR-0002](0002-name-packages-codelab-side-layer.md) | Имена пакетов по схеме `codelab_<сторона>_<слой>` | Accepted | 2026-10-26 |
+| [ADR-0003](0003-build-project-site-with-astro-in-monorepo.md) | Сайт CodeLab на Astro в `site/` monorepo, документация читается на месте | Accepted | 2026-11-17 |
 
-Новый ADR добавляется в таблицу вместе с файлом; статус в таблице меняется вместе со строкой `Status:` в ADR.
+Дата — строка `Date:` из шапки ADR. Новый ADR добавляется в таблицу вместе с файлом и в перечень принятых решений `docs/architecture/README.md` §3 (раздел `adr/`); статус в таблице меняется вместе со строкой `Status:` в ADR.

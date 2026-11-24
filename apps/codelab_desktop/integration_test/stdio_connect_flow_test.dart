@@ -31,10 +31,19 @@ void main() {
     );
     expect(find.text('Failed'), findsWidgets);
     // Диагностика — в панели Protocol дока, а не в постоянной карточке
-    // Debug log (change `redesign-workbench-shell`, D5).
+    // Debug log (change `redesign-workbench-shell`, D5). Панель открывается
+    // на виде «Frames», а записи журнала (в том числе отказ без исключения)
+    // лежат на виде «Log» (change `redesign-protocol-pane`, D1).
     codeLabDependenciesOf(
       tester.element(find.byType(CodeLabApp)),
     ).shellCubit.openPane(ToolPane.protocol);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(CodeLabSelectorBar<CodeLabProtocolView>),
+        matching: find.textContaining('Log'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(
       find.text('Stdio command is required before connecting.'),
@@ -180,7 +189,14 @@ void main() {
         findsOneWidget,
       );
       final [first, second] = launch.models;
-      expect(find.text(first.name), findsOneWidget);
+      // Имя модели видно и в строке статуса сессии (change
+      // `redesign-workbench-shell`), поэтому ищем его только внутри чипа
+      // выбора модели композера, а не по всему экрану.
+      Finder inChip(String name) => find.descendant(
+        of: find.byKey(const ValueKey('composer-config-option-model')),
+        matching: find.text(name),
+      );
+      expect(inChip(first.name), findsOneWidget);
 
       await tester.tap(
         find.byKey(const ValueKey('composer-config-option-model')),
@@ -207,8 +223,8 @@ void main() {
         second.value,
       );
       expect(shellCubit.state.isRespondingToConfigOption, isFalse);
-      expect(find.text(second.name), findsOneWidget);
-      expect(find.text(first.name), findsNothing);
+      expect(inChip(second.name), findsOneWidget);
+      expect(inChip(first.name), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();

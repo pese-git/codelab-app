@@ -38,6 +38,15 @@ void main() {
 
     final entry = captured.singleWhere((e) => e['source'] == 'stderr');
     expect(entry['event'], 'Authorization: Bearer $redactedSecret');
+    // Тот же текст в записи буфера `diagnostics` замаскирован одним проходом.
+    expect(
+      client.diagnostics.single.message,
+      'Authorization: Bearer $redactedSecret',
+    );
+    expect(
+      client.diagnostics.single.message,
+      isNot(contains('transport-token')),
+    );
   });
 
   test('tags transport diagnostics with component=transport', () async {
@@ -78,6 +87,9 @@ void main() {
           e['to'] == 'ClientConnectionReady',
     );
     expect(readyEntry['connection_generation'], 1);
+    expect(readyEntry['component'], 'client');
+    expect(readyEntry['from'], isA<String>());
+    expect(readyEntry['from'], isNot('ClientConnectionReady'));
     expect(client.generation, 1);
 
     await replacement.close();
@@ -133,6 +145,27 @@ void main() {
       expect(captured.where((e) => e['source'] == 'stderr').length, 520);
     },
   );
+
+  // structured-logging «Ограниченная (bounded) история diagnostic-событий»,
+  // сценарий «Диагностика не меняет снимок сессии» (задача 2.1 change
+  // `align-cross-cutting-specs`, D3): единственный буфер — `client.diagnostics`.
+  test('diagnostics do not change the session snapshot', () async {
+    await _createSession(client, transport);
+    final before = client.sessionById(const SessionId('session-1'))!;
+    final changes = <AcpSession>[];
+    final subscription = client.sessionChanges.listen(changes.add);
+    addTearDown(subscription.cancel);
+
+    transport.emitDiagnostic(message: 'stderr line', source: 'stderr');
+    await _pump();
+
+    expect(client.diagnostics.map((e) => e.message), contains('stderr line'));
+    expect(
+      identical(client.sessionById(const SessionId('session-1')), before),
+      isTrue,
+    );
+    expect(changes, isEmpty);
+  });
 
   test('protocol tracing sink is off by default', () async {
     await _createSession(client, transport);

@@ -82,6 +82,26 @@ void main() {
     expect(formatRedactedJson(null), isNull);
   });
 
+  // approval-safety «Редактирование секретов», сценарий «Отображаются
+  // переменные окружения» (задача 5.2 change `align-cross-cutting-specs`):
+  // launch environment профиля в диагностике показывает секретоподобные
+  // значения замаскированными, обычные — как есть.
+  test('launch environment in diagnostics masks secret-like values', () {
+    final text = formatRedactedJson({
+      'env': {
+        'PATH': '/usr/bin',
+        'API_KEY': 'sk-live-123456',
+        'GITHUB_TOKEN': 'ghp_abc123',
+        'DB_PASSWORD': 'hunter2',
+      },
+    })!;
+
+    expect(text, contains('"PATH": "/usr/bin"'));
+    expect(text, isNot(contains('sk-live-123456')));
+    expect(text, isNot(contains('ghp_abc123')));
+    expect(text, isNot(contains('hunter2')));
+  });
+
   group('workspace diagnostics', () {
     late KitAgent agent;
 

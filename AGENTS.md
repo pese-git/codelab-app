@@ -751,6 +751,8 @@ melos run check
 
 ### Проверка перед pull request
 
+Состав `melos run check` и охват CI заданы требованиями спецификации `testing-quality` «Проверки workspace» и «Непрерывная интеграция»; этот раздел задаёт, что агент запускает перед pull request.
+
 Полный `melos run check` идёт больше 10 минут, а GitHub CI полностью выполняет его после merge в `develop` и ночью; зелёный CI pull request остаётся условием merge. Поэтому локально перед pull request из `feature/*` и `hotfix/*` агент проверяет только затронутое изменением:
 
 1. `fvm dart format --set-exit-if-changed <изменённые файлы>`.

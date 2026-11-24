@@ -2840,7 +2840,7 @@ final class AcpClientApplication {
 
   /// Сырые данные сообщения для диагностики и журнала по базовой политике.
   ///
-  /// Почему: диагностика уходит в поток `diagnostics`, в состояние сессий и во
+  /// Почему: диагностика уходит в поток `diagnostics`, в буфер клиента и во
   /// встроенный журнал, где в release не должно быть ни промптов, ни
   /// содержимого файлов (решение пользователя к ревью change
   /// `redesign-protocol-pane`; D3). Trace эти данные не раскрывает — как и
@@ -2879,6 +2879,25 @@ final class AcpClientApplication {
     _ => cause.runtimeType.toString(),
   };
 
+  /// Записывает диагностическое событие в единственный буфер клиента.
+  ///
+  /// Почему: копия записи в каждой сессии росла без предела и публиковала
+  /// `sessionChanges` на каждое событие транспорта (OBS-004, D3 change
+  /// `align-cross-cutting-specs`).
+  ///
+  /// Для чего: запись попадает только в ограниченный буфер
+  /// [AcpClientApplication.diagnostics] (последние 500), поток
+  /// `diagnosticChanges` и журнал; снимки сессий не меняются. До потребителей
+  /// app и CLI запись доходит через журнал (`_logDiagnosticEntry` →
+  /// `Logger`); у `diagnosticChanges` в продукте подписчиков нет — это API
+  /// для хостов.
+  ///
+  /// Как использовать: вызывают обработчики ошибок транспорта и протокола
+  /// внутри [AcpClientApplication] (разбор ответа, входящие запросы, сбой
+  /// отправки, диагностика транспорта). `message`, `context` и причина
+  /// маскируются здесь же; `component`/`sessionId`/`requestId`/`toolCallId`
+  /// нужны для корреляции записи журнала. Хосты читают `diagnostics` или
+  /// подписываются на `diagnosticChanges`, а не берут данные из сессии.
   void _recordDiagnostic({
     required String message,
     required DiagnosticSeverity severity,
@@ -2906,12 +2925,6 @@ final class AcpClientApplication {
     }
     if (!_diagnosticController.isClosed) {
       _diagnosticController.add(entry);
-    }
-
-    for (final session in _sessions.values.toList(growable: false)) {
-      _storeSession(
-        session.copyWith(diagnostics: [...session.diagnostics, entry]),
-      );
     }
 
     _logDiagnosticEntry(

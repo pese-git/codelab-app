@@ -71,10 +71,6 @@ void main() {
     'diagnostics': [
       for (final d in client.diagnostics) {'m': d.message, 'c': d.context},
     ],
-    'session': [
-      for (final d in client.sessionById(_session)!.diagnostics)
-        {'m': d.message, 'c': d.context},
-    ],
   }, toEncodable: (o) => o.toString());
 
   Future<void> startPrompt() async {

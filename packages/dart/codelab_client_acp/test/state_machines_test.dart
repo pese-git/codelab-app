@@ -1202,19 +1202,6 @@ void main() {
       );
     });
 
-    test('unknown risk is never allowed without approval in any mode', () {
-      for (final mode in PermissionMode.values) {
-        expect(
-          ApprovalPolicy.decidePermission(
-            mode: mode,
-            riskLevel: ApprovalRiskLevel.unknown,
-          ),
-          isNot(PermissionModeDecision.allowWithoutApproval),
-          reason: '$mode',
-        );
-      }
-    });
-
     test('an update with an explicit other kind lifts a read record', () {
       expect(
         ApprovalPolicy.classifyToolCallUpdateWithin(

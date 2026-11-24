@@ -93,7 +93,9 @@ AI-agent НЕ ДОЛЖЕН придумывать новую classification са
 
 Компенсирующий контроль вместо approval: `path`/`cwd` из этих запросов ограничены рабочей директорией активной сессии (working directory containment); выход за её пределы отклоняется как protocol/security error на уровне application, до выполнения операции.
 
-Полное обоснование и рассмотренные альтернативы — `openspec/changes/add-acp-fs-client-support/design.md`, `openspec/changes/add-acp-terminal-client-support/design.md`.
+Полное обоснование и рассмотренные альтернативы — `openspec/changes/archive/2026-09-04-add-acp-fs-client-support/design.md`, `openspec/changes/archive/2026-09-04-add-acp-terminal-client-support/design.md`.
+
+Требование — spec [`approval-safety`](../../openspec/specs/approval-safety/spec.md) «Review-first изменения»: что клиент показывает до ответа на `session/request_permission`, исключение для `fs/*` и `terminal/*` и сценарий «Запись файла без одобрения клиента».
 
 ### Терминал пользователя — не действие агента
 
@@ -201,6 +203,8 @@ PermissionRequest
 ```
 
 Конкретные поля должны соответствовать ACP/OpenSpec и существующей реализации.
+
+В коде клиента `risk` — уровень `ApprovalRiskLevel` (`codelab_client_acp`), который считает `ApprovalPolicy.classifyToolCall`. Это подсказка для показа пользователю, а не решение: нужно ли одобрение, решает агент, присылая `session/request_permission` (spec [`approval-safety`](../../openspec/specs/approval-safety/spec.md) «Уровни риска», §58). Клиентских режимов разрешений нет: режимы принадлежат агенту (spec [`agent-permissions`](../../openspec/specs/agent-permissions/spec.md), §58), клиент выбирает режим опцией конфигурации сессии ACP (acp-protocol-client «Исходящий session/set_config_option»). Мёртвые `PermissionMode` и `ApprovalPolicy.decidePermission` удалены (change `align-cross-cutting-specs`, D9).
 
 ---
 
@@ -336,6 +340,8 @@ PermissionEvaluation
 Auto-allow допустим только для явно безопасных или ранее одобренных operations, если это разрешено product policy.
 
 Auto-allow НЕ ДОЛЖЕН быть default для неизвестных actions.
+
+В коде клиента автоматический ответ без вопроса пользователю даёт только политика headless CLI `--approve` (spec [`cli-headless`](../../openspec/specs/cli-headless/spec.md) «Политика одобрений headless»): `reject` по умолчанию, `read-only` и `allow-all` — явный выбор пользователя; она опирается на `ApprovalRiskLevel`, а вызов с риском `unknown` `read-only` не одобряет (approval-safety «Риск вызова неизвестного вида и смены режима»). Режимы с автоодобрением — режимы сессии агента `accept-edits` и `bypass` (их клиент выбирает опцией конфигурации сессии `mode`) и режим `autopilot`, который включается только флагом запуска агента; клиентских режимов нет (§58).
 
 ---
 
@@ -604,6 +610,8 @@ Duplicate/replayed tool call не должен показывать второй
 
 Нужна deduplication по stable identity.
 
+В коде повторный `session/request_permission` с тем же id JSON-RPC не создаёт второго ожидающего одобрения. Требование — spec [`approval-safety`](../../openspec/specs/approval-safety/spec.md) «Поток разрешений ACP». Ответ `cancelled` на запрос, пришедший во время отмены хода, задаёт spec [`acp-protocol-client`](../../openspec/specs/acp-protocol-client/spec.md) «Отмена prompt turn» (сценарий «Запрос разрешения во время отмены»). Запрос без активного хода `_handlePermissionRequest` тоже отвечает `cancelled`, но ни требования, ни теста на этот случай нет — кандидат (design.md change [`align-cross-cutting-specs`](../../openspec/changes/align-cross-cutting-specs/design.md), D14).
+
 ---
 
 ## 35. Concurrent permission requests
@@ -791,6 +799,8 @@ deny
 ```text
 allow because policy failed
 ```
+
+В коде клиента внутренняя ошибка обработки `session/request_permission` (`_handlePermissionRequest`, `acp_client_application.dart`) даёт ответ `cancelled` и диагностику `Failed to handle ACP permission request.`. Требование — spec [`approval-safety`](../../openspec/specs/approval-safety/spec.md) «Поток разрешений ACP», сценарий «Внутренняя ошибка обработки запроса разрешения» (тест «answers cancelled when handling a permission request fails internally», `application_use_cases_test.dart`; change [`align-cross-cutting-specs`](../../openspec/changes/align-cross-cutting-specs/design.md), D10).
 
 ---
 
