@@ -36,7 +36,7 @@ CodeLab SHALL помечать structured-события клиента комп
 - **THEN** запись журнала уровня `error` с `event` `Failed to send ACP request session/new.` несёт `component` `protocol` (`structured_logging_test.dart`, «tags protocol send failures with component=protocol»)
 
 ### Requirement: Ограниченная (bounded) история diagnostic-событий
-CodeLab SHALL хранить in-memory историю diagnostic-событий протокольного клиента только в одном ограниченном буфере — `AcpClientApplication.diagnostics` на 500 записей `DiagnosticEntry`; при превышении вытесняются самые старые записи. Снимок сессии `AcpSession` диагностику SHALL NOT нести: запись диагностики SHALL NOT менять снимки сессий и SHALL NOT публиковать `sessionChanges`. Подписчики получают записи потоком `AcpClientApplication.diagnosticChanges`, а ядро клиента — `ClientWorkspace.diagnostics`. Structured-вывод в журнал от предела SHALL NOT зависеть: каждое событие пишется в журнал.
+CodeLab SHALL хранить in-memory историю diagnostic-событий протокольного клиента только в одном ограниченном буфере — `AcpClientApplication.diagnostics` на 500 записей `DiagnosticEntry`; при превышении вытесняются самые старые записи. Снимок сессии `AcpSession` диагностику SHALL NOT нести: запись диагностики SHALL NOT менять снимки сессий и SHALL NOT публиковать `sessionChanges`. Поток `AcpClientApplication.diagnosticChanges` публикует каждую запись для хостов, но в app и CLI подписчиков у него нет: до пользователя диагностика протокольного клиента доходит через журнал (окно журнала desktop, `--verbose` CLI). `ClientWorkspace.diagnostics` — отдельный поток `WorkspaceDiagnostic` ядра клиента, записи `DiagnosticEntry` он не пересылает. Structured-вывод в журнал от предела SHALL NOT зависеть: каждое событие пишется в журнал.
 
 #### Scenario: Превышение лимита вытесняет старые записи
 - **WHEN** транспорт эмитит 520 диагностик подряд
@@ -44,7 +44,7 @@ CodeLab SHALL хранить in-memory историю diagnostic-событий 
 
 #### Scenario: Диагностика не меняет снимок сессии
 - **WHEN** при открытой сессии транспорт эмитит диагностику
-- **THEN** запись есть в `AcpClientApplication.diagnostics`, снимок `AcpSession` этой сессии не меняется, а `sessionChanges` не публикует ни одного события (`structured_logging_test.dart`, тест задачи 2.1 change `align-cross-cutting-specs`)
+- **THEN** запись есть в `AcpClientApplication.diagnostics`, снимок `AcpSession` этой сессии не меняется, а `sessionChanges` не публикует ни одного события (`structured_logging_test.dart`, «diagnostics do not change the session snapshot»)
 
 ## ADDED Requirements
 

@@ -73,7 +73,7 @@
 | C | перестать копировать диагностику в сессии, удалить поле `AcpSession.diagnostics` | убирает и память, и лишние события сессий | изменение публичного API `codelab_client_acp` и Freezed-модели; §19 — без необходимости не менять public API |
 
 **Решение пользователя 2026-11-24 (Q2): вариант C.** Поле `AcpSession.diagnostics` и копирование в `_recordDiagnostic` удаляются. Обоснование:
-- поле в продукте никто не читает: app и CLI берут диагностику из `ClientWorkspace.diagnostics` и потока `AcpClientApplication.diagnosticChanges`;
+- поле в продукте никто не читает: в app и CLI диагностика протокольного клиента доходит через журнал (`_logDiagnosticEntry` → `Logger`: окно журнала desktop, `--verbose` CLI). У потока `AcpClientApplication.diagnosticChanges` подписчиков в продукте нет, а `ClientWorkspace.diagnostics` — отдельный поток `WorkspaceDiagnostic`, записи `DiagnosticEntry` он не пересылает;
 - запись копируется во все открытые сессии без связи с сессией — в снимке сессии она ничего не значит;
 - список растёт без предела;
 - на каждую запись `_storeSession` публикует `sessionChanges` для всех сессий — лишние события и пересборка проекций.
@@ -134,6 +134,8 @@ REMOVED «Границы Clean Architecture», «Ограничения SOLID, K
 
 *Альтернатива:* ослабить спеку до охвата сторожа. Отклонена: обе нормы правильные (`AGENTS.md` §5, §11), а проверка — по строке в `rules.dart`.
 
+Правила CLI для `package:codelab_acp_testing/` (только `lib/src/scenario/`) и `package:dart_tui/` (только `lib/src/tui/`) висят на `apps/codelab_cli/lib/src`: барель `lib/*.dart` и `bin/` они не охватывают. Требование описывает их ровно в этом охвате («в `lib/src/` — только …»); расширение на весь `lib/` и `bin/`, как у IO-барелей мостов, — кандидат на расширение сторожа следующим change (D14), кода этот change здесь не меняет.
+
 Исполнители по зонам: правило CLI — `[client]` (`client-engineer`, зона `apps/codelab_cli`), правило кита — `[desktop]` (`desktop-engineer`, зона `codelab_ui`). Правило сторожа правит тот, чью границу оно описывает (`CLAUDE.md`).
 
 Что требование не охватывает, — по-прежнему таблица `layers-and-dependencies.md` §42. Документ ссылается на требование, а не перечисляет правила второй раз (задача 6.3).
@@ -164,13 +166,15 @@ REMOVED «Границы Clean Architecture», «Ограничения SOLID, K
 - `readOnly` и `ask` дают одинаковые решения;
 - запрос `session/request_permission` клиент всегда отдаёт пользователю. Исключение — headless CLI со своей политикой `--approve`: она опирается на `ApprovalRiskLevel`, а не на `PermissionMode`.
 
-Режимы разрешений принадлежат агенту (`agent-permissions`: `alwaysAsk`, `write`, `acceptEdits`, `yolo`, `autopilot`), клиент выбирает их опцией конфигурации сессии. Требование «SHALL NOT `bypass`» прямо противоречит `yolo`/`autopilot` агента.
+Режимы разрешений принадлежат агенту (спека `agent-permissions`, «Режимы и уровни»). Клиент видит режимы сессии `ModeId` — `plan`, `ask`, `standard`, `accept-edits`, `bypass` — в config option `mode` и в `modes` (`codelab_agent_acp/lib/src/config_options.dart`) и выбирает их через `session/set_config_option` или `session/set_mode`. Внутри ядра режим сессии отображается в `PermissionMode` политики (`alwaysAsk`, `write`, `acceptEdits`, `yolo`, `autopilot`): `ask` → `alwaysAsk`, `plan` и `standard` → `write`, `accept-edits` → `acceptEdits`, `bypass` → `yolo`. `autopilot` режимом сессии не является и клиенту не виден: его включает только флаг запуска `--permission-mode autopilot` (CFG-4). Требование «SHALL NOT `bypass`» прямо противоречит режиму сессии `bypass` агента и `autopilot`.
 
 | Вариант | За | Против |
 |---|---|---|
 | **A (выбран)** — REMOVED требования; удалить `PermissionMode`, `PermissionModeDecision`, `decidePermission`, `requiresExplicitApproval` и их тесты; в «Риск вызова неизвестного вида» и kit «Неизвестный уровень риска вызова» заменить «решение режима разрешений клиента» на реальную автоматическую политику (`--approve read-only`) | спека и код описывают одно поведение; мёртвый публичный API уходит (`AGENTS.md` §13) | изменение публичного API `codelab_client_acp`; потребителей вне тестов нет |
 | B — REMOVED требования, код оставить | ноль кода | мёртвый API выглядит как действующая политика; README пакета вводит в заблуждение |
 | C — реализовать клиентские режимы | — | дублирует режимы агента; клиентское «автоодобрение» поверх агента противоречит модели ACP, где разрешение запрашивает агент (`08-Tool Calls.md#requesting-permission`), и §10 |
+
+REMOVED «Режимы разрешений» оставил бы висячую ссылку в agent-workbench-ui «Выбор значения селектора отправляется агенту» (сценарий «Селектор не смешивается с client-side permission mode» называл «локальные режимы `readOnly`/`ask`/`plan`/`autoEdits` из `approval-safety`»). Поэтому требование модифицируется здесь: текст скопирован из главной спеки, изменена только ссылка — режимы у агента (`agent-permissions`), клиентских режимов нет. Активные changes это требование не модифицируют (`redesign-protocol-pane` и `remove-recent-projects-migration` меняют другие требования agent-workbench-ui), конфликта архивации нет.
 
 Удаление — TDD без красного шага: сначала удаляются тесты мёртвого кода и проверяется, что тесты `classifyToolCall*` и `unknown_tool_kind_test.dart` покрывают сценарии требования; затем удаляется код (задачи 4.1–4.2).
 
@@ -179,8 +183,8 @@ REMOVED «Границы Clean Architecture», «Ограничения SOLID, K
 ### D10. «Уровни риска» и «Поток разрешений ACP»
 
 - Уровней шесть (`unknown` — change `add-provider-setup-ui`, D27). Сценарий «деструктивное → клиент требует одобрения» неисполним для внешнего агента: одобрение запрашивает агент (`permissions.md` §58). Он заменён проверяемым сценарием классификации (`codelab_client_acp_test.dart`).
-- В «Поток разрешений ACP» добавлена дедупликация запроса с тем же id: тест «ignores duplicate permission request ids» есть, нормы в спеках не было (`permissions.md` §34). Ответ `cancelled` без хода и при отмене — норма acp-protocol-client «Отмена prompt turn», здесь — ссылкой.
-- **Fail closed** при внутренней ошибке обработки запроса (`_handlePermissionRequest` → `cancelled`, `permissions.md` §46) в требование **не включён**: тест `payload_policy_diagnostics_test.dart` проходит эту ветку, но ответ `cancelled` не проверяет (D14).
+- В «Поток разрешений ACP» добавлена дедупликация запроса с тем же id: тест «ignores duplicate permission request ids» есть, нормы в спеках не было (`permissions.md` §34). Ответ `cancelled` на запрос во время отмены хода — норма acp-protocol-client «Отмена prompt turn» (сценарий «Запрос разрешения во время отмены»), здесь — ссылкой. Ответ `cancelled` на запрос без активного хода код даёт той же веткой `_handlePermissionRequest`, но ни требования, ни теста на этот случай нет — кандидат D14.
+- **Fail closed** при внутренней ошибке обработки запроса (`_handlePermissionRequest` → `cancelled`, `permissions.md` §46) по ревью стал нормой: тест «answers cancelled when handling a permission request fails internally» (`application_use_cases_test.dart`, задача 5.4) проверяет ответ `cancelled` на запрос с неразбираемыми параметрами, диагностику уровня error и отсутствие хода. В «Поток разрешений ACP» добавлены SHALL и сценарий «Внутренняя ошибка обработки запроса разрешения».
 
 ### D11. «Редактирование секретов»: промпты в debug-логе и «персистентное состояние»
 
@@ -195,13 +199,25 @@ REMOVED «Границы Clean Architecture», «Ограничения SOLID, K
 
 **Решение пользователя 2026-11-24 (Q3): вариант A** — спека приводится к факту.
 
-Текст правил имён, счётчиков, присваиваний, адресов и PEM переносится **дословно** из дельты `extend-secret-name-redaction`: меняются только первый абзац и сценарий «Открыт debug-лог». Его заменяет «Полный payload в журнале маскируется» с тестом. Поэтому этот change архивируется **после** `extend-secret-name-redaction` (D15). Если тот change до архивации поменяет текст, задача 7.1 переносит правку сюда.
+Текст правил имён, счётчиков, присваиваний, адресов и PEM переносится **дословно** из дельты `extend-secret-name-redaction`: меняются только первый абзац, сценарий «Открыт debug-лог» и сценарий «Отображаются переменные окружения». «Открыт debug-лог» заменяет «Полный payload в журнале маскируется» с тестом. «Отображаются переменные окружения» сужен под характеризационный тест задачи 5.2 («launch environment in diagnostics masks secret-like values», `diagnostics_test.dart` `codelab_client_core`): форматирование диагностики ядра клиента и конкретные переменные, без обещаний про экран диагностики desktop. При сверке 7.1 эти три места — правки этого change, а не расхождение с `extend-secret-name-redaction`. В перечень мест маскирования добавлены кадры протокола клиента (панель Protocol, Copy, экспорт; `protocol_frame_recorder.dart`) со ссылкой на acp-protocol-client «Кадры ACP клиента». Формулировка называет место в коде и требование по имени и не зависит от того, архивирован ли уже `redesign-protocol-pane`, который это требование вводит. Поэтому этот change архивируется **после** `extend-secret-name-redaction` (D15). Если тот change до архивации поменяет текст, задача 7.1 переносит правку сюда.
 
 ### D12. «Review-first изменения»: исключение `fs/*` и `terminal/*`
 
 SHALL «до применения правок файлов показать diff» конфликтует с исключением `AGENTS.md` §10: `fs/write_text_file` и `terminal/*` клиент выполняет без своего гейта, компенсирующий контроль — containment. Требование переформулировано: детали показываются **до ответа на запрос одобрения агента**. Исключение и containment-сценарий записаны явно со ссылкой на acp-fs-client.
 
-Сценарий diff в карточке одобрения app явным тестом не подтверждён (быстрый поиск по тестам app и кита не нашёл проверки diff в одобрении). Задача 5.3 — найти тест или добавить характеризационный тест `[desktop]`; сценарий команды подтверждён `approval_prompt_test.dart` CLI.
+Сценарий diff в карточке одобрения app явным тестом не подтверждён (быстрый поиск по тестам app и кита не нашёл проверки diff в одобрении). Задача 5.3 — сверка; сценарий команды подтверждён `approval_prompt_test.dart` CLI.
+
+**Находка сверки 5.3.** Diff в карточке одобрения app не показывается, и характеризационный тест добавить нельзя — показывать нечего:
+
+- `PendingApprovalView` (`codelab_client_core`) несёт `command`, `rawInput`, `risk`, `options`, `toolTitle`; поля с diff в нём нет;
+- `ToolCallView` несёт `paths` и `textOutput`; поля для `ToolCallDiff` нет;
+- `ToolCallDiff` разбирается только в инспекторе (`codelab_client_core/lib/src/inspector/inspector_projection.dart`), а не в транскрипте и не в одобрении.
+
+Тестами подтверждено (`apps/codelab_desktop/test/features/workbench/presentation/subagent_approval_block_test.dart`): «the file path is visible without opening the raw input» — заголовок вызова с путём записи файла виден в блоке одобрения до решения; «shows path, command and the panel; Allow answers this request» — команда, панель решения и ответ именно на этот запрос.
+
+**Решение (пользователь, 2026-11-24).** Сценарий «Запрошена правка файла» описывает факт: до ответа видны заголовок вызова, путь файла и команда, со ссылками на эти тесты. Показ diff не обещается ни в тексте требования, ни в сценариях; исключение `fs/*` и `terminal/*` (`AGENTS.md` §10) сохранено, в сценарии записи без одобрения формулировка «без показа diff» заменена на «без собственного шага одобрения». Показ diff в карточке одобрения — отдельный change: расширение `ToolCallView`/`PendingApprovalView` полем diff (проекция `ToolCallDiff` в `codelab_client_core`) и виджет diff в `codelab_ui`.
+
+Альтернативы: (а) оставить сценарий diff и реализовать показ в этом change — отвергнуто, change приводит спеки к коду и не добавляет функций (proposal, «Не входит»); (б) удалить сценарий правки файла — отвергнуто, путь и команда до решения реально проверяются и полезны как норма.
 
 ### D13. Владельцы повторяющихся норм
 
@@ -219,7 +235,9 @@ SHALL «до применения правок файлов показать dif
 
 | Кандидат | Почему не сейчас | Что нужно |
 |---|---|---|
-| Fail closed: внутренняя ошибка обработки `session/request_permission` → ответ `cancelled` | ответ не проверен тестом | тест в `payload_policy_diagnostics_test.dart` или `application_use_cases_test.dart`, затем ADDED в approval-safety |
+| ~~Fail closed: внутренняя ошибка обработки `session/request_permission` → ответ `cancelled`~~ | **стал требованием** по ревью: тест «answers cancelled when handling a permission request fails internally» (`application_use_cases_test.dart`, задача 5.4) | сценарий «Внутренняя ошибка обработки запроса разрешения» в approval-safety «Поток разрешений ACP» (D10) |
+| Ответ `cancelled` на `session/request_permission` без активного хода | код отвечает (`_handlePermissionRequest`), но ни требования, ни теста нет | тест в `application_use_cases_test.dart`, затем сценарий в acp-protocol-client «Отмена prompt turn» или approval-safety «Поток разрешений ACP» |
+| Правила CLI для `package:codelab_acp_testing/` и `package:dart_tui/` на весь `lib/` и `bin/` | сторож охватывает только `lib/src/`; барель и `bin/` не проверяются (D6) | расширение правил `rules.dart` по образцу IO-барелей мостов, негативный тест в `import_guard_test.dart` |
 | Пересылка на dev-сервер (`httpOutput`) не получает `protocol` | тест не эмитит записей `protocol` | усилить тест «httpOutput sink…» созданием сессии, затем сценарий в «Маршрутизация категорий журнала по sink» |
 | Группы concurrency ночного прогона и `workflow_dispatch` | проверяется только наблюдением запусков | остаётся в `testing.md` §74 |
 | `CODELAB_TEST_REPORT_DIR` — абсолютный путь | нет проверки | остаётся в комментарии скрипта и `testing.md` |
@@ -250,7 +268,7 @@ SHALL «до применения правок файлов показать dif
 
 - **Конфликт архивации** с `extend-secret-name-redaction` и `redesign-protocol-pane` → порядок D15, задача 8.1 сверяет тексты перед архивацией.
 - **Удаление публичного API `codelab_client_acp`** (D9) → потребителей вне тестов нет (поиск по `packages/`, `apps/`); README пакета обновляется в той же задаче; `fvm dart analyze` зависимых пакетов (§21).
-- **Удаление поля `AcpSession.diagnostics`** (D3) — изменение публичного типа `AcpSession`: потребителей вне тестов нет (`client_fixture_conformance_test.dart:480`; контрактный тест `codelab_agent_acp` использует `AcpSession` — его `analyze` обязателен). Диагностика остаётся в `AcpClientApplication.diagnostics`, `diagnosticChanges` и журнале. Побочный выигрыш — запись диагностики больше не публикует `sessionChanges` всех сессий.
+- **Удаление поля `AcpSession.diagnostics`** (D3) — изменение публичного типа `AcpSession`: потребителей вне тестов нет (`client_fixture_conformance_test.dart:480`; контрактный тест `codelab_agent_acp` использует `AcpSession` — его `analyze` обязателен). Диагностика остаётся в `AcpClientApplication.diagnostics`, потоке `diagnosticChanges` (API для хостов, подписчиков в продукте нет) и журнале — через него она доходит до app и CLI. Побочный выигрыш — запись диагностики больше не публикует `sessionChanges` всех сессий.
 - **Расширение правил сторожа** (D6) может покраснеть на ветках других changes, если они импортируют `codelab_setup/io.dart` в барель CLI или `desktop_drop` в кит → код `develop` правилам уже соответствует; конфликт возможен только у нового кода, и это и есть цель правила.
 - **Строковый тест `ci.yml`** (D7) хрупок к переформатированию workflow → проверяются только строки `runs-on:` вне комментариев, без разбора YAML-структуры; комментарии с `macOS` не мешают.
 - **Race/cancellation/late events**: поведение не меняется. Предел списка не влияет на порядок применения событий и на поколение соединения.
@@ -265,5 +283,6 @@ SHALL «до применения правок файлов показать dif
 - **Q6** — camelCase-ключи диагностики и `attempt_superseded` — отдельный change позже.
 - **Q7** — правки `AGENTS.md` §21 и `.github/pull_request_template.md` одобрены.
 - **Q8** (D13) — таблица владельцев принята; замена повторов — следующим change.
+- **Q9** (D12, задача 5.3) — сценарий «Запрошена правка файла» смягчён до факта (заголовок, путь, команда); показ diff в карточке одобрения — отдельный change позже.
 
 Открытых вопросов нет.

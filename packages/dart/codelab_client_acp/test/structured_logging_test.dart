@@ -38,6 +38,15 @@ void main() {
 
     final entry = captured.singleWhere((e) => e['source'] == 'stderr');
     expect(entry['event'], 'Authorization: Bearer $redactedSecret');
+    // Тот же текст в записи буфера `diagnostics` замаскирован одним проходом.
+    expect(
+      client.diagnostics.single.message,
+      'Authorization: Bearer $redactedSecret',
+    );
+    expect(
+      client.diagnostics.single.message,
+      isNot(contains('transport-token')),
+    );
   });
 
   test('tags transport diagnostics with component=transport', () async {
@@ -78,6 +87,9 @@ void main() {
           e['to'] == 'ClientConnectionReady',
     );
     expect(readyEntry['connection_generation'], 1);
+    expect(readyEntry['component'], 'client');
+    expect(readyEntry['from'], isA<String>());
+    expect(readyEntry['from'], isNot('ClientConnectionReady'));
     expect(client.generation, 1);
 
     await replacement.close();

@@ -44,7 +44,7 @@ flowchart LR
 | `CreateSessionCommand`, `SendPromptCommand`, `ReconnectCommand` и др. | Команды сценариев (freezed) |
 | `ClientConnectionState`, `AcpSession`, `PromptTurn`, `ApprovalRequest`, `ToolCallRecord` | Доменное состояние, независимое от DTO протокола |
 | `ConnectionStateMachine`, `SessionStateMachine`, `PromptTurnStateMachine` | Чистые функции переходов; результат — `StateTransitionResult` (применён, проигнорирован, отклонён) |
-| `ApprovalPolicy`, `PermissionMode` | Классификация риска вызова инструмента и решение по режиму разрешений |
+| `ApprovalPolicy`, `ApprovalRiskLevel` | Классификация риска вызова инструмента (`ApprovalPolicy.classifyToolCall`) по уровням `ApprovalRiskLevel` |
 | `TextFileReader`, `TextFileWriter`, `TerminalProcessRunner`, `TerminalProcessHandle` | Порты файлов и процессов; реализует адаптер вне пакета (`codelab_client_io`) |
 | `resolveWithinWorkingDirectory` | Проверка, что путь лежит внутри рабочей папки сессии |
 | `SecretRedactor`, `Logger`, `StructuredLogLogger` | Маскирование секретов и журнал на `structured_log` |
@@ -149,7 +149,7 @@ stateDiagram-v2
 
 ### Одобрения
 
-Политика разрешений принадлежит хосту, ядро её не навязывает ([`permissions.md`](../../../docs/architecture/permissions.md)). Ядро связывает запрос с правильной сессией, ходом и вызовом инструмента: `approvalId` строится из id JSON-RPC запроса, а решение для одного запроса не применяется к другому. Запрос без активной сессии или хода, а также во время `cancelling` получает ответ `cancelled`. `respondToPermission` принимает `SelectPermissionCommand` (выбранный вариант проверяется по списку вариантов запроса) или `CancelPermissionCommand`; для уже решённого запроса бросает `StateTransitionException`. Риск вызова считает `ApprovalPolicy.classifyToolCall`; вызов вида `other` или с незнакомым видом получает уровень `unknown` и требует явного одобрения в любом режиме `ApprovalPolicy.decidePermission`.
+Политика разрешений принадлежит хосту, ядро её не навязывает ([`permissions.md`](../../../docs/architecture/permissions.md)). Ядро связывает запрос с правильной сессией, ходом и вызовом инструмента: `approvalId` строится из id JSON-RPC запроса, а решение для одного запроса не применяется к другому. Запрос без активной сессии или хода, а также во время `cancelling` получает ответ `cancelled`. `respondToPermission` принимает `SelectPermissionCommand` (выбранный вариант проверяется по списку вариантов запроса) или `CancelPermissionCommand`; для уже решённого запроса бросает `StateTransitionException`. Риск вызова считает `ApprovalPolicy.classifyToolCall`; вызов вида `other` или с незнакомым видом получает уровень `unknown`. Ядро только классифицирует риск: решение об одобрении принимают агент и пользователь, автоматическая политика — флаг `--approve` CLI.
 
 ### Файлы и процессы без собственного одобрения
 
