@@ -185,6 +185,7 @@ melos run conformance:client
 
 ## Смотрите также
 
+- [Руководство разработчика](doc/README.md) — слои, жизненный цикл соединения, сессии и хода, `fs/*` и `terminal/*` с ограничением рабочей папкой, тесты, рецепты и частые проблемы.
 - [`codelab_acp_protocol`](../codelab_acp_protocol/README.md), [`codelab_acp_transports`](../codelab_acp_transports/README.md), [`codelab_acp_testing`](../codelab_acp_testing/README.md) — модели, транспорты, фикстуры.
 - [`codelab_agent_acp`](../codelab_agent_acp/README.md) — противоположная сторона протокола.
 - `openspec/specs/acp-protocol-client/spec.md`, `acp-fs-client`, `acp-terminal-client`, `acp-golden-fixtures` — спецификации поведения.
