@@ -491,12 +491,14 @@ void main() {
 
     final violations = [
       for (final rule in rules.where(
-        (r) => r.dir == 'apps/codelab_cli/lib/src',
+        (r) =>
+            r.dir == 'apps/codelab_cli/lib' &&
+            r.forbidden.contains('package:codelab_setup/io.dart'),
       ))
         ...scan(
           tmp.path,
           PackageRule(
-            'lib/src',
+            'lib',
             forbidden: rule.forbidden,
             exclude: rule.exclude,
             sealExclude: rule.sealExclude,

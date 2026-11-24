@@ -1306,10 +1306,10 @@ void main() {
       final session = client.sessionById(const SessionId('session-1'));
       expect(session?.status, SessionLifecycleStatus.cancellingTurn);
       expect(session?.turns.single.status, PromptTurnStatus.cancelling);
-      expect(session?.diagnostics.single.severity, DiagnosticSeverity.error);
-      expect(session?.diagnostics.single.source, 'application.permission');
+      expect(client.diagnostics.single.severity, DiagnosticSeverity.error);
+      expect(client.diagnostics.single.source, 'application.permission');
       expect(
-        session?.diagnostics.single.context,
+        client.diagnostics.single.context,
         containsPair('method', sessionRequestPermissionMethod),
       );
       expect(
@@ -1348,14 +1348,10 @@ void main() {
       source: 'stderr',
     );
 
-    final diagnostic = client
-        .sessionById(const SessionId('session-1'))
-        ?.diagnostics
-        .single;
-    expect(client.diagnostics.single, diagnostic);
-    expect(diagnostic?.message, 'Authorization: Bearer $redactedSecret');
-    expect(diagnostic?.severity, DiagnosticSeverity.warning);
-    expect(diagnostic?.source, 'stderr');
+    final diagnostic = client.diagnostics.single;
+    expect(diagnostic.message, 'Authorization: Bearer $redactedSecret');
+    expect(diagnostic.severity, DiagnosticSeverity.warning);
+    expect(diagnostic.source, 'stderr');
   });
 
   test('records redacted diagnostics for invalid session updates', () async {
@@ -1371,15 +1367,12 @@ void main() {
       ),
     );
 
-    final diagnostic = client
-        .sessionById(const SessionId('session-1'))
-        ?.diagnostics
-        .single;
-    expect(diagnostic?.message, 'Failed to handle ACP session update.');
-    expect(diagnostic?.severity, DiagnosticSeverity.error);
+    final diagnostic = client.diagnostics.single;
+    expect(diagnostic.message, 'Failed to handle ACP session update.');
+    expect(diagnostic.severity, DiagnosticSeverity.error);
     // sessionId is a plain correlation identifier, not a secret — only
     // session_token (an actual credential-shaped key) gets redacted.
-    expect(diagnostic?.context['params'], {
+    expect(diagnostic.context['params'], {
       'sessionId': 'session-1',
       'update': {'session_token': redactedSecret},
     });
@@ -1583,7 +1576,7 @@ void main() {
       final session = client.sessionById(const SessionId('session-1'));
       expect(session?.turns.single.approvals, isEmpty);
       expect(session?.status, SessionLifecycleStatus.cancellingTurn);
-      expect(session?.diagnostics, isEmpty);
+      expect(client.diagnostics, isEmpty);
 
       transport.emitInbound(
         JsonRpcMessage.response(

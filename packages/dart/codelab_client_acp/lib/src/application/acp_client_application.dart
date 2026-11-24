@@ -2782,7 +2782,7 @@ final class AcpClientApplication {
 
   /// Сырые данные сообщения для диагностики и журнала по базовой политике.
   ///
-  /// Почему: диагностика уходит в поток `diagnostics`, в состояние сессий и во
+  /// Почему: диагностика уходит в поток `diagnostics`, в буфер клиента и во
   /// встроенный журнал, где в release не должно быть ни промптов, ни
   /// содержимого файлов (решение пользователя к ревью change
   /// `redesign-protocol-pane`; D3). Trace эти данные не раскрывает — как и
@@ -2821,6 +2821,18 @@ final class AcpClientApplication {
     _ => cause.runtimeType.toString(),
   };
 
+  /// Записывает диагностическое событие в единственный буфер клиента.
+  ///
+  /// Почему: копия записи в каждой сессии росла без предела и публиковала
+  /// `sessionChanges` на каждое событие транспорта (OBS-004, D3 change
+  /// `align-cross-cutting-specs`).
+  ///
+  /// Для чего: запись попадает только в ограниченный буфер
+  /// [AcpClientApplication.diagnostics], поток `diagnostics` и журнал;
+  /// снимки сессий не меняются.
+  ///
+  /// Как использовать: вызывать из любого места приложения; хосты читают
+  /// `diagnostics`/`diagnosticEvents`, а не состояние сессии.
   void _recordDiagnostic({
     required String message,
     required DiagnosticSeverity severity,
@@ -2848,12 +2860,6 @@ final class AcpClientApplication {
     }
     if (!_diagnosticController.isClosed) {
       _diagnosticController.add(entry);
-    }
-
-    for (final session in _sessions.values.toList(growable: false)) {
-      _storeSession(
-        session.copyWith(diagnostics: [...session.diagnostics, entry]),
-      );
     }
 
     _logDiagnosticEntry(

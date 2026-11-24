@@ -201,11 +201,13 @@ const rules = [
   ),
   // IO-барель моста настроек агента — только `run.dart` (`codelab config
   // check`); остальной CLI не знает о нём (design.md change
-  // `add-agent-configuration`, D14).
+  // `add-agent-configuration`, D14). Правило на весь `lib/`, чтобы барель
+  // `lib/codelab_cli.dart` не мог его импортировать или реэкспортировать
+  // (change `align-cross-cutting-specs`, D6); `bin/` — правилом ниже.
   PackageRule(
-    'apps/codelab_cli/lib/src',
+    'apps/codelab_cli/lib',
     forbidden: ['package:codelab_setup/io.dart'],
-    exclude: ['run.dart'],
+    exclude: ['src/run.dart'],
     sealExclude: false,
   ),
   // IO-барель встроенного агента — только composition root CLI; остальной код
@@ -229,11 +231,13 @@ const rules = [
     exclude: ['src/scenario/'],
     sealExclude: false,
   ),
-  // Точка входа рабочего бинаря не знает ни IO-барель, ни сценарий модели:
-  // сборка агента — в composition root.
+  // Точка входа рабочего бинаря не знает ни IO-барель, ни сценарий модели, ни
+  // IO-барель моста настроек: сборка агента — в composition root, `config
+  // check` — в `run.dart` (change `align-cross-cutting-specs`, D6).
   PackageRule(
     'apps/codelab_cli/bin',
     forbidden: [
+      'package:codelab_setup/io.dart',
       'package:codelab_embedded/io.dart',
       'package:codelab_embedded/testing.dart',
     ],

@@ -471,13 +471,11 @@ final _stateChecks = <String, _StateCheck>{
     expect(_lastTurn(user).status, PromptTurnStatus.completed);
   },
   'acp/errors-unknown-session-update-tolerated': (user, _) {
-    final session = user.app.sessions.single;
     expect(_lastTurn(user).status, PromptTurnStatus.completed);
     expect(
       user.app.diagnostics.where((d) => d.severity == DiagnosticSeverity.error),
       isEmpty,
     );
-    expect(session.diagnostics, isEmpty);
   },
   // Незнакомый вид вызова и `switch_mode` (change `tolerate-unknown-tool-kind`,
   // D8; acp-golden-fixtures «Состояние после прогона»).
