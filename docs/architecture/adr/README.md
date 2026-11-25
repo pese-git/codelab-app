@@ -126,7 +126,8 @@ docs/architecture/adr/
 ├── template.md
 ├── 0001-embed-dart-agent-core-behind-acp.md
 ├── 0002-name-packages-codelab-side-layer.md
-└── 0003-build-project-site-with-astro-in-monorepo.md
+├── 0003-build-project-site-with-astro-in-monorepo.md
+└── 0004-defer-os-sandbox-harden-workspace-boundary.md
 ```
 
 ---
@@ -554,5 +555,6 @@ ADR хранит **историю причины решения**, но не я�
 | [ADR-0001](0001-embed-dart-agent-core-behind-acp.md) | Встраиваемое ядро Dart-агента за ACP для codelab-app и `codelab_cli` | Accepted | 2026-10-21 |
 | [ADR-0002](0002-name-packages-codelab-side-layer.md) | Имена пакетов по схеме `codelab_<сторона>_<слой>` | Accepted | 2026-10-26 |
 | [ADR-0003](0003-build-project-site-with-astro-in-monorepo.md) | Сайт CodeLab на Astro в `site/` monorepo, документация читается на месте | Accepted | 2026-11-17 |
+| [ADR-0004](0004-defer-os-sandbox-harden-workspace-boundary.md) | Граница папки и одобрения в 1.0, песочница ОС в 1.x; усиление containment клиента | Proposed | 2026-11-25 |
 
 Дата — строка `Date:` из шапки ADR. Новый ADR добавляется в таблицу вместе с файлом и в перечень принятых решений `docs/architecture/README.md` §3 (раздел `adr/`); статус в таблице меняется вместе со строкой `Status:` в ADR.

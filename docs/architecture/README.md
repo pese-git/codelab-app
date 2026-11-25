@@ -485,6 +485,10 @@ Architecture Decision Records. [`adr/README.md`](adr/README.md) — когда �
 * [ADR-0002](adr/0002-name-packages-codelab-side-layer.md) — имена пакетов по схеме `codelab_<сторона>_<слой>`;
 * [ADR-0003](adr/0003-build-project-site-with-astro-in-monorepo.md) — сайт CodeLab на Astro в `site/` monorepo.
 
+На рассмотрении (Proposed):
+
+* [ADR-0004](adr/0004-defer-os-sandbox-harden-workspace-boundary.md) — граница папки и одобрения в 1.0, песочница ОС в 1.x; модель угроз исполнения (change `add-os-sandbox-decision`).
+
 Читать перед архитектурным изменением (§6, §7) и чтобы понять, почему принято действующее решение.
 
 ---
