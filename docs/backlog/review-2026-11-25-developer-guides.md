@@ -1,6 +1,6 @@
 # Backlog: находки при написании руководств разработчика, ревью 2026-11-25
 
-Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`, найдены позже в тот же день):
+Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, подтверждены ревью безопасности; найдены позже в тот же день):
 - [#471](https://github.com/pese-git/codelab-app/pull/471) — ядро агента;
 - [#472](https://github.com/pese-git/codelab-app/pull/472) — слой ACP и сторож;
 - [#473](https://github.com/pese-git/codelab-app/pull/473) — агентская сторона;
@@ -35,6 +35,12 @@
 | REV-20 | P3 | bug | agent | Рантайм пишет причину пропуска MCP в лог по-русски («сервис MCP не передан») | нет | [#494](https://github.com/pese-git/codelab-app/issues/494) |
 | REV-21 | P3 | bug | agent, mcp | Серверы MCP с именами вроде `my.srv` и `my_srv` получают общий префикс инструментов; у агента с ограниченным набором `toolCount` считается суммой | нет | [#495](https://github.com/pese-git/codelab-app/issues/495) |
 | REV-22 | P3 | tech-debt | agent | Проверка отмены перед стартом хода потомка ничего не делает, комментарий в коде утверждает обратное | нет | [#497](https://github.com/pese-git/codelab-app/issues/497) |
+| REV-23 | P2 | security | client, ui | Строка инструмента и блок одобрения показывают поля без маскирования секретов | нет | [#499](https://github.com/pese-git/codelab-app/issues/499) |
+| REV-24 | P2 | security | agent | `describeHttpError` усекает тело ошибки до вычистки секретов: на границе остаётся начало ключа | нет | [#500](https://github.com/pese-git/codelab-app/issues/500) |
+| REV-25 | P2 | security | agent | `codelab-agent` пишет в журнал полный текст исключений и стек: ядро передаёт в `error:` сырой объект | нет | [#501](https://github.com/pese-git/codelab-app/issues/501) |
+| REV-26 | P3 | security | agent, config | `config get` показывает литерал без известного формата рядом со ссылкой на секрет под секретным именем | нет | [#502](https://github.com/pese-git/codelab-app/issues/502) |
+| REV-27 | P3 | bug | client | Ложные срабатывания `SecretRedactor`: подстрока `pass` и слова `Token`, `Basic`, `Digest` в обычном тексте | нет | [#503](https://github.com/pese-git/codelab-app/issues/503) |
+| REV-28 | P3 | tech-debt | client, agent | Мелкие расхождения маскирования: пары `{name, value}` на верхнем уровне, экранирование ссылок, ключи `redact.*` без эффекта | да | [#504](https://github.com/pese-git/codelab-app/issues/504) |
 
 ## Карточки
 
@@ -395,3 +401,117 @@
 **Что сделать:**
 - Убрать проверку или передавать уже отменённый токен в ход потомка так, чтобы отмена срабатывала без опоры на порядок микрозадач.
 - Исправить комментарий; тест на отмену между `SubagentStarted` и началом хода.
+
+### REV-23. Строка инструмента и блок одобрения показывают поля без маскирования секретов (P2)
+
+Источник: документация механизма маскирования (`codelab_agent_core/doc/algorithms/redaction.md`, `codelab_client_acp/doc/redaction.md`), подтверждено ревью безопасности. Issue: [#499](https://github.com/pese-git/codelab-app/issues/499).
+
+**Где:**
+- `packages/dart/codelab_client_core/lib/src/transcript/tool_row.dart` (`ToolRowFormatter`: `_labelOf`, `_firstLine`, `summary`, `summaryShort`)
+- `packages/dart/codelab_client_core/lib/src/transcript/transcript_projector.dart` (`_command`)
+- `apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart`
+- `apps/codelab_cli/lib/src/repl/approval_prompt.dart` (`_command()`)
+
+**Факт:**
+- Метка вызова вида `other` — сырой `title` от агента; `secondary` — сырая первая строка вывода упавшего вызова (её показывает app); `summary` и `summaryShort` не проходят `SecretRedactor`.
+- Команда в блоке одобрения не маскируется ни в app, ни в REPL.
+- CLI `toolRow` и деталь `fetch` с учётными данными в адресе закрывают открытые PR #453 (`redact-tool-row-text`) и #451 (`strip-fetch-url-userinfo`); перечисленные здесь поля в них не входят — сверить при слиянии.
+
+**Почему важно:** Агент — недоверенный источник текста: токен в аргументах команды или в тексте ошибки инструмента попадает на экран и в снимки экрана (`approval-safety`, «Редактирование секретов»; `AGENTS.md` §10, §16).
+
+**Что сделать:**
+- Пропустить эти поля через `SecretRedactor` в `codelab_client_core`, а не в каждом клиенте.
+- Красные тесты на каждое поле.
+
+### REV-24. `describeHttpError` усекает тело ошибки до вычистки секретов: на границе остаётся начало ключа (P2)
+
+Источник: документация механизма маскирования (`codelab_agent_core/doc/algorithms/redaction.md`, `codelab_client_acp/doc/redaction.md`), подтверждено ревью безопасности. Issue: [#500](https://github.com/pese-git/codelab-app/issues/500).
+
+**Где:**
+- `packages/dart/codelab_agent_core/lib/src/llm/providers/http_support.dart` (`describeHttpError`, `maxErrorBodyLength = 2000`, `redactSecrets`)
+
+**Факт:**
+- Тело ошибки провайдера сначала усекается до 2000 символов, затем `redactSecrets` ищет известные значения секретов. Ключ, разрезанный границей, уже не совпадает целиком и остаётся префиксом (воспроизведено: текст кончается на `sk-test-a…`).
+
+**Почему важно:** Префикс ключа — частичная утечка секрета в лог, диагностику и ошибку хода (`agent-secrets`, «Сырое значение в теле ошибки»).
+
+**Что сделать:**
+- Вычищать секреты до усечения или усекать с запасом длины самого длинного секрета.
+- Красный тест с ключом на границе 2000 символов.
+
+### REV-25. `codelab-agent` пишет в журнал полный текст исключений и стек: ядро передаёт в `error:` сырой объект (P2)
+
+Источник: документация механизма маскирования (`codelab_agent_core/doc/algorithms/redaction.md`, `codelab_client_acp/doc/redaction.md`), подтверждено ревью безопасности. Issue: [#501](https://github.com/pese-git/codelab-app/issues/501).
+
+**Где:**
+- `apps/codelab_agent/lib/src/log/host_logger.dart` (`error?.toString()` и стек)
+- `packages/dart/codelab_agent_core/lib/src/tools/executor.dart` (`tool.present.error`, `tool.validate.error`)
+- `packages/dart/codelab_agent_core/lib/src/runtime/agent_runtime.dart` (`mcp.server.failed`)
+- `packages/dart/codelab_agent_core/lib/src/subagents/subagent_manager.dart` (три места)
+- `packages/dart/codelab_agent_core/lib/src/tools/tasks/task_list.dart`
+
+**Факт:**
+- Логгер ядра ничего не маскирует; правило «вместо текста исключения пишется тип» держится дисциплиной вызывающего кода.
+- Перечисленные места передают в `error:` сам объект исключения; `HostLogger` пишет его `toString()` и стек в файл и stderr.
+
+**Почему важно:** Текст исключения может содержать аргументы инструмента, адреса и заголовки MCP, ответы провайдеров — секреты попадут в журнал процесса (`structured-logging`, «Маскирование секретов в structured-выводе»).
+
+**Что сделать:**
+- Передавать тип ошибки и безопасный код вместо объекта или маскировать `error` в `HostLogger`.
+- Сторож или тест, запрещающий сырой объект в `error:` на уровнях выше `debug`.
+
+### REV-26. `config get` показывает литерал без известного формата рядом со ссылкой на секрет под секретным именем (P3)
+
+Источник: документация механизма маскирования (`codelab_agent_core/doc/algorithms/redaction.md`, `codelab_client_acp/doc/redaction.md`), подтверждено ревью безопасности. Issue: [#502](https://github.com/pese-git/codelab-app/issues/502).
+
+**Где:**
+- `packages/dart/codelab_agent_io/lib/src/cli/config_output.dart`
+- `packages/dart/codelab_agent_core/lib/src/config/inline_secrets.dart`, `secret_references.dart`
+
+**Факт:**
+- Значение `headers.Authorization` вида `mypassword123 ${X}` или `Basic dXNlcjpwYXNzd29yZA== ${X}` выводится как есть: шаблоны известных форматов его не узнают, а наличие ссылки делает значение «не литералом» (подтверждено тестом).
+
+**Почему важно:** Под секретным именем литерал рядом со ссылкой — почти всегда учётные данные; вывод `config get` копируют в чаты и issues.
+
+**Что сделать:**
+- Под секретным именем скрывать литеральную часть значения целиком, оставляя только ссылки.
+- Тест на оба примера.
+
+### REV-27. Ложные срабатывания `SecretRedactor`: подстрока `pass` и слова `Token`, `Basic`, `Digest` в обычном тексте (P3)
+
+Источник: документация механизма маскирования (`codelab_agent_core/doc/algorithms/redaction.md`, `codelab_client_acp/doc/redaction.md`), подтверждено ревью безопасности. Issue: [#503](https://github.com/pese-git/codelab-app/issues/503).
+
+**Где:**
+- `packages/dart/codelab_client_acp/lib/src/domain/secret_redaction.dart` (`_sensitiveKeyPattern`, `_authorizationPattern`)
+
+**Факт:**
+- Ключи `passport`, `bypass` и текст `passport: X123`, `compass=north` скрываются (подстрока `pass`).
+- `Token of appreciation` → `Token <redacted> appreciation`; `Basic auth required` → `Basic <redacted> required` (у правила нет быстрого пути и контекста).
+
+**Почему важно:** Ложные срабатывания портят диагностику и приучают не доверять маскированию; исправлять нужно без ослабления правил для настоящих секретов.
+
+**Что сделать:**
+- Сузить правила: границы слова для `pass`, форма значения после схемы авторизации.
+- Тесты на ложные и истинные случаи; изменение правил — по дельте `approval-safety`.
+
+### REV-28. Мелкие расхождения маскирования: пары `{name, value}` на верхнем уровне, экранирование ссылок, ключи `redact.*` без эффекта (P3)
+
+Источник: документация механизма маскирования (`codelab_agent_core/doc/algorithms/redaction.md`, `codelab_client_acp/doc/redaction.md`), подтверждено ревью безопасности. Issue: [#504](https://github.com/pese-git/codelab-app/issues/504).
+
+**Где:**
+- `packages/dart/codelab_client_acp/lib/src/domain/secret_redaction.dart` (`redactMap`)
+- `packages/dart/codelab_agent_core/lib/src/config/secret_references.dart` (`hasSecretReference`, `secretReferencesIn`)
+- `packages/dart/codelab_agent_core/lib/src/config/schema.dart`, `redact_settings.dart`
+
+**Факт:**
+- `redactMap` верхнего уровня не применяет правило пары `{name, value}`, вложенные пары маскируются.
+- Для экранированной ссылки `$${secret:x}` `hasSecretReference` даёт `true`, а `secretReferencesIn` — пустой список.
+- Ключи `redact.*` читаются, но объявлены с `applied: false`: универсального редактора на стороне агента нет.
+
+**Почему важно:** Расхождения между соседними функциями дают непредсказуемое поведение; объявленные ключи безопасности без эффекта вводят пользователя в заблуждение.
+
+**Что сделать:**
+- Выровнять `redactMap` и разбор ссылок, тесты.
+- Решить судьбу `redact.*`: реализовать (OpenSpec change) или убрать из схемы.
+
+Связано: утечка значения `--agent` с `ws://` в stderr уже заведена как REV-14 ([#487](https://github.com/pese-git/codelab-app/issues/487)).
