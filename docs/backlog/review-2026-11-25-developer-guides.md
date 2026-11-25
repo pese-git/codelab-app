@@ -1,6 +1,6 @@
 # Backlog: находки при написании руководств разработчика, ревью 2026-11-25
 
-Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, REV-29…33 — из документации механизма хранения секретов, REV-34…40 — из документации хранения и управления сессиями, REV-41…42 — из документации сторон исполнения approval, инструментов, `fs/*` и `terminal/*`, REV-43…45 — из документации механизма подсчёта usage, REV-46…47 — из документации механизма настроек, подтверждены ревью; найдены позже в тот же день):
+Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, REV-29…33 — из документации механизма хранения секретов, REV-34…40 — из документации хранения и управления сессиями, REV-41…42 — из документации сторон исполнения approval, инструментов, `fs/*` и `terminal/*`, REV-43…45 — из документации механизма подсчёта usage, REV-46…47 — из документации механизма настроек, REV-48…51 — из OpenSpec changes по пробелам обвязки агента и ADR-0004, подтверждены ревью; найдены позже в тот же день):
 - [#471](https://github.com/pese-git/codelab-app/pull/471) — ядро агента;
 - [#472](https://github.com/pese-git/codelab-app/pull/472) — слой ACP и сторож;
 - [#473](https://github.com/pese-git/codelab-app/pull/473) — агентская сторона;
@@ -60,6 +60,10 @@
 | REV-45 | P3 | bug | cli | TUI печатает команду агента (`/usage`, `/status`) в ленте дважды | нет | [#527](https://github.com/pese-git/codelab-app/issues/527) |
 | REV-46 | P3 | security | client, io | Файлы клиента (`profiles.json` и другие) создаются с правами по `umask`; `args` и `env` stdio-профиля с токеном видны другим локальным пользователям | нет | [#529](https://github.com/pese-git/codelab-app/issues/529) |
 | REV-47 | P3 | ux | agent, io | `config get --layer merged` не учитывает доверие к проекту: показывает «выключенный» MCP-сервер, который агент запускает | да | [#530](https://github.com/pese-git/codelab-app/issues/530) |
+| REV-48 | P2 | security | agent | Разрешение не перепроверяется после паузы: смена режима или `deny`, пока висит вопрос, не влияет на уже одобренный вызов | да | [#533](https://github.com/pese-git/codelab-app/issues/533) |
+| REV-49 | P3 | security | agent | Доверие к проекту не запрашивается заново при изменении проектного конфига | да | [#534](https://github.com/pese-git/codelab-app/issues/534) |
+| REV-50 | P3 | bug | agent, io | Allowlist окружения команд агента не содержит переменных Windows (`SystemRoot`, `PATHEXT` и др.) | нет | [#535](https://github.com/pese-git/codelab-app/issues/535) |
+| REV-51 | P3 | bug | agent, protocol | Команда CodeLab-агента через клиента (`terminal/create`) не получает фиксированный набор `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0` | нет | [#536](https://github.com/pese-git/codelab-app/issues/536) |
 
 ## Карточки
 
@@ -879,3 +883,72 @@
 **Что сделать:**
 - OpenSpec change: помечать в `get` ключи, отброшенные доверием (`ignored by trust`), или флаг с учётом доверия.
 - Сценарий спецификации и тест на недоверенный слой.
+
+### REV-48. Разрешение не перепроверяется после паузы: смена режима или `deny`, пока висит вопрос, не влияет на уже одобренный вызов (P2)
+
+Источник: OpenSpec changes по пробелам обвязки агента (`add-final-response-guardrails`, `add-os-sandbox-decision`, ADR-0004), подтверждено ревью кода. Issue: [#533](https://github.com/pese-git/codelab-app/issues/533).
+
+**Где:**
+- `packages/dart/codelab_agent_core/lib/src/tools/executor.dart` (`ToolCallExecutor`: между `beforeToolCall` и исполнением перепроверяется только отмена)
+- `openspec/changes/add-final-response-guardrails/design.md` (Q3)
+
+**Факт:**
+- Пока вызов ждёт ответа на `session/request_permission` (или замка пути), пользователь может переключить режим на `plan`, а перезагрузка конфига — добавить правило `deny`. После одобрения вызов исполняется по решению, принятому до паузы.
+- Перепроверки режима, правил и `preflight` путей перед необратимым действием нет; это вынесено из change `add-final-response-guardrails` (Q3, решение пользователя 2026-11-26) в отдельный change.
+
+**Почему важно:** Безопасность (`AGENTS.md` §2 п. 1, §10): решение для одного состояния сессии не должно применяться к другому.
+
+**Что сделать:**
+- OpenSpec change в `agent-permissions`: перепроверка режима, правил и путей в `ToolCallExecutor` после паузы, перед исполнением.
+- Красные тесты: смена режима на `plan` и новое `deny` во время вопроса.
+
+### REV-49. Доверие к проекту не запрашивается заново при изменении проектного конфига (P3)
+
+Источник: OpenSpec changes по пробелам обвязки агента (`add-final-response-guardrails`, `add-os-sandbox-decision`, ADR-0004), подтверждено ревью кода. Issue: [#534](https://github.com/pese-git/codelab-app/issues/534).
+
+**Где:**
+- `packages/dart/codelab_agent_core/lib/src/config/trust.dart` (`applyProjectTrust`)
+- `docs/architecture/adr/0004-defer-os-sandbox-harden-workspace-boundary.md` (сценарии S8, S9)
+
+**Факт:**
+- Доверие привязано к корню проекта в `trusted_projects`, а не к содержимому `.codelab/config.yaml`. Изменённый конфиг доверенного проекта (`mcp.servers`, `providers`, `permissions`) после перезапуска применяется без вопроса.
+- Сторонний агент может переписать `.codelab/config.yaml` через `fs/write_text_file` без одобрения (исключение §10); одобренная команда может переписать `$CODELAB_HOME`.
+
+**Почему важно:** Изменение конфига доверенного проекта — тот же риск, что и первое доверие: запуск процессов MCP и ослабление прав.
+
+**Что сделать:**
+- OpenSpec change: отпечаток доверенного проектного конфига и повторный запрос доверия при его изменении (или предупреждение).
+
+### REV-50. Allowlist окружения команд агента не содержит переменных Windows (`SystemRoot`, `PATHEXT` и др.) (P3)
+
+Источник: OpenSpec changes по пробелам обвязки агента (`add-final-response-guardrails`, `add-os-sandbox-decision`, ADR-0004), подтверждено ревью кода. Issue: [#535](https://github.com/pese-git/codelab-app/issues/535).
+
+**Где:**
+- `packages/dart/codelab_agent_io/lib/src/env/host_variables.dart` (`hostEnvironmentAllowlist`)
+- `packages/dart/codelab_agent_io/lib/src/env/local_execution_env.dart`, `packages/dart/codelab_agent_io/lib/src/mcp/stdio_process_transport.dart`
+
+**Факт:**
+- Команды `exec` и stdio-серверы MCP запускаются с `includeParentEnvironment: false` и окружением из `hostEnvironmentAllowlist`. Списка Windows-переменных там нет; без `SystemRoot`, `PATHEXT`, `ComSpec` и подобных многие программы Windows не запускаются.
+- Клиентский allowlist `terminal/create` в change `add-os-sandbox-decision` этот список для Windows уже содержит; у агента — нет.
+
+**Почему важно:** Корректность исполнения команд на Windows-целях.
+
+**Что сделать:**
+- Добавить Windows-часть в `hostEnvironmentAllowlist` (по образцу клиентского списка), сверка в `codelab_architecture_tests`; тест на Windows-окружении.
+
+### REV-51. Команда CodeLab-агента через клиента (`terminal/create`) не получает фиксированный набор `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GIT_TERMINAL_PROMPT=0` (P3)
+
+Источник: OpenSpec changes по пробелам обвязки агента (`add-final-response-guardrails`, `add-os-sandbox-decision`, ADR-0004), подтверждено ревью кода. Issue: [#536](https://github.com/pese-git/codelab-app/issues/536).
+
+**Где:**
+- `packages/dart/codelab_agent_acp/lib/src/acp_client_env.dart` (`AcpClientExecutionEnv.exec`: в `env` запроса только `options.env`)
+- `packages/dart/codelab_agent_io/lib/src/env/local_execution_env.dart` (фиксированный набор ENV-6)
+
+**Факт:**
+- Локально (`LocalExecutionEnv`) команда получает фиксированный набор ENV-6, через клиента — нет. Одна и та же команда (`git log`, `git push`) через `serve --stdio`/`--ws` может открыть пейджер или запросить пароль и зависнуть до таймаута.
+- Решение пользователя 2026-11-26 (Q4 change `add-os-sandbox-decision`): набор добавляет агент в `env` запроса, отдельным change.
+
+**Почему важно:** Одинаковое поведение команд независимо от стороны исполнения; зависание хода на интерактивном запросе.
+
+**Что сделать:**
+- `AcpClientExecutionEnv.exec` добавляет фиксированный набор в `env` запроса; красный тест на кадр `terminal/create`; фикстура ACP.
