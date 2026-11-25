@@ -348,6 +348,7 @@ final outcome = await remover.remove(
 
 ## Смотрите также
 
+- [Алгоритм настроек: запись провайдера мастером с перезагрузкой](../../codelab_agent_core/doc/algorithms/settings.md) и [настройки на клиенте](../../codelab_client_core/doc/settings-on-client.md).
 - Рецепт «новый шаг мастера» и «новый пресет» — [глава 08](08-extending.md).
 - Тесты мастера — `test/provider_setup_flow_test.dart` (1731 строка), `test/provider_setup_error_code_test.dart`, `test/provider_setup_commit_test.dart`; описание — [глава 07](07-testing.md).
 - Спецификация — требования «Мастер провайдера», «Проверка списка моделей», «Порядок записи провайдера», «Готовность провайдера» в [`client-agent-setup`](../../../../openspec/specs/client-agent-setup/spec.md).

@@ -47,6 +47,7 @@
 
 ## Смежные документы
 
+- Сквозной разбор настроек: [сторона агента](../../codelab_agent_core/doc/algorithms/settings.md) (слои, перезагрузка, ACP, подключение) и [сторона клиента](../../codelab_client_core/doc/settings-on-client.md).
 - Пакеты агентской стороны: [`codelab_agent_core`](../../codelab_agent_core/README.md) и его [руководство](../../codelab_agent_core/doc/README.md), [`codelab_agent_io`](../../codelab_agent_io/README.md), [`codelab_embedded`](../../codelab_embedded/README.md).
 - Клиенты, использующие мост: [`apps/codelab_cli`](../../../../apps/codelab_cli/README.md) ([разработка](../../../../apps/codelab_cli/doc/development.md)) и [`apps/codelab_desktop`](../../../../apps/codelab_desktop/README.md) ([разработка](../../../../apps/codelab_desktop/doc/development.md)).
 - Для пользователя и эксплуатации: [настройка агента](../../../../docs/user/configuration.md), [`CODELAB_HOME`](../../../../docs/ops/codelab-home.md).

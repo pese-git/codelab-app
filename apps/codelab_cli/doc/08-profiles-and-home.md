@@ -157,6 +157,7 @@ codelab: default is the built-in agent; use --agent embedded
 
 ## Смотрите также
 
+- Сквозной разбор: [настройки на клиенте](../../../packages/dart/codelab_client_core/doc/settings-on-client.md) (профили, `CODELAB_HOME`, повреждённый файл, одновременная запись).
 - [Глава 02: выбор режима и коды выхода](02-startup-and-composition.md)
 - [`codelab_client_io`](../../../packages/dart/codelab_client_io/README.md) — `JsonFileProfileStore`, `JsonFileRecentProjectsStore`, `resolveCodelabHome`
 - [Каталог `CODELAB_HOME`](../../../docs/ops/codelab-home.md) — общие файлы с CodeLab app

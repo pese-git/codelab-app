@@ -177,6 +177,7 @@ Let's set one up. Press Ctrl+C to quit; run "codelab provider add" later to chan
 
 ## Смотрите также
 
+- Сквозной разбор настроек: [настройки на клиенте](../../../packages/dart/codelab_client_core/doc/settings-on-client.md) и [алгоритм настроек агента](../../../packages/dart/codelab_agent_core/doc/algorithms/settings.md).
 - [`codelab_setup`](../../../packages/dart/codelab_setup/README.md) — мост настроек
 - Спецификации [`client-agent-setup`](../../../openspec/specs/client-agent-setup/spec.md) и [`codelab-cli`](../../../openspec/specs/codelab-cli/spec.md) («Подкоманда codelab config», «Мастер первого запуска CLI», «Команды /provider и /settings в REPL и TUI»)
 - Проектный документ [первый запуск и настройки](../../../docs/architecture/proposals/dart-agent-and-clients/12-4-first-run-and-settings.md)

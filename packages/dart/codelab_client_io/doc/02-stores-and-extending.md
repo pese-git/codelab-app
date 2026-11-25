@@ -283,3 +283,5 @@ FormatException: Unknown profile type "ssh" in ~/.codelab/profiles.json.
 **Причина.** `ioTransportResolver` встроенного агента не открывает.
 
 **Что сделать.** Добавьте в `ClientWorkspace(resolvers: …)` резолвер встроенного агента рядом с `ioTransportResolver`, как в `composition_root.dart` терминального клиента.
+
+Сквозной разбор: [настройки на клиенте](../../codelab_client_core/doc/settings-on-client.md).

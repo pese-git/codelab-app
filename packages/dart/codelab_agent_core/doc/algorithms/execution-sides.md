@@ -605,3 +605,4 @@ A->C {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"<session-
 - [`codelab_client_acp`: исполнение на клиенте](../../../codelab_client_acp/doc/execution-on-client.md), [запросы агента: файлы и терминал](../../../codelab_client_acp/doc/03-agent-requests-fs-terminal.md).
 - [`codelab_client_core`: одобрения](../../../codelab_client_core/doc/08-approvals.md).
 - Для пользователя: [разрешения агента](../../../../../apps/codelab_agent/doc/user/05-permissions.md), [запрос без диалога в `codelab -p`](../../../../../apps/codelab_cli/doc/user/04-headless.md#разрешения-без-человека).
+- [Настройки: кто читает конфигурацию при данном подключении](settings.md).

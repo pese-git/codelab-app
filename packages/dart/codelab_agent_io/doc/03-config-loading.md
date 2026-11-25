@@ -254,6 +254,7 @@ if (loaded.config == null) { /* loaded.issues не пуст */ }
 
 ## Смотрите также
 
+- [Сквозной алгоритм настроек: слои, доверие, перезагрузка, подключение](../../codelab_agent_core/doc/algorithms/settings.md)
 - [Глава 9 ядра: схема, доверие, слияние, перезагрузка](../../codelab_agent_core/doc/09-config-prompts-commands.md)
 - [Глава 4: запись и перезагрузка](04-config-writing-and-reload.md)
 - [Глава 13: частые проблемы](13-troubleshooting.md)

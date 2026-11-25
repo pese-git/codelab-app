@@ -149,3 +149,7 @@ providers.gw.models.m.max_output_tokens | (not set) | default
 5. Тест — на `snapshotOf` или `RealHome` ([глава 07](07-testing.md)); проверьте, что секрет-маркер не попадает в `toString()` (пример — группа «секреты (SETUP-1)» в `test/views/setting_field_view_test.dart`).
 
 Полные рецепты — [глава 08](08-extending.md).
+
+## Смотрите также
+
+- [Алгоритм настроек: слои, перезагрузка, подключение](../../codelab_agent_core/doc/algorithms/settings.md) и [настройки на клиенте](../../codelab_client_core/doc/settings-on-client.md).

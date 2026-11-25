@@ -816,3 +816,4 @@ a2c {"jsonrpc":"2.0","id":5,"error":{"code":-32602,"message":"cwd does not exist
 - [10. Наблюдаемость и ошибки](../10-observability-and-errors.md) — события лога `session.*`.
 - [`docs/architecture/session-lifecycle.md`](../../../../../docs/architecture/session-lifecycle.md) — жизненный цикл сессии на стороне клиента.
 - Проекты: [`08-sessions.md`](../../../../../docs/architecture/proposals/agent-core/08-sessions.md), [`17-6-session-management.md`](../../../../../docs/architecture/proposals/agent-core/17-6-session-management.md).
+- [Настройки: смена режима и модели по ACP, перезагрузка конфигурации](settings.md)

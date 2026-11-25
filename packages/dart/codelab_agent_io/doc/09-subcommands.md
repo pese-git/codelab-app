@@ -280,6 +280,7 @@ exit(result.exitCode);
 
 ## Смотрите также
 
+- [Сквозной алгоритм настроек: кто и как меняет настройки](../../codelab_agent_core/doc/algorithms/settings.md)
 - [Глава 3: загрузка](03-config-loading.md), [глава 4: запись](04-config-writing-and-reload.md), [глава 5: секреты](05-secrets.md)
 - [Эксплуатация агента: подкоманды и флаги](../../../../apps/codelab_agent/doc/operations.md)
 - Тесты: `test/cli/` — 15 файлов; `cli_config_commands_test.dart`, `config_commands_test.dart`, `provider_commands_test.dart`, `secret_commands_test.dart`, `secret_migrate_command_test.dart`, `mcp_add_stdin_test.dart`

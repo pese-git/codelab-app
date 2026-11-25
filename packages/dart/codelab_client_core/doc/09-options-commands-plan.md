@@ -92,3 +92,5 @@ all:     host:logs agent:compact agent:plan agent:explain
 Источник: временный скрипт с `CommandCatalog`. `/plan` стоит перед `/explain`: первый — по префиксу (ранг 0), второй содержит `pl` внутри имени (ранг 1). Заглушка `compact` хоста вытеснена командой агента; `file` находит `explain` по описанию («Explain the open file») — это ранг 3. Тест — `test/commands/command_catalog_test.dart`.
 
 В CLI каталог использует разбор `/команд` и Tab-дополнение (`apps/codelab_cli/lib/src/repl/command_router.dart`).
+
+Сквозной разбор настроек клиента и агента: [настройки на клиенте](settings-on-client.md), [алгоритм настроек агента](../../codelab_agent_core/doc/algorithms/settings.md).

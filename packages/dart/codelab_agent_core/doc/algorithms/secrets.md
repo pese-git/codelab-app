@@ -755,3 +755,4 @@ Config: valid
 - [Маскирование секретов на стороне агента](redaction.md)
 - [Секреты в `codelab`: руководство пользователя](../../../../../apps/codelab_cli/doc/user/07-secrets.md)
 - [`agent-secrets`](../../../../../openspec/specs/agent-secrets/spec.md)
+- [Настройки: чьи они, слои конфигурации, перезагрузка и подключение](settings.md)

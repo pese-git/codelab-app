@@ -158,3 +158,5 @@ sequenceDiagram
 Список секретов для выбора «Use stored secret» — `selectableProfileTokenSecrets(names)`: только `codelab/profiles/*` и только допустимые имена, по алфавиту. Ключи провайдеров и секреты MCP-серверов в него не входят: выбрать их токеном профиля почти всегда ошибка. Фильтр касается только выбора в интерфейсе; ручная ссылка `secret:<имя>` в `profiles.json` по-прежнему читается.
 
 Тесты — `test/connection/profile_commit_test.dart`; двойники хранилищ с журналом вызовов `calls` — `test/support/profile_fakes.dart`.
+
+Сквозной разбор настроек клиента и агента: [настройки на клиенте](settings-on-client.md), [алгоритм настроек агента](../../codelab_agent_core/doc/algorithms/settings.md).
