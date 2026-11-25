@@ -170,4 +170,6 @@ Id вызова потомка на проводе — цепочка `<преф
 
 Мост ведёт агрегаты usage на сессию сервера (`UsageAccounting`) и независимо от того, согласился ли текущий владелец: после `reattach` агрегаты и `seq` продолжаются без сброса. Кадр `_codelab/session/usage` строится и тратит `seq` только если он уйдёт: согласие `usage` читается в момент события, а у отсоединённой сессии кадр не строится. Триггеры снимков — `step` (по `StepEnded`), `turn` (по `TurnEnded`, до ответа на `session/prompt`), `compaction`, `compactionDiscarded` и `load`. Формат и правила расширения — спецификация [`agent-acp-server`](../../../../openspec/specs/agent-acp-server/spec.md) (разделы про `_codelab/session/usage`), код — [`usage_accounting.dart`](../lib/src/usage_accounting.dart). В лог идёт `acp.usage.sent {session_id, seq, trigger, turn_id}` без токенов и денег.
 
+Сквозной разбор — от ответа провайдера до кадра, с примерами кадров, засевом при `session/load` и граничными случаями — в [алгоритме учёта usage](../../codelab_agent_core/doc/algorithms/usage.md).
+
 Дальше: [проекция и запросы к клиенту](03-projection-and-client-requests.md).

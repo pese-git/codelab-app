@@ -227,5 +227,6 @@ sequenceDiagram
 | разрешения | [`agent-permissions`](../../../../openspec/specs/agent-permissions/spec.md), [`docs/architecture/permissions.md`](../../../../docs/architecture/permissions.md) |
 | субагенты | [`agent-subagents`](../../../../openspec/specs/agent-subagents/spec.md) |
 | исключение ACP `fs/*` и `terminal/*` из клиентского approval | корневой [`AGENTS.md`](../../../../AGENTS.md), раздел 10 |
+| уведомление `_codelab/session/usage` и запрос журнала | [алгоритм учёта usage](../../codelab_agent_core/doc/algorithms/usage.md), [`agent-acp-server`](../../../../openspec/specs/agent-acp-server/spec.md) |
 
 Дальше: [тестирование](04-testing.md).
