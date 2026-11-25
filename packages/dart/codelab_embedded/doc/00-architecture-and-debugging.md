@@ -284,6 +284,7 @@ info agents.loaded {session_id: <session-id>, names: []}
 
 ## Смотрите также
 
+- [Алгоритм исполнения: кто решает, спрашивает и исполняет](../../codelab_agent_core/doc/algorithms/execution-sides.md): почему встроенный агент не шлёт `fs/*` и `terminal/*`, но спрашивает разрешение тем же `session/request_permission`; кадры из реального прогона;
 - [Тесты, рецепты и частые проблемы](01-tests-recipes-troubleshooting.md);
 - [`AGENTS.md`](../AGENTS.md) пакета и [README](../README.md);
 - [`openspec/specs/embedded-agent/spec.md`](../../../../openspec/specs/embedded-agent/spec.md).

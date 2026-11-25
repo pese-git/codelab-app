@@ -146,6 +146,8 @@ a2c {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"<session-i
 
 ### `AcpClientExecutionEnv`
 
+Сводная таблица «кто и где» для всех способов подключения, примеры кадров и граничные случаи — [алгоритм исполнения](../../codelab_agent_core/doc/algorithms/execution-sides.md); клиентская половина — [исполнение на клиенте](../../codelab_client_acp/doc/execution-on-client.md).
+
 Окружение реализует `ExecutionEnv` ядра запросами к клиенту: встроенные инструменты пишутся один раз над `ExecutionEnv`, а клиент показывает пользователю правки и терминалы и держит ограничение рабочей папки (`AGENTS.md` §10). Если хост задал `AcpServerConfig.localEnv`, это окружение не создаётся: файлы и команды исполняет сам хост, а `fs/*` и `terminal/*` клиенту не уходят ([глава ядра: встроенный режим](../../codelab_agent_core/doc/03-request-flow.md#встроенный-режим)).
 
 #### Что получает ядро при создании сессии
