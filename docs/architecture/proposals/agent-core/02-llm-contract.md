@@ -891,6 +891,53 @@ Usage неудачных попыток суммируется в итогово
 первый текст через 410 с — запрос жив; после первого текста пауза 130 с — `timeout` по `idle`.
 Та же пауза в 410 с у модели без флага — `timeout` через 120 с после `StartEvent`.
 
+### 2.10.6. Гейт передачи данных провайдеру (LLM-17)
+
+Хост, который обязан спросить пользователя перед отправкой данных провайдеру (app в магазинах
+приложений, App Store Review Guidelines 5.1.2(i)), передаёт ядру функцию-гейт. Ядро вызывает её
+перед каждым запросом модели и при отказе не обращается к сети (design.md change
+`add-ai-data-sharing-consent`, D4; `docs/architecture/permissions.md` §59).
+
+```dart
+final class ProviderEndpoint {          // кому уйдёт запрос: id провайдера конфига, вид API, адрес
+  const ProviderEndpoint({required this.providerId, required this.api, required this.baseUrl});
+  factory ProviderEndpoint.of(ProviderConfig config);
+  final String providerId; final ProviderApi api; final Uri baseUrl;
+}
+/// true — можно отправлять; [cancelled] завершается при отмене запроса (CancelToken).
+typedef SharingGate = Future<bool> Function(ProviderEndpoint endpoint, Future<void> cancelled);
+
+StreamFunction withSharingGate(StreamFunction inner, {
+    required ProviderEndpoint? Function(String providerId) endpointOf,
+    required SharingGate gate, required Logger logger});
+```
+
+Правила декоратора:
+
+1. Место: оборачивает функцию модели, которую хост отдаёт в `buildAgentCore` (маршрутизирующую
+   или сценарную), то есть стоит снаружи повтора и watchdog одного провайдера, но внутри
+   `withFallback` (его строит `ModelRoleResolver` поверх функции хоста, §17.10.5). Поэтому вопрос —
+   один на запрос к модели: повторы уже разрешённого запроса не спрашивают, а переход fallback на
+   модель другого провайдера спрашивает про него. Решения не кэширует: разрешение может быть
+   отозвано между запросами.
+2. `endpointOf(model.provider)` даёт `null` для провайдера без возможности запроса (нет в
+   конфиге или в `providerProblems`): запрос уходит во внутреннюю функцию без вопроса — она сама
+   завершает его ошибкой без HTTP (§2.10, маршрутизация).
+3. Отказ (`false`) — `ErrorEvent` класса `badRequest` с текстом
+   `<providerId>: the user did not allow sending data to this provider`, внутренняя функция не
+   вызывается; лог `llm.sharing.denied {provider}`. Класс `badRequest` не повторяется и не
+   переключает модель (LLM-9, §2.10.3).
+4. Исключение гейта — тот же отказ (fail closed) с текстом
+   `<providerId>: the data sharing check failed`; лог `llm.sharing.gate_failed {provider, error_class}`.
+5. Отмена во время ожидания — `ErrorEvent` `aborted` в пределах цикла событий (LLM-7); `cancelled`
+   гейта завершается, ответ гейта после отмены игнорируется.
+6. Контракт `StreamFunction` (§2.5) сохраняется: поток возвращается синхронно, работа начинается
+   не раньше следующей микрозадачи, терминальное событие одно.
+7. Хост без гейта не оборачивает функцию: бинарь `codelab-agent` и CLI ведут себя как раньше.
+
+Ответ ACP при отказе — существующий итог хода `failed` (§13.8: `-32603`, `data.codelab.errorClass:
+"badRequest"`); новых методов и полей нет.
+
 ## 2.11. Переполнение контекста
 
 `bool isContextOverflow(AssistantMessage m, {required int contextWindow})` — `true`, если:
@@ -1184,6 +1231,7 @@ endpoint, max output 32768 from remote catalog)`.
 14. **LLM-14.** Удалённый каталог метаданных не добавляет модель в список; каждое поле `ModelRef` разрешается по фиксированному порядку источников §2.12.2.
 15. **LLM-15.** Параметр рассуждения (`thinking`, `reasoning_effort`, `reasoning`) отправляется только модели с `supportsReasoning`; значение опции `effort` при смене на модель без рассуждения сохраняется.
 16. **LLM-16.** Таймер `idle` сбрасывается `StartEvent` и каждым событием блока любого вида, включая рассуждение, и только ими; keep-alive его не сбрасывает. До первого контентного блока у модели с `hiddenReasoning` действует `idleReasoning`.
+17. **LLM-17.** Если хост передал гейт передачи данных, ни один запрос модели не уходит в сеть до ответа гейта `true` на этот запрос; отказ, исключение гейта и отмена ожидания не вызывают внутреннюю функцию (§2.10.6).
 
 После MVP: PRV-1 … PRV-18 (§17.10.13).
 
