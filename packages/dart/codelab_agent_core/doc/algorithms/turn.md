@@ -616,5 +616,6 @@ SessionTitleChanged
 - [08. Сессии и сжатие](../08-sessions-and-compaction.md) — журнал, записи, сжатие.
 - [09. Конфигурация, промпты, команды](../09-config-prompts-commands.md) — встроенные слэш-команды и шаблоны.
 - [`context.md`](context.md), [`tool-call.md`](tool-call.md) — соседние алгоритмы.
+- [`usage.md`](usage.md) — как usage шагов и потомков складывается в `TurnEnded.usage` и уходит клиенту.
 - Нормы: [`agent-loop`](../../../../../openspec/specs/agent-loop/spec.md), [`agent-cancellation`](../../../../../openspec/specs/agent-cancellation/spec.md), [`agent-sessions`](../../../../../openspec/specs/agent-sessions/spec.md), [`agent-slash-commands`](../../../../../openspec/specs/agent-slash-commands/spec.md).
 - Исходный код: [`agent_loop.dart`](../../lib/src/loop/agent_loop.dart), [`agent.dart`](../../lib/src/loop/agent.dart), [`agent_runtime.dart`](../../lib/src/runtime/agent_runtime.dart), [`session_writer.dart`](../../lib/src/session/session_writer.dart); сторона ACP — [`codelab_agent_acp`](../../../codelab_agent_acp/README.md).

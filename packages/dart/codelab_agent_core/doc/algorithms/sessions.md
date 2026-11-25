@@ -812,6 +812,7 @@ a2c {"jsonrpc":"2.0","id":5,"error":{"code":-32602,"message":"cwd does not exist
 - [Управление сессиями на стороне клиента](../../../codelab_client_core/doc/session-management.md) — как клиент ведёт список, открывает сессию и держит состояние; [сессии](../../../codelab_client_core/doc/04-sessions.md) и [восстановление](../../../codelab_client_core/doc/05-restore.md) в `codelab_client_core`.
 - [04. Цикл хода](../04-turn-loop.md), [turn.md](turn.md) — события, которые пишет `SessionWriter`.
 - [context.md](context.md) — сжатие и проекция контекста; [subagents.md](subagents.md) — журналы потомков; [plan.md](plan.md) — запись `task`.
+- [usage.md](usage.md) — учёт usage: поле `usage` в записях журнала, `usage.json`, засев суммы при `session/load`.
 - [10. Наблюдаемость и ошибки](../10-observability-and-errors.md) — события лога `session.*`.
 - [`docs/architecture/session-lifecycle.md`](../../../../../docs/architecture/session-lifecycle.md) — жизненный цикл сессии на стороне клиента.
 - Проекты: [`08-sessions.md`](../../../../../docs/architecture/proposals/agent-core/08-sessions.md), [`17-6-session-management.md`](../../../../../docs/architecture/proposals/agent-core/17-6-session-management.md).

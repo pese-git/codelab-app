@@ -355,6 +355,7 @@ sequenceDiagram
 
 - [04-turn-loop.md](04-turn-loop.md) — события, которые пишет `SessionWriter`.
 - [05-llm.md](05-llm.md) — `usage`, `overflow` и `StreamFunction`, на которой работает суммаризатор.
+- [algorithms/usage.md](algorithms/usage.md) — учёт usage: поле `usage` ответов, запись `subagent`, usage суммаризатора и отброшенного прохода, файл `usage.json`.
 - [09-config-prompts-commands.md](09-config-prompts-commands.md) — ключи `compaction.*`, `sessions.*`, промпты `compaction/*`, команда `/compact`.
 - [10-observability-and-errors.md](10-observability-and-errors.md) — события лога `session.*` и `compaction.*`.
 - [`docs/architecture/session-lifecycle.md`](../../../../docs/architecture/session-lifecycle.md) — жизненный цикл сессии на стороне клиента.

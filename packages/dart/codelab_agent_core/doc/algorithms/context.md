@@ -930,3 +930,4 @@ compaction.done    info   {trigger: afterTurn, pass: 1, tokens_before: 13033, to
 - Спецификации: [`agent-compaction`](../../../../../openspec/specs/agent-compaction/spec.md), [`agent-prompts`](../../../../../openspec/specs/agent-prompts/spec.md), [`agent-sessions`](../../../../../openspec/specs/agent-sessions/spec.md).
 - Архитектура: [сжатие контекста](../../../../../docs/architecture/proposals/agent-core/09-compaction.md), [промпты](../../../../../docs/architecture/proposals/agent-core/11-prompts.md).
 - Соседние алгоритмы: [turn.md](turn.md), [tool-call.md](tool-call.md), [mcp.md](mcp.md).
+- Usage суммаризатора сжатия и отброшенного прохода: [usage.md](usage.md).

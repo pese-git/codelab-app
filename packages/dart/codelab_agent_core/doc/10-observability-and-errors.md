@@ -283,6 +283,7 @@ sequenceDiagram
 - [03-request-flow.md](03-request-flow.md) — путь `session/prompt`, встроенный режим.
 - [04-turn-loop.md](04-turn-loop.md) — `AgentEvent`, `TurnEnded`, обработка ошибок цикла.
 - [05-llm.md](05-llm.md) — провайдеры, декораторы повтора и запасных моделей.
+- [algorithms/usage.md](algorithms/usage.md) — события `usage.ledger.*` и `acp.usage.*` в потоке учёта usage.
 - [06-tools.md](06-tools.md) — исполнитель инструментов и окружение.
 - [08-sessions-and-compaction.md](08-sessions-and-compaction.md) — сбой записи журнала и ремонт.
 - [`docs/architecture/observability.md`](../../../../docs/architecture/observability.md), [`docs/architecture/error-handling.md`](../../../../docs/architecture/error-handling.md) — правила для клиентов и агента.
