@@ -1,6 +1,6 @@
 # Backlog: находки при написании руководств разработчика, ревью 2026-11-25
 
-Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, REV-29…33 — из документации механизма хранения секретов, REV-34…40 — из документации хранения и управления сессиями, REV-41…42 — из документации сторон исполнения approval, инструментов, `fs/*` и `terminal/*`, REV-43…45 — из документации механизма подсчёта usage, подтверждены ревью; найдены позже в тот же день):
+Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, REV-29…33 — из документации механизма хранения секретов, REV-34…40 — из документации хранения и управления сессиями, REV-41…42 — из документации сторон исполнения approval, инструментов, `fs/*` и `terminal/*`, REV-43…45 — из документации механизма подсчёта usage, REV-46…47 — из документации механизма настроек, подтверждены ревью; найдены позже в тот же день):
 - [#471](https://github.com/pese-git/codelab-app/pull/471) — ядро агента;
 - [#472](https://github.com/pese-git/codelab-app/pull/472) — слой ACP и сторож;
 - [#473](https://github.com/pese-git/codelab-app/pull/473) — агентская сторона;
@@ -58,6 +58,8 @@
 | REV-43 | P2 | bug | agent | Отброшенный ответ (overflow до первого блока, повтор после ошибки спаривания) теряет usage: нарушено «usage шага — сумма всех попыток» | нет | [#525](https://github.com/pese-git/codelab-app/issues/525) |
 | REV-44 | P3 | observability | client | Лог `usage.received` пишет триггеры `load` и `compactionDiscarded` как `other` | нет | [#526](https://github.com/pese-git/codelab-app/issues/526) |
 | REV-45 | P3 | bug | cli | TUI печатает команду агента (`/usage`, `/status`) в ленте дважды | нет | [#527](https://github.com/pese-git/codelab-app/issues/527) |
+| REV-46 | P3 | security | client, io | Файлы клиента (`profiles.json` и другие) создаются с правами по `umask`; `args` и `env` stdio-профиля с токеном видны другим локальным пользователям | нет | [#529](https://github.com/pese-git/codelab-app/issues/529) |
+| REV-47 | P3 | ux | agent, io | `config get --layer merged` не учитывает доверие к проекту: показывает «выключенный» MCP-сервер, который агент запускает | да | [#530](https://github.com/pese-git/codelab-app/issues/530) |
 
 ## Карточки
 
@@ -840,3 +842,40 @@
 
 **Что сделать:**
 - Найти место двойного добавления команды в ленту; красный тест TUI на одну строку команды.
+
+### REV-46. Файлы клиента (`profiles.json` и другие) создаются с правами по `umask`; `args` и `env` stdio-профиля с токеном видны другим локальным пользователям (P3)
+
+Источник: документация механизма настроек клиента и агента (`codelab_agent_core/doc/algorithms/settings.md`, `codelab_client_core/doc/settings-on-client.md`), подтверждено ревью кода. Issue: [#529](https://github.com/pese-git/codelab-app/issues/529).
+
+**Где:**
+- `packages/dart/codelab_client_io/lib/src/stores/json_file.dart` (`writeBytesAtomically`: `writeAsBytes` и `rename` без `chmod`)
+- `apps/codelab_cli/lib/src/home.dart` (`CodelabHome.ensureExists` — права `0700` каталогу ставит только CLI)
+- `apps/codelab_cli/lib/src/profiles/` (`profile_arg.dart`, `profiles_command.dart`: значения `args` и `env` stdio-профиля хранятся как есть)
+
+**Факт:**
+- В прогоне `profiles.json` создан с правами `-rw-r--r--`. Токен WebSocket хранится ссылкой (`tokenRef`), но `args` и `env` stdio-профиля лежат открытым текстом; пользователь может положить туда токен.
+- Каталогу `$CODELAB_HOME` права `0700` ставит только `CodelabHome.ensureExists` (интерактивные режимы и подкоманда `profiles` терминала); app права не ставит. Если каталог первым создал app, файл читают другие локальные пользователи.
+
+**Почему важно:** Секреты не должны быть доступны другим пользователям машины (`AGENTS.md` §10). Уровень hardening: утечка только если пользователь сам положил токен в `args`/`env`.
+
+**Что сделать:**
+- Ставить `0600` файлам в `writeBytesAtomically` и `0700` каталогу `$CODELAB_HOME` и в app (по образцу файлового бэкенда секретов).
+- Тест прав на POSIX; предупреждение в документации остаётся.
+
+### REV-47. `config get --layer merged` не учитывает доверие к проекту: показывает «выключенный» MCP-сервер, который агент запускает (P3)
+
+Источник: документация механизма настроек клиента и агента (`codelab_agent_core/doc/algorithms/settings.md`, `codelab_client_core/doc/settings-on-client.md`), подтверждено ревью кода. Issue: [#530](https://github.com/pese-git/codelab-app/issues/530).
+
+**Где:**
+- `packages/dart/codelab_agent_io` (подкоманда `config get`, `ConfigCommands`)
+- `openspec/specs/agent-configuration/spec.md` (печать сырого значения старшего слоя; сценарий ожидает значение проекта)
+
+**Факт:**
+- Прогон: в слое `user` включён stdio-сервер `tools`, недоверенный проект пишет `mcp.servers: [{name: tools, enabled: false}]`. `config get mcp.servers --layer merged` показывает `enabled: false`, `layer: project`; `config check` сообщает, что `mcp.servers` проекта проигнорирован; `/mcp list` в `serve --stdio` показывает `tools` запущенным.
+- Так же `get` показывает проектный `permissions.mode: bypass`, который доверие отбрасывает. Поведение соответствует спецификации.
+
+**Почему важно:** Пользователь видит более строгое (или более мягкое) значение, чем действует, — ложное чувство безопасности (`AGENTS.md` §2, п. 1).
+
+**Что сделать:**
+- OpenSpec change: помечать в `get` ключи, отброшенные доверием (`ignored by trust`), или флаг с учётом доверия.
+- Сценарий спецификации и тест на недоверенный слой.
