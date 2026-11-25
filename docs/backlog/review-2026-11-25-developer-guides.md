@@ -1,6 +1,6 @@
 # Backlog: находки при написании руководств разработчика, ревью 2026-11-25
 
-Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, REV-29…33 — из документации механизма хранения секретов, подтверждены ревью безопасности; найдены позже в тот же день):
+Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, REV-29…33 — из документации механизма хранения секретов, REV-34…40 — из документации хранения и управления сессиями, подтверждены ревью; найдены позже в тот же день):
 - [#471](https://github.com/pese-git/codelab-app/pull/471) — ядро агента;
 - [#472](https://github.com/pese-git/codelab-app/pull/472) — слой ACP и сторож;
 - [#473](https://github.com/pese-git/codelab-app/pull/473) — агентская сторона;
@@ -46,6 +46,13 @@
 | REV-31 | P3 | security | client, transport | Токен профиля WebSocket: `toString` конфигурации печатает токен, `ws://` на удалённый адрес не блокируется при открытии | нет | [#508](https://github.com/pese-git/codelab-app/issues/508) |
 | REV-32 | P3 | tech-debt | agent | Хранилище секретов: дублированные тексты проблем `secrets.backend`, лог отказа пишет только первую причину, `_verifyFinal` удаляет весь файл | нет | [#509](https://github.com/pese-git/codelab-app/issues/509) |
 | REV-33 | P3 | bug | desktop, embedded | Требует воспроизведения: после замены только ключа в мастере провайдера встроенный агент может ходить со старым ключом до перезапуска | нет | [#510](https://github.com/pese-git/codelab-app/issues/510) |
+| REV-34 | P2 | bug | agent, protocol | Два одновременных `session/load` закрытой сессии открывают двух писателей над одним журналом | нет | [#513](https://github.com/pese-git/codelab-app/issues/513) |
+| REV-35 | P2 | security | agent, protocol | Мост сессии не проверяет владельца: любое соединение может слать `session/prompt`, `set_mode`, `cancel` в чужую сессию | да | [#514](https://github.com/pese-git/codelab-app/issues/514) |
+| REV-36 | P2 | bug | agent, io | Нет блокировки писателя сессии между процессами; ключи `sessions.lease` и `sessions.read_only` объявлены без эффекта | да | [#515](https://github.com/pese-git/codelab-app/issues/515) |
+| REV-37 | P3 | bug | cli | `/resume` в REPL возвращает открытую `detached`-сессию без `session/load`: промпты в неё падают | нет | [#516](https://github.com/pese-git/codelab-app/issues/516) |
+| REV-38 | P3 | bug | agent, io | Журнал сессии: заголовок-сирота при сбое создания, режим не пишется при создании, `set_mode` после сбоя записи, каталог без `fsync` | нет | [#517](https://github.com/pese-git/codelab-app/issues/517) |
+| REV-39 | P3 | bug | agent, cli | `session/list` фильтрует `cwd` сравнением строк; `--continue` смотрит только первую страницу списка | нет | [#518](https://github.com/pese-git/codelab-app/issues/518) |
+| REV-40 | P3 | bug | client | После ошибки записи снимок рабочего пространства не пишется повторно, пока состояние не изменится | нет | [#519](https://github.com/pese-git/codelab-app/issues/519) |
 
 ## Карточки
 
@@ -617,3 +624,127 @@
 **Что сделать:**
 - Воспроизвести тестом встроенного агента.
 - Если подтвердится — сбрасывать кэш после `SecretAdmin.store` или гарантировать перезагрузку.
+
+### REV-34. Два одновременных `session/load` закрытой сессии открывают двух писателей над одним журналом (P2)
+
+Источник: документация механизма хранения и управления сессиями (`codelab_agent_core/doc/algorithms/sessions.md`, `codelab_client_core/doc/session-management.md`), подтверждено ревью кода. Issue: [#513](https://github.com/pese-git/codelab-app/issues/513).
+
+**Где:**
+- `packages/dart/codelab_agent_acp/lib/src/agent_server.dart` (обработчик `session/load`, ветка без открытой сессии)
+
+**Факт:**
+- Если сессии нет в памяти, обработчик ждёт `_server._runtime.loadSession(...)` и только потом кладёт мост в `_server._sessions[id]`. Маршрутизатор выполняет запросы параллельно, поэтому второй `session/load` того же id в это окно тоже открывает сессию.
+- Получаются два `_Session` над одним журналом с разными листьями: записи расходятся на боковые ветки; первая сессия вытесняется из `_server._sessions`, её MCP-серверы и дескриптор журнала утекают.
+
+**Почему важно:** Целостность пользовательских данных (`AGENTS.md` §2, приоритет 3) и явный владелец долгоживущих ресурсов (§9).
+
+**Что сделать:**
+- Резервировать id до `await` (например, `Future` открытия в карте), второй запрос ждёт его или получает `sessionBusy`.
+- Красный тест на два параллельных `session/load`.
+
+### REV-35. Мост сессии не проверяет владельца: любое соединение может слать `session/prompt`, `set_mode`, `cancel` в чужую сессию (P2)
+
+Источник: документация механизма хранения и управления сессиями (`codelab_agent_core/doc/algorithms/sessions.md`, `codelab_client_core/doc/session-management.md`), подтверждено ревью кода. Issue: [#514](https://github.com/pese-git/codelab-app/issues/514).
+
+**Где:**
+- `packages/dart/codelab_agent_acp/lib/src/agent_server.dart` (`_bridge(id)`, обработчики `session/prompt`, `set_mode`, `set_config_option`, `cancel`)
+
+**Факт:**
+- `_bridge` ищет сессию только по id; владелец (соединение, которое её открыло или загрузило) не сверяется.
+- В `ws`-режиме несколько соединений: одно может управлять сессией другого, а запросы разрешений при этом уходят владельцу.
+
+**Почему важно:** Изоляция сессий между клиентами и связь запроса разрешения с правильной сессией (`AGENTS.md` §10). Требует сверки со спекой: допускает ли ACP управление сессией без `session/load` в этом соединении.
+
+**Что сделать:**
+- Сверить с `docs/protocols/acp/` и `openspec/specs/agent-acp-server`.
+- Отвечать ошибкой на запросы к сессии, которой соединение не владеет; тест.
+
+### REV-36. Нет блокировки писателя сессии между процессами; ключи `sessions.lease` и `sessions.read_only` объявлены без эффекта (P2)
+
+Источник: документация механизма хранения и управления сессиями (`codelab_agent_core/doc/algorithms/sessions.md`, `codelab_client_core/doc/session-management.md`), подтверждено ревью кода. Issue: [#515](https://github.com/pese-git/codelab-app/issues/515).
+
+**Где:**
+- `packages/dart/codelab_agent_io/lib/src/session/jsonl_session_store.dart`
+- `packages/dart/codelab_agent_core/lib/src/config/schema.dart` (`sessions.lease`, `sessions.read_only`, `applied: false`)
+
+**Факт:**
+- Документация заявляет «одна сессия — один процесс-писатель», но ни блокировки, ни проверки в коде нет: два процесса (`codelab` и `codelab-agent serve` над одним `CODELAB_HOME`) могут писать в один журнал.
+- Ключи `sessions.lease`, `sessions.read_only` (и `sessions.window`, `segments`, `search`, `branch_summary`) принимаются схемой с `applied: false`.
+
+**Почему важно:** Записи двух процессов перемешиваются в одном журнале, ремонт при открытии может переписать чужие строки.
+
+**Что сделать:**
+- Решить механизм аренды (lease-файл, advisory lock) — OpenSpec change.
+- До реализации — явно описать ограничение пользователю.
+
+### REV-37. `/resume` в REPL возвращает открытую `detached`-сессию без `session/load`: промпты в неё падают (P3)
+
+Источник: документация механизма хранения и управления сессиями (`codelab_agent_core/doc/algorithms/sessions.md`, `codelab_client_core/doc/session-management.md`), подтверждено ревью кода. Issue: [#516](https://github.com/pese-git/codelab-app/issues/516).
+
+**Где:**
+- `apps/codelab_cli/lib/src/repl/commands/resume.dart`
+
+**Факт:**
+- Уже открытую сессию (в том числе `detached`) `/resume` берёт из памяти без `session/load`; она остаётся `detached`, `send` даёт `PromptFailed`. `_reopenIfDetached` спасает только активную сессию.
+- Спека `codelab-cli` («Сессии в REPL») говорит, что `/resume` загружает сессию.
+
+**Почему важно:** Пользователь «возобновил» сессию, а работать с ней нельзя; поведение расходится со спекой.
+
+**Что сделать:**
+- Для `detached` вызывать `loadSession`; тест.
+
+### REV-38. Журнал сессии: заголовок-сирота при сбое создания, режим не пишется при создании, `set_mode` после сбоя записи, каталог без `fsync` (P3)
+
+Источник: документация механизма хранения и управления сессиями (`codelab_agent_core/doc/algorithms/sessions.md`, `codelab_client_core/doc/session-management.md`), подтверждено ревью кода. Issue: [#517](https://github.com/pese-git/codelab-app/issues/517).
+
+**Где:**
+- `packages/dart/codelab_agent_core/lib/src/runtime/agent_runtime.dart` (`createSession`, `_abandon`, `_open`, `_failed`)
+- `packages/dart/codelab_agent_io/lib/src/session/jsonl_session_store.dart`
+
+**Факт:**
+- Если первая `model_change` не записалась или рантайм останавливают после `store.create` (`CancelledException`), журнал с одним заголовком остаётся и виден в `session/list`; `_abandon` закрывает только MCP и не вызывает `store.close(id)`.
+- Режим при создании корневой сессии в журнал не пишется: пока не было `mode_change`, при загрузке режим берётся из текущей конфигурации (у дочерней сессии пишется).
+- После сбоя записи `_failed` держится до `TurnStarted`: `set_mode` между ходами отвечает успехом, а `mode_change` молча не пишется.
+- `fsync` идёт только по дескриптору файла; каталог после `create` и после `rename` при ремонте не синхронизируется.
+
+**Почему важно:** Пустые сессии в списке, расхождение режима после перезапуска, молчаливая потеря изменения, новый файл может не пережить отключение питания.
+
+**Что сделать:**
+- Удалять или помечать журнал при неудачном создании и закрывать дескриптор.
+- Писать начальный `mode_change`.
+- Отвечать ошибкой `set_mode` при `_failed`.
+- Синхронизировать каталог после `create` и `rename`.
+- Тесты на каждый случай.
+
+### REV-39. `session/list` фильтрует `cwd` сравнением строк; `--continue` смотрит только первую страницу списка (P3)
+
+Источник: документация механизма хранения и управления сессиями (`codelab_agent_core/doc/algorithms/sessions.md`, `codelab_client_core/doc/session-management.md`), подтверждено ревью кода. Issue: [#518](https://github.com/pese-git/codelab-app/issues/518).
+
+**Где:**
+- `packages/dart/codelab_agent_io/lib/src/session/jsonl_session_store.dart` (`entry.summary.cwd == cwd`)
+- `apps/codelab_cli/lib/src/session_setup.dart` (`openCliSession(last: true)`)
+
+**Факт:**
+- `header.cwd` хранит строку клиента, сравнение сырое: `/a/b/` не найдёт `/a/b`, то же со ссылками и регистром.
+- `--continue` выбирает из `workspace.current.sessions` (первая страница) без `loadMoreSessions`. Dart-агент сортирует от новых к старым по 50, поэтому с ним не проявляется; ACP порядок не задаёт — у внешнего агента свежая сессия может не попасть в выбор.
+
+**Почему важно:** Пользователь не находит свою сессию по каталогу или продолжает не ту.
+
+**Что сделать:**
+- Нормализовать путь (абсолютный, без завершающего `/`, по возможности `realpath`) при записи и сравнении.
+- В `--continue` дочитывать страницы или запрашивать с фильтром; тесты.
+
+### REV-40. После ошибки записи снимок рабочего пространства не пишется повторно, пока состояние не изменится (P3)
+
+Источник: документация механизма хранения и управления сессиями (`codelab_agent_core/doc/algorithms/sessions.md`, `codelab_client_core/doc/session-management.md`), подтверждено ревью кода. Issue: [#519](https://github.com/pese-git/codelab-app/issues/519).
+
+**Где:**
+- `packages/dart/codelab_client_core/lib/src/restore/workspace_restorer.dart` (`_drain`, `observe`, `flush`)
+
+**Факт:**
+- `_drain` присваивает `_written = next` и после ошибки `store.write`; `observe` с тем же состоянием запись пропускает, `flush` завершается как успешный. На диске остаётся старый снимок.
+
+**Почему важно:** После перезапуска клиент восстанавливает устаревшее состояние; спека `acp-client-kit` требует здесь только диагностики, но повтор записи ожидаем.
+
+**Что сделать:**
+- Обновлять `_written` только после успешной записи; тест со сбойным хранилищем.
