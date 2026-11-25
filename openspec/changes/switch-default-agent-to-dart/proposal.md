@@ -97,11 +97,13 @@
 
 | № | Дата | Коммит | Запуск | Обязательные джобы, `parity` | Итог |
 |---|---|---|---|---|---|
-| 1 | — | — | — | — | — |
-| 2 | — | — | — | — | — |
-| 3 | — | — | — | — | — |
+| 1 | 2026-11-22 | `cf7c2fad` | https://github.com/pese-git/codelab-app/actions/runs/45013491670 (попытка 1) | все 14 `success`, `parity` `success` | ✅ |
+| 2 | 2026-11-23 | `c1161066` | https://github.com/pese-git/codelab-app/actions/runs/45167547895 (попытка 1) | все 14 `success`, `parity` `success` | ✅ |
+| 3 | 2026-11-24 | `2eabe0ec` | https://github.com/pese-git/codelab-app/actions/runs/45401129101 (попытка 1) | все 14 `success`, `parity` `success` | ✅ |
 
 Красный, пропущенный или вручную перезапущенный запуск обнуляет счёт.
+
+Счёт начат с первого зелёного `parity` после merge pull request #413 (задача 4.0). Ночь 2026-11-21 (https://github.com/pese-git/codelab-app/actions/runs/44895089449) красная и в счёт не входит. Отчёт третьей ночи — [`evidence/nightly/`](evidence/nightly/README.md): 173 доказательства 77 строк Must, `pass` 154, `deferred` 19 (только `app:`), прочих статусов нет.
 
 ### Flutter-тесты приложения на macOS (`release/<version>`, один коммит)
 
