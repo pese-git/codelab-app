@@ -226,7 +226,7 @@ sequenceDiagram
 3. **Читает ответ.** `selected` с `optionId` превращается в решение; `cancelled` и отмена хода — в `cancelled`. Неизвестный `optionId` и `allow_always`, которого не предлагали, — не разрешение, а `rejectOnce` с записью `acp.permission.unknown_option`.
 4. **Любой сбой — отказ**, никогда не разрешение: ошибка клиента, недекодируемый ответ, обрыв соединения. Исключение — переподключение: с `waitForReconnect` обрыв не отказ, вопрос ждёт нового соединения и задаётся заново с тем же `toolCallId`.
 
-Клиентская сторона — диалог, варианты, хранение стабильных разрешений — в `codelab_client_core` и клиентах и сюда не входит ([`docs/architecture/permissions.md`](../../../../docs/architecture/permissions.md)).
+Клиентская сторона — диалог, варианты, хранение стабильных разрешений — в `codelab_client_core` и клиентах и сюда не входит ([`docs/architecture/permissions.md`](../../../../docs/architecture/permissions.md)). Сводка «кто что делает» по способам подключения — встроенный агент, `serve --stdio`, `serve --ws`, внешний агент — в [алгоритме исполнения](algorithms/execution-sides.md).
 
 ## Инварианты
 

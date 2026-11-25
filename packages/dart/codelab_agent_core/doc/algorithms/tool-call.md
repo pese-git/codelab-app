@@ -522,6 +522,8 @@ flowchart TD
 
 ## Исполнение у клиента через ACP
 
+Этот раздел описывает только ветку «через клиента». Какая сторона исполняет и решает при встроенном агенте, `serve --stdio`, `serve --ws` и внешнем агенте — в [execution-sides.md](execution-sides.md).
+
 Когда агент работает как процесс по `stdio` или `WebSocket`, он не видит файлов и терминалов клиента. Поэтому env сессии — `AcpClientExecutionEnv` из `codelab_agent_acp`: он переводит операции `ExecutionEnv` в запросы агента к клиенту. Встроенные инструменты от этого не меняются: они написаны один раз над `ExecutionEnv`.
 
 Сборка env сессии в `agent_server.dart`: `AcpClientExecutionEnv` (при `localListing` его оборачивает `ListingOverlayEnv`, который берёт локально только `listDir` и `stat`), затем `BoundedEnv.wrap(…, cwd)` в `agent_runtime.dart`. У встроенного агента (профили `embedded-*`) клиентского env нет: хост исполняет файлы и команды сам.

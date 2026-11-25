@@ -170,7 +170,7 @@ flowchart TD
 | `AcpClientExecutionEnv` | `codelab_agent_acp`, `lib/src/acp_client_env.dart` | файлы и команды исполняет клиент ACP: `readText` → `fs/read_text_file`, `writeText` → `fs/write_text_file`, `exec` → `terminal/*`. Терминал всегда освобождается через `terminal/release` (ENV-7). `listDir`, `readBytes`, `realpath` не реализует: в ACP таких методов нет |
 | `ListingOverlayEnv` | `codelab_agent_core`, `lib/src/env/listing_overlay_env.dart` | листинг и `stat` берутся из локального env, всё остальное — от клиента. Так `ls` и `search` работают с клиентом ACP, когда он на той же машине (stdio) |
 
-Какую реализацию получает сессия, решает хост: ACP-сервер `codelab_agent_acp` по `AcpServerConfig.localEnv` и `localListing` собирает порты сессии. Встроенный режим (`codelab_embedded`) идёт локально, `codelab-agent serve --stdio` — через клиента с наложением локального листинга. Подробности — в [главе 02](./02-assembly-and-hosts.md) и [главе 03](./03-request-flow.md).
+Какую реализацию получает сессия, решает хост: ACP-сервер `codelab_agent_acp` по `AcpServerConfig.localEnv` и `localListing` собирает порты сессии. Встроенный режим (`codelab_embedded`) идёт локально, `codelab-agent serve --stdio` — через клиента с наложением локального листинга. Подробности — в [главе 02](./02-assembly-and-hosts.md) и [главе 03](./03-request-flow.md); какая сторона что исполняет при каждом способе подключения — в [алгоритме исполнения](./algorithms/execution-sides.md).
 
 ### `BoundedEnv`
 

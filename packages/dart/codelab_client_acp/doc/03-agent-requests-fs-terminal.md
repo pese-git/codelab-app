@@ -2,6 +2,8 @@
 
 В ACP агент не только отвечает клиенту, но и сам шлёт ему запросы: прочитать файл, записать файл, запустить процесс. Эта глава объясняет, как `AcpClientApplication` их принимает, где проверяет, что агент не выходит за рабочую папку сессии, какие ошибки возвращает и как ведёт процессы. Запрос `session/request_permission` разобран в [главе 02](02-connection-and-turns.md#одобрения).
 
+Какие запросы приходят от какого агента (встроенный агент, `codelab-agent` по stdio и WebSocket, чужой агент) и кто принимает решение о разрешении — в [исполнении на клиенте](execution-on-client.md) и в [алгоритме исполнения](../../codelab_agent_core/doc/algorithms/execution-sides.md).
+
 Нормы: спецификации [`acp-fs-client`](../../../../openspec/specs/acp-fs-client/spec.md) и [`acp-terminal-client`](../../../../openspec/specs/acp-terminal-client/spec.md). Обоснование решений — `design.md` изменений [`add-acp-fs-client-support`](../../../../openspec/changes/archive/2026-09-04-add-acp-fs-client-support/design.md) и [`add-acp-terminal-client-support`](../../../../openspec/changes/archive/2026-09-04-add-acp-terminal-client-support/design.md). Протокол — `docs/protocols/acp/protocol/09-File System.md` и `10-Terminal.md`.
 
 ## Почему нет одобрения
