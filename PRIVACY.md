@@ -1,10 +1,10 @@
-Last revised: 2026-11-20
+Last revised: 2026-11-25
 
 # CodeLab Privacy Policy
 
 Draft pending legal review. Русская редакция: [`PRIVACY.ru.md`](PRIVACY.ru.md). Terms of use: [`TERMS.md`](TERMS.md).
 
-This policy covers the CodeLab desktop app (`codelab_desktop`), the terminal client `codelab` and the Dart agent `codelab-agent`. CodeLab runs on your computer. It has no accounts and no server of its own.
+This policy covers the CodeLab app (`codelab_desktop`) on every platform and in every store where it is distributed, the terminal client `codelab` and the Dart agent `codelab-agent`. It is published by `<developer name>` ("the author"). CodeLab runs on your computer. It has no accounts, no sign-in and no server of its own. Through the software, the author does not collect, receive, store, sell or share your personal data; the only exception is reports that you choose to share through an app store (section 10).
 
 ## 1. No telemetry
 
@@ -43,4 +43,33 @@ Data sent to a model provider, an MCP server or an external ACP agent is handled
 
 Questions: `<contact>`. Project site: `<site>`.
 
-The date in the first line is the date of this revision. A new revision changes that date and is listed in the "Privacy" part of [`CHANGELOG.md`](CHANGELOG.md). The license is in [`LICENSE`](LICENSE); components under their own licenses are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+The date in the first line is the date of this revision. A new revision changes that date and is listed in the release section of [`CHANGELOG.md`](CHANGELOG.md). If a new version starts sending data that this policy does not describe, the policy is changed in the same release, before that version is published. The license is in [`LICENSE`](LICENSE); components under their own licenses are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+## 6. Your choices and rights
+
+The author receives no personal data through the software, so the author holds nothing about you to show, correct, export or delete. You control the data on your computer yourself (section 7). The software sends data only to services you configure (section 2); you stop that by removing the service from the configuration. To exercise rights over data a service received (access, deletion, objection and others under the GDPR, the CCPA or other law), contact that service.
+
+If you write to the author at the contact in section 5, the author uses your message and address only to answer you and keeps them no longer than needed for that.
+
+## 7. Retention and deletion
+
+Data on your computer stays until you delete it. To delete it:
+
+- remove the configuration folder (`$CODELAB_HOME`, by default `~/.codelab`) with the configuration, session logs, agent logs and the secrets file;
+- remove the app's `logs` folder in the application support folder of the operating system;
+- uninstall the app; on most systems this also removes its per-user preferences, on others you remove them yourself;
+- revoke API keys and tokens at the services that issued them, and delete conversations stored there under their own policies.
+
+There is no account, so there is nothing to delete on the author's side.
+
+## 8. Security
+
+API keys are read from environment variables or kept in a file in the configuration folder that only your user can read (permissions `0600`); the software does not write key values to its logs. Connections to `https` and `wss` addresses are encrypted; a `ws://` or `http://` address that you configure yourself is not. No method of storage or transfer is fully secure, and the security of your computer and of the services you connect is outside the author's control (see [`TERMS.md`](TERMS.md), section 2).
+
+## 9. Children
+
+The software is a developer tool and is not directed at children under 13, or under the age of digital consent where you live. The author does not knowingly collect data from anyone, including children.
+
+## 10. App stores and the operating system
+
+App stores (the App Store, the Mac App Store, Google Play and others) and the operating system may collect data about downloads, purchases, crashes and device use under their own policies; that data goes to them. If you allow your system or store to share crash reports or diagnostics with app developers, the store may show the author aggregated or de-identified reports, and the author uses them only to find and fix defects.
