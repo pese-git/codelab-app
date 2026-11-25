@@ -1,6 +1,6 @@
 # Backlog: находки при написании руководств разработчика, ревью 2026-11-25
 
-Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, REV-29…33 — из документации механизма хранения секретов, REV-34…40 — из документации хранения и управления сессиями, REV-41…42 — из документации сторон исполнения approval, инструментов, `fs/*` и `terminal/*`, подтверждены ревью; найдены позже в тот же день):
+Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, REV-29…33 — из документации механизма хранения секретов, REV-34…40 — из документации хранения и управления сессиями, REV-41…42 — из документации сторон исполнения approval, инструментов, `fs/*` и `terminal/*`, REV-43…45 — из документации механизма подсчёта usage, подтверждены ревью; найдены позже в тот же день):
 - [#471](https://github.com/pese-git/codelab-app/pull/471) — ядро агента;
 - [#472](https://github.com/pese-git/codelab-app/pull/472) — слой ACP и сторож;
 - [#473](https://github.com/pese-git/codelab-app/pull/473) — агентская сторона;
@@ -55,6 +55,9 @@
 | REV-40 | P3 | bug | client | После ошибки записи снимок рабочего пространства не пишется повторно, пока состояние не изменится | нет | [#519](https://github.com/pese-git/codelab-app/issues/519) |
 | REV-41 | P2 | bug | protocol, client | `StdioAcpTransport.send` пишет без очереди: два одновременных исходящих сообщения клиента падают с `sendFailed` | нет | [#521](https://github.com/pese-git/codelab-app/issues/521) |
 | REV-42 | P3 | bug | agent | Агент спрашивает разрешение до проверки возможностей клиента: одобренный вызов `fs`/`terminal` гарантированно падает | да | [#522](https://github.com/pese-git/codelab-app/issues/522) |
+| REV-43 | P2 | bug | agent | Отброшенный ответ (overflow до первого блока, повтор после ошибки спаривания) теряет usage: нарушено «usage шага — сумма всех попыток» | нет | [#525](https://github.com/pese-git/codelab-app/issues/525) |
+| REV-44 | P3 | observability | client | Лог `usage.received` пишет триггеры `load` и `compactionDiscarded` как `other` | нет | [#526](https://github.com/pese-git/codelab-app/issues/526) |
+| REV-45 | P3 | bug | cli | TUI печатает команду агента (`/usage`, `/status`) в ленте дважды | нет | [#527](https://github.com/pese-git/codelab-app/issues/527) |
 
 ## Карточки
 
@@ -787,3 +790,53 @@
 **Что сделать:**
 - Решить: скрывать недоступные инструменты из схемы модели или проверять возможность до вопроса — OpenSpec change.
 - Тест с клиентом без `fs`/`terminal`.
+
+### REV-43. Отброшенный ответ (overflow до первого блока, повтор после ошибки спаривания) теряет usage: нарушено «usage шага — сумма всех попыток» (P2)
+
+Источник: документация механизма подсчёта usage (`codelab_agent_core/doc/algorithms/usage.md`, `codelab_client_core/doc/usage-accounting.md`), подтверждено ревью кода. Issue: [#525](https://github.com/pese-git/codelab-app/issues/525).
+
+**Где:**
+- `packages/dart/codelab_agent_core/lib/src/loop/agent_loop.dart` (`_request`: ветки `continue` около строк 480-493 раньше `_usage += …` около строки 171)
+
+**Факт:**
+- При `!started && overflow && _compactEmergency` и при повторе после `badRequest` с ошибкой спаривания (флаг `retried`) цикл делает `continue` до прибавления `response.usage` к usage шага. Ответ не попадает ни в транскрипт, ни в `StepEnded`/`TurnEnded`, ни в журнал usage.
+- Денежный случай — тихое переполнение `length` с `output == 0` (`overflow.dart`, `silentOverflow`): блоков нет, `started == false`, а ненулевой `input` уже оплачен провайдеру. У отказа провайдера usage обычно нулевой.
+- Требование `openspec/specs/agent-llm/spec.md` «Usage и стоимость»: «Usage шага SHALL быть суммой всех попыток». Решения об исключении в архивных changes нет.
+
+**Почему важно:** Целостность учёта расходов (`AGENTS.md` §2, п. 3–4): пользователь видит меньше, чем заплатил.
+
+**Что сделать:**
+- Перед `continue` прибавлять `response.usage` к usage шага (по образцу `failedUsage` в `retry.dart`).
+- Красный тест: тихий `length` с ненулевым `input` и последующее аварийное сжатие — usage шага включает отброшенный ответ.
+
+### REV-44. Лог `usage.received` пишет триггеры `load` и `compactionDiscarded` как `other` (P3)
+
+Источник: документация механизма подсчёта usage (`codelab_agent_core/doc/algorithms/usage.md`, `codelab_client_core/doc/usage-accounting.md`), подтверждено ревью кода. Issue: [#526](https://github.com/pese-git/codelab-app/issues/526).
+
+**Где:**
+- `packages/dart/codelab_client_acp/lib/src/application/acp_client_application.dart` (`_handleUsageNotification`, около строк 3044-3048)
+- `packages/dart/codelab_client_core/lib/src/usage/usage_decoder.dart` (switch по `triggerName`)
+
+**Факт:**
+- В лог попадает только закрытый набор `{step, turn, compaction}` (D14/D22 п. 1 change `add-usage-extension`); набор старше триггеров `load` (`add-usage-ledger`) и `compactionDiscarded` (`fix-discarded-compaction-usage`), поэтому они пишутся как `other`.
+- Декодер клиента превращает `compactionDiscarded` в `UsageTrigger.unknown`.
+
+**Почему важно:** Наблюдаемость (`AGENTS.md` §16): по логу нельзя отличить снимок при загрузке и отброшенное сжатие от неизвестного триггера.
+
+**Что сделать:**
+- Расширить закрытый набор лога и `UsageTrigger` известными триггерами агента; обновить `docs/architecture/observability.md`; тесты.
+
+### REV-45. TUI печатает команду агента (`/usage`, `/status`) в ленте дважды (P3)
+
+Источник: документация механизма подсчёта usage (`codelab_agent_core/doc/algorithms/usage.md`, `codelab_client_core/doc/usage-accounting.md`), подтверждено ревью кода. Issue: [#527](https://github.com/pese-git/codelab-app/issues/527).
+
+**Где:**
+- `apps/codelab_cli/lib/src/tui/` (лента ввода TUI; точное место в коде не установлено)
+
+**Факт:**
+- В TUI `> /usage` и `> /status` видны в ленте два раза; обычный промпт — один раз. Дубль остаётся после следующих ходов. Проверено снимком `tmux capture-pane` после отрисовки на реальном `codelab` со сценарным агентом. В REPL дубля нет.
+
+**Почему важно:** Лента — история диалога; дубль вводит в заблуждение и расходится с REPL.
+
+**Что сделать:**
+- Найти место двойного добавления команды в ленту; красный тест TUI на одну строку команды.
