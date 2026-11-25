@@ -131,7 +131,7 @@ class _ProvidersPageHostState extends State<ProvidersPageHost> {
 | Connection | `ConnectionSettingsCubit`; в диалоге «Add connection profile» — `AddProfileCubit` | `ConnectionCommands` (его реализует `ConnectionCubit`), `ProfileStore`, `ProfileSecrets`, `ConnectionPreferences`, `ClientWorkspace`, окружение composition root |
 | Providers | `ProviderSettingsCubit`; в мастере — `ProviderWizardCubit` | `ProviderSettingsSession` (открывается заново при каждой загрузке; даёт `AgentConfigStore`, проверку ключа, секреты и автомат мастера) |
 | MCP servers | `McpSettingsCubit` | `ProviderSettingsSession`, `EmbeddedMcpStatusSource` |
-| Agents & modes | `AgentsModesCubit` | `ProviderSettingsSession`, `AgentDefinitionsPort`, `LocalFolderOpener` |
+| Agents & modes | `AgentsModesCubit` | `ProviderSettingsSession`, `AgentDefinitionsLoader` (результат — `AgentDefinitionsLoad`), `LocalFolderOpener` |
 | Skills & extensions | `SkillsSettingsCubit` | `ProviderSettingsSession`, `LocalFolderOpener` |
 | General | `AgentDefaultsCubit` и `StartupSettingsCubit`; язык — `AppLanguageCubit` из корня | `ProviderSettingsSession`, `StartupPreferences`, `AboutPorts` (`ExternalLinkOpener`, `LocalFolderOpener`) |
 | Appearance | `AppearanceSettingsCubit`; применённым оформлением владеет `AppAppearanceCubit` | `ThemeLibrary`, `ThemeFilePicker`, `SystemAccentSource` |

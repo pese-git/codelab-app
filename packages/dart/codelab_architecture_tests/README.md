@@ -37,7 +37,7 @@
 Из корня репозитория:
 
 ```bash
-melos run guard
+fvm dart run melos run guard
 ```
 
 Скрипт выполняет `fvm dart test packages/dart/codelab_architecture_tests`. Тот же набор можно запустить из каталога пакета:

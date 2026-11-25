@@ -30,4 +30,5 @@
 
 - [Руководство агента: подключение клиентов](../../../codelab_agent/doc/user/02-connect-clients.md) — как запустить `codelab-agent serve --ws` и `--stdio`.
 - [Терминальный клиент `codelab`](../../../codelab_cli/doc/user-guide.md) — те же профили.
+- [Claude Code как внешний агент](../../../../docs/integrations/claude-code.md) — профиль stdio для `claude-agent-acp` и отличия этого агента от ACP.
 - [Если что-то пошло не так](10-troubleshooting.md)

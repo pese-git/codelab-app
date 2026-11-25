@@ -25,7 +25,7 @@ fvm dart run melos run guard
 Melos печатает команду, а затем вывод `dart test`:
 
 ```text
-melos run guard
+fvm dart run melos run guard
   └> fvm dart test packages/dart/codelab_architecture_tests
      └> RUNNING
 …

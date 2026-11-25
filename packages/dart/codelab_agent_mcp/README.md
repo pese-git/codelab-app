@@ -96,7 +96,7 @@ sequenceDiagram
   core->>con: McpTool.execute
   con->>srv: tools/call
   srv-->>con: результат tools/call
-  con-->>core: результат; ToolCallExecutor ограждает его как untrusted
+  con-->>core: результат, ToolCallExecutor ограждает его как untrusted
 ```
 
 Если сервер недоступен, сессия всё равно создаётся: коннектор пишет `mcp.server.failed` и повторяет попытки с задержкой не больше 30 секунд. Инструменты упавшего сервера остаются в реестре и отвечают `is not connected (retry in <n>s)`. Автомат состояний сервера — `connecting`, `connected`, `failed`, `disabled`.
