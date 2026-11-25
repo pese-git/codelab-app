@@ -1,6 +1,6 @@
 # Backlog: находки при написании руководств разработчика, ревью 2026-11-25
 
-Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, REV-29…33 — из документации механизма хранения секретов, REV-34…40 — из документации хранения и управления сессиями, подтверждены ревью; найдены позже в тот же день):
+Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, REV-29…33 — из документации механизма хранения секретов, REV-34…40 — из документации хранения и управления сессиями, REV-41…42 — из документации сторон исполнения approval, инструментов, `fs/*` и `terminal/*`, подтверждены ревью; найдены позже в тот же день):
 - [#471](https://github.com/pese-git/codelab-app/pull/471) — ядро агента;
 - [#472](https://github.com/pese-git/codelab-app/pull/472) — слой ACP и сторож;
 - [#473](https://github.com/pese-git/codelab-app/pull/473) — агентская сторона;
@@ -53,6 +53,8 @@
 | REV-38 | P3 | bug | agent, io | Журнал сессии: заголовок-сирота при сбое создания, режим не пишется при создании, `set_mode` после сбоя записи, каталог без `fsync` | нет | [#517](https://github.com/pese-git/codelab-app/issues/517) |
 | REV-39 | P3 | bug | agent, cli | `session/list` фильтрует `cwd` сравнением строк; `--continue` смотрит только первую страницу списка | нет | [#518](https://github.com/pese-git/codelab-app/issues/518) |
 | REV-40 | P3 | bug | client | После ошибки записи снимок рабочего пространства не пишется повторно, пока состояние не изменится | нет | [#519](https://github.com/pese-git/codelab-app/issues/519) |
+| REV-41 | P2 | bug | protocol, client | `StdioAcpTransport.send` пишет без очереди: два одновременных исходящих сообщения клиента падают с `sendFailed` | нет | [#521](https://github.com/pese-git/codelab-app/issues/521) |
+| REV-42 | P3 | bug | agent | Агент спрашивает разрешение до проверки возможностей клиента: одобренный вызов `fs`/`terminal` гарантированно падает | да | [#522](https://github.com/pese-git/codelab-app/issues/522) |
 
 ## Карточки
 
@@ -748,3 +750,40 @@
 
 **Что сделать:**
 - Обновлять `_written` только после успешной записи; тест со сбойным хранилищем.
+
+### REV-41. `StdioAcpTransport.send` пишет без очереди: два одновременных исходящих сообщения клиента падают с `sendFailed` (P2)
+
+Источник: документация сторон исполнения approval, инструментов, `fs/*` и `terminal/*` (`codelab_agent_core/doc/algorithms/execution-sides.md`, `codelab_client_acp/doc/execution-on-client.md`), подтверждено ревью кода. Issue: [#521](https://github.com/pese-git/codelab-app/issues/521).
+
+**Где:**
+- `packages/dart/codelab_acp_transports/lib/src/io/stdio_acp_transport.dart` (`send`)
+- `packages/dart/codelab_client_acp/lib/src/application/acp_client_application.dart` (`_sendTracedMessage`, общий `catch` ответа на запрос агента)
+
+**Факт:**
+- `send` делает `writeln` и `await flush()` без цепочки записей. Если следующий `writeln` приходит, пока предыдущий `flush` не завершён, `IOSink` бросает `StateError`, транспорт отдаёт `sendFailed`. Серверный транспорт пишет через цепочку `_writes` (`stdio_server_acp_transport.dart`), клиентский — нет, своей очереди у клиента тоже нет.
+- Наблюдалось в 4 запусках из 4 при отмене `exec` против `codelab-agent serve --stdio`: ответ на `terminal/kill` и ответ на `terminal/wait_for_exit` уходят одновременно, второй падает, общий `catch` шлёт вместо него ошибку `-32603`.
+- Гонка возможна у любых двух одновременных исходящих сообщений клиента, включая `session/cancel` и ответ на `session/request_permission`. Если упадёт и повторная отправка, ответ теряется; у вопроса разрешения таймаута нет. Зависнет ли агент — не проверено.
+
+**Почему важно:** Корректность протокола ACP и состояния (`AGENTS.md` §2, приоритеты 2 и 4): потерянный ответ на запрос агента или на вопрос разрешения.
+
+**Что сделать:**
+- Сериализовать запись в `StdioAcpTransport.send` (цепочка `Future`, как в серверном транспорте).
+- Красный тест: два параллельных `send` по stdio без ошибки и в порядке вызова.
+
+### REV-42. Агент спрашивает разрешение до проверки возможностей клиента: одобренный вызов `fs`/`terminal` гарантированно падает (P3)
+
+Источник: документация сторон исполнения approval, инструментов, `fs/*` и `terminal/*` (`codelab_agent_core/doc/algorithms/execution-sides.md`, `codelab_client_acp/doc/execution-on-client.md`), подтверждено ревью кода. Issue: [#522](https://github.com/pese-git/codelab-app/issues/522).
+
+**Где:**
+- `packages/dart/codelab_agent_core/lib/src/runtime/agent_runtime.dart` (хук политики разрешений — первый перед исполнением)
+- `packages/dart/codelab_agent_acp/lib/src/acp_client_env.dart` (`readText`, `writeText`, `exec`: проверки `fs.readTextFile`, `fs.writeTextFile`, `terminal`)
+
+**Факт:**
+- Возможности клиента (`clientCapabilities.fs`, `terminal`) проверяются только при исполнении в `AcpClientExecutionEnv`; итог — `FileErrorCode.unsupported` или `shellUnavailable`. До этого вызов уже прошёл `session/request_permission`.
+- Инструменты `read`, `write`, `edit`, `exec` остаются в схеме модели, даже если клиент их не поддерживает. ACP не нарушен: запросов к клиенту без объявленной возможности агент не шлёт.
+
+**Почему важно:** Пользователь одобряет действие, которое заведомо не выполнится; модель тратит шаги на недоступные инструменты (UX, `AGENTS.md` §2 п.7).
+
+**Что сделать:**
+- Решить: скрывать недоступные инструменты из схемы модели или проверять возможность до вопроса — OpenSpec change.
+- Тест с клиентом без `fs`/`terminal`.
