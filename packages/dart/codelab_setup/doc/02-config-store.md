@@ -209,6 +209,7 @@ final store = FileAgentConfigStore(
 
 ## Смотрите также
 
+- [Алгоритм настроек: слои, перезагрузка и подключение](../../codelab_agent_core/doc/algorithms/settings.md) и [настройки на клиенте](../../codelab_client_core/doc/settings-on-client.md).
 - [Мастер провайдера](03-provider-wizard.md) использует порт при записи и откате.
 - [Представления](06-views.md) строятся по снимку.
 - Расположение конфигурации и секретов для пользователя — [`docs/user/configuration.md`](../../../../docs/user/configuration.md) и [`docs/ops/codelab-home.md`](../../../../docs/ops/codelab-home.md).

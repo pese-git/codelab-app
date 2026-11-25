@@ -271,3 +271,4 @@ mcp:
 
 - Перешли с Python-агента — [перенос настроек](migrating-from-python-agent.md).
 - Хотите подключить агента к Zed — [zed.md](zed.md).
+- Хотите понять, какие настройки чьи и что применяется на лету — [алгоритм настроек агента](../../packages/dart/codelab_agent_core/doc/algorithms/settings.md) и [настройки клиента](../../packages/dart/codelab_client_core/doc/settings-on-client.md).

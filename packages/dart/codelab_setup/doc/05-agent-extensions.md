@@ -205,3 +205,7 @@ final rows = await agentDefinitionRowsAt(
 | `test/io/read_agent_extensions_test.dart`, `read_agent_extensions_consents_test.dart` | чтение с диска, кандидаты согласия, пределы времени и записей |
 | `test/io/extensions_host_paths_test.dart` | полнота перевода путей |
 | `test/io/agent_definition_rows_at_test.dart`, `test/views/agent_definition_rows_test.dart` | строки определений и их чтение |
+
+## Смотрите также
+
+- [Алгоритм настроек: слои, перезагрузка, подключение](../../codelab_agent_core/doc/algorithms/settings.md) и [настройки на клиенте](../../codelab_client_core/doc/settings-on-client.md).

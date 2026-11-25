@@ -22,6 +22,7 @@
 
 ## Смежные документы
 
+- [Настройки на клиенте](../../codelab_client_core/doc/settings-on-client.md) — какие файлы и ключи хранит клиент, как их читают app и CLI, что при повреждении и одновременной записи.
 - [`codelab_client_core`](../../codelab_client_core/README.md) и [`codelab_client_core/doc`](../../codelab_client_core/doc/README.md) — порты и политики, которые реализует пакет.
 - [`codelab_client_acp`](../../codelab_client_acp/README.md) и [`codelab_client_acp/doc`](../../codelab_client_acp/doc/README.md) — порты `fs/*` и `terminal/*`.
 - [Руководство по `codelab`](../../../../apps/codelab_cli/doc/README.md) — composition root терминального клиента.

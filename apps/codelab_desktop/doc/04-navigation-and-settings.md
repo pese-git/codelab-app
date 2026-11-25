@@ -213,6 +213,7 @@ Onboarding завершают только исходы шага «Open a projec
 
 ## Что смотреть дальше
 
+- Сквозной разбор настроек: [настройки на клиенте](../../../packages/dart/codelab_client_core/doc/settings-on-client.md) и [алгоритм настроек агента](../../../packages/dart/codelab_agent_core/doc/algorithms/settings.md).
 - Спецификации: [app-settings](../../../openspec/specs/app-settings/spec.md), [agent-workbench-ui](../../../openspec/specs/agent-workbench-ui/spec.md), [app-onboarding](../../../openspec/specs/app-onboarding/spec.md).
 - Правила приложения по страницам и onboarding — [`AGENTS.md`](../AGENTS.md); события журнала и ключи тестов перечислены там.
 - Тесты: `test/app/navigation/navigation_cubit_test.dart`, `test/features/settings/presentation/settings_shell_test.dart`, тесты onboarding в `test/features/onboarding/`; как они устроены — [тесты приложения](08-testing.md).

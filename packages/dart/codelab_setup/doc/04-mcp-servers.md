@@ -182,3 +182,7 @@ final outcome = await remover.remove(snapshot, name: 'docs');
 | `test/views/mcp_server_entry_view_test.dart` | строки списка, маскирование, порядок слияния |
 
 Снимки для этих тестов строят `mcpSnapshot` и `freshMcpSnapshot` из `test/support/mcp_snapshots.dart`.
+
+## Смотрите также
+
+- [Алгоритм настроек: слои, перезагрузка, подключение](../../codelab_agent_core/doc/algorithms/settings.md) и [настройки на клиенте](../../codelab_client_core/doc/settings-on-client.md).

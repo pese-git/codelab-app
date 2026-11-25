@@ -233,6 +233,7 @@ FileConfigSource(
 
 ## Смотрите также
 
+- [Сквозной алгоритм настроек: перезагрузка и запись из клиента](../../codelab_agent_core/doc/algorithms/settings.md)
 - [Глава 3: загрузка](03-config-loading.md)
 - [Глава 9 ядра: правка и перезагрузка](../../codelab_agent_core/doc/09-config-prompts-commands.md)
 - [Глава 7 ядра: правка конфигурации агента как критическое действие](../../codelab_agent_core/doc/07-permissions.md)
