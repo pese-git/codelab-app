@@ -126,6 +126,8 @@ flowchart LR
 
 Клиенты встроенного агента маскируют записи сами: `CliEmbeddedLogger` прогоняет поля через `SecretRedactor` клиента и чистит управляющие символы терминала; `CodeLabEmbeddedLogger` ничего не добавляет: журнал приложения маскирует процессор `secretRedactionProcessor`, а от ошибки адаптер берёт только `error_class`, без текста и стека. Журнал `codelab-agent` такой защиты не имеет, поэтому его нельзя публиковать без просмотра.
 
+Сторона агента целиком, с примерами и пределами, — в [алгоритме маскирования секретов](algorithms/redaction.md); сторона клиента — в [`codelab_client_acp/doc/redaction.md`](../../codelab_client_acp/doc/redaction.md).
+
 ## Ошибки
 
 ### Три класса

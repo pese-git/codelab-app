@@ -35,7 +35,7 @@
 
 `describeFailure(Object error)` — текст ошибки для интерфейса и CLI без токенов и ключей. Исключения `codelab_client_acp` печатаются как `ClassName: message`, а человеку нужен только текст: функция берёт `message` у `AcpClientApplicationException`, `AcpTransportException`, `StateTransitionException` и `ClientWorkspaceException`, а остальное превращает в строку; результат проходит `SecretRedactor.redactText`.
 
-`formatRedactedJson(Object?)` — JSON с отступами после редакции секретов по ключам и по тексту; `null` — `null`. Через неё идут сырые аргументы вызовов в инспекторе и в одобрениях.
+`formatRedactedJson(Object?)` — JSON с отступами после редакции секретов по ключам и по тексту; `null` — `null`. Через неё идут сырые аргументы вызовов в инспекторе и в одобрениях. Правила редактора и политику payload описывает [«Маскирование секретов»](../../codelab_client_acp/doc/redaction.md).
 
 Пример проверки: исключение с токеном в тексте превращается в сообщение с маской. Тест — `test/diagnostics/diagnostics_test.dart`.
 
