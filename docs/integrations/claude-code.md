@@ -22,14 +22,17 @@
 
 ## 2. Как подключить
 
-В диалоге подключения (**Configure connection**), транспорт **stdio**:
+Настройки → **Connection** → **Add profile**, в диалоге **Add connection profile** тип **Local stdio**:
 
 | Поле | Значение |
 |---|---|
+| Name | любое, например `Claude Code` |
 | Command | `/opt/homebrew/bin/npx` (абсолютный путь, см. примечание) |
-| Args | `--yes @agentclientprotocol/claude-agent-acp` |
+| Arguments | `--yes @agentclientprotocol/claude-agent-acp` |
 
-Затем **Close** → **Connect**, открыть проект, создать сессию (`/new`).
+Сохраните профиль, нажмите **Use** в его строке и **Restart agent**, затем откройте проект и создайте сессию (`/new`). Профиль сохраняется в `profiles.json` в `CODELAB_HOME` и доступен терминальному клиенту как `codelab -a <id>`. Страница целиком описана в [руководстве app, глава «Подключение и профили»](../../apps/codelab_desktop/doc/user/06-connection-and-profiles.md).
+
+Диалог подключения сверен с приложением 2026-11-26; таблицы раздела 3 — со снимком 2026-10-09.
 
 Условия, которые не относятся к протоколу, но без них подключение не работает:
 

@@ -86,20 +86,12 @@ flowchart TD
   client_acp --> transports
   transports --> protocol
 
-  classDef app fill:#F1EFE8,stroke:#5F5E5A,color:#444441
-  classDef acp fill:#EEEDFE,stroke:#534AB7,color:#3C3489
-  classDef client fill:#E1F5EE,stroke:#0F6E56,color:#085041
-  classDef agentside fill:#FAECE7,stroke:#993C1D,color:#712B13
   classDef testonly stroke-dasharray:1 3
 
-  class desktop,cli,agent,arch,setup,embedded app
-  class protocol,transports,testing acp
-  class ui,client_io,client_core,client_acp client
-  class agent_io,agent_acp,agent_mcp,agent_core agentside
   class testing,arch testonly
 ```
 
-Цвета: серый — приложения, инфраструктура и мосты между сторонами, сиреневый — `codelab_acp_*`, зелёный — `codelab_client_*` и `codelab_ui`, терракотовый — `codelab_agent_*`. Точечная рамка — пакет только для тестов. Мосты между сторонами (ADR-0002, без префикса `codelab_agent_`):
+Сторону пакета видно по имени: `codelab_acp_*` — общий протокольный слой, `codelab_client_*` и `codelab_ui` — клиент, `codelab_agent_*` — агент; приложения, сторож и мосты — без стороны. Точечная рамка — пакет только для тестов. Схема без цветов, чтобы читаться в светлой и тёмной теме. Мосты между сторонами (ADR-0002, без префикса `codelab_agent_`):
 
 - `codelab_cli` → `codelab_setup` и `codelab_desktop` → `codelab_setup` — мост настроек (change `add-agent-configuration`, D14; ребро app — change `add-provider-setup-ui`, D20): клиенты получают типы и подкоманды `config` и хранилище секретов агента через него, а не импортом `codelab_agent_*`. В app его IO-барель `codelab_setup/io.dart` импортирует только composition root `lib/app/`, а `dart:io` и этот барель запрещены в `lib/features/settings/presentation/` (SETUP-9);
 - `codelab_desktop` → `codelab_embedded` и `codelab_cli` → `codelab_embedded` — мост встроенного агента (change `add-embedded-agent-mode`, D1–D3). Рёбра `codelab_embedded` к `codelab_agent_core`, `codelab_acp_protocol` и `codelab_acp_transports` транзитивны (через `codelab_agent_acp` и `codelab_agent_io`) и не рисуются.
@@ -118,10 +110,10 @@ Flutter SDK закреплён в `.fvmrc` и ставится через [FVM](
 fvm install
 fvm flutter pub get
 fvm dart run melos exec -c 1 --depends-on=build_runner -- "fvm dart run build_runner build --delete-conflicting-outputs"
-fvm dart run melos run check
+fvm dart run melos run guard
 ```
 
-Сгенерированный код (`*.freezed.dart`) в git не хранится — третья команда создаёт его после checkout. `check` запускает формат, анализ, сторож архитектуры, проверку промптов ядра, тесты, protocol conformance, прогон golden-фикстур ACP в роли клиента (`conformance:client`) и агента (`conformance:agent`) и web-компиляцию ядра; интеграционные тесты в `feature/*` и `hotfix/*` идут только на Dart VM. Прогон приложения на устройстве или симуляторе — `fvm dart run melos run test:e2e:app:<имя>` (список — `fvm dart run melos run --list`) — выполняется только в ветке `release/<version>` (`AGENTS.md` §21).
+Сгенерированный код (`*.freezed.dart`) в git не хранится — третья команда создаёт его после checkout. Четвёртая — короткий прогон сторожа архитектуры: границы пакетов и зависимости. Полная проверка monorepo — `fvm dart run melos run check`, она идёт больше 10 минут; перед pull request из `feature/*` достаточно проверить затронутое (`AGENTS.md` §21). `check` запускает формат, анализ, сторож архитектуры, проверку промптов ядра, тесты, protocol conformance, прогон golden-фикстур ACP в роли клиента (`conformance:client`) и агента (`conformance:agent`) и web-компиляцию ядра; интеграционные тесты в `feature/*` и `hotfix/*` идут только на Dart VM. Прогон приложения на устройстве или симуляторе — `fvm dart run melos run test:e2e:app:<имя>` (список — `fvm dart run melos run --list`) — выполняется только в ветке `release/<version>` (`AGENTS.md` §21).
 
 ## Правила разработки
 

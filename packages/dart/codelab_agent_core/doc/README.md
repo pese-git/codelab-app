@@ -35,7 +35,7 @@
 | [12. Тестирование](12-testing.md) | как тестируется агент: уровни тестов, модель-сценарий, фикстуры, запуск |
 | [13. Частые проблемы](13-troubleshooting.md) | симптомы, причины и что проверить |
 | [Туториал: новый инструмент](tutorial-new-tool.md) | сквозной пример: инструмент с нуля — код, тесты, проверка |
-| [Алгоритмы](algorithms/README.md) | сквозные алгоритмы с псевдокодом и разобранными примерами: [контекст запроса и сжатие](algorithms/context.md), [ход агента](algorithms/turn.md), [вызов инструмента](algorithms/tool-call.md), [MCP](algorithms/mcp.md), [кто и где исполняет](algorithms/execution-sides.md), [учёт usage](algorithms/usage.md) |
+| [Алгоритмы](algorithms/README.md) | сквозные алгоритмы с псевдокодом и разобранными примерами: [контекст запроса и сжатие](algorithms/context.md), [ход агента](algorithms/turn.md), [вызов инструмента](algorithms/tool-call.md), [MCP](algorithms/mcp.md), [кто и где исполняет](algorithms/execution-sides.md), [учёт usage](algorithms/usage.md), [субагенты](algorithms/subagents.md), [навыки](algorithms/skills.md), [планирование](algorithms/plan.md), [маскирование секретов](algorithms/redaction.md), [хранение секретов](algorithms/secrets.md), [сессии](algorithms/sessions.md), [настройки](algorithms/settings.md) |
 
 ## Кому что читать
 

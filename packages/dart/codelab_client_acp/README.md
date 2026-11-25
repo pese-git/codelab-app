@@ -174,7 +174,7 @@ fvm dart test
 Набор `test/fixtures/client_fixture_conformance_test.dart` проигрывает золотые фикстуры ACP против `AcpClientApplication`. Из корня репозитория его запускает скрипт Melos:
 
 ```bash
-melos run conformance:client
+fvm dart run melos run conformance:client
 ```
 
 С переменной `CODELAB_TEST_REPORT_DIR` скрипт дополнительно пишет отчёт `dart/codelab_client_acp.conformance.json`. Фикстуры, фальшивые транспорты и помощники берутся из [`codelab_acp_testing`](../codelab_acp_testing/README.md) (`dev_dependency`).
