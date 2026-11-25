@@ -17,7 +17,7 @@
 
 1. **Файлы `config.yaml` — настройки агента.** Их читает тот, кто запускает ядро: процесс `codelab-agent` или, во встроенном режиме, сам клиент. Клиент не хранит копию: его мастер провайдера и страницы настроек пишут в тот же файл через мост `codelab_setup`.
 2. **Своё у клиента отдельное.** Профили подключения (`profiles.json`), недавние проекты, пользовательские темы, снимок восстановления, язык и оформление app. Агент их не читает, а клиент не пишет их в `config.yaml`.
-3. **Слоёв семь**, приоритет растёт от умолчаний схемы к флагам запуска. Проект из репозитория доверенным по умолчанию не считается: из его слоёв вырезается всё, что могло бы расширить права или увести ключ на чужой адрес (CFG-3).
+3. **Слоёв семь**, приоритет растёт от умолчаний схемы к флагам запуска. Правила слияния — в разделе «[Слияние конфигов](#слияние-конфигов)». Проект из репозитория доверенным по умолчанию не считается: из его слоёв вырезается всё, что могло бы расширить права или увести ключ на чужой адрес (CFG-3).
 4. **Ядро получает только проверенное.** Любая проблема файла или значения останавливает загрузку: `serve` выходит с кодом `64`, живая перезагрузка оставляет прежний снимок целиком (CFG-1, CFG-15).
 5. **На лету применяется не всё.** Правка файла вступает в силу сразу, если ключ не помечен `restartRequired`, а провайдер с ключом, stdio-сервер MCP и любые `permissions.*` ждут перезапуска (CFG-16).
 6. **Режим, модель и уровень рассуждения сессии — не конфигурация.** Их меняют `session/set_config_option` и `session/set_mode` (расширений `_codelab/*` для этого нет). Выбор пишется в журнал сессии и возвращается при `session/load` этой сессии, а в `config.yaml` не попадает. Новые сессии узнают только последнюю выбранную модель (`state/last-model.json`), и то лишь при пустом `agent.default_model`.
@@ -126,6 +126,230 @@ flowchart TD
 | 5 | `extra` | `--config <файл>` или `CODELAB_CONFIG` (абсолютный путь) |
 | 6 | `environment` | предконфигурация `CODELAB_PROVIDER_*`, затем `CODELAB_MODEL`, `CODELAB_MAX_STEPS`, `CODELAB_PERMISSION_MODE`, `CODELAB_LOG_LEVEL`, `CODELAB_LOG_FILE` |
 | 7 | `flags` | флаги `serve`: `--permission-mode`, `--max-steps`, `--model`, `--provider*`, `--log-level`, `--log-file` |
+
+## Слияние конфигов
+
+Слои 1–7 не накладываются друг на друга простым «последний победил». Перед слиянием слои проверяются, проектные проходят доверие, а группа «адрес и аутентификация» провайдера отбирается из одного слоя. Само слияние — чистая функция `mergeLayers` с несколькими особыми правилами. Раздел описывает всё это по порядку и в конце отвечает, какие места похожи на слияние, но им не являются.
+
+### Порядок слоёв и откуда берётся каждый
+
+В `mergeLayers` слои идут списком от низшего приоритета к высшему: поздний слой перекрывает ранний. Каждый слой — `ConfigTree` с видом `ConfigLayerKind` (`config_tree.dart`).
+
+| № | `ConfigLayerKind` | Источник | Как значения попадают в дерево |
+|---|---|---|---|
+| 1 | `defaults` | `ConfigTree.defaults()` | дерево пустое: умолчания живут не в нём, а в сборщике (`_Builder`) и конструкторах `CoreConfig`; слой нужен только как нижняя точка отсчёта |
+| 2 | `user` | `$CODELAB_HOME/config.yaml` | YAML → `readYamlTree`; `trusted_projects` канонизируются |
+| 3 | `project` | `<cwd>/.codelab/config.yaml` | то же, потом `applyProjectTrust` |
+| 4 | `projectLocal` | `<cwd>/.codelab/config.local.yaml` | то же, потом `applyProjectTrust` |
+| 5 | `extra` | `--config` или `CODELAB_CONFIG` | YAML; доверие не применяется |
+| 6 | `environment` | предконфигурация `CODELAB_PROVIDER_*`, затем `CODELAB_*` | таблица `environmentLayerVariables`: `CODELAB_MODEL` → `agent.default_model`, `CODELAB_MAX_STEPS` → `budget.max_steps` (число), `CODELAB_PERMISSION_MODE` → `permissions.mode`, `CODELAB_LOG_LEVEL` → `logging.level`, `CODELAB_LOG_FILE` → `logging.file`; пустое значение равно отсутствию |
+| 7 | `flags` | флаги `serve`, предконфигурация из флагов | `_flagsLayer`: только явно названное; `--provider` кладёт `providers.cli` |
+| — | `appStorage` | хранилище приложения мобильного или web-хоста | дерево без позиций; в `lower` для доверия входит наравне с `user` |
+
+Предконфигурация провайдера из переменных стоит в списке перед слоем окружения, а из флагов — после него и перед `flags`. Так `CODELAB_MODEL` и `--model` перекрывают её (`config_loader.dart`, шаг 8 псевдокода А).
+
+`mergeLayers` вызывается в двух местах (`resolve.dart`): на строке 141 — для порога доверия, `lower = mergeLayers(defaults, user, appStorage, project)` (для `projectLocal` в него входит и `project`), и на строке 566 — для итога, `merged = mergeLayers(layers)` по всем слоям после доверия и правила группы провайдера.
+
+### Что происходит до слияния
+
+1. `validateLayer` проверяет каждый слой отдельно. Поэтому ключ-отображение в одном слое и скаляр в другом (`permissions: ask` против `permissions: {…}`) до слияния не доходит: это проблема слоя с файлом и строкой.
+2. `applyProjectTrust` (только слои `project` и `projectLocal`) вырезает ключи, а для недоверенного проекта ещё и ужесточает: сравнивает слой с `lower`, то есть с уже слитым низом. Это одно из двух мест, где слияние нужно раньше итогового; второе — `ProviderKeyBinding.fromLayers` (`provider_binding.dart`), см. таблицу ниже.
+3. `applyProviderGroupRule` (`provider_binding.dart`, вызывается из конструктора `_Builder`, `resolve.dart:520`). Если поля «адреса и аутентификации» провайдера (`kind`, `base_url`, `headers`, `api_key`, `api_key_env`, `api_key_secret`, `auth_header`) задают два слоя и среди них есть проектный, то верхний из них один задаёт аутентификацию: чего он не задал, того нет. Поля `kind` и `base_url`, которых он не задал, берутся из непроектных слоёв ниже него. Это обобщение правила `providers.cli` для слоя флагов. Правило нужно, чтобы ключ пользователя (`api_key_env`, `api_key_secret`) не встретился с адресом из репозитория (`agent-secrets`, «Группа целиком из одного слоя»).
+4. Затем `mergeLayers`, и только потом подстановка и сборка разделов.
+
+### Алгоритм `mergeLayers`
+
+```text
+mergeLayers(layers) -> Map
+  // core/config/merge.dart: mergeLayers, _mergeMaps, _mergeServers, _clone
+  1. result = {}
+  2. для каждого слоя по порядку: result = _mergeMaps(result, layer.values, layer.kind, путь = [])
+  3. return result
+
+_mergeMaps(base, over, kind, path) -> Map
+  1. out = копия base                                              // верхний слой не меняет нижний
+  2. для каждой пары (key, value) в over:
+       2.1 value == null → continue                                 // контейнер без листьев (`exec:`) ничего не меняет
+       2.2 here = path + key; old = out[key]
+       2.3 kind == flags и here == 'providers.cli'      → out[key] = _clone(value)   // замена целиком
+       2.4 old — отображение и value — отображение      → out[key] = _mergeMaps(old, value, kind, here)   // рекурсия
+       2.5 here == 'mcp.servers' и value — список       → out[key] = _mergeServers(old или [], value)
+       2.6 here == 'tools.disabled', old и value — списки, kind ∈ {user, project, projectLocal}
+                                                         → out[key] = old + элементы value, которых нет в old
+       2.7 иначе                                         → out[key] = _clone(value)   // скаляр, список, смена вида: замена
+  3. return out
+
+_mergeServers(base, over) -> List
+  1. out = копия base
+  2. для каждого server в over:
+       name = server['name'] (если server — отображение)
+       index = первый элемент out с тем же name
+       index найден → out[index] = _clone(server)                   // тот же name: замена целиком, поля не сливаются
+       иначе       → out.add(_clone(server))                        // новый — в конец
+  3. return out
+
+_clone(value) — глубокая копия отображений и списков; скаляры как есть
+```
+
+Проверка порядка веток: ветка 2.3 стоит раньше рекурсии, поэтому `providers.cli` флагов не сливается с одноимённым провайдером из файла.
+
+### Таблица правил
+
+| Путь ключа | Правило | Пример |
+|---|---|---|
+| вложенные отображения (`providers.<id>`, `budget`, `permissions`) | рекурсивное слияние по ключам | `budget.max_steps` из одного слоя и `budget.max_cost` из другого сохраняются оба |
+| скаляр (`budget.max_steps`, `permissions.mode`) | поздний слой заменяет | локальный `5` перекрывает пользовательский `20` |
+| список (`permissions.deny`, `skills.extra_roots`) | заменяется целиком, не объединяется | `deny: [exec:sudo]` доверенного проекта заменяет `[exec:rm, exec:curl]` пользователя (у недоверенного `deny` объединяется, `trust.dart`) |
+| пустой список | тоже заменяет | `deny: []` слоя `projectLocal` доверенного проекта очищает запреты нижних слоёв |
+| `exec:` и другой раздел без значений; `null` у скаляра или списка | раздел без значений ничего не меняет; `null` у скаляра или списка — ошибка слоя `null is not allowed` (`validate.dart`) | контейнер без листьев не удаляет нижние значения |
+| `mcp.servers` | по `name`: тот же `name` заменяет сервер целиком, новый добавляется в конец | сервер доверенного проекта `tools` без `args` и `env` убирает `args` и `env` пользовательского `tools` (у недоверенного `mcp.servers` вырезается целиком) |
+| `tools.disabled` | объединение, только для слоёв `user`, `project`, `projectLocal` | `[a]` + `[b]` = `[a, b]`; из окружения и флагов — замена |
+| `providers.cli` в слое `flags` | заменяет целиком | `--provider` убирает модели и заголовки `providers.cli` из файла |
+| группа провайдера при проектном слое среди задающих | аутентификация (`headers`, `api_key*`, `auth_header`) — из верхнего задающего слоя; `kind` и `base_url` — из непроектных слоёв ниже (`provider_binding.dart`, `agent-secrets`); см. «до слияния», п. 3 | заголовки проекта не получают `headers` пользователя |
+| вид значения разный (отображение и скаляр) | слой с ошибкой схемы не доходит до слияния; у непрозрачного раздела схемы (`OpaqueNode`) поздний заменяет | `hooks: {a: 1}` и `hooks: 5` дают `hooks = 5` |
+
+### Связь с доверием
+
+Доверие стоит перед слиянием, потому что после него отбросить ключи уже нельзя: слитое дерево не помнит, откуда пришло значение. Из этого следует два наблюдаемых эффекта.
+
+- **У недоверенного проекта вырезан `mcp.servers` целиком.** Его элемент `{name: tools, enabled: false}` до `mergeLayers` не доходит, поэтому пользовательский сервер остаётся включённым (пример 2).
+- **У доверенного проекта список заменяет, а не дополняет.** `permissions.deny` доверенного `config.yaml` или `config.local.yaml` заменяет список пользователя целиком; правило «объединяется» работает только у недоверенного (`_restrictPermissions` вызывается при `!trusted`). Поэтому `trusted_projects` — решение о доверии к тому, что репозиторий сможет снять запреты пользователя.
+
+### Подстановка после слияния
+
+`${ENV}` и `${secret:…}` раскрываются после слияния, при сборке раздела (`_Builder._interpolate`), по значению победившего слоя. Нижний слой с `${A}` и верхний с `${B}` дают `${B}`: нижняя ссылка не проверяется и не читается. Переменные берутся из окружения процесса агента, а не слоя. Ссылка `${secret:…}` в строку не раскрывается: остаётся шаблон, который читает `SecretResolver` при первом обращении ([secrets.md](secrets.md)). Ссылку на ключ в проектном слое дополнительно судит `ProviderKeyBinding` (привязка к адресу).
+
+### Что похоже на слияние, но им не является
+
+| Место | Что это | Где |
+|---|---|---|
+| `ProviderKeyBinding.fromLayers` | вызывает `mergeLayers` по непроектным слоям, чтобы найти адрес провайдера; результат нужен только для проверки привязки ключа и в итог не входит | `provider_binding.dart:396` |
+| Снимок `withoutProject` | второй полный проход `_resolve` по тем же слоям без `project` и `projectLocal` со своим слиянием; отдельный итог, а не вычитание | `resolve.dart`, шаг Б4 псевдокода |
+| Конфигурация папки сессии | `ProjectConfigLoader.loadForProject` заново грузит и сливает слои той папки; затем `deferForFolderSession` выбирает, какие части взять из применённого снимка корня (по правилу перекрытия на поле) — выбор, а не слияние значений | `project_config.dart`, `folder_session_config.dart` |
+| `CoreConfig.withDeferred` при перезагрузке | подстановка: отложенные провайдеры, серверы MCP, `permissions`, `agent.default_model` берутся из прежнего снимка, остальное — из нового; значения для сравнения — `plan.appliedValues` | `core_config.dart`, `config_reload_plan.dart` |
+| MCP-серверы `session/new` и конфигурации | не слои: `_planMcp` ставит серверы конфигурации, затем серверы клиента; клиентский сервер с тем же именем заменяет серверный целиком, дубликаты и пустые имена пропускаются (`mcp.server.skipped`) | `agent_runtime.dart`: `_planMcp` |
+| `config get --layer merged` | не `mergeLayers`: берёт поддерево слоя-победителя ключа (старшего слоя, где ключ задан), без правил доверия и без группы провайдера | `codelab_agent_io/lib/src/cli/config_commands.dart` (`ConfigGetLayer.merged`); пример 2 и пример слияния ниже |
+| `ConfigWriter.validateCandidate` | собирает те же слои с текстом-кандидатом вместо файла и зовёт тот же `fromLayers`; отдельного слияния нет | `config_loader.dart` |
+
+### Схема слияния
+
+На схеме — путь слоёв до `CoreConfig` с ветками правил слияния. Пунктиром показан второй проход без проектных слоёв.
+
+```mermaid
+flowchart TD
+  layers["Слои: defaults, user, project, projectLocal, extra, окружение, флаги"] --> val["validateLayer: каждый слой отдельно"]
+  val --> trust["applyProjectTrust: project и projectLocal против lower"]
+  trust --> grp["applyProviderGroupRule: группа провайдера из одного слоя"]
+  grp --> merge["mergeLayers: слой за слоем"]
+  merge --> r1["отображения: рекурсия"]
+  merge --> r2["скаляры и списки: замена"]
+  merge --> r3["mcp.servers: по name, целиком"]
+  merge --> r4["tools.disabled: объединение файловых слоёв"]
+  merge --> r5["flags: providers.cli целиком"]
+  r1 --> sub["Подстановка ENV и ссылок secret"]
+  r2 --> sub
+  r3 --> sub
+  r4 --> sub
+  r5 --> sub
+  sub --> core["_Builder: CoreConfig и HostSettings"]
+  trust -.->|"второй проход без проектных слоёв"| bare["CoreConfig.withoutProject"]
+```
+
+Пунктир — второй проход: снимок `withoutProject` строится заново с `_resolve` без проектных слоёв, а не продолжает первый проход после доверия.
+
+### Пример слияния на реальном прогоне
+
+Источник: `codelab-agent config get` и загрузчик `ConfigLoader` во временном `CODELAB_HOME` (чистое окружение, `env -i`). В слое `user` — провайдеры `gw` (с `api_key_env: GW_KEY` и заголовками `X-User`, `X-Both: user`) и `cli` (модель `old`), `permissions.deny: [exec:rm, exec:curl]`, `budget.max_steps: 20`, серверы `tools` (с `args` и `env`) и `docs`, и `trusted_projects` с проектом. Проект доверенный; `.codelab/config.yaml` задаёт заголовки `gw` (`X-Proj`, `X-Both: project`), `deny: [exec:sudo]`, серверы `tools` (только `type` и `command`) и `extra`; `config.local.yaml` — `budget.max_steps: 5`.
+
+Слои по отдельности:
+
+```bash
+codelab-agent config get budget.max_steps --layer user
+codelab-agent config get budget.max_steps --layer project
+codelab-agent config get budget.max_steps --layer local
+codelab-agent config get budget.max_steps --layer merged
+```
+
+```text
+20
+layer: user
+config get: budget.max_steps is not set in the project layer
+5
+layer: local
+5
+layer: local
+```
+
+`merged` у `config get` — это значение слоя-победителя. Для вложенных ключей он покажет поддерево победителя целиком, а не слияние:
+
+```text
+$ codelab-agent config get providers.gw.headers --layer merged
+{
+  "X-Proj": "p",
+  "X-Both": "project"
+}
+layer: project
+```
+
+Итог слияния — плоская карта `ConfigLoadResult.values` (её печатает временный драйвер на Dart, потому что подкоманды её не показывают):
+
+```text
+budget.max_steps = 5
+mcp.servers[docs] = {name: docs, type: stdio, command: /bin/echo}
+mcp.servers[extra] = {name: extra, type: stdio, command: /bin/echo}
+mcp.servers[tools] = {name: tools, type: stdio, command: /bin/true}
+permissions.deny = [exec:sudo]
+permissions.mode = ask
+providers.gw.base_url = http://127.0.0.1:9/v1
+providers.gw.headers.X-Both = project
+providers.gw.headers.X-Proj = p
+providers.gw.kind = openai-compatible
+providers.gw.models.m1.context_window = 32768
+```
+
+Что видно:
+
+- **Скаляр заменён:** `budget.max_steps` — локальный `5`, а не пользовательский `20`.
+- **Вложенное отображение сливается:** `providers.gw.models.m1` и `kind` из `user` остались, хотя проект заданным провайдером `gw` занят только заголовками.
+- **Список заменён:** `permissions.deny` — только `exec:sudo`; `exec:rm` и `exec:curl` пользователя исчезли.
+- **Серверы по имени:** `docs` (только у пользователя) и `extra` (только у проекта) на месте; `tools` взят целиком из проекта, поэтому `args: [-u]` и `env.LEVEL` пользователя пропали.
+- **Правило группы провайдера:** `providers.gw.headers.X-User` и `providers.gw.api_key_env` пользователя пропали: проектный слой задал `headers`, значит, аутентификацию провайдера задаёт он один. При обычном рекурсивном слиянии заголовок `X-User` остался бы, а ключ ушёл бы вместе с адресом репозитория. Поля `kind` и `base_url` остались от пользователя: проект их не задавал.
+
+Переменная окружения и флаг:
+
+```text
+$ CODELAB_MAX_STEPS=7 codelab-agent config get budget.max_steps
+<from env:CODELAB_MAX_STEPS>
+layer: env
+```
+
+Загрузчик с `CODELAB_MAX_STEPS=7` дал `budget.max_steps = 7`: окружение перекрыло локальный `5`.
+
+Флаг `--provider` против `providers.cli` из файла (в `user` у `cli` модель `old`). Строка `host.config.loaded` лога `serve --stdio`:
+
+```text
+без флагов:  sources: [defaults, ~/demo/home/config.yaml, ~/demo/proj/.codelab/config.yaml, ~/demo/proj/.codelab/config.local.yaml], models: [gw/m1, cli/old]
+--provider openai-compatible --base-url http://127.0.0.1:9/v1 --model new:
+             sources: [defaults, …, flags], models: [gw/m1, cli/new]
+```
+
+`cli/old` исчез: флаг заменил провайдера `cli` целиком, и его заголовки из файла тоже не доходят до адреса из `--base-url`.
+
+### Граничные случаи слияния
+
+Проверено запусками на тех же файлах.
+
+| Ситуация | Что происходит | Где в коде |
+|---|---|---|
+| Ключ — отображение в одном слое и скаляр в другом (ключ схемы) | проблема слоя `permissions: expected a mapping` с файлом и строкой; до слияния не доходит | `validate.dart`: `validateLayer` |
+| То же у непрозрачного раздела схемы (`OpaqueNode`) | поздний слой заменяет целиком: `hooks: {a: 1}` и `hooks: 5` дают `hooks = 5`; оба слоя дают `config.key.not_applied` | `merge.dart`, ветка 2.7 |
+| Пустой список | заменяет нижний: `permissions.deny: []` в `config.local.yaml` доверенного проекта оставляет `permissions.deny = []`. У недоверенного проекта `deny` объединяется со списком нижних слоёв | `merge.dart`; `trust.dart`: `_restrictPermissions` |
+| `null` у скалярного ключа | проблема `budget.max_steps: null is not allowed; remove the key to use the default`; значение нижнего слоя не снимается | `validate.dart` |
+| `null` у контейнера без листьев (`exec:`) | ничего не меняет | `merge.dart`, ветка 2.1 |
+| Сервер без `name` | проблема слоя `mcp.servers[0]: name is required and must be a non-empty string`; в `_mergeServers` такой элемент не попадает | `validate.dart` |
+| Выключить серверу из нижнего слоя | элемент `{name: docs, enabled: false}` заменяет сервер целиком; его нечем собрать, поэтому он выпадает из списка с `mcp.server.skipped` (проверено: `docs` в итоге нет). Недоверенный проект так сделать не может: его `mcp.servers` вырезан | `resolve.dart`: `_mcpServer` |
+| Удалить значение нижнего слоя | нельзя: ни `null`, ни отсутствие ключа его не снимают. Перекрыть можно значением (в том числе пустым списком) у слоя, которому разрешено; убрать — правкой файла нижнего слоя (`config unset`) | `merge.dart`, `validate.dart` |
+| `tools.disabled` из окружения или флагов | заменяет, а не объединяет: объединение только у файловых слоёв (ключ без потребителя, `applied: false`) | `merge.dart`, ветка 2.6 |
 
 ## Псевдокод
 
