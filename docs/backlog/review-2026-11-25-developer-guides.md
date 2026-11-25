@@ -1,6 +1,6 @@
 # Backlog: находки при написании руководств разработчика, ревью 2026-11-25
 
-Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, подтверждены ревью безопасности; найдены позже в тот же день):
+Пункты найдены при написании руководств разработчика по пакетам и приложениям монорепо. Каждое руководство сверялось с кодом ревьюером `architecture-reviewer`. Источники (REV-19…22 — из раздела алгоритмов `packages/dart/codelab_agent_core/doc/algorithms/`; REV-23…28 — из документации механизма маскирования, REV-29…33 — из документации механизма хранения секретов, подтверждены ревью безопасности; найдены позже в тот же день):
 - [#471](https://github.com/pese-git/codelab-app/pull/471) — ядро агента;
 - [#472](https://github.com/pese-git/codelab-app/pull/472) — слой ACP и сторож;
 - [#473](https://github.com/pese-git/codelab-app/pull/473) — агентская сторона;
@@ -41,6 +41,11 @@
 | REV-26 | P3 | security | agent, config | `config get` показывает литерал без известного формата рядом со ссылкой на секрет под секретным именем | нет | [#502](https://github.com/pese-git/codelab-app/issues/502) |
 | REV-27 | P3 | bug | client | Ложные срабатывания `SecretRedactor`: подстрока `pass` и слова `Token`, `Basic`, `Digest` в обычном тексте | нет | [#503](https://github.com/pese-git/codelab-app/issues/503) |
 | REV-28 | P3 | tech-debt | client, agent | Мелкие расхождения маскирования: пары `{name, value}` на верхнем уровне, экранирование ссылок, ключи `redact.*` без эффекта | да | [#504](https://github.com/pese-git/codelab-app/issues/504) |
+| REV-29 | P2 | security | client, protocol | Клиент передаёт внешнему агенту и его командам `terminal/create` всё окружение, включая `CODELAB_SECRET_*` и `*_API_KEY` | да | [#506](https://github.com/pese-git/codelab-app/issues/506) |
+| REV-30 | P2 | security | setup, desktop | Токен, вставленный в `${secret:…}` вместо имени, показывается в баннере desktop после удаления MCP-сервера | нет | [#507](https://github.com/pese-git/codelab-app/issues/507) |
+| REV-31 | P3 | security | client, transport | Токен профиля WebSocket: `toString` конфигурации печатает токен, `ws://` на удалённый адрес не блокируется при открытии | нет | [#508](https://github.com/pese-git/codelab-app/issues/508) |
+| REV-32 | P3 | tech-debt | agent | Хранилище секретов: дублированные тексты проблем `secrets.backend`, лог отказа пишет только первую причину, `_verifyFinal` удаляет весь файл | нет | [#509](https://github.com/pese-git/codelab-app/issues/509) |
+| REV-33 | P3 | bug | desktop, embedded | Требует воспроизведения: после замены только ключа в мастере провайдера встроенный агент может ходить со старым ключом до перезапуска | нет | [#510](https://github.com/pese-git/codelab-app/issues/510) |
 
 ## Карточки
 
@@ -515,3 +520,100 @@
 - Решить судьбу `redact.*`: реализовать (OpenSpec change) или убрать из схемы.
 
 Связано: утечка значения `--agent` с `ws://` в stderr уже заведена как REV-14 ([#487](https://github.com/pese-git/codelab-app/issues/487)).
+
+### REV-29. Клиент передаёт внешнему агенту и его командам `terminal/create` всё окружение, включая `CODELAB_SECRET_*` и `*_API_KEY` (P2)
+
+Источник: документация механизма хранения секретов (`codelab_agent_core/doc/algorithms/secrets.md`), подтверждено ревью безопасности. Issue: [#506](https://github.com/pese-git/codelab-app/issues/506).
+
+**Где:**
+- `packages/dart/codelab_acp_transports/lib/src/io/stdio_acp_transport.dart` (запуск процесса агента)
+- `packages/dart/codelab_client_io/lib/src/platform/terminal_process_runner.dart` (процессы `terminal/create`)
+
+**Факт:**
+- Процесс внешнего агента и процессы его команд `terminal/create` получают полное окружение клиента.
+- На стороне агента окружение дочерних процессов режется allowlist (`host_variables.dart`, `stdio_process_transport.dart`, `local_execution_env.dart`, `secret_process_runner.dart`), на стороне клиента — нет.
+
+**Почему важно:** Внешний агент — недоверенная сторона: он и любая команда, которую он запустит через клиента, видят все секреты пользователя (`AGENTS.md` §10: secrets не должны утекать; приоритет 1 — безопасность).
+
+**Что сделать:**
+- Архитектурное решение: allowlist окружения для процесса агента и `terminal/create` или как минимум снятие `CODELAB_SECRET_*` и `*_API_KEY` (OpenSpec change: меняет наблюдаемое поведение для внешних агентов).
+- Красные тесты на оба пути.
+
+### REV-30. Токен, вставленный в `${secret:…}` вместо имени, показывается в баннере desktop после удаления MCP-сервера (P2)
+
+Источник: документация механизма хранения секретов (`codelab_agent_core/doc/algorithms/secrets.md`), подтверждено ревью безопасности. Issue: [#507](https://github.com/pese-git/codelab-app/issues/507).
+
+**Где:**
+- `packages/dart/codelab_agent_core/lib/src/config/secret_references.dart` (`secretReferencesIn`)
+- `packages/dart/codelab_setup/lib/src/mcp/mcp_secret_cleanup.dart` (`referencedSecrets`)
+- `packages/dart/codelab_setup/lib/src/mcp/mcp_server_remover.dart`
+- `apps/codelab_desktop/lib/features/settings/presentation/mcp_texts.dart` (`mcpSecretKept(name)`)
+
+**Факт:**
+- `secretReferencesIn('${secret:ghp_…}')` возвращает сам токен как имя ссылки (вопреки doc-комментарию); для `${ghp_…}` без `secret:` — пустой список. Подтверждено тестом.
+- Очистка секретов при удалении MCP-сервера берёт эти «имена», кладёт их в итог как `kept`, а desktop показывает их в баннере. Удаления не происходит (фильтр `inPageNamespace`).
+
+**Почему важно:** Токен, ошибочно вставленный пользователем, выводится на экран открытым текстом.
+
+**Что сделать:**
+- Не возвращать в `secretReferencesIn` ссылки, которые выглядят как токен (`UnusableSecretReference` / `literalSecretTag`), либо фильтровать их в cleanup.
+- Тест на цепочку до текста баннера.
+
+### REV-31. Токен профиля WebSocket: `toString` конфигурации печатает токен, `ws://` на удалённый адрес не блокируется при открытии (P3)
+
+Источник: документация механизма хранения секретов (`codelab_agent_core/doc/algorithms/secrets.md`), подтверждено ревью безопасности. Issue: [#508](https://github.com/pese-git/codelab-app/issues/508).
+
+**Где:**
+- `packages/dart/codelab_acp_transports/lib/src/transport_configs.dart` (freezed `WebSocketAcpTransportConfig`, сгенерированный `toString`)
+- `packages/dart/codelab_client_core/lib/src/connection/transport_resolver.dart`
+- `packages/dart/codelab_client_core/lib/src/connection/profile_draft.dart` (`plaintextToRemote`)
+
+**Факт:**
+- Сгенерированный `toString` `WebSocketAcpTransportConfig` печатает `token: $token` открытым текстом. Мест, где объект сейчас логируется, не найдено — риск скрытый.
+- Токен уходит по `ws://` без TLS на адрес не этой машины: форма профиля только предупреждает (`plaintextToRemote`), открытие транспорта ничего не проверяет.
+
+**Почему важно:** Первое — утечка при любом будущем `log(config)`; второе — передача учётных данных по открытому каналу.
+
+**Что сделать:**
+- Переопределить `toString` без токена (или `@JsonKey`-подобная маскировка), тест.
+- Решить политику для `ws://` на удалённый хост с токеном: отказ или явное подтверждение.
+
+### REV-32. Хранилище секретов: дублированные тексты проблем `secrets.backend`, лог отказа пишет только первую причину, `_verifyFinal` удаляет весь файл (P3)
+
+Источник: документация механизма хранения секретов (`codelab_agent_core/doc/algorithms/secrets.md`), подтверждено ревью безопасности. Issue: [#509](https://github.com/pese-git/codelab-app/issues/509).
+
+**Где:**
+- `packages/dart/codelab_agent_core/lib/src/config/resolve.dart` (`_secretsBackend`)
+- `packages/dart/codelab_agent_io/lib/src/secrets/secrets_backend_problem.dart`
+- `packages/dart/codelab_agent_io/lib/src/secrets/file_secret_store.dart` (`_refusedPaths`, `_verifyFinal`)
+
+**Факт:**
+- Тексты проблем `secrets.backend` заданы в двух местах; сейчас совпадают, но общего источника нет, а спека `agent-secrets` требует одну проверку.
+- `_refusedPaths` пишет одну запись лога на путь за процесс: новая причина отказа на том же пути в лог не попадает (`AGENTS.md` §16).
+- `_verifyFinal` удаляет весь `secrets.yaml`, если права расширили после `rename`. Так требует спека, но это потеря всех секретов файла; сработать может только при одновременном `chmod` тем же пользователем — стоит обсудить.
+
+**Почему важно:** Расхождение текстов при следующей правке, потеря диагностики и неожиданная потеря данных.
+
+**Что сделать:**
+- Один источник текстов проблем.
+- Логировать смену причины отказа.
+- Обсудить поведение `_verifyFinal` (изменение — через спеку).
+
+### REV-33. Требует воспроизведения: после замены только ключа в мастере провайдера встроенный агент может ходить со старым ключом до перезапуска (P3)
+
+Источник: документация механизма хранения секретов (`codelab_agent_core/doc/algorithms/secrets.md`), подтверждено ревью безопасности. Issue: [#510](https://github.com/pese-git/codelab-app/issues/510).
+
+**Где:**
+- `packages/dart/codelab_agent_io/lib/src/secrets/secret_admin.dart` (`SecretAdmin.store` не сбрасывает кэш резолвера)
+- `packages/dart/codelab_embedded/lib/src/io/local_opener.dart` (наблюдатель перезагрузки)
+- `ConfigWriter.apply` в `codelab_agent_io`
+
+**Факт:**
+- `SecretAdmin.store` не сбрасывает кэш `SecretResolver` (так записано в docstring); сброс делает перезагрузка конфигурации.
+- Если мастер заменил только ключ, а запись конфигурации оказалась пустой, перезагрузки может не быть — тогда встроенный агент держит старое значение и получает 401. По коду не доказано: не проверено, что делает `ConfigWriter.apply` при пустом наборе правок и срабатывает ли наблюдатель.
+
+**Почему важно:** Пользователь исправил ключ, а агент продолжает падать с 401 до перезапуска.
+
+**Что сделать:**
+- Воспроизвести тестом встроенного агента.
+- Если подтвердится — сбрасывать кэш после `SecretAdmin.store` или гарантировать перезагрузку.
