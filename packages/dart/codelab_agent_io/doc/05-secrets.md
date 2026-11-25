@@ -254,6 +254,7 @@ warning: secrets are stored unencrypted in ~/demo/home/secrets.yaml
 ## Смотрите также
 
 - [Глава 9 ядра: секреты и резолвер](../../codelab_agent_core/doc/09-config-prompts-commands.md#секреты-libsrcsecrets)
+- [Алгоритм хранения и выдачи секретов](../../codelab_agent_core/doc/algorithms/secrets.md): сквозной путь от `secret set` до запроса провайдера
 - [Глава 9: подкоманды `secret`](09-subcommands.md#подкоманды-secret)
 - [Глава 13: частые проблемы с секретами](13-troubleshooting.md)
 - Тесты: `test/secrets/file_secret_store_test.dart`, `secret_admin_test.dart`, `secret_migrator_test.dart`, `client_secret_access_test.dart`
