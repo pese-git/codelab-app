@@ -136,7 +136,16 @@ docs/ops/                            сквозное руководство Dev
 
 ### Ход агента
 
-Снять диалог с ответом модели без живого провайдера сейчас нельзя: сценарный открыватель доступен только тестам и `test-scenario`, а он печатает PASS/FAIL, а не транскрипт. Поэтому до change `docs:screenshots` ход агента (ответ модели, блок одобрения, вызов инструмента) — всегда маркер `<!-- screenshot: … -->`, а не выдуманный снимок.
+**Терминал `codelab` — снимается тестовой моделью.** `bin/codelab.dart` сценарий не принимает, но точка входа e2e-тестов принимает:
+
+1. `cd apps/codelab_cli && fvm dart compile exe test/e2e/support/embedded_cli_main.dart -o <scratchpad>/bin/codelab-e2e`.
+2. Сценарий модели — JSON в scratchpad (не в репозитории): например, шаг с вызовом `edit` и шаг с ответом `done`.
+3. Запуск в tmux (ширина 120) в папке-образце, окружение изолировано: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY CODELAB_HOME=<scratchpad>/home CODELAB_CONFIG=<конфиг с провайдером на 127.0.0.1:9> CODELAB_E2E_LLM_SCRIPT=<сценарий> CODELAB_E2E_PERMISSION_MODE=standard`.
+4. Ввод и ответы — `tmux send-keys`, вывод — `tmux capture-pane -p`. Маскировка — как в разделе выше; ответ тестовой модели (`done`) поясни в тексте перед снимком.
+
+Так снят блок одобрения в `apps/codelab_cli/doc/user/02-repl.md#разрешения`.
+
+**Настольное приложение — пока нет.** Сценарный открыватель в сборку app не попадает (`AGENTS.md` §5), поэтому ход агента в app (ответ модели, карточка одобрения, вызов инструмента) до change `docs:screenshots` — маркер `<!-- screenshot: … -->`, а не выдуманный снимок.
 
 ### Настольное приложение
 1. Запусти приложение с расширением драйвера: `cd apps/codelab_desktop && fvm flutter run -d macos -t test_driver/app.dart --print-dtd`.
