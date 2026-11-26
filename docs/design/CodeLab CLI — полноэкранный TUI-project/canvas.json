@@ -1,0 +1,82 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 960,
+      "h": 700,
+      "title": "1 · Идёт ход (120×36)"
+    },
+    {
+      "file": "Approval.dc.html",
+      "x": 1040,
+      "y": 0,
+      "w": 960,
+      "h": 700,
+      "title": "2 · Зона одобрения вместо композера"
+    },
+    {
+      "file": "SlashMenu.dc.html",
+      "x": 2080,
+      "y": 0,
+      "w": 960,
+      "h": 700,
+      "title": "3 · Slash-меню (ListModel с фильтром)"
+    },
+    {
+      "file": "ScrollHold.dc.html",
+      "x": 0,
+      "y": 820,
+      "w": 960,
+      "h": 700,
+      "title": "4 · Удержание прокрутки и выбор строки"
+    },
+    {
+      "file": "Inspect.dc.html",
+      "x": 1040,
+      "y": 820,
+      "w": 960,
+      "h": 700,
+      "title": "5 · Подробности вызова (ViewportModel)"
+    },
+    {
+      "file": "ModelPicker.dc.html",
+      "x": 2080,
+      "y": 820,
+      "w": 960,
+      "h": 700,
+      "title": "6 · Пикер /model (SelectListModel)"
+    },
+    {
+      "file": "Narrow.dc.html",
+      "x": 0,
+      "y": 1640,
+      "w": 648,
+      "h": 304,
+      "title": "7 · Узкий и низкий терминал (80×14)"
+    },
+    {
+      "file": "Ascii.dc.html",
+      "x": 728,
+      "y": 1640,
+      "w": 648,
+      "h": 484,
+      "title": "8 · ASCII-значки (80×24)"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "head",
+      "x": 0,
+      "y": -260,
+      "w": 240,
+      "maxW": 3040,
+      "text": "CodeLab CLI · полноэкранный TUI на dart_tui",
+      "kind": "title1"
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

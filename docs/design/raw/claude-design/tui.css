@@ -1,0 +1,42 @@
+/* codelab_cli — terminal mock-up kit.
+   Colors are the theme tokens of §12.6.3 (text, accent, muted, success, error, warning, info,
+   diff_add_bg, diff_remove_bg, selection, approval_border). Built-in dark = 16 ANSI, light = RGB. */
+
+.term {
+  --t-bg: #15171C; --t-fg: #D5D8DE; --t-accent: #56C2D6; --t-muted: #8A909A;
+  --t-ok: #7BCB7B; --t-err: #EE7B7B; --t-warn: #E3C07A; --t-info: #8BDDEA;
+  --t-add: #0F3D1A; --t-del: #4A1515; --t-sel: #3A3D44; --t-appr: #E3C07A;
+  --t-chrome: #26292F; --t-chrome-fg: #9AA0AA;
+  background: var(--t-bg); color: var(--t-fg);
+  font: 13px/19px 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-variant-ligatures: none;
+  display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box;
+}
+.term.light {
+  --t-bg: #FFFFFF; --t-fg: #1F2328; --t-accent: #0969DA; --t-muted: #6E7781;
+  --t-ok: #1A7F37; --t-err: #CF222E; --t-warn: #9A6700; --t-info: #0550AE;
+  --t-add: #DAFBE1; --t-del: #FFEBE9; --t-sel: #DDF4FF; --t-appr: #9A6700;
+  --t-chrome: #E8EAED; --t-chrome-fg: #57606A;
+}
+
+/* Terminal window chrome (the host terminal, not part of codelab_cli) */
+.chrome { height: 30px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: var(--t-chrome); color: var(--t-chrome-fg); font: 12px/1 system-ui, -apple-system, sans-serif; }
+.chrome i { width: 11px; height: 11px; border-radius: 50%; background: currentColor; opacity: .35; display: inline-block; }
+.chrome span { flex: 1; text-align: center; }
+.screen { flex: 1; min-height: 0; padding: 8px 14px; display: flex; flex-direction: column; overflow: hidden; }
+.grow { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+
+/* One terminal line */
+.ln { white-space: pre; min-height: 19px; overflow: hidden; text-overflow: clip; }
+.row { display: flex; justify-content: space-between; gap: 16px; }
+.row > span:first-child { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* SGR attributes mapped to theme tokens */
+.b { font-weight: 700; } .i { font-style: italic; } .u { text-decoration: underline; } .dim { color: var(--t-muted); }
+.ac { color: var(--t-accent); } .mu { color: var(--t-muted); } .ok { color: var(--t-ok); } .er { color: var(--t-err); } .wa { color: var(--t-warn); } .in { color: var(--t-info); }
+.inv { background: var(--t-fg); color: var(--t-bg); }
+.addbg { background: var(--t-add); } .delbg { background: var(--t-del); } .sel { background: var(--t-sel); }
+.cur { background: var(--t-fg); color: var(--t-bg); }
+.ap { color: var(--t-appr); }
+.sq { display: inline-block; width: 1ch; }
+.rule { color: var(--t-muted); overflow: hidden; white-space: nowrap; }

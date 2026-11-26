@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Third-party notices — package search states</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{min-height:900px;display:flex;flex-direction:column;background:var(--mica)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr));gap:24px;padding:0 40px 48px;box-sizing:border-box;max-width:1360px;width:100%}
+.panel{background:var(--layer);border:1px solid var(--stroke);border-radius:8px;padding:24px 28px 28px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel h2{margin:0;font-size:20px;line-height:28px;font-weight:600}
+.state{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pk{width:100%;border:0;background:none;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.pk b{font-weight:700;background:var(--accent-weak);color:var(--text);border-radius:2px}
+.empty{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:24px 20px;border:1px dashed var(--cstroke2);border-radius:4px;background:var(--card)}
+.clear{width:24px;height:24px;border:0;background:none;color:var(--text2);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.f-tb input{flex:1;min-width:0;border:0;outline:0;background:none}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <div style="padding: 40px 40px 24px; display: flex; flex-direction: column; gap: 8px; max-width: 1360px; box-sizing: border-box">
+    <div class="t-cap t2"><a href="Notices.dc.html" class="f-hl">35 Third-party notices</a> › 2. Package licenses</div>
+    <h1 class="t-title" style="margin: 0">Package search — states</h1>
+    <p class="t2" style="margin: 0; max-width: 820px">Search narrows what is shown by package name (case-insensitive substring); it never changes the list itself. Registry entries above stay visible in every state (§12.7.7а).</p>
+  </div>
+  <div class="grid">
+    <section class="panel" aria-labelledby="st-m">
+      <div class="state"><span class="tag acc">M of N</span><span id="st-m" class="t-strong">Query matches some packages</span></div>
+      <h2>2. Package licenses</h2>
+      <div class="bar">
+        <label class="f-tb" data-fluent="AutoSuggestBox" style="flex: 1; min-width: 240px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m20 20-4.5-4.5"></path></svg><input type="search" value="flutter" aria-label="Search packages by name" aria-controls="pk-m"><button class="clear" aria-label="Clear search"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></label>
+        <span class="t-cap t2" role="status">[M] of [N] packages</span>
+      </div>
+      <div id="pk-m" style="display: flex; flex-direction: column; gap: 4px">
+        <section class="f-exp" data-fluent="Expander"><button class="f-exph pk" aria-expanded="false"><span class="mono" style="flex: 1"><b>flutter</b></span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></button></section>
+        <section class="f-exp" data-fluent="Expander"><button class="f-exph pk" aria-expanded="false"><span class="mono" style="flex: 1"><b>flutter</b>_bloc</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></button></section>
+        <section class="f-exp" data-fluent="Expander"><button class="f-exph pk" aria-expanded="false"><span class="mono" style="flex: 1"><b>flutter</b>_localizations</span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></button></section>
+        <section class="f-exp" data-fluent="Expander"><button class="f-exph pk" aria-expanded="false"><span class="mono" style="flex: 1">structured_log_<b>flutter</b></span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></button></section>
+        <section class="f-exp" data-fluent="Expander"><button class="f-exph pk" aria-expanded="false"><span class="mono" style="flex: 1">val_latex_<b>flutter</b></span><span class="f-chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></span></button></section>
+      </div>
+      <p class="t-cap t2" style="margin: 4px 0 0">Matching part of the name is highlighted. Expanding a package works as without a query.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="st-0">
+      <div class="state"><span class="tag warn">0 of N</span><span id="st-0" class="t-strong">Nothing matches</span></div>
+      <h2>2. Package licenses</h2>
+      <div class="bar">
+        <label class="f-tb" data-fluent="AutoSuggestBox" style="flex: 1; min-width: 240px"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m20 20-4.5-4.5"></path></svg><input type="search" value="reqwest" aria-label="Search packages by name" aria-controls="pk-0"><button class="clear" aria-label="Clear search"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></label>
+        <span class="t-cap t2" role="status">0 of [N] packages</span>
+      </div>
+      <div id="pk-0" class="empty">
+        <span class="t-strong">No packages match</span>
+        <span class="t-cap t2">No package name contains “reqwest”. The notices register above is not affected by search.</span>
+        <button class="f-btn">Clear search</button>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

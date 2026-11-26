@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>TUI — ASCII-значки</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ln{height:18px;white-space:pre}
+.cell{display:inline-block;width:1ch;text-align:center;vertical-align:top}
+.b{font-weight:700}.i{font-style:italic}
+.dim{color:#7D8590}.acc{color:#6CB6FF}.ok{color:#7EC699}.err{color:#F47067}.warn{color:#E0B65C}.hunk{color:#56C2D6}
+.code{color:#D2A8FF}
+.cur{background:#C9D1D9;color:#0B0D10}
+.bar{background:#161B22}
+</style>
+</helmet>
+<div style="width: 648px; height: 484px; box-sizing: border-box; display: flex; flex-direction: column; background: #0B0D10; color: #C9D1D9; border-radius: 10px; overflow: hidden; font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace">
+<div style="height: 28px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #1A1D23; color: #9AA3AF; font-size: 12px">
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span style="margin-left: 8px">codelab --ui tui — LANG=C — {{cols}}×{{rows}}</span>
+</div>
+<div style="padding: 12px; font-size: 13px; line-height: 18px">
+<div style="width: {{cols}}ch; overflow: hidden">
+<sc-for list="{{lines}}" as="ln" hint-placeholder-count="24"><div class="ln"><sc-for list="{{ln.segs}}" as="s" hint-placeholder-count="3"><span class="{{s.c}}">{{s.t}}</span></sc-for></div></sc-for>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":648,"height":484}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // LANG/LC_ALL без UTF-8 или display.ascii = true: значки + * x ! - и git:main вместо ⎇ (§12.2.4,
+    // §12.2.6). Цвета сохраняются; рамки и разделители тоже переходят на ASCII.
+    var W = 80, H = 24;
+    function S(t, c) { return { t: t, c: c || '' }; }
+    // Глиф вне ASCII и кириллицы встаёт в ячейку ровно 1ch: в веб-шрифте его нет, запасной шрифт шире.
+    function CELLS(segs) { var out = []; segs.forEach(function (s) { var run = ''; Array.from(s.t).forEach(function (ch) { if (/[\x20-\x7E\u0400-\u04FF]/.test(ch)) { run += ch; } else { if (run) out.push(S(run, s.c)); run = ''; out.push(S(ch, (s.c + ' cell').trim())); } }); if (run) out.push(S(run, s.c)); }); return out; }
+    function width(segs) { var n = 0; segs.forEach(function (s) { n += Array.from(s.t).length; }); return n; }
+    function LR(left, right, c) { return left.concat([S(' '.repeat(Math.max(1, W - width(left) - width(right))), c)], right); }
+    function PAD(segs, c) { var gap = W - width(segs); return gap > 0 ? segs.concat([S(' '.repeat(gap), c)]) : segs; }
+    function BAR(segs) { return PAD(segs.map(function (s) { return S(s.t, (s.c + ' bar').trim()); }), 'bar'); }
+    function FRAME(top, bottom) {
+      var room = H - bottom.length;
+      var t = top.length > room ? top.slice(top.length - room) : top;
+      var fill = [];
+      for (var i = t.length; i < room; i++) fill.push([]);
+      return t.concat(fill, bottom).map(function (segs) { return { segs: CELLS(segs) }; });
+    }
+    var top = [
+      [S('> ', 'acc b'), S('Update the README and check the docs links', 'b')],
+      [],
+      [S('thought for 8s', 'dim')],
+      [],
+      LR([S('+ ', 'ok'), S('Read', 'b'), S(' README.md')], [S('0.0s', 'dim')]),
+      LR([S('x ', 'err'), S('Fetch', 'b'), S(' example.com/docs')], [S('1.4s', 'dim')]),
+      [S('  | ', 'dim'), S('HTTP 404')],
+      [S('! ', 'warn'), S('Edit', 'b'), S(' README.md')],
+      [S('  | ', 'dim'), S('Rejected by user')],
+      LR([S('* ', 'acc'), S('Run', 'b'), S(' markdown-link-check README.md')], [S('2.0s', 'dim')]),
+      [S('  | [+] https://dart.dev', 'dim')],
+      [S('  | [x] https://example.com/docs -> 404', 'dim')],
+      [S('- ', 'dim'), S('Read', 'b'), S(' docs/index.md', 'dim')]
+    ];
+    var bottom = [
+      [S('-'.repeat(W), 'dim')],
+      [S('> ', 'acc b'), S(' ', 'cur')],
+      [],
+      [S('esc'), S(' interrupt · ', 'dim'), S('enter'), S(' queue · ', 'dim'), S('ctrl+j'), S(' newline · ', 'dim'), S('pgup'), S(' scroll', 'dim')],
+      BAR([S('* 9s', 'acc'), S(' · ', 'dim'), S('ask', 'acc b'), S(' · gpt-4.1 · ctx 9% · ↑4.1k ↓0.6k · $0.01 · git:main', 'dim')])
+    ];
+    return { cols: W, rows: H, lines: FRAME(top, bottom) };
+  }
+}
+</script>
+</body>
+</html>
