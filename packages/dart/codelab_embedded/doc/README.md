@@ -16,6 +16,6 @@
 ## Смежные документы
 
 - [Руководство по ядру агента](../../codelab_agent_core/doc/README.md): [сборка ядра и хосты](../../codelab_agent_core/doc/02-assembly-and-hosts.md#хост-2-codelab_embedded), [путь запроса, встроенный режим](../../codelab_agent_core/doc/03-request-flow.md#встроенный-режим), [тестирование ядра](../../codelab_agent_core/doc/12-testing.md).
-- Как клиенты используют мост: [`codelab`](../../../../apps/codelab_cli/doc/development.md), [CodeLab app](../../../../apps/codelab_desktop/doc/development.md).
+- Как клиенты используют мост: [`codelab`](../../../../apps/codelab_cli/doc/02-startup-and-composition.md), [CodeLab app](../../../../apps/codelab_desktop/doc/07-embedded-agent-and-connections.md).
 - Бинарь `codelab-agent` — второй хост того же ядра: [разработка](../../../../apps/codelab_agent/doc/development.md).
 - Спецификация [`embedded-agent`](../../../../openspec/specs/embedded-agent/spec.md); решения — в архивном change `add-embedded-agent-mode` (`openspec/changes/archive/`, `design.md`).

@@ -1,6 +1,8 @@
 # 17. Спецификации после MVP
 
 > Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
+>
+> **Статус реализации (сверено с кодом 2026-11-26).** Обзорная глава: статус каждой спецификации — такая же строка в начале глав 17.1–17.16, статусы целей — [`agent-parity-goals.md`](../agent-parity-goals.md) §3. Разделы конфигурации «после MVP» (`llm`, `images`, `jobs`, `hooks`, `plugins`, `a2a`, `memory`, `steering`, `lsp`) ядро распознаёт и не применяет (`afterMvpSections`, `codelab_agent_core/lib/src/config/schema.dart`).
 
 ← [16. Что не входит в MVP и открытые вопросы](16-non-mvp-and-open-questions.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.1. Web-инструменты: `web_fetch` и `web_search`](17-1-web-tools.md) →
 

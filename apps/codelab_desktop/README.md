@@ -12,7 +12,7 @@ CodeLab app — настольное приложение для работы с
 |---|---|
 | пользоваться CodeLab app | [Руководство пользователя](doc/user-guide.md) |
 | собрать приложение, найти его данные и логи | [Эксплуатация](doc/operations.md) |
-| менять код приложения | [Разработка](doc/development.md) |
+| собрать, запустить и проверить код | [Разработка](doc/development.md) |
 | разобраться в коде приложения по главам | [Руководство разработчика](doc/README.md) |
 
 ## Быстрый старт
@@ -75,7 +75,7 @@ ACP (Agent Client Protocol) — протокол, по которому клие
 - Код каталога генерирует `fvm flutter gen-l10n` (настройка — `l10n.yaml`). Сгенерированные файлы коммитятся.
 - `fvm dart run melos run l10n:check` перегенерирует каталоги app и кита во временной копии и сверяет с рабочими. Скрипт входит в `melos run check`.
 - Сторож литералов `ui_literals_test` (`packages/dart/codelab_architecture_tests`) ищет английские строки интерфейса в `lib/app`, в `presentation/` внутри `lib/features` и в `lib/src` кита (кроме превью и `l10n/`) мимо каталога. Исключение — запись с причиной в `test/support/ui_literals_allowlist.txt`: название продукта, значение конфигурации, пример поля. Запись, которой нет в коде, роняет тест.
-- Русские формулировки — по [глоссарию](../../docs/architecture/l10n-glossary.md). Как добавить строку и страницу — в [разработке](doc/development.md).
+- Русские формулировки — по [глоссарию](../../docs/architecture/l10n-glossary.md). Как добавить строку и страницу — в [расширении приложения](doc/09-extending.md).
 - Меню macOS следует языку системы: `CFBundleLocalizations` в `macos/Runner/Info.plist` и `macos/Runner/ru.lproj/MainMenu.strings`.
 
 ## Смотрите также

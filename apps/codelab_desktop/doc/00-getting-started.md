@@ -38,7 +38,7 @@ fvm flutter run -d macos
 
 ## Изолированный запуск с `CODELAB_HOME`
 
-Почему `flutter run` не годится для временных данных и как запустить собранный бинарь с `CODELAB_HOME` — в [разработке](development.md#изолированный-ручной-прогон). Команда оттуда с предварительной сборкой:
+`fvm flutter run -d macos` не передаёт запущенному приложению переменные окружения терминала, например `CODELAB_HOME`: приложение читает настоящий `~/.codelab`. Для изолированного прогона соберите приложение (`fvm flutter build macos --debug` или предыдущим `flutter run`) и запустите бинарник с временной папкой. Путь — от `apps/codelab_desktop`:
 
 ```bash
 cd apps/codelab_desktop
@@ -61,7 +61,14 @@ CODELAB_HOME=<временная папка> \
 
 ## Управление запущенным приложением: `flutter_driver` и Dart MCP
 
-Точка входа `test_driver/app.dart`, команда запуска с `--print-dtd`, ключи вроде `settings-nav-providers` и размер окна по умолчанию — в [разработке](development.md#управление-запущенным-приложением). Что делать с адресом DTD:
+`test_driver/app.dart` включает расширение `flutter_driver`, и запущенным приложением можно управлять по стабильным `ValueKey` виджетов, например `app-bar-menu`, `sidebar-settings`, `tool-toggle-files`, `settings-nav-providers`:
+
+```bash
+cd apps/codelab_desktop
+fvm flutter run -d macos -t test_driver/app.dart --print-dtd
+```
+
+Команда печатает адрес Dart Tooling Daemon (DTD), к которому подключается инструмент управления. Окно по умолчанию — 800×600 логических точек: в такой ширине боковая панель и док выдвигаются поверх ленты. Что делать с адресом DTD:
 
 1. Подключите инструмент Dart MCP к DTD: сначала найдите адреса (`listDtdUris` инструмента `dtd`), потом подключитесь по выбранному (`connect`).
 2. `listConnectedApps` покажет запущенное приложение; через него вызываются действия `flutter_driver` — нажать элемент по ключу, ввести текст, прочитать текст, сделать снимок.
@@ -164,7 +171,7 @@ fvm flutter test test/app/root_scope_close_test.dart --plain-name "паралл�
 - Теги: `scripted-only` помечает тесты, которым нужен scripted-агент; прогон против Dart-агента идёт с `--exclude-tags scripted-only` (`dart_test.yaml`).
 - Интеграционные тесты `integration_test/` и скрипты `test:e2e:app:*` на устройстве запускаются только в ветке `release/<version>`; в `feature/*` для них достаточно `fvm flutter analyze` ([глава 08](08-testing.md), корневой [`AGENTS.md`](../../../AGENTS.md), §21).
 
-Остальные проверки (формат, `analyze`, `guard`, `l10n:check`) — в списке под таблицей тестов [разработки](development.md#тесты). После правки `.arb` выполните `fvm flutter gen-l10n` и закоммитьте результат. При изменении виджетов `codelab_ui` запускайте тесты и в `packages/flutter/codelab_ui`. Полный `melos run check` перед pull request запускают только по просьбе ([`AGENTS.md`](../../../AGENTS.md), §21). Уровни тестов — [testing.md](../../../docs/architecture/testing.md).
+Остальные проверки (формат, `analyze`, `guard`, `l10n:check`) — в таблице «Какие проверки затрагивает изменение» [главы 08](08-testing.md#какие-проверки-затрагивает-изменение). После правки `.arb` выполните `fvm flutter gen-l10n` и закоммитьте результат. При изменении виджетов `codelab_ui` запускайте тесты и в `packages/flutter/codelab_ui`. Полный `melos run check` перед pull request запускают только по просьбе ([`AGENTS.md`](../../../AGENTS.md), §21). Уровни тестов — [testing.md](../../../docs/architecture/testing.md).
 
 ## Что изменить и куда смотреть
 

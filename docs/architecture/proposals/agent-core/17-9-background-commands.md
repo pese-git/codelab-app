@@ -1,6 +1,8 @@
 # 17.9. Фоновые команды
 
 > Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
+>
+> **Статус реализации (сверено с кодом 2026-11-26).** Не реализовано: инструментов `job_output` и `job_kill` нет; раздел `jobs` и capability `background_jobs` распознаются без применения (`schema.dart`, `resolve.dart`).
 
 ← [17.8. LSP: языковые серверы](17-8-lsp.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.10. Провайдеры и устойчивость LLM](17-10-providers.md) →
 

@@ -191,7 +191,7 @@ CODELAB_E2E_AGENT=embedded fvm dart test test/e2e/headless_print_basic_test.dart
 
 Правила для `codelab_setup/io.dart`, `codelab_embedded/io.dart` и `codelab_embedded/testing.dart` действуют на весь `lib/`, поэтому барель `lib/codelab_cli.dart` не может их реэкспортировать; запреты `codelab_acp_testing` и `dart_tui` — на `lib/src`. Точка входа `bin/` не знает мосты `io.dart` и `testing.dart` вовсе.
 
-**Что сделать.** Перенести код в разрешённое место или получить нужное через порт ([глава 01](development.md#швы-для-тестов)). Расширение списка зависимостей (`cliAllowlist`) — только через OpenSpec change.
+**Что сделать.** Перенести код в разрешённое место или получить нужное через порт ([глава 01](01-overview.md#швы-для-тестов)). Расширение списка зависимостей (`cliAllowlist`) — только через OpenSpec change.
 
 ## Смотрите также
 

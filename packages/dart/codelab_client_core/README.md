@@ -96,8 +96,8 @@ await workspace.dispose(); // бэкенд закрывает его владе�
 
 ## Как app и CLI используют слой
 
-- `apps/codelab_desktop` оборачивает `ClientWorkspace` в Cubit-ы рабочего места и фасад `CodeLabShellCubit`; Cubit-ы только отображают состояние. См. [`apps/codelab_desktop/doc/development.md`](../../../apps/codelab_desktop/doc/development.md).
-- `apps/codelab_cli` держит `ClientWorkspace` в REPL, headless-режиме `-p` и драйвере фикстур `test-scenario`. См. [`apps/codelab_cli/doc/development.md`](../../../apps/codelab_cli/doc/development.md).
+- `apps/codelab_desktop` оборачивает `ClientWorkspace` в Cubit-ы рабочего места и фасад `CodeLabShellCubit`; Cubit-ы только отображают состояние. См. [`apps/codelab_desktop/doc/03-state-flow.md`](../../../apps/codelab_desktop/doc/03-state-flow.md).
+- `apps/codelab_cli` держит `ClientWorkspace` в REPL, headless-режиме `-p` и драйвере фикстур `test-scenario`. См. [`apps/codelab_cli/doc/01-overview.md`](../../../apps/codelab_cli/doc/01-overview.md).
 - Оба приложения регистрируют резолверы и порты в composition root и не разбирают `_meta.codelab.*` сами.
 
 ## Тесты

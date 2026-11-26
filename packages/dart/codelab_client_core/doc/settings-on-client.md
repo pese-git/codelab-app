@@ -298,44 +298,7 @@ sequenceDiagram
 
 ### Пример 1. `profiles.json`
 
-```bash
-codelab profiles add local "stdio:codelab-agent serve --stdio"
-codelab profiles add remote ws://127.0.0.1:9/acp
-```
-
-```text
-Saved profile local.
-Saved profile remote.
-```
-
-```json
-{
-  "version": 1,
-  "profiles": [
-    {
-      "type": "stdio",
-      "id": "local",
-      "label": "stdio:codelab-agent serve --stdio",
-      "command": "codelab-agent",
-      "args": [
-        "serve",
-        "--stdio"
-      ],
-      "env": {},
-      "runInProjectDirectory": true
-    },
-    {
-      "type": "webSocket",
-      "id": "remote",
-      "label": "ws://127.0.0.1:9/acp",
-      "uri": "ws://127.0.0.1:9/acp",
-      "tokenRef": "env:CODELAB_AGENT_TOKEN"
-    }
-  ]
-}
-```
-
-Токена в файле нет, только ссылка `env:CODELAB_AGENT_TOKEN`. Встроенного агента в файле нет: он выбирается словом `embedded` или `default`. Права файла — по `umask` (в прогоне `-rw-r--r--`): права не ставятся ни при создании файла, ни при замене (`writeBytesAtomically`: `writeAsBytes` и `rename`, без `chmod`). Каталог `$CODELAB_HOME` получает права `0700` только от интерактивных режимов и подкоманды `profiles` терминала `codelab` (`CodelabHome.ensureExists`), `cli_history` — `0600`; app права не ставит. Значения `args` и `env` stdio-профиля в `profiles.json` открыты: не кладите в них токены, для WebSocket используйте ссылку `env:` или `secret:`.
+Файл, который записывает `codelab profiles add` (профили `stdio` и WebSocket, токен только ссылкой `tokenRef`), с командами и разбором прав доступа — в [главе 2 пакета `codelab_client_io`](../../codelab_client_io/doc/02-stores-and-extending.md#profilesjson). Здесь пример не повторяется: хранилище — реализация `codelab_client_io`, а порт `ProfileStore` и правила выбора профиля — этого пакета.
 
 ### Пример 2. `recent_projects.json`
 

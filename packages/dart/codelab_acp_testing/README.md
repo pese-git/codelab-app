@@ -116,7 +116,7 @@ flowchart LR
 | `conformance:agent` | `AcpAgentServer` против корпуса (драйвер `runAgentFixture`) |
 | `conformance:embedded` | встроенный агент в процессе CLI: `codelab test-scenario … --agent embedded` |
 
-Транспортные фикстуры (`setup.transport`) играет `apps/codelab_agent/test/transport_conformance_test.dart` через `runAgentFixtureOver`. `melos run protocol-conformance` корпус не проигрывает. Файлы тестов, запуск одной фикстуры и разбор отчёта о падении — [`doc/00-getting-started.md`](doc/00-getting-started.md#кто-проигрывает-корпус). Команда `codelab test-scenario` описана в [`apps/codelab_cli/doc/operations.md`](../../../apps/codelab_cli/doc/operations.md#проверка-агента-фикстурами-test-scenario), ограничения импорта — в [`apps/codelab_cli/doc/development.md`](../../../apps/codelab_cli/doc/development.md).
+Транспортные фикстуры (`setup.transport`) играет `apps/codelab_agent/test/transport_conformance_test.dart` через `runAgentFixtureOver`. `melos run protocol-conformance` корпус не проигрывает. Файлы тестов, запуск одной фикстуры и разбор отчёта о падении — [`doc/00-getting-started.md`](doc/00-getting-started.md#кто-проигрывает-корпус). Команда `codelab test-scenario` описана в [`apps/codelab_cli/doc/operations.md`](../../../apps/codelab_cli/doc/operations.md#проверка-агента-фикстурами-test-scenario), ограничения импорта — в [`apps/codelab_cli/doc/01-overview.md`](../../../apps/codelab_cli/doc/01-overview.md).
 
 ## Как использовать
 

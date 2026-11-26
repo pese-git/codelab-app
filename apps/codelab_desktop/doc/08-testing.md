@@ -1,6 +1,6 @@
 # Тестирование app
 
-Глава о том, как проверяется `apps/codelab_desktop`: какие бывают тесты, где лежат двойники, как написать тест Cubit-а и страницы, что делают тесты-сторожа внутри приложения и как устроены интеграционные тесты на устройстве. Общую стратегию задаёт [`docs/architecture/testing.md`](../../../docs/architecture/testing.md), требования к проверкам — спецификация [`testing-quality`](../../../openspec/specs/testing-quality/spec.md). Здесь они не пересказываются: глава показывает, как это устроено в коде app. Краткая таблица команд — в [development.md](development.md#тесты).
+Глава о том, как проверяется `apps/codelab_desktop`: какие бывают тесты, где лежат двойники, как написать тест Cubit-а и страницы, что делают тесты-сторожа внутри приложения и как устроены интеграционные тесты на устройстве. Общую стратегию задаёт [`docs/architecture/testing.md`](../../../docs/architecture/testing.md), требования к проверкам — спецификация [`testing-quality`](../../../openspec/specs/testing-quality/spec.md). Здесь они не пересказываются: глава показывает, как это устроено в коде app. Команды проверки по типу изменения — в разделе [«Какие проверки затрагивает изменение»](#какие-проверки-затрагивает-изменение).
 
 Перед главой полезно прочитать [02-composition-root.md](02-composition-root.md): почти все виджет-тесты строят приложение через `createCodeLabRootScope`, и швы этой функции — основа двойников.
 
@@ -340,7 +340,9 @@ Future<CodeLabTestBinding> openGeneral(
 
 ### Один файл на запуск
 
-На macOS `flutter test integration_test -d macos` не поднимает приложение после первого файла, поэтому скрипты `test:e2e:app:dart-agent` и `test:e2e:app:embedded` запускают файлы по одному и возвращают ненулевой итог, если упал хотя бы один. Код 79 («No tests ran») — файл целиком из `scripted-only`: это пропуск, а не падение. Список скриптов и что проверяет каждый — в [development.md](development.md#тесты).
+На macOS `flutter test integration_test -d macos` не поднимает приложение после первого файла, поэтому скрипты `test:e2e:app:dart-agent` и `test:e2e:app:embedded` запускают файлы по одному и возвращают ненулевой итог, если упал хотя бы один. Код 79 («No tests ran») — файл целиком из `scripted-only`: это пропуск, а не падение. Скрипты `test:e2e:app:stdio`, `permission`, `fs`, `open-project`, `terminal`, `plan-checklist`, `prompt-queue`, `multi-session`, `command-palette`, `transcript-rendering`, `language` (смена языка на живой сессии, `integration_test/settings_language_flow_test.dart`), `onboarding` (`integration_test/onboarding_flow_test.dart`: приветственные шаги до открытия проекта), `legal` (`integration_test/settings_legal_flow_test.dart`: страница «Legal»), `usage` (два файла: строка статуса и панель «Usage») и `appearance` (`integration_test/settings_appearance_flow_test.dart`: импорт темы `acme-night`, превью, «Use» в режиме «Dark», перезапуск сохраняет тему) запускают по одному сценарию против scripted-агента. Сценарии `test:e2e:app:dart-agent` и `test:e2e:app:embedded` — все, кроме помеченных `scripted-only`, против Dart-агента или встроенного агента; агента выбирает `--dart-define=CODELAB_E2E_AGENT=scripted|dart|embedded`.
+
+Сценарии scripted-агента (`test:e2e:app:stdio`, `permission`, `fs` и другие) запускают его скрипт через `--dart-define=CODELAB_E2E_DART=../../.fvm/flutter_sdk/bin/dart` (`integration_test/support/e2e_agent.dart`), то есть ждут ссылку `.fvm/flutter_sdk` в корне репозитория. `test:e2e:app:dart-agent` эту ссылку не использует: он собирает `build/bin/codelab-agent` (`build:agent`) и передаёт его через `CODELAB_E2E_AGENT_BIN`. `fvm install` её не создаёт, а в новом git worktree её нет: каталог `.fvm/` кроме `fvm_config.json` не хранится в git. Создайте ссылку командой `fvm use --skip-pub-get --force` из корня и проверьте `ls .fvm/flutter_sdk/bin/dart`. FVM при этом переписывает `.fvmrc` и `.gitignore` — верните их через `git checkout -- .fvmrc .gitignore`.
 
 ## `test_driver/`
 
@@ -353,7 +355,7 @@ void main() {
 }
 ```
 
-Запуск (`fvm flutter run -d macos -t test_driver/app.dart --print-dtd`), стабильные ключи вроде `app-bar-menu`, `sidebar-settings`, `settings-nav-providers` и изолированный прогон с временным `CODELAB_HOME` описаны в [development.md](development.md#управление-запущенным-приложением). Именно для этого ключи `ValueKey` считаются контрактом: их используют и виджет-тесты, и интеграционные, и ручное управление.
+Запуск (`fvm flutter run -d macos -t test_driver/app.dart --print-dtd`), стабильные ключи вроде `app-bar-menu`, `sidebar-settings`, `settings-nav-providers` и изолированный прогон с временным `CODELAB_HOME` описаны в [главе 00](00-getting-started.md#управление-запущенным-приложением-flutter_driver-и-dart-mcp) (изолированный прогон — [там же](00-getting-started.md#изолированный-запуск-с-codelab_home)). Именно для этого ключи `ValueKey` считаются контрактом: их используют и виджет-тесты, и интеграционные, и ручное управление.
 
 ## Реальный прогон
 
@@ -391,7 +393,7 @@ fvm flutter test -r expanded \
 
 ## Какие проверки затрагивает изменение
 
-Перед pull request из `feature/*` и `hotfix/*` агент проверяет только затронутое ([development.md](development.md#тесты), корневой [`AGENTS.md`](../../../AGENTS.md), §21):
+Перед pull request из `feature/*` и `hotfix/*` агент проверяет только затронутое (корневой [`AGENTS.md`](../../../AGENTS.md), §21):
 
 | Что изменилось | Что запустить |
 |---|---|
@@ -423,7 +425,7 @@ fvm flutter test -r expanded \
 
 ## Смотрите также
 
-- [development.md](development.md) — карта кода и краткая таблица тестов.
+- [development.md](development.md) — вход разработчика: сборка, запуск, проверка и карта глав.
 - [09-extending.md](09-extending.md) — рецепты изменений; у каждого есть тест и проверки.
 - [`AGENTS.md`](../AGENTS.md) приложения — раздел «Тесты» и ключи тестов отдельных страниц.
 - [testing.md](../../../docs/architecture/testing.md) — общая стратегия, разделы про Cubit (§26), виджеты (§28), Fluent UI и язык (§30, §30а), интеграционные тесты (§32).

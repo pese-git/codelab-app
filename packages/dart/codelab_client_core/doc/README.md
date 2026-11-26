@@ -37,6 +37,13 @@
 | [14. Тестирование](14-testing.md) | как устроены тесты, обвязки `KitAgent`, `GatedWorkspace`, `UsageAgent`, корпус фикстур, свойства |
 | [15. Расширение](15-extending.md) | рецепты: резолвер, хранилище, команда палитры, поле представления, заметка, расширение `_meta.codelab.*` |
 | [16. Частые проблемы](16-troubleshooting.md) | симптомы, причины и что проверить |
+
+### Сквозные разборы
+
+Разборы без номера идут поперёк глав: каждый прослеживает одну тему через несколько глав и пакетов. Читайте их после глав, на которые они ссылаются.
+
+| Документ | О чём |
+|---|---|
 | [Хранение и управление сессиями](session-management.md) | сквозной разбор клиентской стороны: создание, список, открытие, разрыв, `detached`, снимок и недавние проекты, пример на реальном прогоне |
 | [Учёт usage на клиенте](usage-accounting.md) | сквозной разбор: объявление `usage`, приём снимков и журнала, сбросы, показ в desktop, CLI и TUI, граничные случаи |
 | [Настройки на клиенте](settings-on-client.md) | сквозной разбор: свои хранилища клиента, профили, темы, настройки app и CLI, правка настроек агента через мост, повреждённый файл и одновременная запись, пример на реальных файлах |
@@ -62,7 +69,7 @@
 
 - Протокольный клиент, на котором стоит слой: [`codelab_client_acp`](../../codelab_client_acp/doc/README.md) (README пакета — [здесь](../../codelab_client_acp/README.md)).
 - `dart:io`-адаптеры слоя: [`codelab_client_io`](../../codelab_client_io/doc/README.md).
-- Хосты: [терминальный клиент `codelab`](../../../../apps/codelab_cli/doc/README.md) и [десктопное приложение](../../../../apps/codelab_desktop/doc/development.md).
+- Хосты: [терминальный клиент `codelab`](../../../../apps/codelab_cli/doc/README.md) и [десктопное приложение](../../../../apps/codelab_desktop/doc/README.md).
 - Транспорты, фикстуры и фейки: [`codelab_acp_transports`](../../codelab_acp_transports/README.md), [`codelab_acp_testing`](../../codelab_acp_testing/README.md).
 - Архитектура: [состояние](../../../../docs/architecture/state-management.md), [жизненный цикл соединения и сессии](../../../../docs/architecture/session-lifecycle.md), [потоки событий](../../../../docs/architecture/streaming.md), [конкурентность](../../../../docs/architecture/concurrency.md), [граница ACP](../../../../docs/architecture/acp-boundary.md), [разрешения](../../../../docs/architecture/permissions.md).
 - Проектный документ о выделении слоя: [`09-10-stage-5-client-kit.md`](../../../../docs/architecture/proposals/dart-agent-and-clients/09-10-stage-5-client-kit.md).

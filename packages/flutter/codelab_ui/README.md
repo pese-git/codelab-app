@@ -20,7 +20,7 @@ flowchart LR
 
 Зависимости на схеме взяты из `pubspec.yaml`. `gpt_markdown` и `val_highlight` импортируются только из `lib/src/rendering/`.
 
-Модели ACP и состояние клиента в пакет не попадают. Маппер приложения (`apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart`) переводит их в типы кита: `CodeLabTranscriptRow`, `CodeLabToolCallRow`, `CodeLabNoticeRow`, `CodeLabTranscriptApproval`. Слои приложения описаны в [`docs/architecture/layers-and-dependencies.md`](../../../docs/architecture/layers-and-dependencies.md), приложение — в [`development.md`](../../../apps/codelab_desktop/doc/development.md).
+Модели ACP и состояние клиента в пакет не попадают. Маппер приложения (`apps/codelab_desktop/lib/features/workbench/application/ui_mappers.dart`) переводит их в типы кита: `CodeLabTranscriptRow`, `CodeLabToolCallRow`, `CodeLabNoticeRow`, `CodeLabTranscriptApproval`. Слои приложения описаны в [`docs/architecture/layers-and-dependencies.md`](../../../docs/architecture/layers-and-dependencies.md), приложение — в [обзор приложения](../../../apps/codelab_desktop/doc/01-overview.md).
 
 ## Граница: никакой логики
 
@@ -174,5 +174,5 @@ fvm dart analyze
 ## Смотрите также
 
 - [`doc/README.md`](doc/README.md) — руководство разработчика по UI-киту: оглавление и порядок чтения.
-- [`apps/codelab_desktop/doc/development.md`](../../../apps/codelab_desktop/doc/development.md) — как приложение собирает данные для виджетов.
+- [`apps/codelab_desktop/doc/03-state-flow.md`](../../../apps/codelab_desktop/doc/03-state-flow.md) — как приложение собирает данные для виджетов.
 - [`docs/architecture/layers-and-dependencies.md`](../../../docs/architecture/layers-and-dependencies.md) — слои и направление зависимостей.

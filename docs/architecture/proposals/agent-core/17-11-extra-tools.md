@@ -1,6 +1,8 @@
 # 17.11. Дополнительные инструменты
 
 > Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
+>
+> **Статус реализации (сверено с кодом 2026-11-26).** Чтение изображений в `read` (`ImageContent`, `tools/builtin/read.dart`) — часть MVP-контракта `read` ([`06-tools.md`](../../../../packages/dart/codelab_agent_core/doc/06-tools.md), §6.4), а не этой главы. Архивы и SQLite, правки по якорям, память, `inspect_image`, метка и откат, `ask`, поиск по сессии и `discover_tools` не реализованы: ключи `tools.read`, `tools.edit`, `tools.inspect_image`, `tools.checkpoint`, `tools.load`, `tools.mounted`, `memory` распознаются без применения.
 
 ← [17.10. Провайдеры и устойчивость LLM](17-10-providers.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.12. Цикл и безопасность](17-12-loop-and-security.md) →
 

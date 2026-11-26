@@ -68,7 +68,7 @@
 ### D6. Документация
 
 - `apps/codelab_desktop/doc/operations.md`: из абзаца «Недавние проекты в этом домене больше не хранятся…» убрать перенос и события. Добавить, что ключ `codelab.recent_projects` предвыпускных сборок app не читает и, при необходимости, удаляется вместе с доменом через `defaults delete`. Фраза про обновление на 1.0 остаётся.
-- `apps/codelab_desktop/doc/development.md`: строка `lib/core/platform/`.
+- `apps/codelab_desktop/doc/01-overview.md`: строка `lib/core/platform/` карты кода; подробности — `doc/06-platform-and-appearance.md`.
 - `packages/dart/codelab_client_core/README.md`: строка `RecentProjectsStore` в таблице реализаций.
 - `apps/codelab_desktop/AGENTS.md`: пункт «Недавние проекты».
 - `docs/architecture/platform-integration.md` §28: фраза «Перенос прежнего ключа есть только в предвыпускных сборках…» заменяется на «удалён change `remove-recent-projects-migration`».

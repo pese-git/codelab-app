@@ -1,6 +1,8 @@
 # 17.5. Настройка агента: провайдеры, секреты, реестр настроек, живая перезагрузка
 
 > Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
+>
+> **Статус реализации (сверено с кодом 2026-11-26).** Реализовано: предконфигурация провайдера из окружения (L-25, `codelab_agent_io/lib/src/config/provider_preconfig.dart`), хранилища секретов `env` и `file`, запись конфига, живая перезагрузка, MCP-переподключение, реестр настроек — changes `add-agent-secret-store`, `add-config-writer-and-reload`, `add-provider-setup-ui` и соседние (архив). Не реализовано: хранилище секретов ОС (`keychain is not supported yet` в `resolve.dart`; активный change `add-agent-os-secret-backends`). Полноту остальных подразделов построчно не сверял.
 
 ← [17.4. Вынос огромного результата инструмента в файл (T-28)](17-4-output-spill.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.6. Управление сессиями: переименование, ветки, перемотка, lease](17-6-session-management.md) →
 

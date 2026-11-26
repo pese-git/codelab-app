@@ -153,6 +153,8 @@ flowchart LR
   state --> app["CodeLabApp: FluentApp theme, darkTheme, themeMode"]
 ```
 
+Файлы тем приходят через порт `ThemeLibrary` из `codelab_client_core` (реализация `IoThemeLibrary` — в `codelab_client_io`, разбор файла — `ThemeFile.parse`); к `dart:io` ни Cubit, ни страница не обращаются. В виджет-тестах порты подменяются двойниками: `InMemoryThemeLibrary` и двойник `SystemAccentSource`, поэтому настоящие файлы и канал плагина не нужны.
+
 ### Кто что делает
 
 | Файл (`lib/app/appearance/`) | Роль |

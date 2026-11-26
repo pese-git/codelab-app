@@ -2,7 +2,7 @@
 
 Руководство для разработчика объясняет, как устроен `codelab_ui` — набор Fluent UI виджетов рабочего места CodeLab: из каких слоёв он состоит, откуда виджеты берут цвета и тексты, как устроены лента, одобрение и markdown, как писать и проверять новые виджеты. Прочитав его, вы понимаете, что кит делает, чего не делает никогда, и знаете, куда добавить виджет, строку локализации или сочетание клавиш.
 
-Руководство описывает код как он есть. Нормы лежат в спецификациях [`agent-workbench-ui`](../../../../openspec/specs/agent-workbench-ui/spec.md) и [`app-settings`](../../../../openspec/specs/app-settings/spec.md), правила пакета — в [`AGENTS.md`](../AGENTS.md). Краткий обзор пакета и быстрый старт — в [README пакета](../README.md); главы раскрывают его темы глубже и не повторяют их построчно. Как приложение подключает кит, описывает [руководство приложения](../../../../apps/codelab_desktop/doc/development.md).
+Руководство описывает код как он есть. Нормы лежат в спецификациях [`agent-workbench-ui`](../../../../openspec/specs/agent-workbench-ui/spec.md) и [`app-settings`](../../../../openspec/specs/app-settings/spec.md), правила пакета — в [`AGENTS.md`](../AGENTS.md). Краткий обзор пакета и быстрый старт — в [README пакета](../README.md); главы раскрывают его темы глубже и не повторяют их построчно. Как приложение подключает кит, описывает [руководство приложения](../../../../apps/codelab_desktop/doc/03-state-flow.md).
 
 ## Порядок чтения
 
@@ -43,5 +43,5 @@
 
 - [`README.md`](../README.md) пакета — слои и публичные виджеты одним взглядом.
 - [`AGENTS.md`](../AGENTS.md) пакета — правила для изменений.
-- [`apps/codelab_desktop/doc/development.md`](../../../../apps/codelab_desktop/doc/development.md) — как приложение собирает данные для виджетов.
+- [`apps/codelab_desktop/doc/03-state-flow.md`](../../../../apps/codelab_desktop/doc/03-state-flow.md) — как приложение собирает данные для виджетов.
 - [`docs/architecture/layers-and-dependencies.md`](../../../../docs/architecture/layers-and-dependencies.md) и [`docs/architecture/testing.md`](../../../../docs/architecture/testing.md) — слои и уровни тестов.

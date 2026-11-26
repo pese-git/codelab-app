@@ -2,11 +2,42 @@
 
 Глава даёт карту: из чего состоит код приложения, какие фичи в нём есть, какие слои у каждой, что запрещено импортировать и как это проверяется. Читайте её сразу после [начала работы](00-getting-started.md): остальные главы ссылаются на понятия отсюда.
 
-Что за приложение и какие у него зависимости — в [разработке](development.md#место-в-monorepo): схему пакетов здесь не повторяем.
+Место приложения среди пакетов — в разделе «Место в monorepo» ниже, карта файлов `lib/` — в разделе «Карта кода».
 
 ## Одним абзацем
 
 CodeLab app — Flutter-приложение для macOS. Своего состояния сессий, очереди промптов и одобрений у него нет: их владелец — клиентский слой `codelab_client_core` (`ClientWorkspace`, `SessionHandle`), общий с терминальным клиентом `codelab`. Cubit-ы приложения подписываются на это состояние, превращают его в данные для экрана и передают действия пользователя обратно. Агента приложение получает через мосты `codelab_embedded` и `codelab_setup`, виджеты рабочего места — из пакета `codelab_ui`. Всё остальное в `apps/codelab_desktop` — склейка: сборка графа зависимостей, порты к системе, настройки, страницы.
+
+## Место в monorepo
+
+`apps/codelab_desktop` — Flutter-приложение. Владелец состояния сессий — клиентский слой (см. «Одним абзацем» выше). Агентскую сторону приложение получает только через два моста: `codelab_embedded` (встроенный агент в процессе) и `codelab_setup` (конфигурация агента, провайдеры, MCP-серверы, секреты). Прямой импорт `package:codelab_agent_*` запрещён и проверяется сторожем (`melos run guard`). Виджеты рабочего места — пакет `codelab_ui`.
+
+Зависимости по `pubspec.yaml` приложения и его прямых зависимостей:
+
+```mermaid
+flowchart LR
+  app["codelab_desktop"]
+  app --> ui["codelab_ui"]
+  app --> core["codelab_client_core"]
+  app --> cio["codelab_client_io"]
+  app --> cacp["codelab_client_acp"]
+  app --> proto["codelab_acp_protocol"]
+  app --> tr["codelab_acp_transports"]
+  app --> setup["codelab_setup"]
+  app --> emb["codelab_embedded"]
+  cio --> core
+  core --> cacp
+  emb --> acore["codelab_agent_core"]
+  emb --> aio["codelab_agent_io"]
+  emb --> aacp["codelab_agent_acp"]
+  emb --> amcp["codelab_agent_mcp"]
+  setup --> acore
+  setup --> aio
+```
+
+Сторонние зависимости приложения: `fluent_ui` (виджеты Fluent), `flutter_bloc` (Cubit-ы), `cherrypick` с `cherrypick_annotations` (внедрение зависимостей), `fpdart`, `path`, `path_provider`, `shared_preferences`, `file_selector` (выбор папки и файла), `desktop_drop` (перетаскивание папки на экран «Open a project»; импорт — только `lib/core/platform/os_drop_region.dart`), `system_theme` (системный акцент; импорт — только `lib/core/platform/system_accent_source.dart`), `pty2`, `xterm2` и `xterm2_core` (терминал), `url_launcher`, `flutter_localizations` и `intl` (локализация), `structured_log` с адаптерами `structured_log_flutter`, `structured_log_fluent` и `structured_log_remote_sync` (журнал). `codelab_acp_testing` — только `dev_dependency`.
+
+На схеме опущены зависимости внутри нижних слоёв: `codelab_client_io` зависит ещё от `codelab_client_acp`, а `codelab_client_*`, `codelab_embedded` и `codelab_agent_acp` — от `codelab_acp_protocol` и `codelab_acp_transports`. Общая картина слоёв — [layers-and-dependencies.md](../../../docs/architecture/layers-and-dependencies.md) и [acp-boundary.md](../../../docs/architecture/acp-boundary.md).
 
 ## Что где живёт
 
@@ -67,13 +98,41 @@ flowchart TD
 - Фичи импортируют друг друга напрямую, например: `workbench` берёт `application/` и `presentation/` соседних фич (`settings`, `usage`, `protocol`, `terminal`, `project_files`), `onboarding` — `settings` и `workbench`, `usage` и `protocol` в `presentation/` — `workbench`. Полный список даёт `grep` по импортам `features/`. Публичного API и закрытой части у фичи нет; связь через узкий интерфейс есть в одном месте — `ConnectionCommands` (`features/settings/application/connection_commands.dart`), его реализует `ConnectionCubit` фичи `workbench`. Это описано в [layers-and-dependencies.md](../../../docs/architecture/layers-and-dependencies.md), раздел 12; сторож межфичевых импортов не проверяет.
 - `lib/core/platform/` лежит рядом с фичами, а не внутри: порты нужны нескольким из них (`ConnectionPreferences` — странице «Connection», рабочему месту и composition root).
 
-## `lib/app/` и `lib/core/`
+## Карта кода
 
-**`lib/app/`** собирает приложение и держит то, что не принадлежит одной фиче. Подробная таблица файлов — в [разработке](development.md#структура-кода). Коротко, по ролям:
+Приложение устроено по фичам (feature-first): каждая фича держит слои `application/` (Cubit-ы и состояние, без виджетов) и `presentation/` (виджеты). Слоёв `domain/` и `infrastructure/` в фичах нет: доменная логика живёт в `codelab_client_core`, адаптеры к ОС — в `lib/core/platform/` и `lib/app/`.
 
-- сборка и жизненный цикл: `app_scope.dart`, `codelab_app_widget.dart`, `app_exit_handler.dart` ([глава 02](02-composition-root.md));
-- общие владельцы состояния процесса: `language/` (язык интерфейса), `appearance/` (оформление), `navigation/` (экран и страница настроек), `onboarding/` (решение для первого кадра);
-- адаптеры, которым нужны IO-барели мостов или пакеты агента: `embedded_transport_resolver.dart`, `provider_settings_session.dart`, `agent_definitions_loader.dart`, `onboarding_probe.dart`, `client_profile_secrets.dart`, `about_ports_factory.dart`, `legal_ports_factory.dart`.
+| Путь | Что там |
+|---|---|
+| `lib/main.dart` | точка входа: каталог логов, первое открытие хранилища секретов, `runApp` |
+| `lib/app/app_scope.dart` | composition root: `createCodeLabRootScope` (модули Cherrypick и швы тестов), `CodeLabBootstrap`, `CodeLabDependencies`, `CodeLabRootLifecycle` |
+| `lib/app/codelab_app_widget.dart` | `CodeLabApp`: `FluentApp`, провайдеры Cubit-ов, переключение рабочего места и настроек, запуск агента после первого кадра |
+| `lib/app/language/` | `AppLanguageCubit`: язык интерфейса (System, English, Русский), `AppStrings` в корневой области; `app_language_start.dart` — `AppLanguageStart`, начальный язык и диагностика чтения, которые `main` передаёт в composition root; `CodeLabApp` меняет только `locale` у `FluentApp` |
+| `lib/app/appearance/` | оформление: `AppAppearanceCubit` (режим, две темы по режимам, очередь записи, номера операций), `AppAppearanceStart` (решение для первого кадра: сохранённый выбор, загруженные темы, акцент), `built_in_themes.dart`, `fluent_theme_builder.dart` (`FluentThemeData` из ролей темы и `CodeLabPalette`); `CodeLabApp` строит `FluentApp` с обеими темами и `themeMode` |
+| `lib/l10n/` | каталоги gen-l10n: `app_en.arb` (шаблон) и `app_ru.arb`, сгенерированный `app_localizations*.dart` (коммитится); настройка — `l10n.yaml` |
+| `lib/app/navigation/` | `NavigationCubit`: переход приветственные шаги → рабочее место ↔ настройки, страницы настроек (`SettingsPage`), вкладка страницы «Legal» |
+| `lib/app/onboarding/`, `onboarding_probe.dart`, `onboarding_project_port.dart` | приветственные шаги: `OnboardingStart` (решение для первого кадра по флагу `codelab.app.onboarding_done`), зонд фактов о настройках агента (поверх `codelab_setup/io.dart`), адаптер порта выбора проекта поверх фасада рабочего места |
+| `lib/app/about_ports_factory.dart`, `legal_ports_factory.dart`, `build_version.dart` | порты раздела «About» (версии, ОС, каталог журналов) и страницы «Legal» (чтение `assets/legal/`, сбор лицензий пакетов из `LicenseRegistry`); константа версии сборки, которую тест сверяет с `pubspec.yaml` |
+| `lib/app/embedded_transport_resolver.dart`, `embedded_logger.dart` | открытие и закрытие встроенного агента, логгер агента → журнал приложения |
+| `lib/app/connection_environment.dart` | окружение процесса и путь к `profiles.json` |
+| `lib/app/client_profile_secrets.dart`, `reopenable_profile_secrets.dart` | хранилище секретов для токенов профилей |
+| `lib/app/provider_settings_session.dart`, `provider_setup_probe.dart`, `provider_setup_offer.dart` | конфигурация агента для страниц «Providers» и «MCP servers» и мастера провайдера |
+| `lib/app/agent_definitions_loader.dart` | чтение определений агентов для страницы «Agents & modes»: `agentDefinitionRowsAt` из `codelab_setup/io.dart`, тайм-аут 5 с |
+| `lib/app/secret_migration_offer.dart`, `embedded_secret_migration_runner.dart` | перенос секретов из `config.yaml` |
+| `lib/app/app_exit_handler.dart` | закрытие при выходе: предел 5 с, сброс журналов |
+| `lib/core/platform/` | порты и адаптеры платформы: оформление, системный акцент, выбор файла и папки, хранилища `shared_preferences`, недавние проекты, брошенная папка, оболочка пользователя, ссылки, сведения об ОС, меню macOS, открытие каталога, сохранение CSV; перечень портов, адаптеров и ключей — [глава 06](06-platform-and-appearance.md#порты-и-адаптеры) |
+| `lib/core/text/` | общие текстовые функции |
+| `lib/features/workbench/` | рабочее место: `CodeLabShellCubit` из частей (`ConnectionCubit`, `SessionsCubit`, `ActiveSessionCubit`, `LayoutCubit`, `SettingsCubit`, `TranscriptViewCubit`), маппер строк ленты `ui_mappers.dart`, данные панели «Agents» `agents_pane_data.dart`, перенос секретов, выбор цели «Go to approval» и ответа сочетанием (`approval_go_to_target.dart`, `approval_shortcut_decision.dart`, `approval_focus_return.dart`); виджеты оболочки, ленты, баннеров, панели «Agents», экран «Open a project» (`open_project_screen.dart`) |
+| `lib/features/onboarding/` | приветственные шаги: `OnboardingCubit` (шаг, факты, шаг модели, шаг выбора проекта, документ «Privacy»), экран и шаги в `presentation/`; `dart:io` запрещён сторожем |
+| `lib/features/settings/` | настройки: страницы «General» (умолчания агента, язык, «Reopen the last project», «Privacy», «About»), «Keyboard» (каталог сочетаний кита, поиск; без Cubit), «Legal» (`LegalPageCubit`, вкладки, поиск по пакетам), «Connection», «Providers», «MCP servers», «Agents & modes» (`AgentsModesCubit` читает умолчания сессии через мост `sessionDefaultsOf` из `codelab_setup`), «Skills & extensions» (`SkillsSettingsCubit`: навыки и расширения, выключатели навыков и согласие на корни), «Appearance» (`AppearanceSettingsCubit`: каталог тем, карточки, превью, контраст, импорт; применённым оформлением владеет `AppAppearanceCubit` из `lib/app/appearance/`, страница только показывает его), диалог профиля, мастер провайдера |
+| `lib/features/usage/` | панель «Usage»: `usage_pane_data.dart` (данные карточек и таблиц), `usage_budget.dart` (блок «Turn budget» с вычетом ожиданий одобрений), `ledger_refresh.dart` (обновление журнала), `usage_csv.dart` (экспорт), `usage_step_label.dart` (подписи шагов); виджеты `workbench_usage_pane.dart`, `usage_pane_view.dart` поверх `CodeLabUsagePane` из `codelab_ui` |
+| `lib/features/project_files/` | панель «Files»: дерево и просмотр файлов |
+| `lib/features/terminal/` | терминал пользователя: вкладки, ссылки, вывод |
+| `assets/legal/` | бандл правовых документов: копии корневых `LICENSE`, `THIRD_PARTY_NOTICES.md`, `PRIVACY*.md`, `TERMS*.md`; тест `test/app/legal_assets_test.dart` сверяет побайтно и по `pubspec.yaml` |
+| `test_driver/app.dart` | точка входа с расширением `flutter_driver` для управления запущенным приложением |
+| `tool/terminal_spike/` | отдельный экспериментальный проект проверки терминала; в приложение не входит |
+
+**`lib/app/`** собирает приложение и держит то, что не принадлежит одной фиче: сборку и жизненный цикл ([глава 02](02-composition-root.md)), общих владельцев состояния процесса (язык, оформление, навигация, решение для первого кадра) и адаптеры, которым нужны IO-барели мостов или пакеты агента.
 
 **`lib/core/`** — только `platform/` (порты и адаптеры к ОС и хранилищам настроек, [глава 06](06-platform-and-appearance.md)) и `text/` (общие текстовые функции). Файл попадает в `core/`, когда у него минимум два независимых потребителя; единственный потребитель — повод оставить порт рядом с ним (так сделан `SettingsPageStore` в `lib/app/navigation/`).
 

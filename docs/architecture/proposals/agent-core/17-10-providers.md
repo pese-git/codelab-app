@@ -1,6 +1,8 @@
 # 17.10. Провайдеры и устойчивость LLM
 
 > Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
+>
+> **Статус реализации (сверено с кодом 2026-11-26).** Не реализовано: адаптера Gemini нет (`ProviderApi.gemini` даёт `_unsupported`, `provider_factory.dart`); пресеты, ротация ключей, вход по подписке, роли моделей (`llm`), диагностика зависаний и вызов инструментов через промпт распознаются в конфигурации без применения (`providers.*.preset`, `auth`, `key_rotation`, `stall_*`, `models.*.tools` в `settings_registry.dart`).
 
 ← [17.9. Фоновые команды](17-9-background-commands.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.11. Дополнительные инструменты](17-11-extra-tools.md) →
 

@@ -24,7 +24,7 @@ Change [`share-recent-projects-store`](../archive/2026-11-22-share-recent-projec
   - `app_scope_recent_projects_test.dart` проверяет, что ключ игнорируется, а не сохраняется;
   - `integration_test/open_project_flow_test.dart` больше не проверяет отсутствие ключа.
 - **Документация:**
-  - для `docs-writer`: `apps/codelab_desktop/doc/operations.md` и `doc/development.md`, README `codelab_client_core`;
+  - для `docs-writer`: `apps/codelab_desktop/doc/operations.md`, `doc/01-overview.md` и `doc/06-platform-and-appearance.md`, README `codelab_client_core`;
   - для `codelab-architect`: `apps/codelab_desktop/AGENTS.md`, `docs/architecture/platform-integration.md` §28, `delivery-roadmap.md` §4.5 и §10.4 — отметить выполненным.
 
 ## Не входит

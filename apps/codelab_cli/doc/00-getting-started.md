@@ -197,7 +197,7 @@ CODELAB_E2E_AGENT=embedded fvm dart test test/e2e/headless_print_basic_test.dart
 | мастер провайдера, `/settings`, первый запуск | `lib/src/setup/` | [07](07-config-and-setup.md) |
 | `test-scenario` | `lib/src/scenario/` | [06](06-test-scenario.md) |
 | `profiles.json`, `cli_history`, недавние проекты | `lib/src/home.dart`, `profiles/` | [08](08-profiles-and-home.md) |
-| правило сторожа для приложения | `packages/dart/codelab_architecture_tests/test/support/rules.dart` | [01](development.md) |
+| правило сторожа для приложения | `packages/dart/codelab_architecture_tests/test/support/rules.dart` | [01](01-overview.md) |
 
 ## Если что-то не работает
 

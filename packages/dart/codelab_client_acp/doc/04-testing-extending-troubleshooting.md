@@ -425,4 +425,4 @@ final class MemoryTextFiles implements TextFileReader, TextFileWriter {
 - [README пакета](../README.md) — публичное API и схема зависимостей.
 - [`AGENTS.md`](../AGENTS.md) — правила пакета и проверки перед pull request.
 - [`codelab_client_core`](../../codelab_client_core/doc/README.md) — что собирает поверх ядра общий клиентский слой.
-- [Руководство `codelab`](../../../../apps/codelab_cli/doc/development.md) — как CLI создаёт ядро и порты.
+- [Руководство `codelab`](../../../../apps/codelab_cli/doc/02-startup-and-composition.md) — как CLI создаёт ядро и порты.

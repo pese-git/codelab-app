@@ -22,8 +22,15 @@
 | [01. Обзор и слои](01-overview.md) | назначение, слои и их зависимости, карта файлов, словарь, публичные потоки, типизированные ошибки, политика payload и маскирование |
 | [02. Соединение, сессия, ход](02-connection-and-turns.md) | автоматы и их результаты, `initialize`, отказ транспорта, поколение, сессии, ход и диаграмма его состояний, правила применения `session/update`, отмена, одобрения, `reconnect`, `dispose` |
 | [03. Запросы агента: файлы и терминал](03-agent-requests-fs-terminal.md) | исключение из одобрений, `resolveWithinWorkingDirectory`, ошибки для агента, что containment не покрывает, реестр и жизненный цикл терминалов, гонки, контракт адаптера |
-| [Исполнение на клиенте](execution-on-client.md) | что клиент решает и чего нет, что объявляет, что приходит от встроенного, своего и чужого агента, вопрос `session/request_permission` и ответы на `fs/*`, `terminal/*` по шагам, кто показывает вопрос в REPL, TUI, headless и app, разобранный пример с чужим агентом |
 | [04. Тестирование, расширение и частые проблемы](04-testing-extending-troubleshooting.md) | уровни тестов, `FakeAcpTransport`, шаблон теста, золотые фикстуры и `conformance:client`, рецепты со скелетами кода, таблица «симптом — причина — что сделать» |
+
+### Сквозные разборы
+
+Документы без номера идут поперёк глав: каждый разбирает одну тему целиком. Читайте их после глав, на которые они ссылаются.
+
+| Документ | О чём |
+|---|---|
+| [Исполнение на клиенте](execution-on-client.md) | что клиент решает и чего нет, что объявляет, что приходит от встроенного, своего и чужого агента, вопрос `session/request_permission` и ответы на `fs/*`, `terminal/*` по шагам, кто показывает вопрос в REPL, TUI, headless и app, разобранный пример с чужим агентом |
 | [Маскирование секретов](redaction.md) | что защищается, правила `SecretRedactor`, политика payload `metadataOnly`/`full`, карта точек применения, разобранные примеры, пределы, как расширить |
 
 ## Кому что читать
@@ -46,5 +53,5 @@
 ## Смежные документы
 
 - Соседние пакеты: [`codelab_acp_protocol`](../../codelab_acp_protocol/README.md) (модели и кодеки), [`codelab_acp_transports`](../../codelab_acp_transports/README.md) (транспорты), [`codelab_acp_testing`](../../codelab_acp_testing/README.md) (двойники и фикстуры), [`codelab_agent_acp`](../../codelab_agent_acp/README.md) (противоположная сторона протокола).
-- Слои выше: [`codelab_client_core`](../../codelab_client_core/doc/README.md) (состояние для интерфейса поверх ядра), [`codelab_client_io`](../../codelab_client_io/doc/README.md) (адаптеры файлов и процессов), [руководство `codelab`](../../../../apps/codelab_cli/doc/development.md) (composition root терминального клиента).
+- Слои выше: [`codelab_client_core`](../../codelab_client_core/doc/README.md) (состояние для интерфейса поверх ядра), [`codelab_client_io`](../../codelab_client_io/doc/README.md) (адаптеры файлов и процессов), [руководство `codelab`](../../../../apps/codelab_cli/doc/02-startup-and-composition.md) (composition root терминального клиента).
 - Архитектура: [`acp-boundary.md`](../../../../docs/architecture/acp-boundary.md), [`session-lifecycle.md`](../../../../docs/architecture/session-lifecycle.md), [`permissions.md`](../../../../docs/architecture/permissions.md), [`streaming.md`](../../../../docs/architecture/streaming.md), [`observability.md`](../../../../docs/architecture/observability.md).
