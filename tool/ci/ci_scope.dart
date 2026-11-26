@@ -311,6 +311,12 @@ bool _isDocumentation(String file) {
 /// исключаются из Dart-матрицы: переименование каталога правится в одном месте.
 const _siteDir = 'site/';
 
+/// Каталоги пакетов, чьи `*.arb` служат источником строк витрины (D6).
+///
+/// Соответствует [_l10nPackages]; пути заданы явно, потому что [_affectsSite]
+/// не получает граф пакетов.
+const _siteL10nDirs = {'apps/codelab_desktop/', 'packages/flutter/codelab_ui/'};
+
 /// Влияет ли [file] на сборку сайта — запускать ли джоб `site` (D13).
 ///
 /// Почему: сайт строит страницы из документации репозитория и переводит её
@@ -320,6 +326,14 @@ const _siteDir = 'site/';
 /// пользователя плюс весь `openspec/**`: точный разбор ссылок на Dart был бы
 /// второй реализацией плагина сайта (D13, ответ на Q6).
 ///
+/// Витрина берёт строки интерфейса из каталогов локализации `codelab_ui` и
+/// `codelab_desktop` (`*.arb`) и бренд из `docs/design/brand/` (change
+/// redesign-site-showcase, D6). Бренд лежит под `docs/` и уже в охвате; каталоги
+/// `*.arb` лежат в пакетах и без этого правка ключа не запустила бы сайт, а
+/// рассинхрон прошёл бы pull request. Сгенерированный код локализации и
+/// `l10n.yaml` источниками витрины не служат, поэтому берутся только `*.arb`.
+/// Список путей повторяет `site/test/ci-scope-sync.test.ts`.
+///
 /// Для чего: единственный предикат «файл сайта» для [ciScope]; на
 /// Dart-матрицу он не влияет — её по-прежнему решает [_isDocumentation] и
 /// владелец-пакет.
@@ -327,6 +341,9 @@ bool _affectsSite(String file) {
   if (file.startsWith(_siteDir) ||
       file.startsWith('docs/') ||
       file.startsWith('openspec/')) {
+    return true;
+  }
+  if (file.endsWith('.arb') && _siteL10nDirs.any(file.startsWith)) {
     return true;
   }
   final parts = file.split('/');
