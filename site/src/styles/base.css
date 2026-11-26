@@ -471,6 +471,24 @@ pre {
   line-height: 16px;
 }
 
+/* Текущий раздел отмечает скрипт `toc-spy` (D7); без него ссылки прежние. */
+.doc-toc a[aria-current='location'] {
+  background: var(--sel);
+  color: var(--text);
+}
+
+.doc-toc a[aria-current='location']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
 @media (max-width: 1199px) {
   .doc-toc {
     display: none;
@@ -483,6 +501,186 @@ pre {
   border-top: 1px solid var(--divider);
   font-size: 12px;
   line-height: 16px;
+}
+
+/*
+ * Меню секции, крошки и «Назад / Далее» (design.md improve-docs-navigation,
+ * D4, D5). Колонка меню видна от 900 px, компактное `<details>` — до 900 px;
+ * `display: none` убирает скрытую копию из дерева доступности.
+ */
+.doc-main {
+  min-width: 0;
+}
+
+.doc-nav {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .doc-nav {
+    display: block;
+  }
+
+  .doc-nav-compact {
+    display: none;
+  }
+}
+
+.doc-nav-all {
+  margin: 0 0 8px;
+  padding: 0 12px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.doc-nav a,
+.doc-nav-inline a {
+  display: flex;
+  gap: 6px;
+}
+
+.doc-nav-inline ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-nav-inline a {
+  position: relative;
+  padding: 6px 12px;
+  border-radius: var(--radius-control);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.doc-nav-inline a:hover {
+  background: var(--hover);
+}
+
+.doc-nav-inline a[aria-current='page'] {
+  background: var(--sel);
+  font-weight: 600;
+}
+
+.doc-nav-inline .doc-nav-title {
+  margin: 8px 0 4px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Номер главы — колонка одной ширины; разделитель «·» скрыт от диктора. */
+.doc-num {
+  flex: none;
+  min-width: 2ch;
+  color: var(--text2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.doc-dot {
+  flex: none;
+  color: var(--text2);
+}
+
+.doc-nav-group {
+  margin: 4px 0;
+}
+
+.doc-nav-group > summary,
+.toc-chapters > summary {
+  padding: 6px 12px;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.doc-nav-group > summary:hover,
+.toc-chapters > summary:hover {
+  background: var(--hover);
+}
+
+/* Компактное меню: свёрнуто до одной строки, чтобы заголовок был на первом экране. */
+.doc-nav-compact {
+  margin: 0 0 16px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+
+.doc-nav-compact > summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.doc-nav-compact > nav {
+  padding: 0 4px 8px;
+}
+
+.doc-crumbs {
+  margin: 0 0 12px;
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.doc-crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Разделитель — псевдоэлемент: пустая альтернатива не даёт диктору прочитать «›». */
+.doc-crumbs li + li::before {
+  content: '›';
+  content: '›' / '';
+  margin: 0 6px;
+}
+
+.doc-pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.doc-pager-link {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-card);
+  background: var(--card);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.doc-pager-link:hover {
+  background: var(--hover);
+}
+
+.doc-pager-next {
+  align-items: flex-end;
+  margin-left: auto;
+  text-align: right;
+}
+
+.doc-pager-dir {
+  color: var(--text2);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.doc-pager-title {
+  display: flex;
+  gap: 6px;
+  font-weight: 600;
 }
 
 /* Текст документа — как acp-md приложения. */
@@ -607,6 +805,53 @@ pre {
   font-weight: var(--shiki-light-font-weight);
 }
 
+/*
+ * Кнопка «Копировать» у блока кода и область объявлений (design.md
+ * improve-docs-navigation, D7). Кнопку создаёт скрипт; без него блок кода
+ * остаётся прежним. Цвета — токены, фокус — общий `:focus-visible`.
+ */
+.code-block {
+  position: relative;
+  margin: 0 0 12px;
+}
+
+.code-block pre {
+  margin: 0;
+}
+
+.code-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--cstroke);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  /* Подпись «Не удалось скопировать» не переносится: высота кнопки фиксирована. */
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.code-copy:hover {
+  background: var(--card2);
+}
+
+.doc-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Исходник mermaid без JavaScript и при ошибке отрисовки (D7). */
 .prose pre.mermaid-source {
   white-space: pre;
@@ -655,6 +900,50 @@ pre {
   padding-left: 18px;
 }
 
+.toc-groups .toc-chapters ul {
+  padding-left: 0;
+  list-style: none;
+}
+
+.toc-groups .toc-chapters a {
+  display: flex;
+  gap: 6px;
+}
+
+.toc-layer-title {
+  margin: 16px 0 4px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.toc-packages {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* Руководство пакета в карточке (D6): ссылка входа и свёрнутые главы. */
+.toc-packages > li {
+  margin-bottom: 8px;
+}
+
+.toc-guide {
+  margin: 4px 0;
+}
+
+.toc-packages .toc-chapters ul {
+  padding-left: 0;
+  list-style: none;
+}
+
+.toc-packages .toc-chapters a {
+  display: flex;
+  gap: 6px;
+}
+
+.toc-packages .toc-chapters .toc-chapters {
+  margin-left: 12px;
+}
+
 .news-list {
   display: flex;
   flex-direction: column;
@@ -680,4 +969,70 @@ pre {
     font-size: 28px;
     line-height: 36px;
   }
+}
+
+/*
+ * Поле поиска по документации (design.md improve-docs-navigation, D8).
+ * Форма скрыта в разметке и показывается скриптом; без JavaScript поля нет.
+ */
+.doc-search {
+  display: grid;
+  gap: 6px;
+  max-width: 560px;
+  margin: 0 0 16px;
+}
+
+.doc-search[hidden] {
+  display: none;
+}
+
+.doc-search label {
+  font-weight: 600;
+}
+
+.doc-search input {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--cstroke);
+  border-bottom-color: var(--cstroke2);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--text);
+  font: inherit;
+}
+
+.doc-search-status {
+  margin: 0;
+}
+
+.doc-search-results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-control);
+  background: var(--card);
+}
+
+.doc-search-results[hidden] {
+  display: none;
+}
+
+.doc-search-results li {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.doc-search-results li:last-child {
+  border-bottom: 0;
+}
+
+.doc-search-excerpt {
+  margin: 2px 0 0;
+}
+
+.doc-search-results mark {
+  border-radius: 2px;
+  background: var(--accent-weak);
+  color: var(--text);
 }

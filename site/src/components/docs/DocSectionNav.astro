@@ -1,0 +1,47 @@
+---
+/**
+ * Меню секции страницы документа в двух видах: колонка и компактное.
+ *
+ * Почему: на узком экране весь список раздела стоял выше текста — заголовок
+ * начинался примерно на 1211 px (proposal.md improve-docs-navigation). Одно
+ * `<details>`, раскрытое скриптом на широком экране, без JavaScript оставило бы
+ * меню свёрнутым, поэтому разметка выводится дважды, а CSS показывает одну
+ * копию; скрытая `display: none` не попадает в дерево доступности (D4).
+ *
+ * Для чего: боковая колонка от 900 px (`variant="side"`) и `<details>`
+ * «Документы раздела (N)» перед статьёй до 900 px (`variant="compact"`).
+ *
+ * Как использовать: страница документа ставит `side` колонкой сетки и
+ * `compact` в основной колонке после крошек; обе копии получают одни данные.
+ */
+import type { NavSection } from '../../lib/nav';
+import { sectionDocs } from '../../lib/nav';
+import type { SiteDoc } from '../../lib/site-docs';
+import DocMenu from './DocMenu.astro';
+
+interface Props {
+  readonly section: NavSection<SiteDoc>;
+  readonly current: string;
+  readonly variant: 'side' | 'compact';
+}
+
+const { section, current, variant } = Astro.props;
+const isPackage = section.layer !== null;
+const label = `Документы раздела «${section.title}»`;
+const count = sectionDocs(section).length;
+---
+
+{
+  variant === 'side' ? (
+    <nav class="doc-nav" aria-label={label}>
+      <DocMenu section={section} current={current} isPackage={isPackage} />
+    </nav>
+  ) : (
+    <details class="doc-nav-compact">
+      <summary>Документы раздела ({count})</summary>
+      <nav class="doc-nav-inline" aria-label={label}>
+        <DocMenu section={section} current={current} isPackage={isPackage} />
+      </nav>
+    </details>
+  )
+}

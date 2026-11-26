@@ -1,0 +1,47 @@
+---
+/**
+ * «Назад» и «Далее» в конце документа.
+ *
+ * Почему: читатель глав идёт по порядку, а без переходов должен возвращаться в
+ * меню после каждой главы (design.md improve-docs-navigation, D5). Соседи берутся
+ * из одного списка, поэтому переход не меняет аудиторию.
+ *
+ * Для чего: `nav aria-label="Соседние документы"` со ссылками `rel="prev"` и
+ * `rel="next"`; блок не индексируется поиском (`data-pagefind-ignore`, D8).
+ *
+ * Как использовать: `<DocPager prev={…} next={…} />` с результатом `neighbours`;
+ * без соседей ничего не выводится.
+ */
+import type { Neighbour } from '../../lib/nav';
+import DocLabel from './DocLabel.astro';
+
+interface Props {
+  readonly prev: Neighbour | null;
+  readonly next: Neighbour | null;
+}
+
+const { prev, next } = Astro.props;
+---
+
+{
+  (prev || next) && (
+    <nav class="doc-pager" aria-label="Соседние документы" data-pagefind-ignore>
+      {prev && (
+        <a class="doc-pager-link doc-pager-prev" rel="prev" href={prev.href}>
+          <span class="doc-pager-dir">Назад</span>
+          <span class="doc-pager-title">
+            <DocLabel number={prev.number} title={prev.title} />
+          </span>
+        </a>
+      )}
+      {next && (
+        <a class="doc-pager-link doc-pager-next" rel="next" href={next.href}>
+          <span class="doc-pager-dir">Далее</span>
+          <span class="doc-pager-title">
+            <DocLabel number={next.number} title={next.title} />
+          </span>
+        </a>
+      )}
+    </nav>
+  )
+}

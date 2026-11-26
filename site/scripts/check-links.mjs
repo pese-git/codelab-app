@@ -185,10 +185,10 @@ function attrValue(match, from) {
  *
  * @typedef {Record<string, { imports: readonly string[], modules: readonly string[] }>} BuildChunks
  *
- * @param {{ dist: string, base: string, expectedPages?: readonly string[], chunks?: BuildChunks, requireOgImage?: boolean }} options
+ * @param {{ dist: string, base: string, expectedPages?: readonly string[], chunks?: BuildChunks, requireOgImage?: boolean, requireSearchIndex?: boolean }} options
  * @returns {LinkProblem[]}
  */
-export function checkDist({ dist, base, expectedPages = [], chunks, requireOgImage = false }) {
+export function checkDist({ dist, base, expectedPages = [], chunks, requireOgImage = false, requireSearchIndex = false }) {
   /** @type {LinkProblem[]} */
   const problems = [];
   const files = walk(dist).sort();
@@ -239,6 +239,22 @@ export function checkDist({ dist, base, expectedPages = [], chunks, requireOgIma
         }
       }
 
+      // Рантайм поиска грузится только по действию читателя, поэтому HTML не
+      // должен подключать его статически (D8, D10 п. 2).
+      const loadsResource =
+        (tagName === 'script' && attrs !== '') ||
+        (tagName === 'link' && rel.some((r) => r === 'modulepreload' || r === 'preload' || r === 'prefetch'));
+      if (loadsResource) {
+        const attribute = [...attrs.matchAll(anyAttribute)].find((m) => ['src', 'href'].includes(m[1].toLowerCase()));
+        if (attribute !== undefined && refersToSearchRuntime(attrValue(attribute, 2).trim(), pageUrlOf, base)) {
+          problems.push({
+            file,
+            link: attrValue(attribute, 2).trim(),
+            message: 'static reference to the search runtime pagefind/ is not allowed: it loads on demand only, outside the page JavaScript budget (D8, D10)',
+          });
+        }
+      }
+
       for (const attr of attrs.matchAll(linkAttribute)) {
         const name = attr[1].toLowerCase();
         const owner = attributeOwners.get(name);
@@ -280,7 +296,7 @@ export function checkDist({ dist, base, expectedPages = [], chunks, requireOgIma
     if (size > demoBudgetBytes) {
       problems.push({
         file,
-        message: `showcase JavaScript budget is 12 KB gzip without theme and mermaid, the page has ${(size / 1024).toFixed(1)} KB (D2, D12)`,
+        message: `page JavaScript budget is 12 KB gzip without theme, mermaid and search runtime, the page has ${(size / 1024).toFixed(1)} KB (D2, D12; D7, D10 improve-docs-navigation)`,
       });
     }
   }
@@ -292,6 +308,19 @@ export function checkDist({ dist, base, expectedPages = [], chunks, requireOgIma
   }
 
   checkOgImage({ html, base, dist, problems, requireOgImage });
+
+  // Индекс поиска строит `pagefind --site dist` после `astro build` (D8, D10 п. 3).
+  if (requireSearchIndex) {
+    const hasDocPages = [...html.keys()].some(
+      (file) => file.startsWith('docs/') && file.endsWith('/index.html') && file !== 'docs/index.html',
+    );
+    if (hasDocPages && !existsSync(join(dist, 'pagefind', 'pagefind.js'))) {
+      problems.push({
+        file: 'pagefind/pagefind.js',
+        message: 'search index is missing: run pagefind after astro build (D8)',
+      });
+    }
+  }
 
   /**
    * Проверка одной ссылки страницы; описание нарушения или `undefined`.
@@ -377,6 +406,16 @@ export function checkDist({ dist, base, expectedPages = [], chunks, requireOgIma
   }
 
   return problems;
+}
+
+/** Ссылка ведёт в каталог рантайма поиска `<base>pagefind/` (D10 п. 2). */
+function refersToSearchRuntime(link, pageUrlOf, base) {
+  if (link === '' || /^([A-Za-z][A-Za-z0-9+.-]*:|\/\/)/.test(link)) return false;
+  try {
+    return new URL(link, pageUrlOf).pathname.startsWith(`${base}pagefind/`);
+  } catch {
+    return false;
+  }
 }
 
 /** Исходный модуль чанка без запроса Vite (`?astro&type=script…`) и с путём от `site/`. */
@@ -549,7 +588,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     process.exit(1);
   }
   const chunks = JSON.parse(readFileSync(chunksFile, 'utf8'));
-  const problems = checkDist({ dist, base, expectedPages: expectedPagesFromRepo(repoRoot, base), chunks, requireOgImage: true });
+  const problems = checkDist({ dist, base, expectedPages: expectedPagesFromRepo(repoRoot, base), chunks, requireOgImage: true, requireSearchIndex: true });
   if (problems.length > 0) {
     console.error(`dist/: ${problems.length} problem(s) (D6):`);
     for (const { file, link, message } of problems) {

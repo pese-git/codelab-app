@@ -1,0 +1,57 @@
+---
+/**
+ * Список документов секции: вход ссылками, подгруппы — `<details>`.
+ *
+ * Почему: меню `codelab` — 31 документ, и плоский список заставил бы
+ * прокручивать к нужной главе; подгруппа текущего документа раскрыта, остальные
+ * свёрнуты с числом документов (design.md improve-docs-navigation, D4, D13 Q3).
+ * `<details>` нативен: работает с клавиатуры, озвучивается и не требует
+ * JavaScript.
+ *
+ * Для чего: общая разметка меню для широкого и узкого экрана (`DocSectionNav`).
+ *
+ * Как использовать: внутри `DocSectionNav`; `current` — путь открытого документа.
+ */
+import { withBase } from '../../lib/urls';
+import { entryLabel, type NavSection } from '../../lib/nav';
+import type { SiteDoc } from '../../lib/site-docs';
+import DocLabel from './DocLabel.astro';
+
+interface Props {
+  readonly section: NavSection<SiteDoc>;
+  readonly current: string;
+  /** Секция пакета: над списком ссылка «Все пакеты». */
+  readonly isPackage: boolean;
+}
+
+const { section, current, isPackage } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+
+{isPackage && <p class="doc-nav-all"><a href={withBase('docs/#packages', base)}>Все пакеты</a></p>}
+<p class="doc-nav-title">{section.title}</p>
+{
+  section.lists.map((list) => {
+    const links = (
+      <ul>
+        {list.items.map((entry) => (
+          <li>
+            <a href={entry.doc.url} aria-current={entry.doc.repoPath === current ? 'page' : undefined}>
+              <DocLabel number={entry.number} title={entryLabel(entry, list, section)} />
+            </a>
+          </li>
+        ))}
+      </ul>
+    );
+    return list.title === null ? (
+      links
+    ) : (
+      <details class="doc-nav-group" open={list.items.some((entry) => entry.doc.repoPath === current)}>
+        <summary>
+          {list.title} ({list.items.length})
+        </summary>
+        {links}
+      </details>
+    );
+  })
+}

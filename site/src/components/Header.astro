@@ -20,6 +20,7 @@
  */
 import logoDark from '../../../docs/design/brand/codelab-logo-dark.svg';
 import logo from '../../../docs/design/brand/codelab-logo.svg';
+import { installDocPath } from '../lib/nav';
 import { pageUrl, withBase } from '../lib/urls';
 
 interface Props {
@@ -45,7 +46,7 @@ const ariaCurrent = (section: Props['current']) => (section === current ? 'page'
         <li><a href={withBase('features/agent/', base)}>Агент codelab-agent</a></li>
       </ul>
     </details>
-    <a class="nav-link" href={pageUrl('docs/user/run-from-source.md', base)} aria-current={ariaCurrent('install')}>
+    <a class="nav-link" href={pageUrl(installDocPath, base)} aria-current={ariaCurrent('install')}>
       Установка
     </a>
     <a class="nav-link" href={withBase('docs/', base)} aria-current={ariaCurrent('docs')}>Документация</a>

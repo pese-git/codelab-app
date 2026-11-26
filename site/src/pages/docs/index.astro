@@ -2,42 +2,203 @@
 /**
  * Оглавление документации: `/docs/`.
  *
- * Почему: документы сгруппированы по расположению файла — «Пользователю»,
- * «Эксплуатация», группы приложений, «Пакеты» (design.md add-astro-site, D9);
- * пустая группа не показывается.
+ * Почему: оглавление «по группам» стало стеной ссылок — у пакетов 147 пунктов
+ * одним списком. Читатель выбирает по задаче, поэтому блоки идут по ролям:
+ * «Начать работу», «Пользоваться», «Развернуть и разрабатывать» (design.md
+ * improve-docs-navigation, D6; группы и порядок — design.md add-astro-site, D9).
  *
- * Для чего: вход в документацию из шапки и с главной.
+ * Для чего: вход в документацию из шапки и с главной. Главы руководств и
+ * разработки свёрнуты в `<details>` (работает без JavaScript), у пакета
+ * свёрнуты главы руководства (`doc/`), так что руководство находится отсюда (D6).
  *
- * Как использовать: страница строится из коллекции `docs` без ручного списка.
+ * Как использовать: страница строится из коллекции `docs` через `buildNav` и
+ * `buildDocsIndex` без ручного списка; якоря блоков (`start`, `use`, `build`,
+ * `packages`, `packages-<слой>`) постоянны, на `#packages` ведут крошки.
  */
+import DocLabel from '../../components/docs/DocLabel.astro';
+import DocSearch from '../../components/docs/DocSearch.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { buildDocsIndex } from '../../lib/docs-index';
 import { buildNav } from '../../lib/nav';
 import { loadDocs } from '../../lib/site-docs';
 
-const sections = buildNav(await loadDocs());
+const index = buildDocsIndex(buildNav(await loadDocs()));
+const { start, use, build } = index;
 ---
 
 <BaseLayout
   title="Документация"
-  description="Документация CodeLab: руководства пользователя, эксплуатация, CodeLab app и терминальный клиент codelab."
+  description="Документация CodeLab: с чего начать, руководства пользователя, эксплуатация, разработка приложений и пакетов."
   current="docs"
 >
   <h1 class="t-title">Документация</h1>
-  <p class="lead t2">Документы собраны из репозитория CodeLab и сгруппированы по разделам.</p>
-  <ul class="toc-groups">
-    {
-      sections.map((section) => (
+  <p class="lead t2">
+    Документы собраны из репозитория CodeLab и разложены по задачам читателя: начать работу, пользоваться, развернуть и разрабатывать.
+  </p>
+
+  <DocSearch />
+
+  {
+    (start.links.length > 0 || start.cards.length > 0) && (
+      <section id={start.id} aria-labelledby="start-title">
+        <h2 id="start-title" class="t-subtitle">{start.title}</h2>
+        <ul class="toc-groups">
+          {start.links.map((doc) => (
+            <li class="card">
+              <h3 class="t-body-large"><a href={doc.url}>{doc.title}</a></h3>
+              <p class="t2">{doc.description}</p>
+            </li>
+          ))}
+          {start.cards.map((card) => (
+            <li class="card">
+              <h3 class="t-body-large">
+                {card.readme ? <a href={card.readme.url}>{card.title}</a> : card.title}
+              </h3>
+              {card.readme && <p class="t2">{card.readme.description}</p>}
+              {card.all && (
+                <a class="card-link" href={card.all.url}>Все документы</a>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  {
+    (use.docs.length > 0 || use.apps.length > 0) && (
+      <section id={use.id} aria-labelledby="use-title">
+        <h2 id="use-title" class="t-subtitle">{use.title}</h2>
+        <ul class="toc-groups">
+          {use.docs.length > 0 && (
+            <li class="card">
+              <h3 class="t-body-large">Общие руководства</h3>
+              <ul>
+                {use.docs.map((doc) => (
+                  <li><a href={doc.url}>{doc.title}</a></li>
+                ))}
+              </ul>
+            </li>
+          )}
+          {use.apps.map((app) => (
+            <li class="card">
+              <h3 class="t-body-large">{app.title}: руководство</h3>
+              {app.entry && <p><a href={app.entry.url}>{app.entry.title}</a></p>}
+              {app.chapters.length > 0 && (
+                <details class="toc-chapters">
+                  <summary>Главы ({app.chapters.length})</summary>
+                  <ul>
+                    {app.chapters.map((chapter) => (
+                      <li>
+                        <a href={chapter.doc.url}><DocLabel number={chapter.number} title={chapter.doc.title} /></a>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  <section id={build.id} aria-labelledby="build-title">
+    <h2 id="build-title" class="t-subtitle">{build.title}</h2>
+    <ul class="toc-groups">
+      {build.docs.length > 0 && (
         <li class="card">
-          <h2 class="t-subtitle">{section.title}</h2>
+          <h3 class="t-body-large">Эксплуатация</h3>
           <ul>
-            {section.items.map((item) => (
-              <li>
-                <a href={item.url}>{item.title}</a>
-              </li>
+            {build.docs.map((doc) => (
+              <li><a href={doc.url}>{doc.title}</a></li>
             ))}
           </ul>
         </li>
-      ))
+      )}
+      {build.apps.map((app) => (
+        <li class="card">
+          <h3 class="t-body-large">{app.title}</h3>
+          {app.operations && <p><a href={app.operations.url}>{app.operations.title}</a></p>}
+          {(app.development.entry || app.development.chapters.length > 0) && (
+            <div>
+              {app.development.entry && <p><a href={app.development.entry.url}>{app.development.entry.title}</a></p>}
+              {app.development.chapters.length > 0 && (
+                <details class="toc-chapters">
+                  <summary>Главы ({app.development.chapters.length})</summary>
+                  <ul>
+                    {app.development.chapters.map((chapter) => (
+                      <li>
+                        <a href={chapter.doc.url}><DocLabel number={chapter.number} title={chapter.doc.title} /></a>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+          {app.nested.map((group) => (
+            <details class="toc-chapters">
+              <summary>{group.title} ({group.items.length})</summary>
+              <ul>
+                {group.items.map((item) => (
+                  <li>
+                    <a href={item.doc.url}><DocLabel number={item.number} title={item.label} /></a>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ))}
+        </li>
+      ))}
+    </ul>
+
+    {
+      build.packages.layers.length > 0 && (
+        <div id={build.packages.id}>
+          <h3 class="t-body-large">{build.packages.title}</h3>
+          {build.packages.layers.map((layer) => (
+            <div id={layer.id} class="toc-layer">
+              <h4 class="toc-layer-title">{layer.title}</h4>
+              <ul class="toc-packages">
+                {layer.packages.map((pkg) => (
+                  <li>
+                    <a href={pkg.doc.url}>{pkg.name}</a>
+                    <span class="t2"> — {pkg.description}</span>
+                    {pkg.guide && (
+                      <p class="toc-guide"><a href={pkg.guide.doc.url}><DocLabel number={pkg.guide.number} title={pkg.guide.doc.title} /></a></p>
+                    )}
+                    {pkg.chaptersCount > 0 && (
+                      <details class="toc-chapters">
+                        <summary>Главы ({pkg.chaptersCount})</summary>
+                        <ul>
+                          {pkg.chapters.map((chapter) => (
+                            <li>
+                              <a href={chapter.doc.url}><DocLabel number={chapter.number} title={chapter.doc.title} /></a>
+                            </li>
+                          ))}
+                        </ul>
+                        {pkg.groups.map((group) => (
+                          <details class="toc-chapters">
+                            <summary>{group.title} ({group.items.length})</summary>
+                            <ul>
+                              {group.items.map((item) => (
+                                <li>
+                                  <a href={item.doc.url}><DocLabel number={item.number} title={item.label} /></a>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        ))}
+                      </details>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )
     }
-  </ul>
+  </section>
 </BaseLayout>
