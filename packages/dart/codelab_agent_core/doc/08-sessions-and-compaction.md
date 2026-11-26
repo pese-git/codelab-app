@@ -161,7 +161,11 @@ sequenceDiagram
 
 ## Хранилище на диске: `JsonlSessionStore`
 
-Реализация порта для настольных хостов (`packages/dart/codelab_agent_io/lib/src/session/jsonl_session_store.dart`). Хост создаёт одно хранилище на процесс функцией `openHostSessions` (`host_sessions.dart`): корень — `sessions.dir` или `$CODELAB_HOME/sessions`, политика — `sessions.fsync`. Хранилище отвечает за байты: каталоги по слагу рабочей папки, один журнал на сессию, очередь записи на путь, `fsync`, карантин и переписывание, кэш списка `index.json`, разбор журнала в отдельном isolate. Раскладка каталогов, правила слага, карантин и защита от ссылок за пределы `sessions/` описаны в [главе 6 пакета `codelab_agent_io`](../../codelab_agent_io/doc/06-sessions-and-state.md#раскладка-на-диске) — здесь не повторяются. Пользовательский смысл ключей и раскладка `CODELAB_HOME` — в [`apps/codelab_agent/doc/operations.md`](../../../../apps/codelab_agent/doc/operations.md) и [`docs/ops/codelab-home.md`](../../../../docs/ops/codelab-home.md).
+Реализация порта для настольных хостов (`packages/dart/codelab_agent_io/lib/src/session/jsonl_session_store.dart`). Хост создаёт одно хранилище на процесс функцией `openHostSessions` (`host_sessions.dart`): корень — `sessions.dir` или `$CODELAB_HOME/sessions`, политика — `sessions.fsync`. Хранилище отвечает за байты: каталоги по слагу рабочей папки, один журнал на сессию, очередь записи на путь, `fsync`, карантин и переписывание, кэш списка `index.json`, разбор журнала в отдельном isolate. Раскладка каталогов, правила слага, карантин и защита от ссылок за пределы `sessions/` описаны в [главе 6 пакета `codelab_agent_io`](../../codelab_agent_io/doc/06-sessions-and-state.md#раскладка-на-диске) — здесь не повторяются.
+
+Страницы списка режет ядро, а не хранилище: `pageOf` (`lib/src/session/session_store.dart`) сортирует сводки от новых к старым по `updatedAt`, при равенстве — по `id`, и отдаёт курсор следующей страницы — base64url от времени и `id` последней сводки. Поэтому `MemorySessionStore` и `JsonlSessionStore` листают одинаково.
+
+Пользовательский смысл ключей и раскладка `CODELAB_HOME` — в [`apps/codelab_agent/doc/operations.md`](../../../../apps/codelab_agent/doc/operations.md) и [`docs/ops/codelab-home.md`](../../../../docs/ops/codelab-home.md).
 
 ## Открытие и ремонт
 
