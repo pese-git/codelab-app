@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>TUI — узкий терминал</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ln{height:18px;white-space:pre}
+.cell{display:inline-block;width:1ch;text-align:center;vertical-align:top}
+.b{font-weight:700}.i{font-style:italic}
+.dim{color:#7D8590}.acc{color:#6CB6FF}.ok{color:#7EC699}.err{color:#F47067}.warn{color:#E0B65C}.hunk{color:#56C2D6}
+.code{color:#D2A8FF}
+.cur{background:#C9D1D9;color:#0B0D10}
+.bar{background:#161B22}
+</style>
+</helmet>
+<div style="width: 648px; height: 304px; box-sizing: border-box; display: flex; flex-direction: column; background: #0B0D10; color: #C9D1D9; border-radius: 10px; overflow: hidden; font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace">
+<div style="height: 28px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #1A1D23; color: #9AA3AF; font-size: 12px">
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span style="margin-left: 8px">codelab --ui tui — {{cols}}×{{rows}}</span>
+</div>
+<div style="padding: 12px; font-size: 13px; line-height: 18px">
+<div style="width: {{cols}}ch; overflow: hidden">
+<sc-for list="{{lines}}" as="ln" hint-placeholder-count="14"><div class="ln"><sc-for list="{{ln.segs}}" as="s" hint-placeholder-count="3"><span class="{{s.c}}">{{s.t}}</span></sc-for></div></sc-for>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":648,"height":304}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Высота < 15: строка подсказок скрыта (§12.2.7 «Раскладка кадра»). Статус-строка отбросила
+    // ветку, стоимость и токены по порядку §12.2.6; ctx ≥ 80 % — жёлтым. Путь обрезан в середине (§12.2.4).
+    var W = 80, H = 14;
+    function S(t, c) { return { t: t, c: c || '' }; }
+    // Глиф вне ASCII и кириллицы встаёт в ячейку ровно 1ch: в веб-шрифте его нет, запасной шрифт шире.
+    function CELLS(segs) { var out = []; segs.forEach(function (s) { var run = ''; Array.from(s.t).forEach(function (ch) { if (/[\x20-\x7E\u0400-\u04FF]/.test(ch)) { run += ch; } else { if (run) out.push(S(run, s.c)); run = ''; out.push(S(ch, (s.c + ' cell').trim())); } }); if (run) out.push(S(run, s.c)); }); return out; }
+    function width(segs) { var n = 0; segs.forEach(function (s) { n += Array.from(s.t).length; }); return n; }
+    function LR(left, right, c) { return left.concat([S(' '.repeat(Math.max(1, W - width(left) - width(right))), c)], right); }
+    function PAD(segs, c) { var gap = W - width(segs); return gap > 0 ? segs.concat([S(' '.repeat(gap), c)]) : segs; }
+    function BAR(segs) { return PAD(segs.map(function (s) { return S(s.t, (s.c + ' bar').trim()); }), 'bar'); }
+    function FRAME(top, bottom) {
+      var room = H - bottom.length;
+      var t = top.length > room ? top.slice(top.length - room) : top;
+      var fill = [];
+      for (var i = t.length; i < room; i++) fill.push([]);
+      return t.concat(fill, bottom).map(function (segs) { return { segs: CELLS(segs) }; });
+    }
+    var top = [
+      [S('> ', 'acc b'), S('Найди, где SessionView теряет очередь при переподключении', 'b')],
+      [],
+      [S('▸ thought for 21s', 'dim')],
+      [],
+      LR([S('✓ ', 'ok'), S('Read', 'b'), S(' packages/…/session_view.dart:10-29')], [S('0.1s', 'dim')]),
+      LR([S('✓ ', 'ok'), S('Search', 'b'), S(' "pendingPrompts" in packages/dart/…')], [S('0.3s', 'dim')]),
+      LR([S('⠹ ', 'acc'), S('Read', 'b'), S(' packages/…/connection_controller.dart')], [S('0.4s', 'dim')]),
+      [],
+      [S('Очередь живёт в '), S('PromptQueue', 'code'), S(', но при reconnect контроллер создаёт')],
+      [S('новую сессию до того, как старая отдала незавершённые промпты.')]
+    ];
+    var bottom = [
+      [S('─'.repeat(W), 'dim')],
+      [S('> ', 'acc b'), S('и проверь, есть ли на это тест', ''), S(' ', 'cur')],
+      BAR([S('⠹ 12s', 'acc'), S(' · ', 'dim'), S('plan', 'acc b'), S(' · anthropic/claude-sonnet-5-5 · ', 'dim'), S('ctx 82%', 'warn'), S(' · ', 'dim'), S('queued: 2', 'acc')])
+    ];
+    return { cols: W, rows: H, lines: FRAME(top, bottom) };
+  }
+}
+</script>
+</body>
+</html>

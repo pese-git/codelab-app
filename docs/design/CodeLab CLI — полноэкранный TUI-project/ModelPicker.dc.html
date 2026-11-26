@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>TUI — пикер модели</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ln{height:18px;white-space:pre}
+.cell{display:inline-block;width:1ch;text-align:center;vertical-align:top}
+.b{font-weight:700}.i{font-style:italic}
+.dim{color:#7D8590}.acc{color:#6CB6FF}.ok{color:#7EC699}.err{color:#F47067}.warn{color:#E0B65C}.hunk{color:#56C2D6}
+.code{color:#D2A8FF}
+.delbg{background:#4A1D20;color:#F5C9C9}.addbg{background:#14381F;color:#C6F0D1}
+.cur{background:#C9D1D9;color:#0B0D10}
+.bar{background:#161B22}
+.sel{background:#23324A}
+.ovl{background:#161B22}.ovsel{background:#2B4A73;color:#FFFFFF}
+</style>
+</helmet>
+<div style="width: 960px; height: 700px; box-sizing: border-box; display: flex; flex-direction: column; background: #0B0D10; color: #C9D1D9; border-radius: 10px; overflow: hidden; font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace">
+<div style="height: 28px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #1A1D23; color: #9AA3AF; font-size: 12px">
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span style="margin-left: 8px">codelab --ui tui — ~/proj — {{cols}}×{{rows}}</span>
+</div>
+<div style="padding: 12px; font-size: 13px; line-height: 18px">
+<div style="width: {{cols}}ch; overflow: hidden">
+<sc-for list="{{lines}}" as="ln" hint-placeholder-count="36"><div class="ln"><sc-for list="{{ln.segs}}" as="s" hint-placeholder-count="3"><span class="{{s.c}}">{{s.t}}</span></sc-for></div></sc-for>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // /model без аргумента в TUI — пикер на ListModel с фильтром: значения опции конфигурации
+    // model от агента, текущее отмечено; Enter шлёт session/set_config_option (U-05).
+    var W = 120, H = 36, MW = 64;
+    function S(t, c) { return { t: t, c: c || '' }; }
+    // Глиф вне ASCII и кириллицы встаёт в ячейку ровно 1ch: в веб-шрифте его нет, запасной шрифт шире.
+    function CELLS(segs) { var out = []; segs.forEach(function (s) { var run = ''; Array.from(s.t).forEach(function (ch) { if (/[\x20-\x7E\u0400-\u04FF]/.test(ch)) { run += ch; } else { if (run) out.push(S(run, s.c)); run = ''; out.push(S(ch, (s.c + ' cell').trim())); } }); if (run) out.push(S(run, s.c)); }); return out; }
+    function width(segs) { var n = 0; segs.forEach(function (s) { n += Array.from(s.t).length; }); return n; }
+    function LR(left, right, c) { return left.concat([S(' '.repeat(Math.max(1, W - width(left) - width(right))), c)], right); }
+    function PAD(segs, c) { var gap = W - width(segs); return gap > 0 ? segs.concat([S(' '.repeat(gap), c)]) : segs; }
+    function BAR(segs) { return PAD(segs.map(function (s) { return S(s.t, (s.c + ' bar').trim()); }), 'bar'); }
+    function BOX(segs, c) { var gap = MW - width(segs); return gap > 0 ? segs.concat([S(' '.repeat(gap), c)]) : segs; }
+    function ITEM(name, note, current, on) {
+      var c = on ? 'ovsel' : 'ovl';
+      var left = [S(on ? ' ▸ ' : '   ', c), S(current ? '● ' : '  ', on ? c : 'ovl acc'), S(name, (c + (on ? ' b' : '')).trim())];
+      var gap = MW - width(left) - note.length - 1;
+      return left.concat([S(' '.repeat(Math.max(1, gap)), c), S(note, on ? c : 'ovl dim'), S(' ', c)]);
+    }
+    function FRAME(top, bottom) {
+      var room = H - bottom.length;
+      var t = top.length > room ? top.slice(top.length - room) : top;
+      var fill = [];
+      for (var i = t.length; i < room; i++) fill.push([]);
+      return t.concat(fill, bottom).map(function (segs) { return { segs: CELLS(segs) }; });
+    }
+    var top = [
+      [S('> ', 'acc b'), S('Почини падающий тест в lib/auth и прогони тесты', 'b')],
+      [],
+      [S('▸ thought for 12s', 'dim')],
+      [],
+      LR([S('✓ ', 'ok'), S('Read', 'b'), S(' lib/auth/session.dart:10-29')], [S('0.1s', 'dim')]),
+      LR([S('✓ ', 'ok'), S('Edit', 'b'), S(' lib/auth/session.dart  '), S('+2', 'ok'), S(' '), S('-1', 'err')], [S('0.0s', 'dim')]),
+      LR([S('✓ ', 'ok'), S('Run', 'b'), S(' dart test test/auth')], [S('4.1s', 'dim')]),
+      [],
+      [S('Готово: сравнение исправлено, 24 теста проходят.')]
+    ];
+    var bottom = [
+      BOX([S(' model', 'ovl b'), S(' · config option of the agent · 3 of 6', 'ovl dim')], 'ovl'),
+      BOX([S(' filter: ', 'ovl dim'), S('gpt', 'ovl'), S(' ', 'cur')], 'ovl'),
+      ITEM('gpt-4.1', 'current', true, false),
+      ITEM('gpt-4.1-mini', 'faster, cheaper', false, true),
+      ITEM('gpt-4.1-nano', '', false, false),
+      [S('─'.repeat(W), 'dim')],
+      [S('> ', 'acc b'), S('/model', 'dim')],
+      [],
+      [S('↑↓'), S(' select · ', 'dim'), S('type'), S(' filter · ', 'dim'), S('enter'), S(' apply · ', 'dim'), S('esc'), S(' close', 'dim')],
+      BAR([S('plan', 'acc b'), S(' · gpt-4.1 · ctx 22% · ↑15.2k ↓1.6k · $0.05 · ⎇ main', 'dim')])
+    ];
+    return { cols: W, rows: H, lines: FRAME(top, bottom) };
+  }
+}
+</script>
+</body>
+</html>

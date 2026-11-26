@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tablet — Settings › Legal, terms of use</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{width:1180px;height:820px;display:flex;flex-direction:column;overflow:hidden;border-radius:18px}
+.master{width:300px;flex:none;display:flex;flex-direction:column;padding:8px 6px;gap:2px;overflow:auto}
+.master .f-pi{min-height:48px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th,.tbl td{text-align:left;padding:10px 12px;border-top:1px solid var(--stroke)}
+.tbl th{font-weight:600;color:var(--text2);font-size:12px;border-top:0}
+.touch{min-height:44px}
+.doc{display:grid;grid-template-columns:minmax(0,1fr);gap:40px;align-items:start}
+.doc h2{font-size:20px;line-height:28px;font-weight:600;margin:28px 0 8px}
+.doc p{margin:0 0 10px;line-height:22px;max-width:720px}
+.doc ul{margin:0 0 10px;padding-left:20px;line-height:22px;max-width:720px}
+.toc{position:sticky;top:16px;display:flex;flex-direction:column;gap:2px;padding-left:16px;border-left:1px solid var(--stroke)}
+.toc a{text-decoration:none;font-size:13px;line-height:28px;color:var(--text2)}
+.toc a.on{color:var(--text);font-weight:600}
+.sel{display:flex;gap:4px;border-bottom:1px solid var(--stroke);flex-wrap:wrap}
+.sel a,.sel button{display:inline-flex;align-items:center;height:40px;padding:0 12px;text-decoration:none;color:var(--text2);background:none;border:0;border-bottom:3px solid transparent;margin-bottom:-1px;cursor:pointer;font:inherit}
+.sel .on{color:var(--text);font-weight:600;border-bottom-color:var(--accent)}
+.net{width:100%;border-collapse:collapse;font-size:13px;line-height:19px;background:var(--card);border:1px solid var(--stroke);border-radius:4px;overflow:hidden}
+.net th{text-align:left;font-weight:600;padding:10px 12px;background:var(--card2);border-bottom:1px solid var(--stroke)}
+.net td{vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--divider)}
+.net tr:last-child td{border-bottom:0}
+.wrap{overflow-x:auto;max-width:760px}
+.sel a{min-height:44px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+<header class="f-appbar" data-fluent="NavigationAppBar" style="height: 52px">
+  <a href="TabletWorkbench.dc.html" class="f-btn subtle icon touch" style="width: 44px" aria-label="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+  <span class="t-strong">Settings</span>
+</header>
+<div class="f-nv" data-fluent="NavigationView (master–detail)">
+  <nav class="master" aria-label="Settings sections" data-fluent="NavigationPane (open)">
+    <label class="f-tb" style="margin: 4px 6px 6px; min-height: 40px"><input type="search" placeholder="Find a setting" aria-label="Find a setting"></label>
+    <div class="f-ph">Agent</div>
+    <a href="#" class="f-pi">Connection</a>
+    <a href="#" class="f-pi">Providers</a>
+    <a href="#" class="f-pi">MCP servers</a>
+    <a href="#" class="f-pi">Agents &amp; modes</a>
+    <a href="#" class="f-pi">Permissions &amp; tools</a>
+    <a href="#" class="f-pi">Redaction</a>
+    <a href="#" class="f-pi">Code &amp; web</a>
+    <div class="f-ph">App</div>
+    <a href="#" class="f-pi">General</a>
+    <a href="#" class="f-pi">Appearance</a>
+    <a href="#" class="f-pi">Keyboard</a>
+    <a href="TabletLegal.dc.html" class="f-pi on" aria-current="page">Legal</a>
+    <p class="t-cap t2" style="margin: 8px 10px 0">Skills &amp; extensions is hidden here: skills, hooks and plugins need local folders or processes (profile mobile, SETUP-17).</p>
+  </nav>
+  <section class="f-content" style="overflow: hidden" data-fluent="ScaffoldPage">
+    <div style="padding: 24px 32px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap" data-fluent="PageHeader">
+        <h1 class="t-title" style="margin: 0; flex: 1">Legal</h1>
+        <button class="f-btn touch">Copy link</button>
+        <button class="f-btn touch">Open on the web</button>
+      </div>
+      <div class="sel" role="tablist" aria-label="Legal documents" data-fluent="SelectorBar">
+        <a href="TabletLegal.dc.html" role="tab" aria-selected="false">Privacy policy</a>
+        <a href="TabletTerms.dc.html" class="on" role="tab" aria-selected="true">Terms of use</a>
+        <a href="TabletLicense.dc.html" role="tab" aria-selected="false">License</a>
+        <a href="TabletNotices.dc.html" role="tab" aria-selected="false">Third-party notices</a>
+      </div>
+      <div class="t-cap t2" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap"><span class="tag ok">Readable offline</span>Revised [REVISION DATE] · bundled with CodeLab 1.0.0 as <span class="mono">assets/legal/TERMS.md</span> · same text as <span class="mono">[SITE]/terms</span></div>
+      <div class="doc">
+        <article>
+          <div class="f-ib" data-fluent="InfoBar (informational)" style="max-width: 720px; box-sizing: border-box"><span class="f-ibi" aria-hidden="true">i</span><div><span class="ttl">Nothing to accept</span>These terms explain who is responsible for what. The app never asks you to agree to them; your rights to the software come from the <a href="TabletLicense.dc.html" class="f-hl">MIT License</a> (D-29).</div></div>
+          <h2 id="t1">1. Status and the license</h2>
+          <p>These terms are informational. Where they and the MIT License differ, the license wins; the terms never narrow the rights it grants. See also <a href="TabletLicense.dc.html" class="f-hl">License</a> and <a href="TabletNotices.dc.html" class="f-hl">Third-party notices</a>.</p>
+          <h2 id="t2">2. Your use and responsibility</h2>
+          <p>The agent works in the folder you open. You are responsible for actions you approve or allow by mode, including bypass, for commands you run yourself, and for following the law and the terms of services you use. Keep your work under version control: approvals and folder limits reduce risk but do not rule out damage.</p>
+          <h2 id="t3">3. Services you connect</h2>
+          <p>Your model provider, MCP servers, external ACP agents and sites opened by web tools have their own terms and billing, between you and them. CodeLab is not a party to them. What they receive is described in the <a href="TabletLegal.dc.html" class="f-hl">Privacy policy</a>, sections 2 and 4.</p>
+          <h2 id="t4">4. No warranty, limited liability</h2>
+          <p>The software is provided as is, as stated in the MIT License. Support and fix times are not promised.</p>
+          <h2 id="t5">5. Model output</h2>
+          <p>Answers, code and edits produced by a model may be wrong, unsafe or similar to someone else’s work. Review them before you use them. The project claims no rights in model output and cannot guarantee that it is free of third-party rights.</p>
+          <h2 id="t6">6. Changes and contact</h2>
+          <p>The revision date is at the top. Every change is listed under “Terms” in the changelog. Questions: <span class="mono">[CONTACT FROM SECURITY.md]</span>.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1180,"height":820}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

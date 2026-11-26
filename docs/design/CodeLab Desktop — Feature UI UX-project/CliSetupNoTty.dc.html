@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>codelab_cli — first run, no wizard</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+<link rel="stylesheet" href="./tui.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="{{cls}}" style="width: 1000px; height: 720px; border-radius: 10px">
+  <div class="chrome" aria-hidden="true"><i></i><i></i><i></i><span>zsh — ~/Projects/OpenIdeaLab/CodeLab/codelab-app — 120×34</span></div>
+  <div class="screen" role="img" aria-label="Cases where the wizard does not run: headless -p without a provider exits with 64, a broken config exits with 64 and lists the key paths, headless -p with a missing key fails on the first turn with 1">
+    <div class="ln"><span class="mu"># empty ~/.codelab, headless: no questions are asked</span></div>
+    <div class="ln"><span class="mu">~/codelab-app $</span> codelab -p "hi"</div>
+    <div class="ln"><span class="er">codelab: no model provider is configured for the embedded agent.</span></div>
+    <div class="ln"><span class="mu">  Set one up in a terminal with: codelab   or   codelab provider add</span></div>
+    <div class="ln"><span class="mu">~/codelab-app $</span> echo $?</div>
+    <div class="ln">64</div>
+    <div class="ln"> </div>
+    <div class="ln"><span class="mu"># broken config: the wizard does not run and the file is not rewritten</span></div>
+    <div class="ln"><span class="mu">~/codelab-app $</span> codelab</div>
+    <div class="ln"><span class="er">codelab: config /Users/me/.codelab/config.yaml is invalid</span></div>
+    <div class="ln"><span class="er">  providers.anthropic.kind: unknown value "antropic"</span></div>
+    <div class="ln"><span class="er">  agent.default_model: provider "openai" is not defined</span></div>
+    <div class="ln"><span class="mu">  Same report as: codelab config check</span></div>
+    <div class="ln"><span class="mu">~/codelab-app $</span> echo $?</div>
+    <div class="ln">64</div>
+    <div class="ln"> </div>
+    <div class="ln"><span class="mu"># provider configured, key missing, headless</span></div>
+    <div class="ln"><span class="mu">~/codelab-app $</span> codelab -p "hi"</div>
+    <div class="ln"><span class="er">✗ Provider "anthropic": no API key — secret "codelab/anthropic" was not found</span></div>
+    <div class="ln"><span class="mu">~/codelab-app $</span> echo $?</div>
+    <div class="ln">1</div>
+    <div class="ln"> </div>
+    <div class="ln"><span class="mu">Without a TTY on stdin or stdout, or with -p, the wizard and the key prompt never run (SETUP-7).</span></div>
+    <div class="grow"><div class="ln"><span class="mu">~/codelab-app $</span> <span class="cur"> </span></div></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark"},"$preview":{"width":1000,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { cls: (this.props.theme ?? 'dark') === 'light' ? 'term light' : 'term' };
+  }
+}
+</script>
+</body>
+</html>

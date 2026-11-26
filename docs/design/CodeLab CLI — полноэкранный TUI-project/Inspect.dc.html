@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>TUI — подробности вызова</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.ln{height:18px;white-space:pre}
+.cell{display:inline-block;width:1ch;text-align:center;vertical-align:top}
+.b{font-weight:700}.i{font-style:italic}
+.dim{color:#7D8590}.acc{color:#6CB6FF}.ok{color:#7EC699}.err{color:#F47067}.warn{color:#E0B65C}.hunk{color:#56C2D6}
+.code{color:#D2A8FF}
+.delbg{background:#4A1D20;color:#F5C9C9}.addbg{background:#14381F;color:#C6F0D1}
+.cur{background:#C9D1D9;color:#0B0D10}
+.bar{background:#161B22}
+.sel{background:#23324A}
+.ovl{background:#161B22}.ovsel{background:#2B4A73;color:#FFFFFF}
+</style>
+</helmet>
+<div style="width: 960px; height: 700px; box-sizing: border-box; display: flex; flex-direction: column; background: #0B0D10; color: #C9D1D9; border-radius: 10px; overflow: hidden; font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace">
+<div style="height: 28px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #1A1D23; color: #9AA3AF; font-size: 12px">
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span aria-hidden="true" style="width: 10px; height: 10px; border-radius: 50%; background: #3A3F47"></span>
+<span style="margin-left: 8px">codelab --ui tui — ~/proj — {{cols}}×{{rows}}</span>
+</div>
+<div style="padding: 12px; font-size: 13px; line-height: 18px">
+<div style="width: {{cols}}ch; overflow: hidden">
+<sc-for list="{{lines}}" as="ln" hint-placeholder-count="36"><div class="ln"><sc-for list="{{ln.segs}}" as="s" hint-placeholder-count="3"><span class="{{s.c}}">{{s.t}}</span></sc-for></div></sc-for>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":960,"height":700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    // Оверлей на ViewportModel dart_tui: статичный длинный текст — то же содержимое, что /inspect
+    // (§12.2.4, правило 4; §12.2.7 «Компоненты dart_tui»).
+    var W = 120, H = 36, IW = W - 8;
+    function S(t, c) { return { t: t, c: c || '' }; }
+    // Глиф вне ASCII и кириллицы встаёт в ячейку ровно 1ch: в веб-шрифте его нет, запасной шрифт шире.
+    function CELLS(segs) { var out = []; segs.forEach(function (s) { var run = ''; Array.from(s.t).forEach(function (ch) { if (/[\x20-\x7E\u0400-\u04FF]/.test(ch)) { run += ch; } else { if (run) out.push(S(run, s.c)); run = ''; out.push(S(ch, (s.c + ' cell').trim())); } }); if (run) out.push(S(run, s.c)); }); return out; }
+    function width(segs) { var n = 0; segs.forEach(function (s) { n += Array.from(s.t).length; }); return n; }
+    function PAD(segs, c) { var gap = W - width(segs); return gap > 0 ? segs.concat([S(' '.repeat(gap), c)]) : segs; }
+    function BAR(segs) { return PAD(segs.map(function (s) { return S(s.t, (s.c + ' bar').trim()); }), 'bar'); }
+    function IN(segs) {
+      var gap = IW - width(segs);
+      var body = segs.map(function (s) { return S(s.t, (s.c + ' ovl').trim()); });
+      if (gap > 0) body.push(S(' '.repeat(gap), 'ovl'));
+      return [S('  │', 'dim'), S(' ', 'ovl')].concat(body, [S(' ', 'ovl'), S('│  ', 'dim')]);
+    }
+    function EDGE(l, r, title, right) {
+      var mid = W - 4 - 2 - width(title) - width(right);
+      return [S('  ' + l + '─ ', 'dim')].concat(title, [S(' ' + '─'.repeat(Math.max(1, mid - 6)) + ' ', 'dim')], right, [S(' ─' + r + '  ', 'dim')]);
+    }
+    var box = [
+      EDGE('╭', '╮', [S('call_7', 'b'), S(' · Run dart test test/auth · ', 'dim'), S('failed', 'err b')], [S('4.8s', 'dim')]),
+      IN([]),
+      IN([S('tool     ', 'dim'), S('run_command')]),
+      IN([S('status   ', 'dim'), S('failed', 'err'), S(' · exit code 1')]),
+      IN([S('cwd      ', 'dim'), S('/Users/me/proj')]),
+      IN([]),
+      IN([S('Input', 'b'), S('  rawInput', 'dim')]),
+      IN([S('  {', 'code')]),
+      IN([S('    "command": "dart test test/auth",', 'code')]),
+      IN([S('    "timeout_ms": 120000', 'code')]),
+      IN([S('  }', 'code')]),
+      IN([]),
+      IN([S('Output', 'b'), S('  last 12 of 86 lines', 'dim')]),
+      IN([S('  00:03 +21: test/auth/login_flow_test.dart: (setUpAll)')]),
+      IN([S('  00:04 +21 -1: test/auth/login_flow_test.dart: redirects after login [E]')]),
+      IN([S('    Expected: \'/home\'')]),
+      IN([S('      Actual: \'/login\'')]),
+      IN([S('       Which: is different.')]),
+      IN([S('              Expected: /home')]),
+      IN([S('                Actual: /login')]),
+      IN([S('                         ^')]),
+      IN([S('               Differ at offset 1')]),
+      IN([S('    package:test_api                    expect')]),
+      IN([S('    test/auth/login_flow_test.dart 41:7  main.<fn>.<fn>')]),
+      IN([S('  00:04 +23 -1: Some tests failed.', 'err')]),
+      IN([]),
+      EDGE('╰', '╯', [S('', 'dim')], [S('86%', 'dim')])
+    ];
+    var lines = [[]].concat(box);
+    var bottom = [
+      [],
+      [S('↑↓ pgup pgdn'), S(' scroll · ', 'dim'), S('home end'), S(' jump · ', 'dim'), S('esc'), S(' close', 'dim')],
+      BAR([S('⠧ 52s', 'acc'), S(' · ', 'dim'), S('plan', 'acc b'), S(' · gpt-4.1 · ctx 31% · ↑22.8k ↓2.4k · $0.08 · ⎇ main', 'dim')])
+    ];
+    while (lines.length < H - bottom.length) lines.push([]);
+    return { cols: W, rows: H, lines: lines.concat(bottom).map(function (segs) { return { segs: CELLS(segs) }; }) };
+  }
+}
+</script>
+</body>
+</html>

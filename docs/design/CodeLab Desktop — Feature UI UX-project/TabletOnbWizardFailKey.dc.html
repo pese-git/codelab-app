@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tablet — Provider wizard, check failed: key rejected</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.fc{display:flex;flex-direction:column;gap:6px;padding:14px 16px}
+.fc .f-sci{color:var(--accent-text)}
+.rows{display:flex;flex-direction:column;gap:4px}
+.grid{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}
+.grid legend{grid-column:1/-1}
+.pr{cursor:pointer;min-height:56px}
+.pr.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.pri{appearance:none;-webkit-appearance:none;margin:0;width:20px;height:20px;border-radius:50%;border:1px solid var(--strong);background:var(--control);flex:none;box-sizing:border-box}
+.pri:checked{border:5px solid var(--accent);background:var(--on-accent)}
+.links{display:flex;gap:8px;flex-wrap:wrap}
+.links a{text-decoration:none}
+.tbtn{min-height:44px;min-width:44px}
+.f-rb .f-tb input{appearance:auto;-webkit-appearance:auto;width:auto;height:auto;border:0;border-radius:0;background:transparent;flex:1;min-width:0}
+.root{width:1180px;height:820px;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;position:relative}
+.step{display:flex;gap:12px;align-items:center;color:var(--text2)}
+.step i{width:24px;height:24px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;font-weight:600;border:1px solid var(--strong);box-sizing:border-box}
+.step.done i{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.step.cur{color:var(--text);font-weight:600}
+.step.cur i{border:2px solid var(--accent);color:var(--accent-text)}
+.tcol{width:100%;max-width:820px;display:flex;flex-direction:column;gap:18px}
+.f-sc{min-height:60px}
+.bd{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column}
+.smoke{position:absolute;inset:0;background:var(--smoke)}
+.dwrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:32px 16px;box-sizing:border-box}
+.st{display:flex;align-items:center;gap:6px;font-size:12px;line-height:16px;color:var(--text2);white-space:nowrap}
+.st.cur{color:var(--text);font-weight:600}
+.ml{display:flex;flex-direction:column;gap:2px;border:1px solid var(--stroke);border-radius:4px;padding:4px;background:var(--card)}
+.ml .f-li{min-height:44px}
+.dl{margin:0;display:grid;grid-template-columns:120px 1fr;row-gap:8px;column-gap:12px}
+.dl dd{margin:0}
+.tcol .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <div class="bd" aria-hidden="true"><header class="f-appbar" data-fluent="NavigationAppBar" style="height: 52px"><span class="f-logo">CL</span><span class="t-cap">Welcome to CodeLab</span></header>
+  <section class="f-content" style="border-left: 0; border-top-left-radius: 0; align-items: center; padding: 32px 32px; overflow: hidden">
+    <div class="tcol">
+      <ol aria-label="Setup steps" style="list-style: none; margin: 0; padding: 0; display: flex; gap: 28px; flex-wrap: wrap"><li class="step done"><i>✓</i>What CodeLab does</li><li class="step done"><i>✓</i>Permissions</li><li class="step cur" aria-current="step"><i>3</i>Choose a model</li><li class="step"><i>4</i>Privacy</li></ol>
+      <div><h1 class="t-tl" style="margin: 0 0 8px">Choose where the model runs</h1><p class="t-bl t2" style="margin: 0; max-width: 720px">Pick a provider. CodeLab checks the address and the key, lists the models and saves the choice as your default.</p></div>
+      <fieldset class="grid" data-fluent="RadioButtons (presets, ProviderPresets.all)"><legend class="t-strong" style="margin-bottom: 8px">Provider</legend><label class="f-sc pr"><input type="radio" name="preset" class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg><div style="flex: 1; min-width: 0"><div>OpenAI</div><div class="t-cap t2">api.openai.com · key</div></div></label><label class="f-sc pr on"><input type="radio" name="preset" checked class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 5 20M12 4l7 16M8 14h8"/></svg><div style="flex: 1; min-width: 0"><div>Anthropic</div><div class="t-cap t2">api.anthropic.com · key</div></div></label><label class="f-sc pr"><input type="radio" name="preset" class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h16M14 6l6 6-6 6"/></svg><div style="flex: 1; min-width: 0"><div>OpenRouter</div><div class="t-cap t2">Many models through one key</div></div></label><label class="f-sc pr"><input type="radio" name="preset" class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/></svg><div style="flex: 1; min-width: 0"><div>Ollama</div><div class="t-cap t2">On your network, no key</div></div></label><label class="f-sc pr"><input type="radio" name="preset" class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><div style="flex: 1; min-width: 0"><div>Custom OpenAI-compatible</div><div class="t-cap t2">Your server URL, optional key</div></div></label><label class="f-sc pr"><input type="radio" name="preset" class="pri"><svg class="f-sci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><div style="flex: 1; min-width: 0"><div>Custom Anthropic-compatible</div><div class="t-cap t2">Your server URL, optional key</div></div></label></fieldset><div class="f-ib" data-fluent="InfoBar (informational)"><span class="f-ibi" aria-hidden="true">i</span><div><span class="ttl">Opens the provider wizard</span>Base URL, key, a live check and the model list. Keys are stored in Keychain; there is no environment variable option on this device.</div></div><p class="t-cap t2" style="margin: 0">This step is skipped when a provider is already set up and its key is found.</p>
+      <div style="display: flex; gap: 8px; justify-content: flex-end"><span class="f-btn tbtn" style="min-width: 140px; justify-content: center">Back</span><span class="f-btn accent tbtn" style="min-width: 140px; justify-content: center">Set up Anthropic…</span></div>
+    </div>
+  </section></div>
+  <div class="smoke" aria-hidden="true" data-fluent="ContentDialog barrier (smoke)"></div>
+  <div class="dwrap">
+  <div class="f-dlg" role="dialog" aria-modal="true" aria-labelledby="wz" data-fluent="ContentDialog (ProviderWizardDialog)" style="position: relative; width: 100%; max-width: 580px">
+    <div class="f-dlgb">
+      <h2 id="wz" class="t-sub" style="margin: 0">Connect Anthropic</h2>
+      <div style="display: flex; flex-direction: column; gap: 8px"><ol aria-label="Steps" style="list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; flex-wrap: wrap"><li class="st">✓ API type ›</li><li class="st">✓ Base URL ›</li><li class="st">✓ Key ›</li><li class="st cur" aria-current="step">Check ›</li><li class="st">Model ›</li><li class="st">Review</li></ol><div class="f-pb" data-fluent="ProgressBar" role="progressbar" aria-valuenow="4" aria-valuemin="1" aria-valuemax="6" aria-label="Step 4 of 6"><i style="width: 67%"></i></div></div>
+      <dl class="dl"><dt class="t2">Type</dt><dd>Anthropic</dd><dt class="t2">Base URL</dt><dd class="mono" style="font-size: 13px">https://api.anthropic.com</dd><dt class="t2">Key</dt><dd>Store in Keychain as <span class="mono" style="font-size: 13px">codelab/anthropic</span></dd></dl>
+      <div class="f-ib error" role="alert" data-fluent="InfoBar (error)"><span class="f-ibi" aria-hidden="true">!</span><div style="display: flex; flex-direction: column; gap: 4px"><span><span class="ttl">The key was rejected (401)</span></span><span>Anthropic answered but did not accept this key. Go back and enter it again, or check the key in your Anthropic account.</span><span class="mono t2 t-cap">GET https://api.anthropic.com/v1/models → 401 · 236 ms</span></div></div>
+      <p class="t-cap t2" style="margin: 0">Only the status and the kind of failure are shown; the server’s reply is not. Redirects are not followed (SETUP-23).</p>
+      
+      
+    </div>
+    <div class="f-dlgf" style="grid-template-columns: repeat(3, minmax(0, 1fr))"><a href="TabletOnbWizardFailKey.dc.html" class="f-btn accent tbtn" data-fluent="primaryButton" style="text-decoration: none; justify-content: center">Retry</a><a href="TabletOnbWizardKey.dc.html" class="f-btn tbtn" data-fluent="secondaryButton" style="text-decoration: none; justify-content: center">Back</a><a href="TabletOnbModel.dc.html" class="f-btn tbtn" data-fluent="closeButton" style="text-decoration: none; justify-content: center">Cancel</a></div>
+  </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":1180,"height":820}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>

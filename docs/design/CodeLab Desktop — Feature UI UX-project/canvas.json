@@ -1,0 +1,4071 @@
+{
+  "artboards": [
+    {
+      "file": "CliTui.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1000,
+      "h": 720,
+      "title": "C1 TUI — transcript, tool rows, diff, status line",
+      "page": "cli"
+    },
+    {
+      "file": "CliApproval.dc.html",
+      "x": 1080,
+      "y": 0,
+      "w": 1000,
+      "h": 720,
+      "title": "C2 TUI — approval zone",
+      "page": "cli"
+    },
+    {
+      "file": "CliInput.dc.html",
+      "x": 0,
+      "y": 1140,
+      "w": 1000,
+      "h": 720,
+      "title": "C3 TUI — composer, @ completion, attachments",
+      "page": "cli"
+    },
+    {
+      "file": "CliRepl.dc.html",
+      "x": 1080,
+      "y": 1140,
+      "w": 1000,
+      "h": 720,
+      "title": "C4 Line REPL (ansi surface)",
+      "page": "cli"
+    },
+    {
+      "file": "CliSetup.dc.html",
+      "x": 0,
+      "y": 2280,
+      "w": 1000,
+      "h": 720,
+      "title": "C5 First run — provider wizard",
+      "page": "cli"
+    },
+    {
+      "file": "CliTheme.dc.html",
+      "x": 1080,
+      "y": 2280,
+      "w": 1000,
+      "h": 720,
+      "title": "C6 /theme picker",
+      "page": "cli",
+      "is_interactive": true
+    },
+    {
+      "file": "Components-dark.dc.html",
+      "x": 0,
+      "y": -1700,
+      "w": 1440,
+      "h": 1100,
+      "title": "00 fluent_ui — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Main-dark.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "01 Workbench — dark",
+      "expand": "fill",
+      "page": "dark",
+      "is_interactive": true
+    },
+    {
+      "file": "Turn-dark.dc.html",
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "02 Running turn — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Files-dark.dc.html",
+      "x": 0,
+      "y": 1320,
+      "w": 1440,
+      "h": 900,
+      "title": "03 Files pane — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Sessions-dark.dc.html",
+      "x": 1520,
+      "y": 1320,
+      "w": 1440,
+      "h": 900,
+      "title": "04 Session search in the sidebar, read-only session — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Providers-dark.dc.html",
+      "x": 1520,
+      "y": 2640,
+      "w": 1440,
+      "h": 900,
+      "title": "05 Providers — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Mcp-dark.dc.html",
+      "x": 3040,
+      "y": 2640,
+      "w": 1440,
+      "h": 1240,
+      "title": "05b MCP servers — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Wizard-dark.dc.html",
+      "x": 4560,
+      "y": 2640,
+      "w": 1440,
+      "h": 900,
+      "title": "06 Provider wizard — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Onboarding-dark.dc.html",
+      "x": 1520,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07 Onboarding — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Boot-dark.dc.html",
+      "x": 7600,
+      "y": 2640,
+      "w": 1440,
+      "h": 900,
+      "title": "08 Boot watchdog — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Narrow-dark.dc.html",
+      "x": 0,
+      "y": 4260,
+      "w": 820,
+      "h": 900,
+      "title": "09 Narrow layout — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Appearance-dark.dc.html",
+      "x": 900,
+      "y": 4260,
+      "w": 1440,
+      "h": 1000,
+      "title": "10 Appearance — dark",
+      "expand": "fill",
+      "page": "dark",
+      "is_interactive": true
+    },
+    {
+      "file": "Projects-dark.dc.html",
+      "x": 0,
+      "y": 5580,
+      "w": 1440,
+      "h": 900,
+      "title": "11 Project picker — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Palette-dark.dc.html",
+      "x": 1520,
+      "y": 5580,
+      "w": 1440,
+      "h": 900,
+      "title": "12 Command palette — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Composer-dark.dc.html",
+      "x": 3040,
+      "y": 5580,
+      "w": 1440,
+      "h": 1100,
+      "title": "13 Composer menus — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Ask-dark.dc.html",
+      "x": 4560,
+      "y": 5580,
+      "w": 1440,
+      "h": 960,
+      "title": "15 Ask dialog and web / critical approvals — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "History-dark.dc.html",
+      "x": 0,
+      "y": 7100,
+      "w": 1440,
+      "h": 900,
+      "title": "14 Session history — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Agents-dark.dc.html",
+      "x": 1520,
+      "y": 7100,
+      "w": 1440,
+      "h": 900,
+      "title": "16 Agents pane — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Usage-dark.dc.html",
+      "x": 3040,
+      "y": 7100,
+      "w": 1440,
+      "h": 1240,
+      "title": "17 Usage pane — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Inspector-dark.dc.html",
+      "x": 4560,
+      "y": 7100,
+      "w": 1440,
+      "h": 900,
+      "title": "18 Protocol pane — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "States-dark.dc.html",
+      "x": 6080,
+      "y": 7100,
+      "w": 1440,
+      "h": 960,
+      "title": "19 Connection & error states — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Connection-dark.dc.html",
+      "x": 0,
+      "y": 2640,
+      "w": 1440,
+      "h": 1120,
+      "title": "20 Settings — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Modes-dark.dc.html",
+      "x": 0,
+      "y": 8760,
+      "w": 1440,
+      "h": 1800,
+      "title": "21 Settings — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Permissions-dark.dc.html",
+      "x": 1520,
+      "y": 8760,
+      "w": 1440,
+      "h": 1600,
+      "title": "22 Settings — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Redaction-dark.dc.html",
+      "x": 3040,
+      "y": 8760,
+      "w": 1440,
+      "h": 1800,
+      "title": "23 Settings — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Extensions-dark.dc.html",
+      "x": 0,
+      "y": 10980,
+      "w": 1440,
+      "h": 1620,
+      "title": "24 Settings — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "CodeWeb-dark.dc.html",
+      "x": 1520,
+      "y": 10980,
+      "w": 1440,
+      "h": 1400,
+      "title": "25 Settings — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "General-dark.dc.html",
+      "x": 3040,
+      "y": 10980,
+      "w": 1440,
+      "h": 1480,
+      "title": "26 Settings — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Keyboard-dark.dc.html",
+      "x": 4560,
+      "y": 10980,
+      "w": 1440,
+      "h": 1100,
+      "title": "27 Settings — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "CliSessions.dc.html",
+      "x": 0,
+      "y": 3420,
+      "w": 1000,
+      "h": 720,
+      "title": "C7 /sessions, /resume, /rewind, /fork",
+      "page": "cli"
+    },
+    {
+      "file": "CliPickers.dc.html",
+      "x": 1080,
+      "y": 3420,
+      "w": 1000,
+      "h": 720,
+      "title": "C8 Slash menu, /model, /mode, /agents",
+      "page": "cli"
+    },
+    {
+      "file": "CliTasks.dc.html",
+      "x": 0,
+      "y": 4560,
+      "w": 1000,
+      "h": 720,
+      "title": "C9 Tasks & subagents board",
+      "page": "cli"
+    },
+    {
+      "file": "CliStatus.dc.html",
+      "x": 1080,
+      "y": 4560,
+      "w": 1000,
+      "h": 720,
+      "title": "C10 /status and /usage",
+      "page": "cli"
+    },
+    {
+      "file": "CliMcp.dc.html",
+      "x": 0,
+      "y": 5700,
+      "w": 1000,
+      "h": 720,
+      "title": "C11 /mcp and /tools",
+      "page": "cli"
+    },
+    {
+      "file": "CliStates.dc.html",
+      "x": 1080,
+      "y": 5700,
+      "w": 1000,
+      "h": 720,
+      "title": "C12 Ask, errors, reconnect",
+      "page": "cli"
+    },
+    {
+      "file": "CliSettings.dc.html",
+      "x": 0,
+      "y": 6840,
+      "w": 1000,
+      "h": 720,
+      "title": "C13 /settings",
+      "page": "cli"
+    },
+    {
+      "file": "CliHeadless.dc.html",
+      "x": 1080,
+      "y": 6840,
+      "w": 1000,
+      "h": 720,
+      "title": "C14 Headless: -p, stream-json, exit codes",
+      "page": "cli"
+    },
+    {
+      "file": "CliTrace.dc.html",
+      "x": 2160,
+      "y": 6840,
+      "w": 1000,
+      "h": 720,
+      "title": "C17 Headless: protocol trace (--include-acp, --trace-file)",
+      "page": "cli"
+    },
+    {
+      "file": "NavApp.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 2160,
+      "h": 2100,
+      "title": "Navigation graph — codelab_app",
+      "page": "nav"
+    },
+    {
+      "file": "NavCli.dc.html",
+      "x": 0,
+      "y": 2220,
+      "w": 1920,
+      "h": 1340,
+      "title": "Navigation graph — codelab_cli",
+      "page": "nav"
+    },
+    {
+      "file": "Coverage.dc.html",
+      "x": 2240,
+      "y": 0,
+      "w": 1440,
+      "h": 2200,
+      "title": "Goal coverage — goal → screen",
+      "expand": "fill",
+      "page": "nav"
+    },
+    {
+      "file": "Components.dc.html",
+      "x": 0,
+      "y": -1700,
+      "w": 1440,
+      "h": 1100,
+      "title": "00 fluent_ui — component sheet and screen map",
+      "expand": "fill"
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "01 Workbench — sidebar by project, session, tool dock",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "Turn.dc.html",
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "02 Running turn — Agents and Plan panes",
+      "expand": "fill"
+    },
+    {
+      "file": "Files.dc.html",
+      "x": 0,
+      "y": 1320,
+      "w": 1440,
+      "h": 900,
+      "title": "03 Files pane — tree and preview in the dock",
+      "expand": "fill"
+    },
+    {
+      "file": "Sessions.dc.html",
+      "x": 1520,
+      "y": 1320,
+      "w": 1440,
+      "h": 900,
+      "title": "04 Session search in the sidebar, read-only session",
+      "expand": "fill"
+    },
+    {
+      "file": "Providers.dc.html",
+      "x": 1520,
+      "y": 2640,
+      "w": 1440,
+      "h": 900,
+      "title": "05 Settings — Providers",
+      "expand": "fill"
+    },
+    {
+      "file": "Mcp.dc.html",
+      "x": 3040,
+      "y": 2640,
+      "w": 1440,
+      "h": 1240,
+      "title": "05b Settings — MCP servers",
+      "expand": "fill"
+    },
+    {
+      "file": "Wizard.dc.html",
+      "x": 4560,
+      "y": 2640,
+      "w": 1440,
+      "h": 900,
+      "title": "06 Provider wizard — check before save",
+      "expand": "fill"
+    },
+    {
+      "file": "Onboarding.dc.html",
+      "x": 1520,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07 Onboarding — step 2 Permissions",
+      "expand": "fill"
+    },
+    {
+      "file": "Boot.dc.html",
+      "x": 7600,
+      "y": 2640,
+      "w": 1440,
+      "h": 900,
+      "title": "08 Boot watchdog — diagnostics",
+      "expand": "fill"
+    },
+    {
+      "file": "Narrow.dc.html",
+      "x": 0,
+      "y": 4260,
+      "w": 820,
+      "h": 900,
+      "title": "09 Narrow layout < 900 px",
+      "expand": "fill"
+    },
+    {
+      "file": "Appearance.dc.html",
+      "x": 900,
+      "y": 4260,
+      "w": 1440,
+      "h": 1000,
+      "title": "10 Settings — Appearance",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "Projects.dc.html",
+      "x": 0,
+      "y": 5580,
+      "w": 1440,
+      "h": 900,
+      "title": "11 Project picker — recent projects, agent of the window",
+      "expand": "fill"
+    },
+    {
+      "file": "Palette.dc.html",
+      "x": 1520,
+      "y": 5580,
+      "w": 1440,
+      "h": 900,
+      "title": "12 Command palette — Ctrl+K",
+      "expand": "fill"
+    },
+    {
+      "file": "Composer.dc.html",
+      "x": 3040,
+      "y": 5580,
+      "w": 1440,
+      "h": 1100,
+      "title": "13 Composer menus — mode, model, /, @, queue",
+      "expand": "fill"
+    },
+    {
+      "file": "Ask.dc.html",
+      "x": 4560,
+      "y": 5580,
+      "w": 1440,
+      "h": 960,
+      "title": "15 Ask dialog and web / critical approvals",
+      "expand": "fill"
+    },
+    {
+      "file": "History.dc.html",
+      "x": 0,
+      "y": 7100,
+      "w": 1440,
+      "h": 900,
+      "title": "14 Session history — Branches pane, rewind",
+      "expand": "fill"
+    },
+    {
+      "file": "Agents.dc.html",
+      "x": 1520,
+      "y": 7100,
+      "w": 1440,
+      "h": 900,
+      "title": "16 Agents pane v1 — subagents (D33)",
+      "expand": "fill"
+    },
+    {
+      "file": "Usage.dc.html",
+      "x": 3040,
+      "y": 7100,
+      "w": 1440,
+      "h": 1240,
+      "title": "17 Usage pane",
+      "expand": "fill"
+    },
+    {
+      "file": "Inspector.dc.html",
+      "x": 4560,
+      "y": 7100,
+      "w": 1440,
+      "h": 900,
+      "title": "18 Protocol pane — Frames tab",
+      "expand": "fill"
+    },
+    {
+      "file": "States.dc.html",
+      "x": 6080,
+      "y": 7100,
+      "w": 1440,
+      "h": 960,
+      "title": "19 Connection & error states",
+      "expand": "fill"
+    },
+    {
+      "file": "Connection.dc.html",
+      "x": 0,
+      "y": 2640,
+      "w": 1440,
+      "h": 1120,
+      "title": "20 Settings — Connection",
+      "expand": "fill"
+    },
+    {
+      "file": "Modes.dc.html",
+      "x": 0,
+      "y": 8760,
+      "w": 1440,
+      "h": 1800,
+      "title": "21 Settings — Agents & modes",
+      "expand": "fill"
+    },
+    {
+      "file": "Permissions.dc.html",
+      "x": 1520,
+      "y": 8760,
+      "w": 1440,
+      "h": 1600,
+      "title": "22 Settings — Permissions & tools",
+      "expand": "fill"
+    },
+    {
+      "file": "Redaction.dc.html",
+      "x": 3040,
+      "y": 8760,
+      "w": 1440,
+      "h": 1800,
+      "title": "23 Settings — Redaction",
+      "expand": "fill"
+    },
+    {
+      "file": "Extensions.dc.html",
+      "x": 0,
+      "y": 10980,
+      "w": 1440,
+      "h": 1620,
+      "title": "24 Settings — Skills & extensions",
+      "expand": "fill"
+    },
+    {
+      "file": "CodeWeb.dc.html",
+      "x": 1520,
+      "y": 10980,
+      "w": 1440,
+      "h": 1400,
+      "title": "25 Settings — Code & web",
+      "expand": "fill"
+    },
+    {
+      "file": "General.dc.html",
+      "x": 3040,
+      "y": 10980,
+      "w": 1440,
+      "h": 1480,
+      "title": "26 Settings — General",
+      "expand": "fill"
+    },
+    {
+      "file": "Keyboard.dc.html",
+      "x": 4560,
+      "y": 10980,
+      "w": 1440,
+      "h": 1100,
+      "title": "27 Settings — Keyboard",
+      "expand": "fill"
+    },
+    {
+      "file": "PhoneSessions.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P1 Sessions (home)",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneChat.dc.html",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P2 Session",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneApproval.dc.html",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P3 Approval and running turn",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneComposer.dc.html",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P4 Composer menus",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneAsk.dc.html",
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P5 Ask (T-22)",
+      "page": "phone"
+    },
+    {
+      "file": "PhonePane.dc.html",
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P6 Navigation pane",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneFiles.dc.html",
+      "x": 0,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P7 Files (Documents)",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneSettings.dc.html",
+      "x": 470,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P8 Settings",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneConnection.dc.html",
+      "x": 940,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P9 Settings › Connection",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProviders.dc.html",
+      "x": 1410,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P10 Settings › Providers",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneWizard.dc.html",
+      "x": 2350,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P11 Provider wizard — Check",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneStates.dc.html",
+      "x": 2350,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P12 States",
+      "page": "phone"
+    },
+    {
+      "file": "NavPhone.dc.html",
+      "x": 0,
+      "y": 2528,
+      "w": 2600,
+      "h": 1080,
+      "title": "Navigation graph — phone",
+      "page": "phone"
+    },
+    {
+      "file": "TabletWorkbench.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1180,
+      "h": 820,
+      "title": "T1 Tablet landscape — workbench",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletPortrait.dc.html",
+      "x": 1260,
+      "y": 0,
+      "w": 820,
+      "h": 1180,
+      "title": "T2 Tablet portrait — narrow layout (D-21)",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletSettings.dc.html",
+      "x": 0,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T3 Tablet — Settings (master–detail)",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletFiles.dc.html",
+      "x": 1260,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T4 Tablet — Files and preview",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletPalette.dc.html",
+      "x": 2520,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T5 Tablet — command palette",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletProtocolLog.dc.html",
+      "x": 3780,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T15 Tablet — Protocol pane, Log tab",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletProtocolFrames.dc.html",
+      "x": 5040,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T15a Tablet — Protocol pane, Frames tab",
+      "page": "tablet"
+    },
+    {
+      "file": "Terminal.dc.html",
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "28 Terminal pane (D-28)",
+      "expand": "fill"
+    },
+    {
+      "file": "Terminal-dark.dc.html",
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "28 Terminal pane (D-28) — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "SplitView.dc.html",
+      "x": 4560,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "29 Split view — two sessions side by side",
+      "expand": "fill"
+    },
+    {
+      "file": "SplitView-dark.dc.html",
+      "x": 4560,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "29 Split view — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "TabletSplit.dc.html",
+      "x": 2160,
+      "y": 0,
+      "w": 1366,
+      "h": 1024,
+      "title": "T6 Tablet — split view at 1366 px",
+      "page": "tablet"
+    },
+    {
+      "file": "Prototype.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "Live prototype — desktop · tablet · phone (A13, §12.8)",
+      "expand": "fill",
+      "page": "proto",
+      "is_interactive": true
+    },
+    {
+      "file": "CliSwitch.dc.html",
+      "x": 2160,
+      "y": 3420,
+      "w": 1000,
+      "h": 720,
+      "title": "C15 TUI — several open sessions, switcher (U-37)",
+      "page": "cli",
+      "is_interactive": true
+    },
+    {
+      "file": "AddProfile.dc.html",
+      "x": 9120,
+      "y": 2640,
+      "w": 1440,
+      "h": 1120,
+      "title": "20a Settings — Add connection profile (§12.4.9)",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "AddProfile-dark.dc.html",
+      "x": 9120,
+      "y": 2640,
+      "w": 1440,
+      "h": 1120,
+      "title": "20a Add connection profile — dark",
+      "expand": "fill",
+      "page": "dark",
+      "is_interactive": true
+    },
+    {
+      "file": "PhoneAddProfile.dc.html",
+      "x": 2820,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P9a Connection › Add WebSocket agent",
+      "page": "phone",
+      "is_interactive": true
+    },
+    {
+      "file": "PhoneProtocol.dc.html",
+      "x": 3290,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P21 Protocol — Frames",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProtocolFrame.dc.html",
+      "x": 3760,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P21a Protocol — frame details",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProtocolLog.dc.html",
+      "x": 4230,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P21b Protocol — Log",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProtocolRecord.dc.html",
+      "x": 4700,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P21c Protocol — log record",
+      "page": "phone"
+    },
+    {
+      "file": "TranscriptRows.dc.html",
+      "x": 0,
+      "y": -4400,
+      "w": 1440,
+      "h": 2000,
+      "title": "00a Transcript rows — every widget and state",
+      "expand": "fill"
+    },
+    {
+      "file": "Subagents.dc.html",
+      "x": 0,
+      "y": 13200,
+      "w": 1440,
+      "h": 900,
+      "title": "30 Subagents in the feed — compact: collapsed agents, quiet task lines, question with its path",
+      "expand": "fill"
+    },
+    {
+      "file": "TaskList.dc.html",
+      "x": 1520,
+      "y": 13200,
+      "w": 1440,
+      "h": 1560,
+      "title": "31 Agent rows and task list — every state",
+      "expand": "fill"
+    },
+    {
+      "file": "Subagents-dark.dc.html",
+      "x": 0,
+      "y": 13200,
+      "w": 1440,
+      "h": 900,
+      "title": "30 Subagents in the feed — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "TaskList-dark.dc.html",
+      "x": 1520,
+      "y": 13200,
+      "w": 1440,
+      "h": 1560,
+      "title": "31 Agent rows and task list — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "CliAgents.dc.html",
+      "x": 0,
+      "y": 7980,
+      "w": 1000,
+      "h": 720,
+      "title": "C16 TUI — agent rows, nested steps, task list",
+      "page": "cli"
+    },
+    {
+      "file": "SubagentsAlt.dc.html",
+      "x": 0,
+      "y": 14220,
+      "w": 1440,
+      "h": 900,
+      "title": "30a Variant, not approved — task list pinned under the latest message",
+      "expand": "fill"
+    },
+    {
+      "file": "OnboardingPrivacy.dc.html",
+      "x": 12160,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07a Onboarding — step 4 Privacy, links to both documents",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "OnboardingPrivacy-dark.dc.html",
+      "x": 12160,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07a Onboarding privacy — dark",
+      "expand": "fill",
+      "page": "dark",
+      "is_interactive": true
+    },
+    {
+      "file": "Legal.dc.html",
+      "x": 1520,
+      "y": 15600,
+      "w": 1440,
+      "h": 1500,
+      "title": "32 Settings › Legal — Privacy policy (PRIVACY.md)",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "Legal-dark.dc.html",
+      "x": 1520,
+      "y": 15600,
+      "w": 1440,
+      "h": 1500,
+      "title": "32 Privacy policy — dark",
+      "expand": "fill",
+      "page": "dark",
+      "is_interactive": true
+    },
+    {
+      "file": "Terms.dc.html",
+      "x": 3040,
+      "y": 15600,
+      "w": 1440,
+      "h": 1300,
+      "title": "33 Settings › Legal — Terms of use (TERMS.md, D-29)",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "Terms-dark.dc.html",
+      "x": 3040,
+      "y": 15600,
+      "w": 1440,
+      "h": 1300,
+      "title": "33 Terms of use — dark",
+      "expand": "fill",
+      "page": "dark",
+      "is_interactive": true
+    },
+    {
+      "file": "License.dc.html",
+      "x": 4560,
+      "y": 15600,
+      "w": 1440,
+      "h": 1380,
+      "title": "34 Settings › Legal — License (MIT)",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "License-dark.dc.html",
+      "x": 4560,
+      "y": 15600,
+      "w": 1440,
+      "h": 1380,
+      "title": "34 License — dark",
+      "expand": "fill",
+      "page": "dark",
+      "is_interactive": true
+    },
+    {
+      "file": "Notices.dc.html",
+      "x": 6080,
+      "y": 15600,
+      "w": 1440,
+      "h": 1900,
+      "title": "35 Settings › Legal — Third-party notices (register + package licenses, D13)",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "Notices-dark.dc.html",
+      "x": 6080,
+      "y": 15600,
+      "w": 1440,
+      "h": 1900,
+      "title": "35 Third-party notices — dark",
+      "expand": "fill",
+      "page": "dark",
+      "is_interactive": true
+    },
+    {
+      "file": "NoticesSearch.dc.html",
+      "x": 6080,
+      "y": 17620,
+      "w": 1440,
+      "h": 900,
+      "title": "35a Third-party notices — package search: M of N, No packages match",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "NoticesSearch-dark.dc.html",
+      "x": 6080,
+      "y": 17620,
+      "w": 1440,
+      "h": 900,
+      "title": "35a Package search states — dark",
+      "expand": "fill",
+      "page": "dark",
+      "is_interactive": true
+    },
+    {
+      "file": "PhoneLegal.dc.html",
+      "x": 0,
+      "y": 4068,
+      "w": 390,
+      "h": 844,
+      "title": "P13 Settings › Legal — Privacy policy",
+      "page": "phone",
+      "is_interactive": true
+    },
+    {
+      "file": "PhoneNotices.dc.html",
+      "x": 470,
+      "y": 4068,
+      "w": 390,
+      "h": 844,
+      "title": "P14 Legal — Third-party notices, search: M of N",
+      "page": "phone",
+      "is_interactive": true
+    },
+    {
+      "file": "TabletLegal.dc.html",
+      "x": 0,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T7 Tablet — Settings › Legal (master–detail)",
+      "page": "tablet",
+      "is_interactive": true
+    },
+    {
+      "file": "PhoneTerms.dc.html",
+      "x": 940,
+      "y": 4068,
+      "w": 390,
+      "h": 844,
+      "title": "P15 Legal — Terms of use",
+      "page": "phone",
+      "is_interactive": true
+    },
+    {
+      "file": "PhoneLicense.dc.html",
+      "x": 1410,
+      "y": 4068,
+      "w": 390,
+      "h": 844,
+      "title": "P16 Legal — License",
+      "page": "phone",
+      "is_interactive": true
+    },
+    {
+      "file": "TabletTerms.dc.html",
+      "x": 1260,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T8 Tablet — Legal › Terms of use",
+      "page": "tablet",
+      "is_interactive": true
+    },
+    {
+      "file": "TabletLicense.dc.html",
+      "x": 2520,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T9 Tablet — Legal › License",
+      "page": "tablet",
+      "is_interactive": true
+    },
+    {
+      "file": "TabletNotices.dc.html",
+      "x": 3780,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T10 Tablet — Legal › Third-party notices",
+      "page": "tablet",
+      "is_interactive": true
+    },
+    {
+      "file": "NavTablet.dc.html",
+      "x": 0,
+      "y": 4200,
+      "w": 2160,
+      "h": 900,
+      "title": "Navigation graph — tablet",
+      "page": "tablet"
+    },
+    {
+      "file": "PhoneAddProfile-dark.dc.html",
+      "x": 2820,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P9a Connection › Add WebSocket agent — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneProtocol-dark.dc.html",
+      "x": 3290,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P21 Protocol — Frames — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneProtocolFrame-dark.dc.html",
+      "x": 3760,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P21a Protocol — frame details — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneProtocolLog-dark.dc.html",
+      "x": 4230,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P21b Protocol — Log — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneProtocolRecord-dark.dc.html",
+      "x": 4700,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P21c Protocol — log record — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneApproval-dark.dc.html",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P3 Approval and running turn — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneAsk-dark.dc.html",
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P5 Ask (T-22) — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneChat-dark.dc.html",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P2 Session — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneComposer-dark.dc.html",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P4 Composer menus — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneConnection-dark.dc.html",
+      "x": 940,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P9 Settings › Connection — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneFiles-dark.dc.html",
+      "x": 0,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P7 Files (Documents) — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhonePane-dark.dc.html",
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P6 Navigation pane — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneProviders-dark.dc.html",
+      "x": 1410,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P10 Settings › Providers — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneSessions-dark.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "P1 Sessions (home) — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneSettings-dark.dc.html",
+      "x": 470,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P8 Settings — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneStates-dark.dc.html",
+      "x": 2350,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P12 States — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneWizard-dark.dc.html",
+      "x": 2350,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P11 Provider wizard — Check — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "TabletFiles-dark.dc.html",
+      "x": 1260,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T4 Tablet — Files and preview — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletPalette-dark.dc.html",
+      "x": 2520,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T5 Tablet — command palette — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletProtocolLog-dark.dc.html",
+      "x": 3780,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T15 Tablet — Protocol pane, Log tab — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletProtocolFrames-dark.dc.html",
+      "x": 5040,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T15a Tablet — Protocol pane, Frames tab — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletPortrait-dark.dc.html",
+      "x": 1260,
+      "y": 0,
+      "w": 820,
+      "h": 1180,
+      "title": "T2 Tablet portrait — narrow layout (D-21) — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletSettings-dark.dc.html",
+      "x": 0,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T3 Tablet — Settings (master–detail) — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletSplit-dark.dc.html",
+      "x": 2160,
+      "y": 0,
+      "w": 1366,
+      "h": 1024,
+      "title": "T6 Tablet — split view at 1366 px — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletWorkbench-dark.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1180,
+      "h": 820,
+      "title": "T1 Tablet landscape — workbench — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "PhoneLegal-dark.dc.html",
+      "x": 0,
+      "y": 4068,
+      "w": 390,
+      "h": 844,
+      "title": "P13 Settings › Legal — Privacy policy — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneNotices-dark.dc.html",
+      "x": 470,
+      "y": 4068,
+      "w": 390,
+      "h": 844,
+      "title": "P14 Legal — Third-party notices, search: M of N — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "TabletLegal-dark.dc.html",
+      "x": 0,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T7 Tablet — Settings › Legal (master–detail) — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "PhoneTerms-dark.dc.html",
+      "x": 940,
+      "y": 4068,
+      "w": 390,
+      "h": 844,
+      "title": "P15 Legal — Terms of use — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneLicense-dark.dc.html",
+      "x": 1410,
+      "y": 4068,
+      "w": 390,
+      "h": 844,
+      "title": "P16 Legal — License — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "TabletTerms-dark.dc.html",
+      "x": 1260,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T8 Tablet — Legal › Terms of use — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletLicense-dark.dc.html",
+      "x": 2520,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T9 Tablet — Legal › License — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletNotices-dark.dc.html",
+      "x": 3780,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T10 Tablet — Legal › Third-party notices — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "PhoneNoticesEmpty.dc.html",
+      "x": 1880,
+      "y": 4068,
+      "w": 390,
+      "h": 844,
+      "title": "P14a Legal — Third-party notices, no packages match",
+      "page": "phone",
+      "is_interactive": true
+    },
+    {
+      "file": "PhoneNoticesEmpty-dark.dc.html",
+      "x": 1880,
+      "y": 4068,
+      "w": 390,
+      "h": 844,
+      "title": "P14a Legal — Third-party notices, no packages match — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "TabletNoticesMatch.dc.html",
+      "x": 5040,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T10a Tablet — Legal › Third-party notices, search: M of N",
+      "page": "tablet",
+      "is_interactive": true
+    },
+    {
+      "file": "TabletNoticesMatch-dark.dc.html",
+      "x": 5040,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T10a Tablet — Legal › Third-party notices, search: M of N — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletNoticesEmpty.dc.html",
+      "x": 6300,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T10b Tablet — Legal › Third-party notices, no packages match",
+      "page": "tablet",
+      "is_interactive": true
+    },
+    {
+      "file": "TabletNoticesEmpty-dark.dc.html",
+      "x": 6300,
+      "y": 2880,
+      "w": 1180,
+      "h": 820,
+      "title": "T10b Tablet — Legal › Third-party notices, no packages match — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "NoticesMatch.dc.html",
+      "x": 7600,
+      "y": 15600,
+      "w": 1440,
+      "h": 1500,
+      "title": "35b Settings › Legal — Third-party notices, search: M of N",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "NoticesMatch-dark.dc.html",
+      "x": 7600,
+      "y": 15600,
+      "w": 1440,
+      "h": 1500,
+      "title": "35b Third-party notices, search: M of N — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "NoticesEmpty.dc.html",
+      "x": 9120,
+      "y": 15600,
+      "w": 1440,
+      "h": 1500,
+      "title": "35c Settings › Legal — Third-party notices, no packages match",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "NoticesEmpty-dark.dc.html",
+      "x": 9120,
+      "y": 15600,
+      "w": 1440,
+      "h": 1500,
+      "title": "35c Third-party notices, no packages match — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "OnboardingWelcome.dc.html",
+      "x": 0,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07b Onboarding — step 1 What CodeLab does",
+      "expand": "fill"
+    },
+    {
+      "file": "OnboardingModel.dc.html",
+      "x": 3040,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c Onboarding — step 3 Choose a model (opens 06 wizard)",
+      "expand": "fill"
+    },
+    {
+      "file": "OnboardingWelcome-dark.dc.html",
+      "x": 0,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07b Onboarding welcome — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "OnboardingModel-dark.dc.html",
+      "x": 3040,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c Onboarding model — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "NavOnboarding.dc.html",
+      "x": 0,
+      "y": 3680,
+      "w": 2160,
+      "h": 900,
+      "title": "Onboarding flow — codelab_app first run",
+      "page": "nav"
+    },
+    {
+      "file": "OnbWizardUrl.dc.html",
+      "x": 4560,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c.1 Onboarding — wizard: provider address",
+      "expand": "fill"
+    },
+    {
+      "file": "OnbWizardUrl-dark.dc.html",
+      "x": 4560,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c.1 Provider address — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "OnbWizardKey.dc.html",
+      "x": 6080,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c.2 Onboarding — wizard: key (keychain, env, none)",
+      "expand": "fill"
+    },
+    {
+      "file": "OnbWizardKey-dark.dc.html",
+      "x": 6080,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c.2 Provider key — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "OnbWizardModel.dc.html",
+      "x": 7600,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c.3 Onboarding — wizard: check passed, choose the model",
+      "expand": "fill"
+    },
+    {
+      "file": "OnbWizardModel-dark.dc.html",
+      "x": 7600,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c.3 Choose the model — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "OnbWizardReview.dc.html",
+      "x": 9120,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c.4 Onboarding — wizard: review and save",
+      "expand": "fill"
+    },
+    {
+      "file": "OnbWizardReview-dark.dc.html",
+      "x": 9120,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c.4 Review provider — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "OnboardingModelDone.dc.html",
+      "x": 10640,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c.5 Onboarding — step 3 done, provider connected",
+      "expand": "fill"
+    },
+    {
+      "file": "OnboardingModelDone-dark.dc.html",
+      "x": 10640,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07c.5 Model ready — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "PhoneOnbWelcome.dc.html",
+      "x": 0,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P17 First run — step 1 What CodeLab does",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneOnbWelcome-dark.dc.html",
+      "x": 0,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P17 First run — step 1 What CodeLab does — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneOnbPermissions.dc.html",
+      "x": 470,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P18 First run — step 2 Permissions (no shell on the device)",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneOnbPermissions-dark.dc.html",
+      "x": 470,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P18 First run — step 2 Permissions (no shell on the device) — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneOnbModel.dc.html",
+      "x": 940,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P19 First run — step 3 Choose a model",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneOnbModel-dark.dc.html",
+      "x": 940,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P19 First run — step 3 Choose a model — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneWizardUrl.dc.html",
+      "x": 1410,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P11a Provider wizard — Base URL",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneWizardUrl-dark.dc.html",
+      "x": 1410,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P11a Provider wizard — Base URL — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneWizardKey.dc.html",
+      "x": 1880,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P11b Provider wizard — API key (Keychain or none)",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneWizardKey-dark.dc.html",
+      "x": 1880,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P11b Provider wizard — API key (Keychain or none) — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneWizardModel.dc.html",
+      "x": 2820,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P11c Provider wizard — Model",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneWizardModel-dark.dc.html",
+      "x": 2820,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P11c Provider wizard — Model — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneWizardReview.dc.html",
+      "x": 3290,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P11d Provider wizard — Review and Save",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneWizardReview-dark.dc.html",
+      "x": 3290,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P11d Provider wizard — Review and Save — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneOnbModelDone.dc.html",
+      "x": 3760,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P19a First run — step 3 done, provider connected",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneOnbModelDone-dark.dc.html",
+      "x": 3760,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P19a First run — step 3 done, provider connected — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneOnbPrivacy.dc.html",
+      "x": 4230,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P20 First run — step 4 Privacy",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneOnbPrivacy-dark.dc.html",
+      "x": 4230,
+      "y": 5432,
+      "w": 390,
+      "h": 844,
+      "title": "P20 First run — step 4 Privacy — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "TabletOnbWelcome.dc.html",
+      "x": 0,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T11 Tablet — first run, step 1 What CodeLab does",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbWelcome-dark.dc.html",
+      "x": 0,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T11 Tablet — first run, step 1 What CodeLab does — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletOnbPermissions.dc.html",
+      "x": 1260,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T12 Tablet — first run, step 2 Permissions",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbPermissions-dark.dc.html",
+      "x": 1260,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T12 Tablet — first run, step 2 Permissions — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletOnbModel.dc.html",
+      "x": 2520,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13 Tablet — first run, step 3 Choose a model",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbModel-dark.dc.html",
+      "x": 2520,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13 Tablet — first run, step 3 Choose a model — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletOnbWizardUrl.dc.html",
+      "x": 3780,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13a Tablet — provider wizard: Base URL",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbWizardUrl-dark.dc.html",
+      "x": 3780,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13a Tablet — provider wizard: Base URL — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletOnbWizardKey.dc.html",
+      "x": 5040,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13b Tablet — provider wizard: key (Keychain or none)",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbWizardKey-dark.dc.html",
+      "x": 5040,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13b Tablet — provider wizard: key (Keychain or none) — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletOnbWizardModel.dc.html",
+      "x": 6300,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13c Tablet — provider wizard: check passed, model",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbWizardModel-dark.dc.html",
+      "x": 6300,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13c Tablet — provider wizard: check passed, model — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletOnbWizardReview.dc.html",
+      "x": 7560,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13d Tablet — provider wizard: review and Save",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbWizardReview-dark.dc.html",
+      "x": 7560,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13d Tablet — provider wizard: review and Save — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletOnbModelDone.dc.html",
+      "x": 8820,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13e Tablet — step 3 done, provider connected",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbModelDone-dark.dc.html",
+      "x": 8820,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T13e Tablet — step 3 done, provider connected — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletOnbPrivacy.dc.html",
+      "x": 10080,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T14 Tablet — first run, step 4 Privacy",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbPrivacy-dark.dc.html",
+      "x": 10080,
+      "y": 5620,
+      "w": 1180,
+      "h": 820,
+      "title": "T14 Tablet — first run, step 4 Privacy — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "PhoneWizardFailKey.dc.html",
+      "x": 2350,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P11e Provider wizard — check failed: key rejected (401)",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneWizardFailKey-dark.dc.html",
+      "x": 2350,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P11e Provider wizard — check failed: key rejected (401) — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneWizardFailNet.dc.html",
+      "x": 2820,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P11f Provider wizard — check failed: unreachable or timeout",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneWizardFailNet-dark.dc.html",
+      "x": 2820,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P11f Provider wizard — check failed: unreachable or timeout — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneWizardSkip.dc.html",
+      "x": 3290,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P11g Provider wizard — confirm “Save without check”",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneWizardSkip-dark.dc.html",
+      "x": 3290,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P11g Provider wizard — confirm “Save without check” — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneWizardManual.dc.html",
+      "x": 3760,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P11h Provider wizard — model entered by hand (not verified)",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneWizardManual-dark.dc.html",
+      "x": 3760,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P11h Provider wizard — model entered by hand (not verified) — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "TabletOnbWizardFailKey.dc.html",
+      "x": 5040,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13f Tablet — wizard: check failed, key rejected (401)",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbWizardFailKey-dark.dc.html",
+      "x": 5040,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13f Tablet — wizard: check failed, key rejected (401) — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletOnbWizardFailNet.dc.html",
+      "x": 6300,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13g Tablet — wizard: check failed, unreachable",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbWizardFailNet-dark.dc.html",
+      "x": 6300,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13g Tablet — wizard: check failed, unreachable — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletOnbWizardSkip.dc.html",
+      "x": 7560,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13h Tablet — wizard: confirm “Save without check”",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbWizardSkip-dark.dc.html",
+      "x": 7560,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13h Tablet — wizard: confirm “Save without check” — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletOnbWizardManual.dc.html",
+      "x": 8820,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13i Tablet — wizard: model entered by hand (not verified)",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbWizardManual-dark.dc.html",
+      "x": 8820,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13i Tablet — wizard: model entered by hand (not verified) — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "PhoneWizardReviewUnverified.dc.html",
+      "x": 4230,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P11i Provider wizard — Review, not verified",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneWizardReviewUnverified-dark.dc.html",
+      "x": 4230,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P11i Provider wizard — Review, not verified — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "TabletOnbWizardReviewUnverified.dc.html",
+      "x": 10080,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13j Tablet — wizard: Review, not verified",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbWizardReviewUnverified-dark.dc.html",
+      "x": 10080,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13j Tablet — wizard: Review, not verified — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "PhoneOnbModelUnverified.dc.html",
+      "x": 4700,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P19b First run — step 3 saved without check (not verified)",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneOnbModelUnverified-dark.dc.html",
+      "x": 4700,
+      "y": 6416,
+      "w": 390,
+      "h": 844,
+      "title": "P19b First run — step 3 saved without check (not verified) — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "TabletOnbModelUnverified.dc.html",
+      "x": 11340,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13k Tablet — step 3 saved without check (not verified)",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletOnbModelUnverified-dark.dc.html",
+      "x": 11340,
+      "y": 6580,
+      "w": 1180,
+      "h": 820,
+      "title": "T13k Tablet — step 3 saved without check (not verified) — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "CliSetupUnauthorized.dc.html",
+      "x": 0,
+      "y": 9120,
+      "w": 1000,
+      "h": 720,
+      "title": "C5a First run — check failed: key rejected (401)",
+      "page": "cli"
+    },
+    {
+      "file": "CliSetupUnreachable.dc.html",
+      "x": 1080,
+      "y": 9120,
+      "w": 1000,
+      "h": 720,
+      "title": "C5b First run — unreachable, save without check",
+      "page": "cli"
+    },
+    {
+      "file": "CliSetupKeyMissing.dc.html",
+      "x": 2160,
+      "y": 9120,
+      "w": 1000,
+      "h": 720,
+      "title": "C5c First run — provider without a key",
+      "page": "cli"
+    },
+    {
+      "file": "CliSetupNoTty.dc.html",
+      "x": 3240,
+      "y": 9120,
+      "w": 1000,
+      "h": 720,
+      "title": "C5d First run — no wizard: headless, broken config",
+      "page": "cli"
+    },
+    {
+      "file": "NavTabletOnboarding.dc.html",
+      "x": 0,
+      "y": 7800,
+      "w": 2960,
+      "h": 1300,
+      "title": "Navigation graph — tablet first run and provider wizard",
+      "page": "tablet"
+    },
+    {
+      "file": "InspectorLog.dc.html",
+      "x": 7600,
+      "y": 7100,
+      "w": 1440,
+      "h": 900,
+      "title": "18a Protocol pane — Log tab",
+      "expand": "fill"
+    },
+    {
+      "file": "InspectorLog-dark.dc.html",
+      "x": 7600,
+      "y": 7100,
+      "w": 1440,
+      "h": 900,
+      "title": "18a Protocol pane, log — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "Diff.dc.html",
+      "x": 3040,
+      "y": 1320,
+      "w": 1440,
+      "h": 900,
+      "title": "03a Diff pane — edits of the focused session in the dock (D-07)",
+      "expand": "fill"
+    },
+    {
+      "file": "Diff-dark.dc.html",
+      "x": 3040,
+      "y": 1320,
+      "w": 1440,
+      "h": 900,
+      "title": "03a Diff pane — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "PhoneDiff.dc.html",
+      "x": 1880,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P7a Diff — applied edits of the session (D-07)",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneDiff-dark.dc.html",
+      "x": 1880,
+      "y": 1264,
+      "w": 390,
+      "h": 844,
+      "title": "P7a Diff — applied edits of the session (D-07) — dark",
+      "page": "phone-dark"
+    },
+    {
+      "file": "TabletDiff.dc.html",
+      "x": 6300,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T4a Tablet — Diff pane in the slide-over dock (D-07)",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletDiff-dark.dc.html",
+      "x": 6300,
+      "y": 1600,
+      "w": 1180,
+      "h": 820,
+      "title": "T4a Tablet — Diff pane in the slide-over dock (D-07) — dark",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "ProjectsEmpty.dc.html",
+      "x": 0,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11a Open project — first start, no project",
+      "expand": "fill"
+    },
+    {
+      "file": "ProjectsEmpty-dark.dc.html",
+      "x": 0,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11a Open project — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "ProjectOpening.dc.html",
+      "x": 1520,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11b Open project — starting the agent in the folder",
+      "expand": "fill"
+    },
+    {
+      "file": "ProjectOpening-dark.dc.html",
+      "x": 1520,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11b Open project — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "ProjectReady.dc.html",
+      "x": 3040,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11c Open project — ready, no sessions yet",
+      "expand": "fill"
+    },
+    {
+      "file": "ProjectReady-dark.dc.html",
+      "x": 3040,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11c Open project — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "ProjectNotFound.dc.html",
+      "x": 4560,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11d Open project — folder not found",
+      "expand": "fill"
+    },
+    {
+      "file": "ProjectNotFound-dark.dc.html",
+      "x": 4560,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11d Open project — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "NavPhoneOnboarding.dc.html",
+      "x": 0,
+      "y": 7660,
+      "w": 2960,
+      "h": 1300,
+      "title": "Navigation graph — phone first run and provider wizard",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProjectsEmpty.dc.html",
+      "x": 0,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22 Project — first start, no projects",
+      "expand": "fill",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProjectsEmpty-dark.dc.html",
+      "x": 0,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22 Project — first start, no projects — dark",
+      "expand": "fill",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneProjects.dc.html",
+      "x": 470,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22a Projects — folders in Documents › CodeLab",
+      "expand": "fill",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProjects-dark.dc.html",
+      "x": 470,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22a Projects — folders in Documents › CodeLab — dark",
+      "expand": "fill",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneProjectNew.dc.html",
+      "x": 940,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22b New project — name and folder",
+      "expand": "fill",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProjectNew-dark.dc.html",
+      "x": 940,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22b New project — name and folder — dark",
+      "expand": "fill",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneProjectOpening.dc.html",
+      "x": 1410,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22c Project — starting the agent",
+      "expand": "fill",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProjectOpening-dark.dc.html",
+      "x": 1410,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22c Project — starting the agent — dark",
+      "expand": "fill",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneProjectReady.dc.html",
+      "x": 1880,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22d Project — ready, no sessions",
+      "expand": "fill",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProjectReady-dark.dc.html",
+      "x": 1880,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22d Project — ready, no sessions — dark",
+      "expand": "fill",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneProjectNotFound.dc.html",
+      "x": 2350,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22e Project — folder not found",
+      "expand": "fill",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProjectNotFound-dark.dc.html",
+      "x": 2350,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22e Project — folder not found — dark",
+      "expand": "fill",
+      "page": "phone-dark"
+    },
+    {
+      "file": "TabletProjectsEmpty.dc.html",
+      "x": 0,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16 Tablet — first start, no projects",
+      "expand": "fill",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletProjectsEmpty-dark.dc.html",
+      "x": 0,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16 Tablet — first start, no projects — dark",
+      "expand": "fill",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletProjects.dc.html",
+      "x": 1260,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16a Tablet — Projects dialog",
+      "expand": "fill",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletProjects-dark.dc.html",
+      "x": 1260,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16a Tablet — Projects dialog — dark",
+      "expand": "fill",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletProjectNew.dc.html",
+      "x": 2520,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16b Tablet — New project",
+      "expand": "fill",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletProjectNew-dark.dc.html",
+      "x": 2520,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16b Tablet — New project — dark",
+      "expand": "fill",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletProjectOpening.dc.html",
+      "x": 3780,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16c Tablet — starting the agent",
+      "expand": "fill",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletProjectOpening-dark.dc.html",
+      "x": 3780,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16c Tablet — starting the agent — dark",
+      "expand": "fill",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletProjectReady.dc.html",
+      "x": 5040,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16d Tablet — ready, no sessions",
+      "expand": "fill",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletProjectReady-dark.dc.html",
+      "x": 5040,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16d Tablet — ready, no sessions — dark",
+      "expand": "fill",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletProjectNotFound.dc.html",
+      "x": 6300,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16e Tablet — folder not found",
+      "expand": "fill",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletProjectNotFound-dark.dc.html",
+      "x": 6300,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16e Tablet — folder not found — dark",
+      "expand": "fill",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "NavProject.dc.html",
+      "x": 0,
+      "y": 4700,
+      "w": 2160,
+      "h": 900,
+      "title": "Open project flow — codelab_app",
+      "page": "nav"
+    },
+    {
+      "file": "NavPhoneProject.dc.html",
+      "x": 0,
+      "y": 10844,
+      "w": 2160,
+      "h": 900,
+      "title": "Navigation graph — phone, opening a project",
+      "page": "phone"
+    },
+    {
+      "file": "NavTabletProject.dc.html",
+      "x": 0,
+      "y": 10960,
+      "w": 2160,
+      "h": 900,
+      "title": "Navigation graph — tablet, opening a project",
+      "page": "tablet"
+    },
+    {
+      "file": "ProjectSecondPick.dc.html",
+      "x": 6080,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11e Open project — second project: Open folder… while a turn runs",
+      "expand": "fill"
+    },
+    {
+      "file": "ProjectSecondPick-dark.dc.html",
+      "x": 6080,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11e Open project — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "ProjectSecondOpen.dc.html",
+      "x": 7600,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11f Open project — second project opened next to the first",
+      "expand": "fill"
+    },
+    {
+      "file": "ProjectSecondOpen-dark.dc.html",
+      "x": 7600,
+      "y": 20540,
+      "w": 1440,
+      "h": 900,
+      "title": "11f Open project — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "PhoneProjectSecondPick.dc.html",
+      "x": 2820,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22f Projects — second project while a turn runs",
+      "expand": "fill",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProjectSecondPick-dark.dc.html",
+      "x": 2820,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22f Projects — second project while a turn runs — dark",
+      "expand": "fill",
+      "page": "phone-dark"
+    },
+    {
+      "file": "PhoneProjectSecondOpen.dc.html",
+      "x": 3290,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22g Sessions — two projects, agent not restarted",
+      "expand": "fill",
+      "page": "phone"
+    },
+    {
+      "file": "PhoneProjectSecondOpen-dark.dc.html",
+      "x": 3290,
+      "y": 9480,
+      "w": 390,
+      "h": 844,
+      "title": "P22g Sessions — two projects, agent not restarted — dark",
+      "expand": "fill",
+      "page": "phone-dark"
+    },
+    {
+      "file": "TabletProjectSecondPick.dc.html",
+      "x": 7560,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16f Tablet — Projects dialog while a turn runs",
+      "expand": "fill",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletProjectSecondPick-dark.dc.html",
+      "x": 7560,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16f Tablet — Projects dialog while a turn runs — dark",
+      "expand": "fill",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "TabletProjectSecondOpen.dc.html",
+      "x": 8820,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16g Tablet — second project opened next to the first",
+      "expand": "fill",
+      "page": "tablet"
+    },
+    {
+      "file": "TabletProjectSecondOpen-dark.dc.html",
+      "x": 8820,
+      "y": 9620,
+      "w": 1180,
+      "h": 820,
+      "title": "T16g Tablet — second project opened next to the first — dark",
+      "expand": "fill",
+      "page": "tablet-dark"
+    },
+    {
+      "file": "OnboardingProject.dc.html",
+      "x": 13680,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07d Onboarding — step 5 Open a project, new install",
+      "expand": "fill"
+    },
+    {
+      "file": "OnboardingProject-dark.dc.html",
+      "x": 13680,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07d Onboarding — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "OnboardingProjectRecents.dc.html",
+      "x": 15200,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07d.1 Onboarding — step 5 with recent projects",
+      "expand": "fill"
+    },
+    {
+      "file": "OnboardingProjectRecents-dark.dc.html",
+      "x": 15200,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07d.1 Onboarding — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "OnboardingProjectRestored.dc.html",
+      "x": 16720,
+      "y": 19100,
+      "w": 1440,
+      "h": 960,
+      "title": "07d.2 Onboarding — step 5, project restored (Continue in …)",
+      "expand": "fill"
+    },
+    {
+      "file": "OnboardingProjectRestored-dark.dc.html",
+      "x": 16720,
+      "y": 19100,
+      "w": 1440,
+      "h": 960,
+      "title": "07d.2 Onboarding — dark",
+      "expand": "fill",
+      "page": "dark"
+    },
+    {
+      "file": "OnboardingProjectDropRejected.dc.html",
+      "x": 18240,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07d.3 Onboarding — step 5, dropped item rejected",
+      "expand": "fill"
+    },
+    {
+      "file": "OnboardingProjectDropRejected-dark.dc.html",
+      "x": 18240,
+      "y": 19100,
+      "w": 1440,
+      "h": 900,
+      "title": "07d.3 Onboarding — dark",
+      "expand": "fill",
+      "page": "dark"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "c-row1",
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "maxW": 2080,
+      "text": "codelab_cli — полноэкранный TUI (dart_tui)",
+      "kind": "title1",
+      "page": "cli"
+    },
+    {
+      "id": "c-row1s",
+      "x": 2160,
+      "y": 0,
+      "w": 460,
+      "text": "§12.2.7: транскрипт с кэшем переносов, композер, строка подсказок HelpModel, статус-строка последней строкой.\n\nC1 — §12.2.2 markdown (│ у кода, инверсия у inline-кода), §12.2.3 «▸ thought 6s», §12.2.4 строки инструментов (⠹ SpinnerModel, последние строки вывода), §12.2.5 diff с номерами и фоном 256:22/52, §12.2.6 статус.\nC2 — зона одобрения §9.11 вместо композера: [y] [a] [n] [N] [?], Enter ничего не делает.",
+      "size": 24,
+      "fill": "blue",
+      "page": "cli"
+    },
+    {
+      "id": "c-row2",
+      "x": 0,
+      "y": 840,
+      "w": 240,
+      "maxW": 2080,
+      "text": "Ввод и построчный режим",
+      "kind": "title1",
+      "page": "cli"
+    },
+    {
+      "id": "c-row2s",
+      "x": 2160,
+      "y": 1140,
+      "w": 460,
+      "text": "C3 — §12.2.8: чипы вложений над текстом, @-дополнение (меню над композером, Tab принимает), предупреждение о секретах строкой над композером, Shift+Enter — новая строка.\nC4 — поверхность ansi: вывод только дописывается; мысли «┆ » приглушённым курсивом; итоговая строка инструмента; после хода «─ статус».",
+      "size": 24,
+      "fill": "teal",
+      "page": "cli"
+    },
+    {
+      "id": "c-row3",
+      "x": 0,
+      "y": 1980,
+      "w": 240,
+      "maxW": 2080,
+      "text": "Первый запуск и темы",
+      "kind": "title1",
+      "page": "cli"
+    },
+    {
+      "id": "c-row3s",
+      "x": 2160,
+      "y": 2280,
+      "w": 460,
+      "text": "C5 — §12.4.3–12.4.4: мастер провайдера вопросами в терминале, ключ без эха, проверка /models до сохранения.\nC6 — §12.6.3: /theme в TUI — SelectListModel; текущая отмечена *, у каждой образец accent success error warning. Строгий разбор: невалидная тема в списке не применяется. Выбор живёт до конца процесса. Кликните строку, чтобы сменить тему.\n\nТвик theme (dark / light) есть у C1–C5.\n\nЯзык: строки CLI английские по умолчанию, русский — каталог ru (display.language / --lang, §12.2.10). Экраны показывают en.\nДругие исходы первого запуска — ряд C5a–C5d.",
+      "size": 24,
+      "fill": "purple",
+      "page": "cli"
+    },
+    {
+      "id": "c-row4",
+      "x": 0,
+      "y": 3120,
+      "w": 240,
+      "maxW": 3160,
+      "text": "Сессии и команды",
+      "kind": "title1",
+      "page": "cli"
+    },
+    {
+      "id": "c-row5",
+      "x": 0,
+      "y": 4260,
+      "w": 240,
+      "maxW": 2080,
+      "text": "Задачи, статус и usage",
+      "kind": "title1",
+      "page": "cli"
+    },
+    {
+      "id": "c-row6",
+      "x": 0,
+      "y": 5400,
+      "w": 240,
+      "maxW": 2080,
+      "text": "MCP, ask и ошибки",
+      "kind": "title1",
+      "page": "cli"
+    },
+    {
+      "id": "c-row7",
+      "x": 0,
+      "y": 6540,
+      "w": 240,
+      "maxW": 3160,
+      "text": "Настройки, headless и трасса протокола",
+      "kind": "title1",
+      "page": "cli"
+    },
+    {
+      "id": "c-row7s",
+      "x": 3240,
+      "y": 6840,
+      "w": 460,
+      "text": "C17 — панели Protocol у CLI нет; кадры ACP видны в headless (§12.5, §9.11). --include-acp добавляет в stream-json строки acp {direction, frame} из того же отвода, что --trace-file, уже после SecretRedactor; без stream-json — код 64. --trace-file пишет кадры прогона в файл. Флаги — change add-cli-stream-json, ещё не реализованы: экран — макет по архитектуре.",
+      "size": 24,
+      "fill": "teal",
+      "page": "cli"
+    },
+    {
+      "id": "d-note",
+      "x": 6080,
+      "y": 0,
+      "w": 440,
+      "text": "Эти экраны — те же файлы, открытые с theme = dark: правка светлого экрана сразу видна здесь.\n\nАкцент в тёмной теме осветляется автоматически, текст на нём тёмный — контраст ≥ 4,5:1.",
+      "size": 24,
+      "fill": "gray",
+      "page": "dark"
+    },
+    {
+      "id": "d-row0",
+      "x": 0,
+      "y": -2000,
+      "w": 240,
+      "maxW": 1440,
+      "text": "fluent_ui — тёмная тема",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "d-row1",
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "maxW": 5920,
+      "text": "Тёмная тема — рабочее место",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "d-row2",
+      "x": 0,
+      "y": 1020,
+      "w": 240,
+      "maxW": 4480,
+      "text": "Тёмная тема — проект и сессии",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "d-row3",
+      "x": 0,
+      "y": 2340,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Тёмная тема — настройка и запуск",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "d-row4",
+      "x": 0,
+      "y": 3960,
+      "w": 240,
+      "maxW": 2340,
+      "text": "Тёмная тема — узкий макет и оформление",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "d-row5",
+      "x": 0,
+      "y": 5280,
+      "w": 240,
+      "maxW": 6000,
+      "text": "Тёмная тема — вход, команды и диалоги",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "d-row6",
+      "x": 0,
+      "y": 6800,
+      "w": 240,
+      "maxW": 7520,
+      "text": "Тёмная тема — сессия, агенты, usage и диагностика",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "d-row7",
+      "x": 0,
+      "y": 8460,
+      "w": 240,
+      "maxW": 4480,
+      "text": "Тёмная тема — настройки агента",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "d-row8",
+      "x": 0,
+      "y": 10680,
+      "w": 240,
+      "maxW": 6000,
+      "text": "Тёмная тема — расширения и настройки приложения",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "n-note",
+      "x": 3760,
+      "y": 0,
+      "w": 460,
+      "text": "Граф app: один хаб — рабочее место; всё остальное в один переход (панель, Ctrl+K, сочетание клавиш), настройки — в два. Карточки — ссылки на артборды: в режиме Play по ним можно пройти.\n\nГраф CLI: один экран TUI и оверлеи над композером; Esc закрывает оверлей, затем отменяет ход.\n\nПокрытие: 137 видимых клиенту строк agent-parity-goals.md → номер экрана app (01–27) и CLI (C1–C14).",
+      "size": 24,
+      "fill": "blue",
+      "page": "nav"
+    },
+    {
+      "id": "row0",
+      "x": 0,
+      "y": -2000,
+      "w": 240,
+      "maxW": 1440,
+      "text": "fluent_ui: компоненты и карта экранов",
+      "kind": "title1"
+    },
+    {
+      "id": "row0s",
+      "x": 1520,
+      "y": -1700,
+      "w": 440,
+      "text": "Все экраны app собраны из виджетов fluent_ui: NavigationView, NavigationAppBar, TabView, CommandBar, InfoBar, ToggleSwitch, Expander, ContentDialog, MenuFlyout, TreeView, BreadcrumbBar…\n\nСвоё (acp_ui) — только то, чего в fluent_ui нет: строки ленты, код, diff, чипы вложений, статус-строка.\n\nКлассы в fluent.css названы по виджетам; у элементов есть data-fluent / data-acp.",
+      "size": 24,
+      "fill": "blue"
+    },
+    {
+      "id": "row1",
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "maxW": 5920,
+      "text": "Рабочее место: сайдбар по проектам, сессии, док панелей",
+      "kind": "title1"
+    },
+    {
+      "id": "row1s",
+      "x": 6080,
+      "y": 0,
+      "w": 440,
+      "text": "Раскладка как в Claude desktop, на виджетах fluent_ui (§12.3 A13, шаг 0): слева — NavigationView с разделом Pinned и сессиями всех проектов (PaneItemExpander по проекту, S-18); в центре — одна или две панели сессии (split view, 29); справа — док панелей инструментов (TabView + вертикальное разбиение, AcpResizeHandle): Files, Diff, Terminal, Plan, Timeline, Agents, Usage, Branches, Protocol. Панели следуют за сессией в фокусе.\n\n01 — D-01…D-09, R-19, R-21; 02 — C-03, R-18, D-23, D-25; 28 — D-28 терминал как панель дока; 29 — split view.\n\nВынос панели в отдельное окно — открытый вопрос (§11): Flutter desktop без нескольких окон.",
+      "size": 24,
+      "fill": "blue"
+    },
+    {
+      "id": "row2",
+      "x": 0,
+      "y": 1020,
+      "w": 240,
+      "maxW": 4480,
+      "text": "Проект и сессии",
+      "kind": "title1"
+    },
+    {
+      "id": "row2s",
+      "x": 4560,
+      "y": 1320,
+      "w": 440,
+      "text": "03 — панель Files в доке: дерево и предпросмотр (D-13, change add-file-preview-and-tree)\n04 — поиск сессий в сайдбаре (D-17), сессия только для чтения (D-10, S-09)\n03a — панель Diff (D-07): изменённые файлы сессии в фокусе (M, A, D, +N −M), снизу — AcpDiffView выбранного файла; «Auto» берёт unified при ширине < 960 px (§12.3, A5). Только просмотр; «Open in Files», «Show full» — AcpDiffViewerDialog. Состояния: created, deleted, binary, too large, упрощённый diff, пусто. Как правки нескольких вызовов одного файла сводятся в один diff, документы не задают.",
+      "size": 24,
+      "fill": "teal"
+    },
+    {
+      "id": "row3",
+      "x": 0,
+      "y": 2350,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Настройка и запуск",
+      "kind": "title1"
+    },
+    {
+      "id": "row3s",
+      "x": 9120,
+      "y": 2640,
+      "w": 440,
+      "text": "20 — U-06, D-04, D-10, R-12 подключение: профили встроенный / stdio / WebSocket (общие с CLI), «Test connection», «Restart agent»; первая страница настроек\n05 — D-05 провайдеры, статус ключа без чтения значения\n05b — E-13 MCP-серверы: состав из конфига, живой статус от агента, Reconnect / Reload all, секреты заголовков в keychain, отказ /config check\n06 — L-24 мастер: Preset → URL → Key → Check → Model → Review\n07 — D-11 onboarding: все четыре шага в ряду «Первый запуск»\n08 — D-15 сторож запуска",
+      "size": 24,
+      "fill": "purple"
+    },
+    {
+      "id": "row4",
+      "x": 0,
+      "y": 3960,
+      "w": 240,
+      "maxW": 2340,
+      "text": "Узкий макет и оформление",
+      "kind": "title1"
+    },
+    {
+      "id": "row4s",
+      "x": 2420,
+      "y": 4260,
+      "w": 440,
+      "text": "09 — D-21: сайдбар и инспектор — выдвижные панели, лента и композер на всю ширину. Основа для этапа 10 (mobile/web).\n\n10 — D-20 Appearance: режим Light / Dark / Match system, встроенные темы, импорт JSON (неизвестный ключ — предупреждение, недостающая роль — из extends), предпросмотр палитры кода и проверка контраста. Карточки тем кликабельны.",
+      "size": 24,
+      "fill": "orange"
+    },
+    {
+      "id": "row5",
+      "x": 0,
+      "y": 5280,
+      "w": 240,
+      "maxW": 6000,
+      "text": "Вход, команды и диалоги",
+      "kind": "title1"
+    },
+    {
+      "id": "row5s",
+      "x": 6080,
+      "y": 5580,
+      "w": 440,
+      "text": "11 — R-22 выбор проекта и профиля подключения\n12 — R-20 палитра Ctrl+K: команды агента, сессии, переходы, Restart agent\n13 — меню композера: режим, модель, effort, профиль агента, /, @, вложения, Queue / Steer\n15 — T-22 ask и одобрение web_fetch / критичных шаблонов",
+      "size": 24,
+      "fill": "blue"
+    },
+    {
+      "id": "row6",
+      "x": 0,
+      "y": 6800,
+      "w": 240,
+      "maxW": 7520,
+      "text": "Сессия, агенты, usage и диагностика",
+      "kind": "title1"
+    },
+    {
+      "id": "row6s",
+      "x": 9120,
+      "y": 7100,
+      "w": 440,
+      "text": "14 — S-06…S-08 rename, fork, ветки, rewind с dry run; S-21 экспорт\n16 — D-25 / T-10 доска субагентов и фоновых задач\n17 — D-09 / L-29 usage, бюджет хода, дедлайн\n18 — R-23 инспектор протокола: вкладка Frames — кадры JSON-RPC всего соединения, секреты замаскированы\n18a — вкладка Log: тот же буфер, что у /logs и Expand (FluentLogViewer: поиск, категория application/protocol, уровень, сессия); детали записи с полями корреляции и переходом «Show frame in Frames» по request_id\n19 — состояния соединения и ошибки хода",
+      "size": 24,
+      "fill": "teal"
+    },
+    {
+      "id": "row7",
+      "x": 0,
+      "y": 8460,
+      "w": 240,
+      "maxW": 4480,
+      "text": "Настройки агента",
+      "kind": "title1"
+    },
+    {
+      "id": "row7s",
+      "x": 4560,
+      "y": 8760,
+      "w": 440,
+      "text": "Единая панель настроек: Agent — Connection (20, ряд «Настройка и запуск»), Providers, MCP, Agents & modes, Permissions & tools, Redaction, Skills & extensions, Code & web; App — General, Appearance, Keyboard.\n21 — режимы, определения агентов, роли моделей, A2A\n22 — правила «всегда», критичные шаблоны, инструменты\n23 — D-24 редактор редакции секретов",
+      "size": 24,
+      "fill": "purple"
+    },
+    {
+      "id": "row8",
+      "x": 0,
+      "y": 10680,
+      "w": 240,
+      "maxW": 6000,
+      "text": "Расширения и настройки приложения",
+      "kind": "title1"
+    },
+    {
+      "id": "row8s",
+      "x": 6080,
+      "y": 10980,
+      "w": 440,
+      "text": "24 — AGENTS.md, skills, шаблоны, хуки, плагины\n25 — LSP, память, web-инструменты\n26 — язык (D-19), Enter во время хода, сон, приватность, About; app не обновляет себя сам\n27 — сочетания клавиш",
+      "size": 24,
+      "fill": "orange"
+    },
+    {
+      "id": "theme",
+      "x": 6600,
+      "y": 0,
+      "w": 440,
+      "text": "D-20 — у каждого экрана твики theme (light / dark) и accent (по умолчанию системный акцент Fluent #0078D4).\n\nЦвета — токены Fluent (mica, layer, card, stroke, text primary / secondary, severity) плюс роли тем CLI (U-18) для кода и diff. Тёмные варианты — на странице «Тёмная тема».",
+      "size": 24,
+      "fill": "gray"
+    },
+    {
+      "id": "p-row1",
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "maxW": 2740,
+      "text": "Смартфон: сессии, лента, одобрение, диалоги",
+      "kind": "title1",
+      "page": "phone"
+    },
+    {
+      "id": "p-row2",
+      "x": 0,
+      "y": 964,
+      "w": 240,
+      "maxW": 5630,
+      "text": "Смартфон: файлы, настройки, состояния, протокол",
+      "kind": "title1",
+      "page": "phone"
+    },
+    {
+      "id": "p-row2s",
+      "x": 5170,
+      "y": 1264,
+      "w": 460,
+      "text": "P21–P21c — панель Protocol на смартфоне (§12.8.4): дока нет, панель — свой экран из P6 › Panes › Protocol, Back — к сессии P2. Вкладки Frames и Log — SelectorBar, Pause, Clear и Export… — в меню «…». Таблиц нет: строки в две линии, детали кадра (P21a) и записи (P21c) — отдельным экраном. Выделен ответ с ошибкой −32603 на запрос id 5: «Show frame in Frames» и «Show record in Log» переводят между P21a и P21c. Фильтры прокручиваются по горизонтали, касания ≥ 44 px.",
+      "size": 24,
+      "fill": "teal",
+      "page": "phone"
+    },
+    {
+      "id": "p-note",
+      "x": 2820,
+      "y": 0,
+      "w": 460,
+      "text": "Этап 10 (§9.15) и профиль mobile ядра (agent-core §10.4–10.5): встроенный агент, рабочая папка — каталог документов приложения, сессии там же. Нет shell, фоновых задач, языковых серверов, хуков, skills и AGENTS.md; MCP только по HTTP; сеть, память и ask есть. Режим по умолчанию — standard.\n\nПодключение: «On this device» или WebSocket к агенту на десктопе; stdio нет, terminal клиент не объявляет.\n\nНавигация — как у десктопа (§12.3 A13): хаб — сессии и открытая сессия, сайдбар заменяет выдвижная панель (D-21): «Pinned» и группы по проектам; панели дока (Files, Diff, Plan, Agents, Usage, Branches) — отдельные экраны из панели и меню «Panes». Граф — внизу страницы.",
+      "size": 24,
+      "fill": "blue",
+      "page": "phone"
+    },
+    {
+      "id": "t-row1",
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "maxW": 3446,
+      "text": "Планшет: рабочее место — сайдбар по проектам, док выдвигается",
+      "kind": "title1",
+      "page": "tablet"
+    },
+    {
+      "id": "t-row2",
+      "x": 0,
+      "y": 1300,
+      "w": 240,
+      "maxW": 6800,
+      "text": "Планшет: настройки, файлы, палитра, протокол",
+      "kind": "title1",
+      "page": "tablet"
+    },
+    {
+      "id": "t-row2s",
+      "x": 6300,
+      "y": 1600,
+      "w": 460,
+      "text": "T15 и T15a — панель Protocol на планшете, вкладки Log и Frames: та же панель, что 18a и 18 на десктопе, в выдвижном доке поверх ленты (§12.8.5). Открывается из палитры или Cmd+Shift+I, в шапке своего переключателя нет. Log: колонка Category ушла в фильтр, имя компонента — в начале события. Frames: выделен ответ с ошибкой −32603 на запрос id 5 — сюда ведёт «Show frame in Frames» из T15, обратно — «Show record in Log». Строки и кнопки ≥ 44 px. Export… отдаёт файл системному меню «Поделиться».",
+      "size": 24,
+      "fill": "teal",
+      "page": "tablet"
+    },
+    {
+      "id": "t-note",
+      "x": 3780,
+      "y": 0,
+      "w": 460,
+      "text": "Раскладка та же, что у десктопа (§12.3 A13): сайдбар с Pinned и проектами, панель сессии, док панелей инструментов. Профиль mobile: панели Files, Diff, Plan, Agents, Usage, Branches, Protocol — Terminal нет.\n\nШирина (§12.8.3): ≥ 1280 — док колонкой и split view; 900–1279 — док выдвигается поверх ленты; < 900 — узкий макет D-21.\n\nС аппаратной клавиатурой работают сочетания A13 (Cmd+K, Cmd+B, Cmd+Shift+E/D/I).",
+      "size": 24,
+      "fill": "teal",
+      "page": "tablet"
+    },
+    {
+      "id": "p-how",
+      "x": 1520,
+      "y": 0,
+      "w": 400,
+      "text": "Как пользоваться (Play, лучше на весь экран):\n• справа панель «Состояния прототипа», как в Amperic: устройство (смартфон, планшет ↕/↔, десктоп, под окно), тема (светлая, тёмная, система), акцент, соединение, раскладка, ход; выбор устройства и темы запоминается\n• раскладка меняется по ширине (§12.8.3): < 641 — стек экранов P1 → P2 → панель; 641–899 — сайдбар и док выдвигаются; 900–1279 — сайдбар, док поверх ленты; ≥ 1280 — док колонкой\n• split и док колонкой — по правилу A13 шаг 6b: лента не уже 560 px\n• на смартфоне и планшете профиль mobile: нет терминала, одобряется запись файла, а не команда\n• остальное как раньше: сессии, split, док, терминал, палитра, отправка промпта",
+      "fill": "blue",
+      "page": "proto"
+    },
+    {
+      "id": "c-row4s",
+      "x": 3240,
+      "y": 3420,
+      "w": 460,
+      "text": "C15 — §12.6.13, U-37: в TUI открыто несколько сессий. Полоса сессий над транскриптом (с двух сессий): номер, маркер ⟳ ход · ! ждёт одобрения · ✗ ошибка · • закончилась в фоне. Ctrl+G — переключатель с фильтром, Alt+1…9, Ctrl+PgUp/PgDn, /switch, /close. Фоновый ход идёт дальше; одобрение фоновой сессии — только строкой статуса, зона появляется после перехода в неё (UX-28). Черновик и прокрутка у каждой сессии свои (UX-30).\n\nКликабельно: полоса, ctrl+g, [y]/[n].",
+      "size": 24,
+      "fill": "orange",
+      "page": "cli"
+    },
+    {
+      "id": "row9",
+      "x": 0,
+      "y": 12900,
+      "w": 240,
+      "maxW": 2960,
+      "text": "Субагенты и список задач — 1.0 (add-subagents-and-tasks)",
+      "kind": "title1"
+    },
+    {
+      "id": "row9s",
+      "x": 3040,
+      "y": 13200,
+      "w": 520,
+      "text": "30 — C-06 этапы 1–2: строка вызова agent с прогрессом и отчётом, шаги потомков вложенным деревом (до глубины 3), вопрос потомка с пометкой «Subagent … · depth n», чек-лист задач с #id, владельцем и blocked by\n31 — все состояния строк agent, строк task_* и пунктов чек-листа; старая сессия с update_plan; сторонний агент без _meta\nДоска субагентов (16) и /tasks — этапы 3–5, 1.x\nИзоляция через git worktree — отложена",
+      "size": 24,
+      "fill": "teal"
+    },
+    {
+      "id": "d-row9",
+      "x": 0,
+      "y": 12900,
+      "w": 240,
+      "maxW": 2960,
+      "text": "Тёмная тема — субагенты и список задач",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "c-row8",
+      "x": 0,
+      "y": 7680,
+      "w": 240,
+      "maxW": 2160,
+      "text": "Субагенты и список задач (1.0)",
+      "kind": "title1",
+      "page": "cli"
+    },
+    {
+      "id": "c-row8s",
+      "x": 1080,
+      "y": 7980,
+      "w": 440,
+      "text": "C16 — строка agent с прогрессом, шаги потомков с отступом по глубине (ctrl+o раскрывает), вопрос внука с путём, список задач над композером: #id, владелец, blocked by",
+      "size": 24,
+      "fill": "teal",
+      "page": "cli"
+    },
+    {
+      "id": "rowT",
+      "x": 0,
+      "y": -4700,
+      "w": 240,
+      "maxW": 1440,
+      "text": "Лента: все виджеты строк и их состояния",
+      "kind": "title1"
+    },
+    {
+      "id": "row10",
+      "x": 0,
+      "y": 15340,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Правовые документы: политика конфиденциальности и лицензия",
+      "kind": "title1"
+    },
+    {
+      "id": "row10s",
+      "x": 10640,
+      "y": 15600,
+      "w": 460,
+      "text": "07a (ряд «Первый запуск») → 32/33 — шаг 4 onboarding (D-11, §12.4.9): что уходит с компьютера, ссылки на Privacy policy и Terms of use; принимать нечего, Back возвращает на шаг.\n26 General → 32 — строка Privacy «No telemetry» (D-18, E-21); About → 32, 33, 34, 35 (MIT License → 34, Third-party notices → 35).\nLegal — последний пункт группы App в панели настроек (§12.4.9), как на телефоне и планшете; General и About — дополнительные входы. 32 ⇄ 33 ⇄ 34 ⇄ 35 — вкладки страницы Legal (SelectorBar): Privacy policy · Terms of use · License · Third-party notices. 35 — записи раздела «## Записи» THIRD_PARTY_NOTICES.md как есть (на русском, с подписью) и лицензии пакетов из LicenseRegistry свёрнутыми Expander, без фильтра (D13 add-app-general-page); заменяет диалог D13. Тексты — ассеты PRIVACY.md, TERMS.md (D-29, §12.7.7а), LICENSE; читаются офлайн; «Open on the web» — [SITE]/privacy и [SITE]/terms.",
+      "size": 24,
+      "fill": "blue"
+    },
+    {
+      "id": "d-row10",
+      "x": 0,
+      "y": 15340,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Тёмная тема — правовые документы",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "row11",
+      "x": 0,
+      "y": 18840,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Первый запуск: шаги onboarding",
+      "kind": "title1"
+    },
+    {
+      "id": "d-row11",
+      "x": 0,
+      "y": 18840,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Тёмная тема — первый запуск",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "row11s",
+      "x": 19760,
+      "y": 19100,
+      "w": 460,
+      "text": "Onboarding app (D-11, §12.4.9): 07b → 07 → 07c → 07a → 07d, после BootReady, флаг onboarding_done.\n07b — шаг 1 «What CodeLab does»: проектная папка, одобрения, своя модель и ключ; встроенный агент по умолчанию. Back нет.\n07 — шаг 2 «Permissions»: что агент делает сам, где спрашивает, что запрещено.\n07c — шаг 3 «Choose a model»: пресеты ProviderPresets.all; кнопка открывает ProviderWizardDialog (тот же ProviderSetupFlow, §12.4.4). Шаг пропускается при ProviderReady.\n07c.1–07c.4 — мастер поверх шага 3: Base URL → Key → Check (успех сразу ведёт на Model; отказ — 06) → Model → Review, Save.\n07c.5 — шаг 3 после Save: провайдер подключён, Next ведёт на 07a.\n07a — шаг 4 «Privacy»: ссылки на 32 и 33 (ряд «Правовые документы»), «Next» → 07d.\n07d — шаг 5 «Open a project» (change add-onboarding-project-step): Open folder…, бросок папки, недавние; выбор папки или «Continue in <папка>» записывает onboarding_done и открывает рабочее место с этим проектом, «Skip for now» — 11a; Back → 07a. Агент не стартует, пока показан onboarding.\n07d.1 — есть недавние (до пяти). 07d.2 — проект прошлого запуска восстановлен: «Last project», «Continue in …» вместо «Skip for now». 07d.3 — отказ броска (файл).\nГраф переходов — NavOnboarding на странице навигации.",
+      "size": 24,
+      "fill": "purple"
+    },
+    {
+      "id": "p-row5",
+      "x": 0,
+      "y": 5172,
+      "w": 240,
+      "maxW": 4700,
+      "text": "Смартфон: первый запуск и мастер провайдера",
+      "kind": "title1",
+      "page": "phone"
+    },
+    {
+      "id": "dp-row5",
+      "x": 0,
+      "y": 5172,
+      "w": 240,
+      "maxW": 4700,
+      "text": "Тёмная тема — смартфон: первый запуск и мастер провайдера",
+      "kind": "title1",
+      "page": "phone-dark"
+    },
+    {
+      "id": "t-row5",
+      "x": 0,
+      "y": 5360,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Планшет: первый запуск и мастер провайдера",
+      "kind": "title1",
+      "page": "tablet"
+    },
+    {
+      "id": "dt-row5",
+      "x": 0,
+      "y": 5360,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Тёмная тема — планшет: первый запуск и мастер провайдера",
+      "kind": "title1",
+      "page": "tablet-dark"
+    },
+    {
+      "id": "p-row5s",
+      "x": 4700,
+      "y": 5432,
+      "w": 460,
+      "text": "Онбординг на смартфоне (D-11, §12.4.9, §12.8.4): P17 → P18 → P19 → мастер P11a → P11b → P11 → P11c → P11d → P19a → P20 → P1.\nПрофиль mobile (§12.8.2): в P18 «Run commands» — «Not here», shell нет; рабочая папка — каталог Documents приложения.\nМастер — отдельные экраны во всю ширину, 7 шагов как у P11; ключ — Keychain (Keystore на Android) или «No key», переменной окружения нет (§12.8.4, шаг 9). Close возвращает на P19.\nP19 пропускается при ProviderReady. P20 ведёт в P13 и P15; Back возвращает на P20. Граф переходов — NavPhoneOnboarding (ряд ниже).",
+      "size": 24,
+      "fill": "purple",
+      "page": "phone"
+    },
+    {
+      "id": "t-row5s",
+      "x": 11340,
+      "y": 5620,
+      "w": 460,
+      "text": "Онбординг на планшете (D-11, §12.4.9, §12.8.5): T11 → T12 → T13 → мастер T13a–T13d диалогом поверх шага 3 → T13e → T14 → T1.\nКак на десктопе (07b–07a), с ограничениями профиля mobile: в T12 команд нет, в T13b ключ — Keychain или «No key». Отказ проверки — как 06.\nКнопки и строки ≥ 44 px. Граф переходов — NavTabletOnboarding (ряд ниже).",
+      "size": 24,
+      "fill": "purple",
+      "page": "tablet"
+    },
+    {
+      "id": "p-row5f",
+      "x": 5170,
+      "y": 6416,
+      "w": 460,
+      "text": "Отказ проверки (§12.4.4, шаги 4–5), под P11 Check.\nP11e — 401/403: ключ не принят; Back → P11b (ключ), Retry повторяет проверку.\nP11f — нет ответа или таймаут 10 с: Retry, Back → P11a (Base URL) и «Save without check…».\nP11g — подтверждение; после него P11h: модель и окно контекста вручную; P11i — Review с предупреждением «Not verified: timeout», Save → P19b: шаг 3 с «Not verified» и жёлтой плашкой, Next → P20.\nВ сообщении только код и вид отказа, тело ответа не показывается; редиректы не выполняются (SETUP-23). 404 на OpenAI-совместимом адресе — как 06 десктопа.\nВсе переходы — граф NavPhoneOnboarding.",
+      "size": 24,
+      "fill": "orange",
+      "page": "phone"
+    },
+    {
+      "id": "t-row5f",
+      "x": 12600,
+      "y": 6580,
+      "w": 460,
+      "text": "Отказ проверки на планшете (§12.4.4, шаги 4–5), под T13b–T13c: T13f — 401, Back → T13b; T13g — недоступен или таймаут, Back → T13a, «Save without check…»; T13h — подтверждение; T13i — модель вручную; T13j — Review с «Not verified: timeout», Save → T13k: шаг 3 с «Not verified», Next → T14. 404 — как 06. Все переходы — граф NavTabletOnboarding.",
+      "size": 24,
+      "fill": "orange",
+      "page": "tablet"
+    },
+    {
+      "id": "c-row9",
+      "x": 0,
+      "y": 8820,
+      "w": 240,
+      "maxW": 4320,
+      "text": "Первый запуск: другие исходы",
+      "kind": "title1",
+      "page": "cli"
+    },
+    {
+      "id": "c-row9s",
+      "x": 4320,
+      "y": 9120,
+      "w": 460,
+      "text": "§12.4.3–12.4.4 (U-17, L-24). Основной путь — C5.\nC5a — 401/403: «Enter the key again» (Back к ключу), Retry, Cancel.\nC5b — недоступен или таймаут: Retry, «Change the base URL», «Save without check» с подтверждением [y/N]; модель и окно контекста вручную, в итоге «Not verified: timeout».\nC5c — ProviderKeyMissing: мастер не запускается, конфиг не меняется; три случая ключа.\nC5d — без TTY или с -p мастер не запускается (SETUP-7): нет провайдера — код 64; битый конфиг — код 64 и пути ключей, файл не трогается; нет ключа — ошибка первого хода, код 1.\nТексты C5c — из §12.4.3 дословно; вопросы C5a–C5b и сообщения C5d — образец, точная формулировка не задана.",
+      "size": 24,
+      "fill": "purple",
+      "page": "cli"
+    },
+    {
+      "id": "t-row6",
+      "x": 0,
+      "y": 7540,
+      "w": 240,
+      "text": "Планшет: граф первого запуска",
+      "kind": "title1",
+      "page": "tablet"
+    },
+    {
+      "id": "row12",
+      "x": 0,
+      "y": 20280,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Открытие проекта: от пустого окна до готовой папки",
+      "kind": "title1"
+    },
+    {
+      "id": "row12s",
+      "x": 9120,
+      "y": 20540,
+      "w": 460,
+      "text": "R-22, требования «Без выбранного проекта нет папки агента и сессий» и «Агент стартует сам» (agent-workbench-ui; change require-project-folder, D1–D17).\n11a — окно без проекта: агент не стартует, «New session» (Ctrl+N) открывает тот же выбор папки, что «Open folder…». Сюда же ведёт «Start using CodeLab» (07a), если проекта нет.\n11b — папка выбрана: проверка существования, старт агента профиля окна в этой папке, затем session/list. Сессия сама не создаётся; «New session» ждёт агента, второй транспорт не открывается.\n11c — агент готов, сессий в проекте нет. Смена проекта не перезапускает агента и не прерывает ходы других папок.\n11d — папки нет на диске: агент не стартует, сессия не создаётся и не загружается; текст из спецификации, запись в диагностике error / project; Retry — тот же триггер.\n11e — второй проект при уже открытом: «Open folder…» в сайдбаре (или Ctrl+O → 11) открывает системный выбор папки, пока в первом проекте идёт ход.\n11f — второй проект открыт рядом: обе группы в сайдбаре, агент не перезапущен, ход и одобрение в codelab-app продолжаются; недавний проект открывается так же — раскрытием группы, без диалога.\n11 (ряд «Вход, команды и диалоги») — выбор проекта со списком недавних.",
+      "size": 24,
+      "fill": "blue"
+    },
+    {
+      "id": "d-row12",
+      "x": 0,
+      "y": 20280,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Открытие проекта — тёмная тема",
+      "kind": "title1",
+      "page": "dark"
+    },
+    {
+      "id": "p-row6",
+      "x": 0,
+      "y": 7400,
+      "w": 240,
+      "text": "Смартфон: граф первого запуска",
+      "kind": "title1",
+      "page": "phone"
+    },
+    {
+      "id": "p-row7",
+      "x": 0,
+      "y": 9220,
+      "w": 240,
+      "maxW": 3680,
+      "text": "Смартфон: открытие проекта",
+      "kind": "title1",
+      "page": "phone"
+    },
+    {
+      "id": "p-row7s",
+      "x": 3760,
+      "y": 9480,
+      "w": 460,
+      "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nP22 — первый старт, проектов нет: «New project»; New session без проекта ведёт сюда.\nP22a — Projects (из P6 / P1): список подпапок, текущий отмечен.\nP22b — New project: имя → папка; занятое имя делает Create недоступной.\nP22c — старт агента «On this device» в папке, затем session/list.\nP22d — сессий нет: New session, Import from Files….\nP22e — папку удалили или переименовали в «Файлах»: текст ошибки — мобильный вариант, на десктопе он ссылается на «Open folder…», которого здесь нет; нужна правка требования.\nP22f — второй проект, пока в notes-app идёт ход: Projects из P6. P22g — P1 с двумя проектами: агент не перезапущен, ход и одобрение в notes-app продолжаются.\nWebSocket-профиль: папки на машине агента — здесь не нарисовано, требований нет.",
+      "size": 24,
+      "fill": "blue",
+      "page": "phone"
+    },
+    {
+      "id": "t-row7",
+      "x": 0,
+      "y": 9360,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Планшет: открытие проекта",
+      "kind": "title1",
+      "page": "tablet"
+    },
+    {
+      "id": "t-row7s",
+      "x": 10080,
+      "y": 9620,
+      "w": 460,
+      "text": "Проект на устройстве — подпапка рабочей папки Documents › CodeLab (§12.8.4 шаг 1; вопрос о нескольких проектах открыт — §12.8.7, предложение «подпапки как проекты»). Системного выбора папки нет: открыть папку из другого места устройства — открытый вопрос §12.8.7; файлы попадают в проект импортом с копированием (MOB-2).\nПравила те же, что у десктопа 11a–11d (agent-workbench-ui, require-project-folder): без проекта агент не стартует; выбор проекта — триггер старта; сессия сама не создаётся; смена проекта не перезапускает агента; папки нет — агент не стартует.\nT16 — первый старт, проектов нет. T16a — диалог Projects (⌘O, пункт «Projects…» в сайдбаре). T16b — New project. T16c — старт агента, сайдбар показывает загрузку сессий. T16d — сессий нет. T16e — папки нет.\nT16f — диалог Projects, пока в notes-app идёт ход. T16g — второй проект рядом с первым: обе группы в сайдбаре, агент не перезапущен.\nРаскладка — T1 (альбомная, класс «средний»); в портрете то же содержимое с сайдбаром minimal (MOB-3).",
+      "size": 24,
+      "fill": "blue",
+      "page": "tablet"
+    },
+    {
+      "id": "dp-row7",
+      "x": 0,
+      "y": 9220,
+      "w": 240,
+      "maxW": 3680,
+      "text": "Тёмная тема — смартфон: открытие проекта",
+      "kind": "title1",
+      "page": "phone-dark"
+    },
+    {
+      "id": "dt-row7",
+      "x": 0,
+      "y": 9360,
+      "w": 240,
+      "maxW": 8000,
+      "text": "Тёмная тема — планшет: открытие проекта",
+      "kind": "title1",
+      "page": "tablet-dark"
+    },
+    {
+      "id": "p-row8",
+      "x": 0,
+      "y": 10584,
+      "w": 240,
+      "maxW": 2160,
+      "text": "Смартфон: граф открытия проекта",
+      "kind": "title1",
+      "page": "phone"
+    },
+    {
+      "id": "t-row8",
+      "x": 0,
+      "y": 10700,
+      "w": 240,
+      "maxW": 2160,
+      "text": "Планшет: граф открытия проекта",
+      "kind": "title1",
+      "page": "tablet"
+    },
+    {
+      "id": "p-row4",
+      "x": 0,
+      "y": 3808,
+      "w": 240,
+      "maxW": 2270,
+      "text": "Смартфон: правовые документы",
+      "kind": "title1",
+      "page": "phone"
+    },
+    {
+      "id": "p-row4s",
+      "x": 2350,
+      "y": 4068,
+      "w": 460,
+      "text": "Legal — пункт группы App в Settings (P8). Вкладки — SelectorBar с прокруткой: Privacy policy · Terms of use · License · Third-party notices. Оглавление — кнопка «On this page»; таблица сетевых запросов — карточками. P14: записи реестра свёрнуты, поиск по пакетам — те же правила, что на десктопе (§12.7.7а). Тексты из ассетов, офлайн.",
+      "size": 24,
+      "fill": "blue",
+      "page": "phone"
+    },
+    {
+      "id": "t-row3",
+      "x": 0,
+      "y": 2620,
+      "w": 240,
+      "maxW": 7480,
+      "text": "Планшет: правовые документы",
+      "kind": "title1",
+      "page": "tablet"
+    },
+    {
+      "id": "t-row3s",
+      "x": 7560,
+      "y": 2880,
+      "w": 460,
+      "text": "T7–T10 — Legal в списке App (после Keyboard), detail — та же страница, что 32–35 на десктопе, без колонки оглавления: ширины не хватает на текст и оглавление рядом. Касания ≥ 44 px.",
+      "size": 24,
+      "fill": "teal",
+      "page": "tablet"
+    },
+    {
+      "id": "t-row4",
+      "x": 0,
+      "y": 3940,
+      "w": 240,
+      "maxW": 2160,
+      "text": "Планшет: граф навигации",
+      "kind": "title1",
+      "page": "tablet"
+    },
+    {
+      "id": "dp-row1",
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "maxW": 2740,
+      "text": "Тёмная тема — смартфон: сессии, лента, одобрение, диалоги",
+      "kind": "title1",
+      "page": "phone-dark"
+    },
+    {
+      "id": "dp-row2",
+      "x": 0,
+      "y": 964,
+      "w": 240,
+      "maxW": 2740,
+      "text": "Тёмная тема — смартфон: файлы, настройки, состояния",
+      "kind": "title1",
+      "page": "phone-dark"
+    },
+    {
+      "id": "dt-row1",
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "maxW": 3446,
+      "text": "Тёмная тема — планшет: рабочее место — сайдбар по проектам, док выдвигается",
+      "kind": "title1",
+      "page": "tablet-dark"
+    },
+    {
+      "id": "dt-row2",
+      "x": 0,
+      "y": 1300,
+      "w": 240,
+      "maxW": 3700,
+      "text": "Тёмная тема — планшет: настройки, файлы, палитра",
+      "kind": "title1",
+      "page": "tablet-dark"
+    },
+    {
+      "id": "dp-row4",
+      "x": 0,
+      "y": 3808,
+      "w": 240,
+      "maxW": 2270,
+      "text": "Тёмная тема — смартфон: правовые документы",
+      "kind": "title1",
+      "page": "phone-dark"
+    },
+    {
+      "id": "dt-row3",
+      "x": 0,
+      "y": 2620,
+      "w": 240,
+      "maxW": 7480,
+      "text": "Тёмная тема — планшет: правовые документы",
+      "kind": "title1",
+      "page": "tablet-dark"
+    },
+    {
+      "id": "dt-row4",
+      "x": 0,
+      "y": 3940,
+      "w": 240,
+      "maxW": 2160,
+      "text": "Тёмная тема — планшет: граф навигации",
+      "kind": "title1",
+      "page": "tablet-dark"
+    },
+    {
+      "id": "dp-note",
+      "x": 3300,
+      "y": 0,
+      "w": 440,
+      "text": "Те же файлы смартфона, открытые с theme = dark: правка светлого экрана сразу видна здесь. Граф навигации не тематизируется и остаётся только на странице «Смартфон».",
+      "size": 24,
+      "fill": "gray",
+      "page": "phone-dark"
+    },
+    {
+      "id": "dt-note",
+      "x": 4300,
+      "y": 0,
+      "w": 440,
+      "text": "Те же файлы планшета, открытые с theme = dark: правка светлого экрана сразу видна здесь. Граф навигации не тематизируется и остаётся только на странице «Планшет».",
+      "size": 24,
+      "fill": "gray",
+      "page": "tablet-dark"
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [
+    {
+      "id": "light",
+      "name": "Светлая тема"
+    },
+    {
+      "id": "dark",
+      "name": "Тёмная тема"
+    },
+    {
+      "id": "cli",
+      "name": "codelab_cli"
+    },
+    {
+      "id": "nav",
+      "name": "Навигация и покрытие"
+    },
+    {
+      "id": "phone",
+      "name": "Смартфон"
+    },
+    {
+      "id": "phone-dark",
+      "name": "Смартфон — тёмная тема"
+    },
+    {
+      "id": "tablet",
+      "name": "Планшет"
+    },
+    {
+      "id": "tablet-dark",
+      "name": "Планшет — тёмная тема"
+    },
+    {
+      "id": "proto",
+      "name": "Прототип"
+    }
+  ]
+}

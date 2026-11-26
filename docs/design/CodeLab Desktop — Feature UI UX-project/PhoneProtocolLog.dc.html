@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone — Protocol, Log</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+<link rel="stylesheet" href="./fluent.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.root{width:390px;height:844px;display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box}
+.bar{height:56px;flex:none;display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--stroke);background:var(--layer)}
+.row{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:4px;text-decoration:none;color:var(--text)}
+.row.on{background:var(--sel)}
+.tbtn{min-height:44px;min-width:44px}
+.sel{display:flex;gap:2px;overflow-x:auto;flex:none;border-bottom:1px solid var(--stroke);background:var(--layer);padding:0 8px;scrollbar-width:none}
+.sel a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;white-space:nowrap;text-decoration:none;color:var(--text2);border-bottom:3px solid transparent;margin-bottom:-1px}
+.sel a.on{color:var(--text);font-weight:600;border-bottom-color:var(--accent)}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;flex:none}
+.chips .f-btn,.chips .f-cbx{flex:none;min-height:36px;min-width:0}
+.li{display:flex;flex-direction:column;justify-content:center;gap:2px;min-height:52px;padding:4px 12px;border-top:1px solid var(--stroke);text-decoration:none;color:var(--text)}
+.li:first-child{border-top:0}
+.fx a.li{color:var(--text)}
+.li.on{background:var(--sel)}
+.l1{display:flex;align-items:center;gap:8px;font-size:13px;line-height:18px;min-width:0}
+.l1 .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.l2{font-size:12px;line-height:16px;color:var(--text2)}
+.dir{width:14px;flex:none;color:var(--text2)}
+.pjson{margin:0;padding:10px 12px;background:var(--code-bg);color:var(--code-fg);border:1px solid var(--stroke);border-radius:4px;font-size:12px;line-height:18px;overflow:hidden;white-space:pre}
+.msk{color:var(--warn)}
+.fl{display:flex;flex-direction:column;margin:0}
+.fl div{display:flex;flex-direction:column;gap:2px;padding:6px 12px;border-top:1px solid var(--stroke)}
+.fl div:first-child{border-top:0}
+.fl dt{font-size:12px;line-height:16px;color:var(--text2)}
+.fl dd{margin:0;font-size:13px;line-height:18px;word-break:break-all}
+</style>
+</helmet>
+<div class="{{themeCls}} root" style="--accent: {{accent}}; --accent-text: {{accentText}}; --accent-weak: {{accentWeak}}; --on-accent: {{onAccent}}">
+  <header class="bar" data-fluent="NavigationAppBar">
+    <a href="PhoneChat.dc.html" class="f-btn subtle icon tbtn" aria-label="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+    <h1 class="t-strong" style="margin: 0; flex: 1; min-width: 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Protocol</h1>
+    <button class="f-btn subtle icon tbtn" aria-label="More: Pause, Clear, Export…" title="Pause · Clear · Export…" data-fluent="CommandBarFlyout (Pause, Clear, Export…)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+  </header>
+  <nav class="sel" role="tablist" aria-label="Protocol views" data-fluent="SelectorBar">
+    <a href="PhoneProtocol.dc.html" aria-selected="false" role="tab">Frames <span class="f-badge">412</span></a>
+    <a href="PhoneProtocolLog.dc.html" class="on" aria-selected="true" role="tab">Log <span class="f-badge">1 284</span></a>
+  </nav>
+  <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px">
+    <label class="f-tb tbtn" data-fluent="AutoSuggestBox"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.5-4.5"/></svg><input type="search" placeholder="Search events and fields" aria-label="Search log"></label>
+    <div class="chips" role="group" aria-label="Log filters"><button class="f-cbx" data-fluent="ComboBox (LogCategoryComboBox)">All categories<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><button class="f-cbx" data-fluent="ComboBox (level)">Debug and above<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><button class="f-cbx" data-fluent="ComboBox (session)">All sessions<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+    <div class="f-card" style="padding: 0; overflow: hidden" role="list" aria-label="Log records" data-fluent="ListView (two-line items)"><a href="#" class="li "><span class="l1"><span class="tag acc" style="font-size: 11px; flex: none">INFO</span><span class="mono t2" style="flex: none">connection</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Connected · on this device</span></span><span class="l2 mono">14:01:02.114 · —</span></a><a href="#" class="li "><span class="l1"><span class="tag acc" style="font-size: 11px; flex: none">INFO</span><span class="mono t2" style="flex: none">session</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Created · notes-app</span></span><span class="l2 mono">14:01:03.120 · s_7f3a</span></a><a href="#" class="li "><span class="l1"><span class="tag " style="font-size: 11px; flex: none">TRACE</span><span class="mono t2" style="flex: none">protocol</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">→ session/prompt · id 2</span></span><span class="l2 mono">14:01:09.551 · s_7f3a</span></a><a href="#" class="li "><span class="l1"><span class="tag acc" style="font-size: 11px; flex: none">INFO</span><span class="mono t2" style="flex: none">permission</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Requested · a9 · edit</span></span><span class="l2 mono">14:01:14.402 · s_7f3a</span></a><a href="#" class="li "><span class="l1"><span class="tag warn" style="font-size: 11px; flex: none">WARN</span><span class="mono t2" style="flex: none">connection</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Lost · reconnecting</span></span><span class="l2 mono">14:01:55.230 · —</span></a><a href="#" class="li "><span class="l1"><span class="tag acc" style="font-size: 11px; flex: none">INFO</span><span class="mono t2" style="flex: none">reconnect</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Reconnected · gen 2</span></span><span class="l2 mono">14:01:57.902 · —</span></a><a href="#" class="li "><span class="l1"><span class="tag warn" style="font-size: 11px; flex: none">WARN</span><span class="mono t2" style="flex: none">reconnect</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Stale frame dropped · gen 1 &lt; 2</span></span><span class="l2 mono">14:01:58.016 · —</span></a><a href="PhoneProtocolRecord.dc.html" class="li on" aria-current="true"><span class="l1"><span class="tag bad" style="font-size: 11px; flex: none">ERROR</span><span class="mono t2" style="flex: none">protocol</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Error −32603 · Internal error</span></span><span class="l2 mono">14:02:40.913 · s_91c0</span></a><a href="#" class="li "><span class="l1"><span class="tag acc" style="font-size: 11px; flex: none">INFO</span><span class="mono t2" style="flex: none">session</span><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Turn ended · refusal</span></span><span class="l2 mono">14:02:41.002 · s_91c0</span></a></div>
+    <p class="t-cap t2" style="margin: 0">Every session on this connection · opened from the navigation pane (P6) › Panes › Protocol.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"accent":{"editor":"color","default":"#0078D4","options":["#0078D4","#0099BC","#8764B8","#CA5010"]},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  palette() {
+    const dark = (this.props.theme ?? 'light') === 'dark';
+    const raw = this.props.accent ?? '#0078D4';
+    const hex = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : '#0078D4';
+    const n = parseInt(hex.slice(1), 16);
+    const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    const mix = (to, w) => '#' + c.map((v, i) => Math.round(v + (to[i] - v) * w).toString(16).padStart(2, '0')).join('');
+    return dark
+      ? { themeCls: 'fx dark', accent: mix([255, 255, 255], 0.45), accentText: mix([255, 255, 255], 0.6), accentWeak: mix([32, 32, 32], 0.78), onAccent: '#000000' }
+      : { themeCls: 'fx', accent: mix([0, 0, 0], 0.2), accentText: mix([0, 0, 0], 0.45), accentWeak: mix([255, 255, 255], 0.88), onAccent: '#FFFFFF' };
+  }
+  renderVals() {
+    return this.palette();
+  }
+}
+</script>
+</body>
+</html>
