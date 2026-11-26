@@ -4,6 +4,7 @@
 .codex/
 .opencode/
 .idea/
+.vscode/
 *.iml
 .claude/*
 !.claude/agents/
@@ -24,7 +25,6 @@ pubspec_overrides.yaml
 !packages/dart/codelab_client_acp/lib/src/domain/state_machines.freezed.dart
 
 # FVM: keep the project config tracked, ignore local SDK metadata/binaries.
-.fvm/*
 !.fvm/
 !.fvm/fvm_config.json
 
@@ -32,3 +32,8 @@ pubspec_overrides.yaml
 site/node_modules/
 site/dist/
 site/.astro/
+
+crash.txt
+
+# FVM Version Cache
+.fvm/
