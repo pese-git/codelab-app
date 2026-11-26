@@ -20,7 +20,7 @@
 - Токен для WebSocket-профиля хранится только ссылкой: переменная окружения («From environment variable») или секрет из хранилища («Use stored secret», «Store a new token»). Сам токен в профиль не записывается. Для адреса `ws://` на другую машину (не `localhost`) приложение попросит подтвердить сохранение («Save anyway»): с токеном предупреждение «ws:// to another machine: the token is sent unencrypted.», без токена — «ws:// to another machine: traffic is sent unencrypted.» Для локального адреса подтверждение не нужно.
 - «Use» в строке профиля выбирает его: агент запустится с ним при следующем старте или после «Restart agent». «Use by default» делает профиль профилем по умолчанию. «Rename» меняет имя профиля (id остаётся прежним). Удаление профиля спрашивает «Remove profile <имя>?»; удаляется только запись в `profiles.json`, а для профиля с сохранённым токеном есть флажок «Also delete the stored token <имя>». Текущий или выбранный профиль удалить нельзя: кнопка удаления неактивна, подсказка — «Use another profile first.»
 - Профили общие с терминальным клиентом `codelab`: профиль из приложения доступен как `codelab -a <id>`. Файл — [`profiles.json` в `CODELAB_HOME`](../../../../docs/ops/codelab-home.md#общие-файлы).
-- «Join a session started in the CLI» подсказывает, как подключиться к тому же агенту, что и CLI: запустить `codelab-agent serve --ws <port>` и выбрать здесь тот же WebSocket-профиль.
+- «Join a session started in the CLI» подсказывает, как подключиться к тому же агенту, что и CLI: запустить `codelab-agent serve --ws --port <port>` и выбрать здесь тот же WebSocket-профиль.
 
 ![Диалог Add connection profile, тип WebSocket: поля Name, URL и варианты хранения токена](../images/add-profile-websocket.png)
 

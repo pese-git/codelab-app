@@ -225,7 +225,7 @@
   "connectionSectionBehavior": "Поведение",
   "connectionProfilesHelp": "Общие с codelab_cli через profiles.json в $CODELAB_HOME. Профиль по умолчанию используется при запуске агента, пока вы не выберете другой кнопкой «Использовать».",
   "connectionJoinCliTitle": "Присоединиться к сессии, запущенной в CLI",
-  "connectionJoinCliBody": "На хосте выполните codelab-agent serve --ws <port>; CLI подключается командой codelab -a <profile>. Выберите здесь тот же профиль WebSocket; его сессии появятся в боковой панели.",
+  "connectionJoinCliBody": "На хосте выполните codelab-agent serve --ws --port <port>; CLI подключается командой codelab -a <profile>. Выберите здесь тот же профиль WebSocket; его сессии появятся в боковой панели.",
   "connectionBadgeCurrent": "Текущий",
   "connectionBadgeSelected": "Выбрано",
   "connectionStatusConnecting": "Подключение…",
