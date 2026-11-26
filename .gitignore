@@ -34,6 +34,7 @@ site/dist/
 site/.astro/
 
 crash.txt
+vsite/build.log
 
 # FVM Version Cache
 .fvm/
