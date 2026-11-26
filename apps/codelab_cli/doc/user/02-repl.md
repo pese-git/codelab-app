@@ -208,7 +208,25 @@ Config: ok
 
 Работают только варианты, которые предложил агент. Если агент не предложил «разрешать всегда», клавиша `a` ничего не отправит.
 
-<!-- screenshot: текстовый снимок блока одобрения в построчном режиме (заголовок, команда, папка, подсказка клавиш) — нужен живой провайдер модели -->
+Так выглядит блок, когда агент хочет изменить файл (режим `standard`; тестовая модель попросила правку `README.md`, папка проекта замаскирована):
+
+```text
+> edit the title
+* Edit README.md
+Permission: Edit README.md (local write)
+  command: README.md
+  cwd: ~/projects/demo
+  [y] allow once  [a] allow always  [n] reject once  [N] reject always  [?] details  [Esc] cancel
+```
+
+После `y` агент делает правку и ход заканчивается (`done` — ответ тестовой модели):
+
+```text
++ Edit README.md 7.5s
+done
+─ standard · scripted/scripted-1 · ctx 8%
+>
+```
 
 Какие действия спрашивают, чем отличаются режимы `ask`, `standard`, `accept-edits`, `bypass` и что такое критические команды — в главе агента о разрешениях: [режимы](../../../codelab_agent/doc/user/05-permissions.md#режимы), [критические действия](../../../codelab_agent/doc/user/05-permissions.md#критические-действия).
 
