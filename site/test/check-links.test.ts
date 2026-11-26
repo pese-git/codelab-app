@@ -574,3 +574,81 @@ describe('checkDist: картинка для ссылок (D10, D12 п. 4)', () 
     expect(checkDist({ dist, base, requireOgImage: true })).toEqual([]);
   });
 });
+
+describe('checkDist: рантайм поиска и индекс (D8, D10)', () => {
+  const runtime = 'pagefind/pagefind.js';
+
+  /** Страница документа без ссылок: годится для любого `base`. */
+  function writeDocs(): void {
+    write('index.html', page('<p>главная</p>'));
+    write('docs/ops/index.html', page('<h1>Эксплуатация</h1>'));
+  }
+
+  function withIndex(): void {
+    writeDocs();
+    write(runtime, 'export{}');
+  }
+
+  for (const siteBase of ['/', '/codelab-app/']) {
+    describe(`base ${siteBase}`, () => {
+      const url = `${siteBase}${runtime}`;
+
+      it.each([
+        ['script src', `<script type="module" src="${url}"></script>`],
+        ['modulepreload', `<link rel="modulepreload" href="${url}">`],
+        ['preload', `<link rel="preload" as="script" href="${url}">`],
+        ['prefetch', `<link rel="prefetch" href="${url}">`],
+      ])('статическая ссылка (%s) на рантайм поиска — нарушение со страницей', (_name, tag) => {
+        withIndex();
+        write('docs/ops/index.html', page('', tag));
+        const problems = checkDist({ dist, base: siteBase });
+        expect(problems).toEqual([
+          expect.objectContaining({ file: 'docs/ops/index.html', message: expect.stringContaining('search runtime') }),
+        ]);
+      });
+
+      it('страницы документов с индексом и без ссылок на него — без нарушений', () => {
+        withIndex();
+        expect(checkDist({ dist, base: siteBase, requireSearchIndex: true })).toEqual([]);
+      });
+
+      it('страницы документов без индекса — ошибка об отсутствующем индексе', () => {
+        writeDocs();
+        const problems = checkDist({ dist, base: siteBase, requireSearchIndex: true });
+        expect(problems).toEqual([
+          expect.objectContaining({ file: runtime, message: expect.stringContaining('search index is missing') }),
+        ]);
+      });
+    });
+  }
+
+  it('обычная ссылка <a> на pagefind/ не считается статической загрузкой рантайма', () => {
+    withIndex();
+    write('docs/ops/index.html', page(`<a href="${base}${runtime}">индекс</a>`));
+    expect(checkDist({ dist, base })).toEqual([]);
+  });
+
+  it('без страниц документов индекс не требуется', () => {
+    write('index.html', page('<p>главная</p>'));
+    expect(checkDist({ dist, base, requireSearchIndex: true })).toEqual([]);
+  });
+
+  it('индекс по умолчанию не требуется: прежние сборки проверяются без него', () => {
+    writeDocs();
+    expect(checkDist({ dist, base })).toEqual([]);
+  });
+});
+
+describe('checkDist: сообщение бюджета страницы (D7, D10)', () => {
+  it('называет бюджет страницы и исключения', () => {
+    writeSite();
+    const heavy = randomBytes(20_000).toString('base64');
+    write('docs/ops/index.html', page('', '<script type="module" src="/codelab-app/_astro/big.js"></script>'));
+    write('_astro/big.js', `var a="${heavy}"`);
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({
+        message: expect.stringContaining('page JavaScript budget is 12 KB gzip without theme, mermaid and search runtime'),
+      }),
+    ]);
+  });
+});

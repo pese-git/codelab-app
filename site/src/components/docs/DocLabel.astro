@@ -1,0 +1,30 @@
+---
+/**
+ * Подпись документа в навигации: номер главы и заголовок.
+ *
+ * Почему: номер — отдельный элемент разметки, чтобы стиль задавал ширину
+ * колонки номеров, а разделитель «·» не читался диктором (design.md
+ * improve-docs-navigation, D1). Заголовок страницы номера не получает.
+ *
+ * Для чего: единая подпись для меню секции, «Назад / Далее» и оглавления `/docs/`.
+ *
+ * Как использовать: `<DocLabel number="03" title="Полноэкранный режим" />`;
+ * без номера выводится только заголовок.
+ */
+interface Props {
+  readonly number: string | null;
+  readonly title: string;
+}
+
+const { number, title } = Astro.props;
+---
+
+{
+  number !== null && (
+    <>
+      <span class="doc-num">{number}</span>
+      <span class="doc-dot" aria-hidden="true">·</span>
+    </>
+  )
+}
+<span class="doc-label-title">{title}</span>

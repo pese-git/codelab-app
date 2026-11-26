@@ -3,9 +3,13 @@
  * Страница документа из репозитория: `/docs/<путь>/`.
  *
  * Почему: документация собирается из файлов репозитория на месте, адрес
- * выводится из пути (design.md add-astro-site, D3, D4); рядом — навигация
- * группы (D9), оглавление по `##` и ссылка на исходный файл на GitHub
- * (tasks.md 4.5).
+ * выводится из пути (design.md add-astro-site, D3, D4); рядом — меню секции
+ * (design.md improve-docs-navigation, D4), крошки и «Назад / Далее» (D5),
+ * оглавление по `##` и ссылка на исходный файл на GitHub.
+ *
+ * Меню секции выводится дважды: колонкой от 900 px и свёрнутым `<details>`
+ * до 900 px, CSS показывает одну копию (D4). `<article data-pagefind-body>`
+ * — единственная индексируемая область страницы (D8).
  *
  * Для чего: одна страница на каждый документ allowlist. Скрипт mermaid
  * подключается только при блоке ```` ```mermaid ```` в исходнике (D7).
@@ -15,9 +19,15 @@
  */
 import { render } from 'astro:content';
 
+import CopyCode from '../../components/docs/CopyCode.astro';
+import DocBreadcrumbs from '../../components/docs/DocBreadcrumbs.astro';
+import DocPager from '../../components/docs/DocPager.astro';
+import DocSearch from '../../components/docs/DocSearch.astro';
+import DocSectionNav from '../../components/docs/DocSectionNav.astro';
+import TocSpy from '../../components/docs/TocSpy.astro';
 import MermaidScript from '../../components/MermaidScript.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { buildNav, navGroup } from '../../lib/nav';
+import { breadcrumbs, buildNav, installDocPath, locateDoc, neighbours } from '../../lib/nav';
 import { loadDocs, type SiteDoc } from '../../lib/site-docs';
 import { repoUrl, resolveRepoRef } from '../../site.config';
 
@@ -33,37 +43,36 @@ interface Props {
 
 const { doc, docs } = Astro.props;
 const { Content, headings } = await render(doc.entry);
-const group = buildNav(docs).find((section) => section.title === navGroup(doc.repoPath).title);
+const nav = buildNav(docs);
+const base = import.meta.env.BASE_URL;
+const section = locateDoc(nav, doc.repoPath)?.section;
+// Группа для подписи результата поиска (D8): у пакета — его имя, как в крошках.
+const group = section?.layer
+  ? section.title
+  : (nav.find((candidate) => candidate.sections.some((entry) => entry === section))?.title ?? '');
+const crumbs = breadcrumbs(nav, doc.repoPath, base);
+const { prev, next } = neighbours(nav, doc.repoPath, base);
 const toc = headings.filter((heading) => heading.depth === 2);
 // Блок mermaid начинается ограждением из трёх и более обратных кавычек или тильд.
 const hasMermaid = /^ {0,3}(`{3,}|~{3,})\s*mermaid\b/m.test(doc.entry.body ?? '');
 const sourceUrl = `${repoUrl}/blob/${resolveRepoRef()}/${doc.repoPath}`;
 ---
 
-<BaseLayout title={doc.title} description={doc.description} current={doc.repoPath === 'docs/user/run-from-source.md' ? 'install' : 'docs'}>
+<BaseLayout title={doc.title} description={doc.description} current={doc.repoPath === installDocPath ? 'install' : 'docs'}>
   <div class="doc-layout">
-    {
-      group && (
-        <nav class="doc-nav" aria-label={`Документы раздела ${group.title}`}>
-          <p class="doc-nav-title">{group.title}</p>
-          <ul>
-            {group.items.map((item) => (
-              <li>
-                <a href={item.url} aria-current={item.repoPath === doc.repoPath ? 'page' : undefined}>
-                  {item.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      )
-    }
-    <article class="prose">
-      <Content />
-      <p class="doc-source t2">
-        <a href={sourceUrl}>Исходный файл на GitHub</a> — <code>{doc.repoPath}</code>
-      </p>
-    </article>
+    {section && <DocSectionNav section={section} current={doc.repoPath} variant="side" />}
+    <div class="doc-main">
+      <DocSearch />
+      <DocBreadcrumbs crumbs={crumbs} />
+      {section && <DocSectionNav section={section} current={doc.repoPath} variant="compact" />}
+      <article class="prose" data-pagefind-body data-pagefind-meta={`group:${group}`}>
+        <Content />
+        <DocPager prev={prev} next={next} />
+        <p class="doc-source t2" data-pagefind-ignore>
+          <a href={sourceUrl}>Исходный файл на GitHub</a> — <code>{doc.repoPath}</code>
+        </p>
+      </article>
+    </div>
     {
       toc.length > 0 && (
         <nav class="doc-toc" aria-label="На этой странице">
@@ -79,5 +88,7 @@ const sourceUrl = `${repoUrl}/blob/${resolveRepoRef()}/${doc.repoPath}`;
       )
     }
   </div>
+  <CopyCode />
+  {toc.length > 0 && <TocSpy />}
   {hasMermaid && <MermaidScript />}
 </BaseLayout>

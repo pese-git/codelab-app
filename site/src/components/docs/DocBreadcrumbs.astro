@@ -1,0 +1,35 @@
+---
+/**
+ * «Хлебные крошки» над заголовком документа.
+ *
+ * Почему: читатель, попавший на главу по ссылке, не видит, в каком разделе он
+ * (design.md improve-docs-navigation, D5). Разделитель «›» рисует CSS, чтобы
+ * диктор его не читал; уровень, ведущий на текущую страницу, уже убран
+ * `breadcrumbs`.
+ *
+ * Для чего: `nav aria-label="Путь"` со списком `ol`.
+ *
+ * Как использовать: `<DocBreadcrumbs crumbs={breadcrumbs(nav, repoPath, base)} />`.
+ */
+import type { Crumb } from '../../lib/nav';
+
+interface Props {
+  readonly crumbs: readonly Crumb[];
+}
+
+const { crumbs } = Astro.props;
+---
+
+{
+  crumbs.length > 0 && (
+    <nav class="doc-crumbs" aria-label="Путь">
+      <ol>
+        {crumbs.map((crumb) => (
+          <li>
+            <a href={crumb.href}>{crumb.label}</a>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  )
+}

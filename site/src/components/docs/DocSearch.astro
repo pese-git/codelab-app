@@ -1,0 +1,32 @@
+---
+/**
+ * Поле поиска по документации на `/docs/` и страницах документов.
+ *
+ * Почему: читатель не находит нужную главу по оглавлению; индекс строит
+ * Pagefind при сборке (design.md improve-docs-navigation, D8, D13).
+ *
+ * Для чего: форма `role="search"` с `<label>`; в разметке она `hidden`, скрипт
+ * показывает её — без JavaScript поля нет, а ссылка «Документация» в крошках и
+ * шапке ведёт на оглавление по ролям. Рантайм индекса грузится только по
+ * первому `focus` или `input` (`scripts/doc-page/search.ts`).
+ *
+ * Как использовать: `<DocSearch />` один раз на страницу. `data-base` берётся
+ * из `import.meta.env.BASE_URL`: от него зависят адрес рантайма и ссылки
+ * результатов при `SITE_BASE=/codelab-app/`; `data-toc` — адрес оглавления для
+ * ссылки в сообщении «Поиск недоступен» (рантайм индекса мог не загрузиться).
+ */
+import { withBase } from '../../lib/urls';
+
+const base = import.meta.env.BASE_URL;
+---
+
+<form class="doc-search" role="search" data-doc-search data-base={base} data-toc={withBase('docs/', base)} hidden>
+  <label for="doc-search-input">Поиск по документации</label>
+  <input id="doc-search-input" type="search" name="q" autocomplete="off" spellcheck="false" />
+  <p class="doc-search-status t2" data-search-status aria-live="polite" role="status"></p>
+  <ol class="doc-search-results" data-search-results hidden></ol>
+</form>
+
+<script>
+  import '../../scripts/doc-page/search';
+</script>
