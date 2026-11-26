@@ -43,3 +43,18 @@ export function withBase(path: string, base: string = '/'): string {
   const prefix = base.endsWith('/') ? base : `${base}/`;
   return `${prefix}${path.replace(/^\/+/, '')}`;
 }
+
+/**
+ * Адрес раздела документа по ссылке `документ#якорь` (`docRef` витрины).
+ *
+ * Почему: витрина везде ссылается на разделы руководства одним видом ссылки;
+ * разбор `#` в каждом компоненте был семью копиями одного правила (D4, D12).
+ *
+ * Как использовать: `docRefUrl(fact.docRef, base)`; без якоря — адрес страницы.
+ */
+export function docRefUrl(docRef: string, base: string = '/'): string {
+  const hash = docRef.indexOf('#');
+  const path = hash === -1 ? docRef : docRef.slice(0, hash);
+  const anchor = hash === -1 ? '' : docRef.slice(hash + 1);
+  return pageUrl(path, base) + (anchor ? `#${anchor}` : '');
+}

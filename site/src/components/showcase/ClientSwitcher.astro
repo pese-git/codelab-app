@@ -1,0 +1,96 @@
+---
+/**
+ * «Один агент — три клиента»: переключатель над одним сценарием.
+ *
+ * Почему: один и тот же запрос разрешения выглядит по-разному в app, в
+ * терминале и в стороннем клиенте, а правила вопроса одни (design.md
+ * redesign-site-showcase, D4). Интерфейс Zed не изображается: это чужой
+ * продукт, его вид меняется между версиями, и проверить его по нашему
+ * источнику нельзя (project-site «Правдивость витрины»); вкладка Zed — нейтральная
+ * схема со ссылкой на руководство и оговоркой из него.
+ *
+ * Для чего: три представления — макет app (`Workbench.astro`), блок одобрения
+ * `codelab` (текстовый снимок документа, D6) и схема Zed. Без JavaScript они
+ * идут подряд с заголовками; со скриптом (`tabs-demo.ts`) — вкладки WAI-ARIA.
+ *
+ * Как использовать: `<ClientSwitcher />` на главной рядом с первым экраном.
+ */
+import '../../styles/showcase.css';
+
+import { scenario } from '../../lib/showcase/scenarios';
+import { splitTicks } from '../../lib/showcase/ticks';
+import { docRefUrl } from '../../lib/urls';
+import Workbench from './Workbench.astro';
+
+const base = import.meta.env.BASE_URL;
+const { cli, zed } = scenario.clients;
+
+/** `документ#якорь` → адрес страницы сайта с якорем. */
+const docHref = (docRef: string): string => docRefUrl(docRef, base);
+
+const tabs = [
+  { id: 'app', label: 'CodeLab app', code: false },
+  { id: 'cli', label: 'codelab', code: true },
+  { id: 'zed', label: 'Zed', code: false },
+] as const;
+---
+
+<section class="clients" id="clients" aria-labelledby="clients-title" data-demo="clients" data-tabs>
+  <h2 class="t-subtitle" id="clients-title">Один агент — три клиента</h2>
+  <div class="tablist" role="tablist" aria-label="Клиент" data-live-only hidden>
+    {
+      tabs.map((tab, i) => (
+        <button
+          class="tab"
+          type="button"
+          role="tab"
+          id={`clients-tab-${tab.id}`}
+          aria-controls={`clients-panel-${tab.id}`}
+          aria-selected={i === 0 ? 'true' : 'false'}
+          tabindex={i === 0 ? 0 : -1}
+        >
+          {tab.code ? <code>{tab.label}</code> : tab.label}
+        </button>
+      ))
+    }
+  </div>
+
+  <div class="view" id="clients-panel-app" data-tabpanel>
+    <h3 class="t-body-large view-title">CodeLab app</h3>
+    <Workbench />
+  </div>
+
+  <div class="view" id="clients-panel-cli" data-tabpanel>
+    <h3 class="t-body-large view-title"><code>codelab</code></h3>
+    <p class="t2">
+      {splitTicks(cli.blockNote.text).map((part) => (part.code ? <code>{part.text}</code> : part.text))}
+    </p>
+    <pre class="term"><code>{cli.block.text}</code></pre>
+    <ul class="kbd-row" aria-label="Клавиши ответа">
+      {
+        cli.keys.map((row) => (
+          <li>
+            <kbd class="key">{row.key.text}</kbd> — {row.answer.text}
+          </li>
+        ))
+      }
+    </ul>
+    <p><a href={docHref(cli.docRef)}>Клавиши ответа и блок одобрения в руководстве <code>codelab</code></a></p>
+  </div>
+
+  <div class="view" id="clients-panel-zed" data-tabpanel>
+    <h3 class="t-body-large view-title">Zed</h3>
+    <div class="scheme" aria-hidden="true">
+      <span class="scheme-box">Zed</span>
+      <span class="scheme-arrow">⇄</span>
+      <span class="scheme-box"><code>codelab-agent</code></span>
+    </div>
+    <p>{zed.text.text}</p>
+    <p class="t2">{zed.caveat.text}. В руководстве {zed.unverified.text}.</p>
+    <p><a href={docHref(zed.docRef)}>Агент CodeLab в Zed</a></p>
+  </div>
+</section>
+
+<script>
+  import '../../scripts/showcase/tabs-demo';
+</script>

@@ -1,0 +1,108 @@
+---
+/**
+ * «Как это работает»: четыре шага от открытия папки до ответа на запрос.
+ *
+ * Почему: путь нового пользователя — проект, провайдер, запрос, разрешение —
+ * описан в руководстве app, и у каждого шага есть ссылка на свой раздел: витрина
+ * не показывает поведения, которого нет в документации (design.md
+ * redesign-site-showcase, D5, D6).
+ *
+ * Для чего: без JavaScript — нумерованный список всех шагов. Со скриптом
+ * (`scripts/showcase/steps.ts`) — вкладки и автопроигрывание: шаг держится 6
+ * секунд, ручной выбор, наведение, фокус, уход с экрана и кнопка «Пауза»
+ * останавливают его, а при `prefers-reduced-motion: reduce` оно не идёт.
+ * Иллюстрации — снимки из `apps/codelab_desktop/doc/images/` через
+ * `astro:assets` (без копий) или схема карточки запроса (шаг 4: готового
+ * снимка карточки в документации пока нет).
+ *
+ * Как использовать: `<HowItWorks />` на главной; тексты шагов — `stepsData`.
+ */
+import '../../styles/showcase.css';
+
+import { Image } from 'astro:assets';
+
+import projects from '../../../../apps/codelab_desktop/doc/images/sidebar-projects.png';
+import provider from '../../../../apps/codelab_desktop/doc/images/provider-wizard-api-type.png';
+import session from '../../../../apps/codelab_desktop/doc/images/workbench-new-session.png';
+import { exampleCaption } from '../../lib/showcase/scenarios';
+import { appShotByKey } from '../../lib/showcase/shots';
+import { stepsData } from '../../lib/showcase/steps';
+import { docRefUrl } from '../../lib/urls';
+import ApprovalCard from './ApprovalCard.astro';
+
+const base = import.meta.env.BASE_URL;
+
+/** Снимок шага: запись `shots.ts` (подпись и `alt` из руководства app, D6); шаг 4 — схема. */
+const illustrations = [
+  { image: projects, alt: appShotByKey.projects.alt },
+  { image: provider, alt: appShotByKey.provider.alt },
+  { image: session, alt: appShotByKey.session.alt },
+  undefined,
+] as const;
+
+const steps = stepsData.map((step, i) => ({ ...step, href: docRefUrl(step.docRef, base), illustration: illustrations[i] }));
+---
+
+<section class="home-section" id="how" aria-labelledby="how-title" data-demo="steps" data-tabs>
+  <h2 class="t-subtitle" id="how-title">Как это работает</h2>
+  <div class="tablist" role="tablist" aria-label="Шаги" data-live-only hidden>
+    {
+      steps.map((step, i) => (
+        <button
+          class="tab"
+          type="button"
+          role="tab"
+          id={`how-tab-${i}`}
+          aria-controls={`how-panel-${i}`}
+          aria-selected={i === 0 ? 'true' : 'false'}
+          tabindex={i === 0 ? 0 : -1}
+        >
+          {i + 1}. {step.title}
+        </button>
+      ))
+    }
+  </div>
+  <div class="wb-controls" data-live-only hidden>
+    <button class="btn" type="button" data-pause>Пауза</button>
+  </div>
+
+  <p class="demo-caption">Снимки — с английским интерфейсом.</p>
+
+  <ol class="steps">
+    {
+      steps.map((step, i) => (
+        <li class="step" id={`how-panel-${i}`} data-tabpanel>
+          <div>
+            <h3 class="t-body-large">
+              <span class="step-num" aria-hidden="true">{i + 1}</span>
+              {step.title}
+            </h3>
+            <p class="t2">{step.text}</p>
+            <p>
+              <a href={step.href}>Подробнее в руководстве</a>
+            </p>
+          </div>
+          <figure>
+            {step.illustration ? (
+              <Image
+                src={step.illustration.image}
+                alt={step.illustration.alt}
+                widths={[480, 800]}
+                sizes="(min-width: 900px) 480px, 100vw"
+              />
+            ) : (
+              <>
+                <ApprovalCard />
+                <figcaption class="demo-caption">{exampleCaption}</figcaption>
+              </>
+            )}
+          </figure>
+        </li>
+      ))
+    }
+  </ol>
+</section>
+
+<script>
+  import '../../scripts/showcase/steps';
+</script>

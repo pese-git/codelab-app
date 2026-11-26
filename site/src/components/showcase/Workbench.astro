@@ -1,0 +1,69 @@
+---
+/**
+ * Живой макет рабочего места CodeLab app: промпт, ответ агента, запрос
+ * разрешения, исход.
+ *
+ * Почему: показать главную идею продукта за первые секунды (design.md
+ * redesign-site-showcase, D3). Это схема, а не снимок: подпись под макетом
+ * называет ответ модели и файл примером (D6). Каркас — шапка сессии, лента,
+ * поле ввода — свёрстан по смыслу артбордов `Main.dc.html` и `Turn.dc.html`
+ * токенами сайта; код артбордов не копируется (`AGENTS.md` §5).
+ *
+ * Для чего: без JavaScript — лента до карточки запроса включительно и оба
+ * исхода текстом, без кнопок (D2 п. 5). Со скриптом (`scripts/showcase/
+ * workbench.ts`) макет проигрывается сам до карточки и ждёт ответа
+ * посетителя: выбор за него демо не делает.
+ *
+ * Как использовать: `<Workbench />` в начале страницы app и внутри
+ * `ClientSwitcher.astro`; на странице один макет. Строки — из `scenario`.
+ */
+import '../../styles/showcase.css';
+
+import { scenario } from '../../lib/showcase/scenarios';
+import ApprovalCard from './ApprovalCard.astro';
+
+const { composer, reply, call, outcomes, caption } = scenario;
+---
+
+<div class="wb" data-demo="workbench">
+  <div class="wb-window" tabindex="-1" role="group" aria-label="Схема рабочего места CodeLab app">
+    <div class="wb-head" aria-hidden="true">demo</div>
+    <div class="wb-feed">
+      <p class="wb-msg wb-user" data-prompt>{composer.prompt.text}</p>
+      {reply.map((line, i) => <p class="wb-msg wb-agent" data-part={i}>{line.text}</p>)}
+      <div class="wb-call" data-part={reply.length}>
+        <span class="wb-tool">{call.tool.text}</span>
+        <code>{call.path.text}</code>
+        <span class="wb-tag" data-kind="warn">{call.risk.text}</span>
+        <span class="wb-tag" data-outcome-tag hidden></span>
+      </div>
+      <ApprovalCard interactive />
+      <p class="wb-msg wb-agent" data-summary="allowed" hidden>{outcomes.allowed.summary.text}</p>
+      <p class="wb-msg wb-agent" data-summary="rejected" hidden>{outcomes.rejected.summary.text}</p>
+    </div>
+    <div class="wb-composer">
+      <span class="wb-placeholder" data-composer-placeholder>{composer.placeholder.text}</span>
+    </div>
+  </div>
+
+  <div class="wb-controls" data-live-only hidden>
+    <button class="btn" type="button" data-pause>Пауза</button>
+    <button class="btn accent" type="button" data-reset hidden>Ещё раз</button>
+  </div>
+
+  <ul class="wb-outcomes" data-nojs>
+    <li><strong>Если разрешить:</strong> {outcomes.allowed.summary.text}</li>
+    <li><strong>Если отклонить:</strong> {outcomes.rejected.summary.text}</li>
+  </ul>
+
+  <!-- Текст меток исхода для скрипта: он читает его, а не собирает строки. -->
+  <span hidden data-tag-text="allowed">{outcomes.allowed.tag.text}</span>
+  <span hidden data-tag-text="rejected">{outcomes.rejected.tag.text}</span>
+
+  <p class="visually-hidden" aria-live="polite" data-announce></p>
+  <p class="demo-caption">{caption}</p>
+</div>
+
+<script>
+  import '../../scripts/showcase/workbench';
+</script>

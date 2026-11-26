@@ -1,0 +1,146 @@
+---
+/**
+ * «Режимы разрешений»: что агент делает без вопроса в каждом режиме.
+ *
+ * Почему: режим — главное правило агента, и документ описывает его таблицей
+ * (design.md redesign-site-showcase, D5). Значения ячеек берутся при сборке из
+ * строк таблицы `05-permissions.md#режимы` (`modeRows`, D6): переформулировка
+ * строки ломает сборку, а не расходится с витриной. `autopilot` в селектор не
+ * входит: документ говорит, что включить его из клиента нельзя, и витрина
+ * показывает его сноской словами документа.
+ *
+ * Для чего: без JavaScript — таблица целиком (`data-nojs`). Со скриптом
+ * (`scripts/showcase/modes.ts`) — вкладки режимов; выбранный режим
+ * объявляется в области `aria-live="polite"`.
+ *
+ * Как использовать: `<ModesDemo headingLevel={3} />`; на странице один экземпляр
+ * (идентификаторы `modes-…` фиксированы). `headingLevel` — уровень заголовка в
+ * структуре страницы (в карточке главной — 3, на странице агента — 2).
+ */
+import '../../styles/showcase.css';
+
+import { modeRows, modesDocRef } from '../../lib/showcase/modes-demo';
+import { quote } from '../../lib/showcase/sources';
+import { splitTicks } from '../../lib/showcase/ticks';
+import { docRefUrl } from '../../lib/urls';
+
+interface Props {
+  readonly headingLevel?: 2 | 3;
+}
+
+const { headingLevel = 2 } = Astro.props;
+const Heading = `h${headingLevel}` as 'h2' | 'h3';
+const base = import.meta.env.BASE_URL;
+const rows = modeRows(quote);
+
+const docPath = modesDocRef.split('#')[0] ?? '';
+const href = docRefUrl(modesDocRef, base);
+
+// Сноска об `autopilot`: слова документа, подтверждённые цитатами (D5, D6).
+quote(docPath, 'Есть и шестой режим, `autopilot`');
+quote(docPath, 'его включить не могут');
+const autopilotRule = quote(
+  docPath,
+  'как `bypass`, но там, где `bypass` задал бы вопрос, `autopilot` отказывает, потому что некому спросить.',
+);
+const autopilotUse = quote(docPath, 'Он нужен для запуска без человека.');
+// Оговорка к `bypass`: «ни о чём» без неё читается как «вообще ни о чём» (проверка фактов 6.1).
+const bypassNote = quote(
+  docPath,
+  'агент не спрашивает ни о чём, кроме критических команд и правок конфигурации агента',
+);
+
+// Оговорка к `accept-edits`: правки без вопроса, а файлы вроде `Makefile` и
+// `.git/hooks/*` агент критическими не считает (задача ревью, D6, D8).
+const acceptEditsFiles = quote(
+  docPath,
+  'Файлы вроде `.git/hooks/*`, `Makefile`, `package.json`, а также `AGENTS.md` и `CLAUDE.md` агент не считает критическими.',
+);
+// Правка конфигурации агента: спрашивает человека, а в `autopilot` запрещена.
+const configNote = quote(docPath, 'Агент перечитывает свои файлы на лету, поэтому их меняет только человек.');
+// Подтверждение фразы «в `autopilot` такая правка запрещена» в разметке ниже.
+quote(docPath, 'В `autopilot` они запрещены.');
+const acceptEditsAdvice = quote(docPath, 'Просматривайте различия, не включайте режим в чужом проекте.');
+
+const columns = [
+  ['read', 'Чтение'],
+  ['edit', 'Правка файлов'],
+  ['run', 'Команды и MCP-инструменты'],
+] as const;
+
+const tagKind = { allow: 'ok', ask: 'warn', deny: 'bad' } as const;
+
+/** Фраза для чтения с экрана: режим и три ответа. */
+const announce = (row: (typeof rows)[number]): string =>
+  `Режим ${row.mode}: ` + columns.map(([key, label]) => `${label.toLowerCase()} — ${row.cells[key].label}`).join('; ');
+---
+
+<div class="modes" data-demo="modes" data-tabs>
+  <Heading class="t-subtitle" id="modes-title">Режимы разрешений</Heading>
+  <p class="t2">Режим задаёт, что агент делает без вопроса. Новая сессия стартует в режиме <code>standard</code>.</p>
+
+  <table class="data-table" data-nojs>
+    <thead>
+      <tr>
+        <th scope="col">Режим</th>
+        {columns.map(([, label]) => <th scope="col">{label}</th>)}
+      </tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((row) => (
+          <tr>
+            <th scope="row"><code>{row.mode}</code></th>
+            {columns.map(([key]) => <td>{row.cells[key].label}</td>)}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+
+  <div class="tablist" role="tablist" aria-label="Режим разрешений" data-live-only hidden>
+    {
+      rows.map((row) => (
+        <button
+          class="tab"
+          type="button"
+          role="tab"
+          id={`modes-tab-${row.mode}`}
+          aria-controls={`modes-panel-${row.mode}`}
+          aria-selected={row.mode === 'standard' ? 'true' : 'false'}
+          tabindex={row.mode === 'standard' ? 0 : -1}
+        >
+          <code>{row.mode}</code>
+        </button>
+      ))
+    }
+  </div>
+  {
+    rows.map((row) => (
+      <dl class="mode-cells" id={`modes-panel-${row.mode}`} data-tabpanel data-phrase={announce(row)} data-live-only hidden>
+        {columns.map(([key, label]) => (
+          <div class="mode-cell">
+            <dt>{label}</dt>
+            <dd><span class="wb-tag" data-kind={tagKind[row.cells[key].kind]}>{row.cells[key].label}</span></dd>
+          </div>
+        ))}
+      </dl>
+    ))
+  }
+  <p class="visually-hidden" aria-live="polite" data-announce></p>
+
+  <p class="note"><code>bypass</code>: {bypassNote}.</p>
+  <p class="note">
+    <code>accept-edits</code>: правки файлов идут без вопроса, кроме правок конфигурации агента. {configNote} В <code>accept-edits</code> агент спросит, в <code>autopilot</code> такая правка запрещена. {splitTicks(acceptEditsFiles).map((part) => (part.code ? <code>{part.text}</code> : part.text))}
+    {acceptEditsAdvice}
+  </p>
+  <p class="note">
+    <code>autopilot</code> — шестой режим: {splitTicks(autopilotRule).map((part) => (part.code ? <code>{part.text}</code> : part.text))}
+    {autopilotUse} Селектором клиента он не включается.
+  </p>
+  <p><a href={href}>Режимы разрешений в руководстве <code>codelab-agent</code></a></p>
+</div>
+
+<script>
+  import '../../scripts/showcase/modes';
+</script>

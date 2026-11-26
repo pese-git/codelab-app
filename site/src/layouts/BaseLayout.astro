@@ -6,8 +6,12 @@
  * содержанию» и применяет тему до первой отрисовки (design.md
  * add-astro-site, D8, D9; skill `codelab-site`, раздел 7).
  *
- * Для чего: `<head>` (заголовок, описание, canonical при `SITE_URL`, D12),
- * шапка, `<main id="content">` и подвал; стили — токены и базовые правила.
+ * Для чего: `<head>` (заголовок, описание, canonical при `SITE_URL`, D12,
+ * мета-теги Open Graph и Twitter card, favicon — design.md
+ * redesign-site-showcase, D10), шапка, `<main id="content">` и подвал; стили —
+ * токены и базовые правила. Мета-теги с абсолютным адресом (`og:url`,
+ * `og:image`, `twitter:image`) пишутся только при заданном `SITE_URL`, как
+ * `canonical`: без хостинга абсолютного адреса нет. `hreflang` нет — язык один.
  *
  * Как использовать: `<BaseLayout title="…" description="…" current="docs">`
  * — содержимое страницы в слоте. `title` без суффикса: «· CodeLab»
@@ -16,9 +20,11 @@
 import '../styles/tokens.css';
 import '../styles/base.css';
 
+import favicon from '../../../docs/design/brand/launcher/web-favicon.svg';
 import Footer from '../components/Footer.astro';
 import Header from '../components/Header.astro';
 import ThemeInit from '../components/ThemeInit.astro';
+import { withBase } from '../lib/urls';
 
 interface Props {
   readonly title: string;
@@ -29,9 +35,17 @@ interface Props {
 }
 
 const { title, description, current, plainTitle = false } = Astro.props;
+// Запасное описание для `og:description`: у 404 и документов без первого
+// абзаца своего нет, а превью ссылки без описания выглядит пустым (D10).
+// Формулировка — та же, что у главной страницы.
+const fallbackDescription =
+  'CodeLab — рабочее место для работы с AI-агентами по протоколу ACP: настольное приложение, терминальный клиент и агент.';
 const fullTitle = plainTitle ? title : `${title} · CodeLab`;
 // Без `SITE_URL` абсолютных адресов нет (D12): `Astro.site` не задан.
 const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined;
+const base = import.meta.env.BASE_URL;
+// Картинку собирает `src/pages/og.png.ts` (D10); адрес абсолютный и с `base`.
+const ogImage = Astro.site ? new URL(withBase('og.png', base), Astro.site).href : undefined;
 ---
 
 <!doctype html>
@@ -44,6 +58,17 @@ const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : un
     <title>{fullTitle}</title>
     {description && <meta name="description" content={description} />}
     {canonical && <link rel="canonical" href={canonical} />}
+    <link rel="icon" type="image/svg+xml" href={favicon.src} />
+    <link rel="apple-touch-icon" href={withBase('apple-touch-icon.png', base)} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description || fallbackDescription} />
+    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:site_name" content="CodeLab" />
+    {canonical && <meta property="og:url" content={canonical} />}
+    {ogImage && <meta property="og:image" content={ogImage} />}
+    <meta name="twitter:card" content="summary_large_image" />
+    {ogImage && <meta name="twitter:image" content={ogImage} />}
   </head>
   <body>
     <a class="skip-link" href="#content">К содержанию</a>

@@ -1,0 +1,29 @@
+---
+/**
+ * Бейджи-факты первого экрана.
+ *
+ * Почему: короткие проверяемые факты о продукте — без телеметрии, ключ не в
+ * конфигурации, файловые инструменты в папке проекта, один агент для трёх
+ * клиентов (design.md redesign-site-showcase, D7). Цифр без источника и сравнений
+ * с другими продуктами нет; каждый бейдж — ссылка на раздел документации, где
+ * факт описан, а слова подтверждены цитатами при сборке (D6).
+ *
+ * Для чего: ряд ссылок под заголовком главной.
+ *
+ * Как использовать: `<Badges />`; список — `badges` в `lib/showcase/facts.ts`.
+ */
+import '../../styles/showcase.css';
+
+import { badges } from '../../lib/showcase/facts';
+import { docRefUrl, withBase } from '../../lib/urls';
+
+const base = import.meta.env.BASE_URL;
+
+/** Бейдж с оговорками ведёт к блоку доверия на главной, остальные — в руководство. */
+const hrefOf = (badge: (typeof badges)[number]): string =>
+  badge.homeAnchor ? `${withBase('', base)}#${badge.homeAnchor}` : docRefUrl(badge.docRef, base);
+---
+
+<ul class="badges" aria-label="Факты о продукте">
+  {badges.map((badge) => <li class="badge"><a href={hrefOf(badge)}>{badge.text}</a></li>)}
+</ul>

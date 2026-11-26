@@ -9,7 +9,9 @@
  * `codelab-site`, раздел 2). Тексты — черновик для проверки фактов
  * `docs-writer` (tasks.md 7.2).
  *
- * Для чего: что пользователь делает в приложении и куда читать дальше.
+ * Для чего: что пользователь делает в приложении и куда читать дальше. В начале
+ * страницы — живой макет рабочего места (design.md redesign-site-showcase, D1,
+ * D3): он объясняет продукт лучше текста.
  *
  * Как использовать: правка текста — по отчёту проверки фактов; новая
  * возможность — `<Feature>` со ссылкой на раздел руководства.
@@ -20,6 +22,7 @@ import sidebarProjects from '../../../../apps/codelab_desktop/doc/images/sidebar
 import terminalPane from '../../../../apps/codelab_desktop/doc/images/terminal-pane.png';
 import workbench from '../../../../apps/codelab_desktop/doc/images/workbench-new-session.png';
 import Feature from '../../components/Feature.astro';
+import Workbench from '../../components/showcase/Workbench.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { pageUrl } from '../../lib/urls';
 
@@ -42,6 +45,11 @@ const guide = 'apps/codelab_desktop/doc/user';
     Сейчас приложение собирается и проверяется для macOS. Установщика нет: приложение собирается из исходников —{' '}
     <a href={pageUrl('docs/user/run-from-source.md', base) + '#4-запуск-app'}>запуск из исходников</a>.
   </p>
+
+  <section aria-labelledby="demo-title">
+    <h2 class="t-subtitle section-title" id="demo-title">Запрос разрешения в приложении</h2>
+    <Workbench />
+  </section>
 
   <ul class="features">
     <Feature
@@ -71,8 +79,7 @@ const guide = 'apps/codelab_desktop/doc/user';
       docPath={`${guide}/04-permissions.md#отвечать-на-запросы-разрешений`}
       linkText="Как отвечать на запросы разрешений"
     >
-      Перед записью файла, командой оболочки или сетевым запросом агент спрашивает разрешение прямо в строке вызова в
-      ленте. Вы видите тег риска и команду или путь и отвечаете «Allow» или «Reject» кнопкой или сочетанием клавиш.
+      Перед правкой файла и запуском команды агент спрашивает разрешение прямо в строке вызова в ленте. Вы видите тег риска и команду или путь и отвечаете «Allow» или «Reject» кнопкой или сочетанием клавиш.
       Ответ «Only this time» относится только к этому вызову; вариант «Always» агент предлагает не всегда.
     </Feature>
     <Feature
@@ -95,7 +102,7 @@ const guide = 'apps/codelab_desktop/doc/user';
       caption="Вкладка терминала и напоминание, что терминал работает мимо агента."
     >
       Панель «Terminal» — оболочка в папке текущей сессии. Команды в ней выполняются от вашего имени, мимо агента и
-      его одобрений. У каждой сессии свои вкладки.
+      его одобрений. Вывод терминала не очищается от секретов. У каждой сессии свои вкладки.
     </Feature>
     <Feature
       title="Подключение провайдера модели"

@@ -2,7 +2,7 @@
 // «Публикуемые источники документации», «Конфигурация под будущий хостинг»).
 import { describe, expect, it } from 'vitest';
 
-import { pageUrl, withBase } from '../src/lib/urls';
+import { docRefUrl, pageUrl, withBase } from '../src/lib/urls';
 
 // Таблица D4 и сценарии спецификации: путь в репозитории → адрес без base.
 const table: ReadonlyArray<readonly [string, string]> = [
@@ -48,5 +48,21 @@ describe('withBase', () => {
     expect(withBase('docs/user/#шаг-1', '/codelab-app/')).toBe(
       '/codelab-app/docs/user/#шаг-1',
     );
+  });
+});
+
+describe('docRefUrl', () => {
+  it('документ#якорь → адрес страницы с якорем и base', () => {
+    expect(docRefUrl('docs/user/configuration.md#шаг-2', '/codelab-app/')).toBe(
+      '/codelab-app/docs/user/configuration/#шаг-2',
+    );
+  });
+
+  it('без якоря — адрес страницы', () => {
+    expect(docRefUrl('docs/user/README.md', '/')).toBe('/docs/user/');
+  });
+
+  it('README каталога приложения', () => {
+    expect(docRefUrl('apps/codelab_cli/README.md#что-это', '/x/')).toBe('/x/docs/apps/codelab_cli/#что-это');
   });
 });

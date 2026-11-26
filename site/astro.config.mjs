@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { unified } from '@astrojs/markdown-remark';
 import { defineConfig } from 'astro/config';
 
+import { buildChunksPlugin } from './src/plugins/build-chunks.ts';
 import { remarkHomePaths } from './src/plugins/home-paths.ts';
 import { remarkMermaidBlocks } from './src/plugins/mermaid-blocks.ts';
 import { remarkNewsBase } from './src/plugins/news-base.ts';
@@ -95,6 +96,18 @@ export default defineConfig({
     },
   },
   vite: {
+    // Манифест чанков для бюджета JavaScript в `check-links` (D12 п. 3); файл
+    // вне `dist/`, в опубликованный сайт не попадает.
+    plugins: [buildChunksPlugin(repoRoot, fileURLToPath(new URL('./.astro/build-chunks.json', import.meta.url)))],
+    build: {
+      // Запрет встраивания скриптов: Astro по умолчанию кладёт маленький модуль
+      // без импортов прямо в HTML (до 4 КБ), и на странице появляется второй
+      // встроенный `<script>`. Для CSP хостинга нужен хэш ровно одного такого
+      // скрипта — темы (`ThemeInit.astro`), поэтому модули демо всегда уходят в
+      // файлы `/_astro/*.js` (D2 п. 2). Для остальных ресурсов остаётся порог
+      // Vite по умолчанию (`undefined`). Итог проверяет `check-links` (D12 п. 1).
+      assetsInlineLimit: (filePath) => (/\.(?:[cm]?[jt]s)(?:\?|$)/.test(filePath) ? false : undefined),
+    },
     resolve: {
       // `mermaid` подгружает `elkjs` для раскладки ELK; его лицензия не проходит
       // D2, поэтому модуль подменяется заглушкой (D7).

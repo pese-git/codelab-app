@@ -1,0 +1,30 @@
+---
+/**
+ * Плашка версии: `version` и дата последней новости выпуска.
+ *
+ * Почему: посетитель сразу видит, какой выпуск последний, и переходит к
+ * новости (design.md redesign-site-showcase, D7; project-site «Разделы сайта»,
+ * сценарии «Плашка версии из последней новости» и «Плашки версии нет без
+ * выпусков»). Версия берётся из новостей, а не набирается руками: так плашка
+ * не расходится с выпуском.
+ *
+ * Для чего: первый экран главной.
+ *
+ * Как использовать: `<VersionPill />`; без новостей компонент ничего не выводит.
+ */
+import { getCollection } from 'astro:content';
+
+import { orderNews } from '../../lib/news';
+import { withBase } from '../../lib/urls';
+
+const base = import.meta.env.BASE_URL;
+const latest = orderNews(await getCollection('news'))[0];
+---
+
+{
+  latest && (
+    <a class="version-pill" href={withBase(`news/${latest.data.version}/`, base)}>
+      Версия {latest.data.version} · <time datetime={latest.data.date}>{latest.data.date}</time>
+    </a>
+  )
+}

@@ -1,0 +1,6 @@
+{
+  "@@locale": "ru",
+  "codeLabApprovalAllow": "Разрешить",
+  "@codeLabApprovalAllow": { "description": "Кнопка разрешения" },
+  "codeLabApprovalReject": "Отклонить"
+}
