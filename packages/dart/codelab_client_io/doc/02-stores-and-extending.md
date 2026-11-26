@@ -26,8 +26,13 @@
 Хранит `JsonFileProfileStore` — порт `ProfileStore`. Файл общий у `codelab` и CodeLab app. Ниже — файл, который записал `codelab profiles add` на изолированном `CODELAB_HOME`:
 
 ```bash
-codelab profiles add local "stdio:/bin/sh -c cat"
+codelab profiles add local "stdio:codelab-agent serve --stdio"
 codelab profiles add remote ws://127.0.0.1:9/acp
+```
+
+```text
+Saved profile local.
+Saved profile remote.
 ```
 
 ```json
@@ -37,11 +42,11 @@ codelab profiles add remote ws://127.0.0.1:9/acp
     {
       "type": "stdio",
       "id": "local",
-      "label": "stdio:/bin/sh -c cat",
-      "command": "/bin/sh",
+      "label": "stdio:codelab-agent serve --stdio",
+      "command": "codelab-agent",
       "args": [
-        "-c",
-        "cat"
+        "serve",
+        "--stdio"
       ],
       "env": {},
       "runInProjectDirectory": true
