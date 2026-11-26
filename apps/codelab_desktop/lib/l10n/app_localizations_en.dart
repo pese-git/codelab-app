@@ -867,7 +867,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectionJoinCliBody =>
-      'On the host run codelab-agent serve --ws <port>; the CLI connects with codelab -a <profile>. Choose the same WebSocket profile here; its sessions appear in the sidebar.';
+      'On the host run codelab-agent serve --ws --port <port>; the CLI connects with codelab -a <profile>. Choose the same WebSocket profile here; its sessions appear in the sidebar.';
 
   @override
   String get connectionBadgeCurrent => 'Current';

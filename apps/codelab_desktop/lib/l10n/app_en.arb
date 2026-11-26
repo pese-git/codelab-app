@@ -1174,9 +1174,9 @@
   "@connectionJoinCliTitle": {
     "description": "Заголовок раскрывающейся справки о подключении к сессии, запущенной в CLI."
   },
-  "connectionJoinCliBody": "On the host run codelab-agent serve --ws <port>; the CLI connects with codelab -a <profile>. Choose the same WebSocket profile here; its sessions appear in the sidebar.",
+  "connectionJoinCliBody": "On the host run codelab-agent serve --ws --port <port>; the CLI connects with codelab -a <profile>. Choose the same WebSocket profile here; its sessions appear in the sidebar.",
   "@connectionJoinCliBody": {
-    "description": "Справка о подключении к агенту из CLI. Команды (codelab-agent serve --ws <port>, codelab -a <profile>) и WebSocket не переводить."
+    "description": "Справка о подключении к агенту из CLI. Команды (codelab-agent serve --ws --port <port>, codelab -a <profile>) и WebSocket не переводить."
   },
   "connectionBadgeCurrent": "Current",
   "@connectionBadgeCurrent": {

@@ -1448,10 +1448,10 @@ abstract class AppLocalizations {
   /// **'Join a session started in the CLI'**
   String get connectionJoinCliTitle;
 
-  /// Справка о подключении к агенту из CLI. Команды (codelab-agent serve --ws <port>, codelab -a <profile>) и WebSocket не переводить.
+  /// Справка о подключении к агенту из CLI. Команды (codelab-agent serve --ws --port <port>, codelab -a <profile>) и WebSocket не переводить.
   ///
   /// In en, this message translates to:
-  /// **'On the host run codelab-agent serve --ws <port>; the CLI connects with codelab -a <profile>. Choose the same WebSocket profile here; its sessions appear in the sidebar.'**
+  /// **'On the host run codelab-agent serve --ws --port <port>; the CLI connects with codelab -a <profile>. Choose the same WebSocket profile here; its sessions appear in the sidebar.'**
   String get connectionJoinCliBody;
 
   /// Метка профиля, к которому подключено окно.
