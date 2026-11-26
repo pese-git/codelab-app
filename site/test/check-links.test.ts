@@ -2,6 +2,7 @@
 // D11, D14; project-site «Проверка внутренних ссылок собранного сайта»,
 // «Сборка под подкаталог», «Нет сторонних запросов») на мини-`dist/` во
 // временном каталоге, без сети.
+import { randomBytes } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -21,7 +22,7 @@ afterEach(() => {
   rmSync(dist, { recursive: true, force: true });
 });
 
-function write(path: string, content: string): void {
+function write(path: string, content: string | Uint8Array): void {
   mkdirSync(dirname(join(dist, path)), { recursive: true });
   writeFileSync(join(dist, path), content);
 }
@@ -325,5 +326,251 @@ describe('checkDist: страницы docs/ только из allowlist (обр�
     expect(checkDist({ dist, base })).toEqual([
       expect.objectContaining({ file, message: expect.stringContaining('allowlist') }),
     ]);
+  });
+});
+
+// Правила витрины (tasks.md redesign-site-showcase, 2.1; D2, D12; project-site
+// «Интерактивные демо витрины»: «Второй встроенный скрипт ломает проверку»,
+// «Превышение бюджета»; «Мета-данные страниц и знак сайта»: «Картинка неверного
+// размера»).
+describe('checkDist: встроенные скрипты (D12 п. 1)', () => {
+  const themeScript = '<script>document.documentElement.dataset.t=1</script>';
+
+  it('один одинаковый встроенный скрипт на каждой странице — без нарушений', () => {
+    writeSite();
+    write('docs/user/index.html', page(`${themeScript}<h1 id="x">x</h1>`));
+    write('docs/user/configuration/index.html', page(`${themeScript}<h1 id="y">y</h1>`));
+    expect(checkDist({ dist, base })).toEqual([]);
+  });
+
+  it('второй встроенный скрипт на странице — нарушение со страницей', () => {
+    writeSite();
+    write('docs/ops/index.html', page(`${themeScript}${themeScript}`));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', message: expect.stringContaining('inline') }),
+    ]);
+  });
+
+  it('два одинаковых встроенных скрипта на странице — всё равно нарушение', () => {
+    writeSite();
+    write('docs/ops/index.html', page(`${themeScript}<script>document.documentElement.dataset.t=1</script>`));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', message: expect.stringContaining('inline') }),
+    ]);
+  });
+
+  it('текст встроенного скрипта на двух страницах различается — нарушение (хэш CSP)', () => {
+    writeSite();
+    write('docs/user/index.html', page(`${themeScript}<h1 id="x">x</h1>`));
+    write('docs/ops/index.html', page('<script>document.documentElement.dataset.t=2</script>'));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ message: expect.stringContaining('differs') }),
+    ]);
+  });
+
+  it('скрипт с src не считается встроенным', () => {
+    writeSite();
+    write('docs/ops/index.html', page('<script type="module" src="/codelab-app/_astro/page.def456.js"></script>'));
+    expect(checkDist({ dist, base })).toEqual([]);
+  });
+});
+
+describe('checkDist: обработчики событий (D12 п. 2)', () => {
+  it.each(['onclick', 'onLoad', 'onerror'])('атрибут %s — нарушение', (attr) => {
+    writeSite();
+    write('docs/ops/index.html', page(`<img src="/codelab-app/_astro/command-palette.xyz.png" alt="x" ${attr}="f()">`));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', message: expect.stringContaining(attr.toLowerCase()) }),
+    ]);
+  });
+
+  it('javascript: в атрибуте без ссылки — нарушение', () => {
+    writeSite();
+    write('docs/ops/index.html', page('<button formaction="javascript:f()">x</button>'));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', message: expect.stringContaining('javascript:') }),
+    ]);
+  });
+
+  it('data-атрибуты и атрибут «one» без ловушки on* — без нарушений', () => {
+    writeSite();
+    write('docs/ops/index.html', page('<div data-onclick="x" data-demo="workbench" one="1">x</div>'));
+    expect(checkDist({ dist, base })).toEqual([]);
+  });
+});
+
+describe('checkDist: бюджет JavaScript витрины (D2 п. 8, D12 п. 3)', () => {
+  /** Несжимаемое содержимое: гарантированно больше порога после gzip. */
+  const heavy = randomBytes(20_000).toString('base64');
+
+  function moduleHtml(entries: string[]): string {
+    return page(
+      entries.map((e) => `<script type="module" src="/codelab-app/_astro/${e}"></script>`).join(''),
+    );
+  }
+
+  /** Манифест сборки: чанк → его статические импорты и исходные модули (от корня репозитория). */
+  const chunks = {
+    '_astro/theme.js': { imports: ['_astro/shared.js'], modules: ['site/src/scripts/theme.ts'] },
+    '_astro/mermaid.js': { imports: ['_astro/shared.js'], modules: ['site/src/scripts/mermaid.ts'] },
+    '_astro/shared.js': { imports: [], modules: ['site/src/scripts/theme-state.ts'] },
+    '_astro/demo.js': { imports: ['_astro/demo-lib.js'], modules: ['site/src/scripts/showcase/demo.ts'] },
+    '_astro/demo-lib.js': { imports: [], modules: ['site/src/lib/showcase/x.ts'] },
+  };
+
+  it('модули демо в пределах бюджета — без нарушений', () => {
+    writeSite();
+    write('docs/ops/index.html', moduleHtml(['demo.js']));
+    write('_astro/demo.js', 'import"./demo-lib.js";console.log(1)');
+    write('_astro/demo-lib.js', 'export{}');
+    expect(checkDist({ dist, base, chunks })).toEqual([]);
+  });
+
+  it('демо больше 12 КБ gzip — нарушение со страницей и размером', () => {
+    writeSite();
+    write('docs/ops/index.html', moduleHtml(['demo.js']));
+    write('_astro/demo.js', `import"./demo-lib.js";var a="${heavy}"`);
+    write('_astro/demo-lib.js', 'export{}');
+    const problems = checkDist({ dist, base, chunks });
+    expect(problems).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', message: expect.stringMatching(/12 KB.*\d+(\.\d+)? KB/) }),
+    ]);
+  });
+
+  it('статический импорт чанка входит в сумму модуля', () => {
+    writeSite();
+    write('docs/ops/index.html', moduleHtml(['demo.js']));
+    write('_astro/demo.js', 'import"./demo-lib.js";console.log(1)');
+    write('_astro/demo-lib.js', `export var a="${heavy}"`);
+    expect(checkDist({ dist, base, chunks })).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', message: expect.stringContaining('12 KB') }),
+    ]);
+  });
+
+  it('тема и mermaid в сумму не входят, даже когда они больше бюджета', () => {
+    writeSite();
+    write('docs/ops/index.html', moduleHtml(['theme.js', 'mermaid.js']));
+    write('_astro/theme.js', `import"./shared.js";var a="${heavy}"`);
+    write('_astro/mermaid.js', `import"./shared.js";var b="${heavy}"`);
+    write('_astro/shared.js', 'export{}');
+    expect(checkDist({ dist, base, chunks })).toEqual([]);
+  });
+
+  it('тема, определённая по манифесту, а не по имени файла', () => {
+    writeSite();
+    write('docs/ops/index.html', moduleHtml(['renamed.js']));
+    write('_astro/renamed.js', `var a="${heavy}"`);
+    const renamed = { '_astro/renamed.js': { imports: [], modules: ['site/src/scripts/theme.ts'] } };
+    expect(checkDist({ dist, base, chunks: renamed })).toEqual([]);
+  });
+
+  it('смешанный входной чанк (тема и демо вместе) в бюджет входит', () => {
+    writeSite();
+    write('docs/ops/index.html', moduleHtml(['mixed.js']));
+    write('_astro/mixed.js', `var a="${heavy}"`);
+    const mixed = {
+      '_astro/mixed.js': { imports: [], modules: ['site/src/scripts/theme.ts', 'site/src/scripts/showcase/demo.ts'] },
+    };
+    expect(checkDist({ dist, base, chunks: mixed })).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', message: expect.stringContaining('12 KB') }),
+    ]);
+  });
+
+  it('модуль, которого нет в манифесте, считается модулем демо', () => {
+    writeSite();
+    write('docs/ops/index.html', moduleHtml(['unknown.js']));
+    write('_astro/unknown.js', `var a="${heavy}"`);
+    expect(checkDist({ dist, base, chunks })).toEqual([
+      expect.objectContaining({ file: 'docs/ops/index.html', message: expect.stringContaining('12 KB') }),
+    ]);
+  });
+});
+
+describe('checkDist: картинка для ссылок (D10, D12 п. 4)', () => {
+  /** PNG с заголовком IHDR нужного размера; остальное содержимое неважно. */
+  function png(width: number, height: number): Buffer {
+    const header = Buffer.alloc(33);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header);
+    header.writeUInt32BE(13, 8);
+    header.write('IHDR', 12, 'latin1');
+    header.writeUInt32BE(width, 16);
+    header.writeUInt32BE(height, 20);
+    return header;
+  }
+
+  function withOgImage(content: string | undefined): void {
+    const meta = content === undefined ? '' : `<meta property="og:image" content="${content}">`;
+    write('index.html', page('<h1 id="x">x</h1>', meta));
+  }
+
+  it('PNG 1200×630 по абсолютному адресу — без нарушений', () => {
+    writeSite();
+    withOgImage('https://example.org/codelab-app/og.png');
+    write('og.png', png(1200, 630));
+    expect(checkDist({ dist, base })).toEqual([]);
+  });
+
+  it('PNG 1200×631 — нарушение с путём и размером', () => {
+    writeSite();
+    withOgImage('https://example.org/codelab-app/og.png');
+    write('og.png', png(1200, 631));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'og.png', message: expect.stringContaining('1200×631') }),
+    ]);
+  });
+
+  it('отсутствующий файл og:image — нарушение', () => {
+    writeSite();
+    withOgImage('https://example.org/codelab-app/og.png');
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'index.html', link: 'https://example.org/codelab-app/og.png' }),
+    ]);
+  });
+
+  it('не PNG — нарушение', () => {
+    writeSite();
+    withOgImage('https://example.org/codelab-app/og.png');
+    write('og.png', '<svg></svg>');
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'og.png', message: expect.stringContaining('PNG') }),
+    ]);
+  });
+
+  it('og:image вне base — нарушение', () => {
+    writeSite();
+    withOgImage('https://example.org/other/og.png');
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'index.html', message: expect.stringContaining('base') }),
+    ]);
+  });
+
+  it('без og:image (нет SITE_URL) файл картинки по известному адресу всё равно проверяется', () => {
+    writeSite();
+    withOgImage(undefined);
+    write('og.png', png(1200, 600));
+    expect(checkDist({ dist, base })).toEqual([
+      expect.objectContaining({ file: 'og.png', message: expect.stringContaining('1200×600') }),
+    ]);
+  });
+
+  it('без og:image и без файла картинки — без нарушений', () => {
+    writeSite();
+    withOgImage(undefined);
+    expect(checkDist({ dist, base })).toEqual([]);
+  });
+
+  it('requireOgImage: нет dist/og.png — нарушение, даже без og:image на страницах', () => {
+    writeSite();
+    withOgImage(undefined);
+    expect(checkDist({ dist, base, requireOgImage: true })).toEqual([
+      expect.objectContaining({ file: 'og.png', message: expect.stringContaining('og.png') }),
+    ]);
+  });
+
+  it('requireOgImage: файл есть и верного размера — без нарушений', () => {
+    writeSite();
+    withOgImage(undefined);
+    write('og.png', png(1200, 630));
+    expect(checkDist({ dist, base, requireOgImage: true })).toEqual([]);
   });
 });

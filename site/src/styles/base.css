@@ -130,15 +130,33 @@ pre {
 }
 
 .brand-logo {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-control);
-  background: var(--accent);
-  color: var(--on-accent);
-  font: 600 9px/1 var(--font-mono);
+  display: block;
+  width: 103px;
+  height: 22px;
+}
+
+/* Логотип по теме: светлый по умолчанию, тёмный — при тёмной системной теме
+   без выбора читателя и при выбранной тёмной (D10). */
+.brand-logo-dark {
+  display: none;
+}
+
+:root.dark .brand-logo-light {
+  display: none;
+}
+
+:root.dark .brand-logo-dark {
+  display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) .brand-logo-light {
+    display: none;
+  }
+
+  :root:not(.light) .brand-logo-dark {
+    display: block;
+  }
 }
 
 .site-nav {

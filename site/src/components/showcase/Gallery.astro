@@ -1,0 +1,102 @@
+---
+/**
+ * Галерея: снимки приложения и текстовые снимки терминала.
+ *
+ * Почему: посетитель видит продукт, а не только описание (design.md
+ * redesign-site-showcase, D9). Снимки app — существующие PNG из
+ * `apps/codelab_desktop/doc/images/` через `astro:assets`, без копий, с `alt` из
+ * руководства. Терминал — не картинка, а блок кода документа CLI (`snippet`,
+ * D6): его можно выделить и прочитать с экрана, а рассинхрон с руководством
+ * ломает сборку. Тёмных и русских снимков в документации нет, поэтому
+ * переключателя темы снимков нет, а подпись называет язык интерфейса (R3).
+ *
+ * Для чего: без JavaScript обе группы идут подряд; со скриптом (`tabs-demo.ts`)
+ * — вкладки «Приложение» и «Терминал». Снимки ниже первого экрана грузятся
+ * лениво; полный размер открывает обычная ссылка на файл без lightbox.
+ *
+ * Как использовать: `<Gallery />` на главной.
+ */
+import '../../styles/showcase.css';
+
+import { Image } from 'astro:assets';
+
+import filesPane from '../../../../apps/codelab_desktop/doc/images/files-pane-preview.png';
+import modes from '../../../../apps/codelab_desktop/doc/images/settings-agents-modes.png';
+import providerWizard from '../../../../apps/codelab_desktop/doc/images/provider-wizard-api-type.png';
+import sidebarProjects from '../../../../apps/codelab_desktop/doc/images/sidebar-projects.png';
+import terminalPane from '../../../../apps/codelab_desktop/doc/images/terminal-pane.png';
+import workbench from '../../../../apps/codelab_desktop/doc/images/workbench-new-session.png';
+import { terminalShots } from '../../lib/showcase/gallery';
+import { appShots } from '../../lib/showcase/shots';
+import { docRefUrl } from '../../lib/urls';
+
+const base = import.meta.env.BASE_URL;
+
+/** Снимки app: подпись и `alt` — из записи `shots.ts`, общей с «Как это работает» (D6). */
+const images = {
+  projects: sidebarProjects,
+  session: workbench,
+  files: filesPane,
+  terminal: terminalPane,
+  provider: providerWizard,
+  modes,
+} as const;
+const appGallery = appShots.map((shot) => ({ ...shot, image: images[shot.key] }));
+
+const docHref = (docRef: string): string => docRefUrl(docRef, base);
+---
+
+<section class="home-section" id="gallery" aria-labelledby="gallery-title" data-demo="gallery" data-tabs>
+  <h2 class="t-subtitle" id="gallery-title">Снимки</h2>
+  <div class="tablist" role="tablist" aria-label="Что показать" data-live-only hidden>
+    <button class="tab" type="button" role="tab" id="gallery-tab-app" aria-controls="gallery-panel-app" aria-selected="true" tabindex="0">
+      Приложение
+    </button>
+    <button class="tab" type="button" role="tab" id="gallery-tab-term" aria-controls="gallery-panel-term" aria-selected="false" tabindex="-1">
+      Терминал
+    </button>
+  </div>
+
+  <div class="gallery-group" id="gallery-panel-app" data-tabpanel>
+    <h3 class="t-body-large view-title">Приложение</h3>
+    <p class="t2">
+      Снимки приложения сделаны с английским интерфейсом. Язык интерфейса выбирается в настройках:
+      <a href={docHref('apps/codelab_desktop/doc/user/09-settings.md#язык-интерфейса')}>язык интерфейса</a>.
+    </p>
+    <ul class="shots">
+      {
+        appGallery.map((shot) => (
+          <li>
+            <figure class="shot">
+              <a href={shot.image.src}>
+                <Image src={shot.image} alt={shot.alt} widths={[480, 800]} sizes="(min-width: 900px) 360px, 100vw" />
+              </a>
+              <figcaption>{shot.caption}. <a href={shot.image.src}>Полный размер</a></figcaption>
+            </figure>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+
+  <div class="gallery-group" id="gallery-panel-term" data-tabpanel>
+    <h3 class="t-body-large view-title">Терминал</h3>
+    <p class="t2">Текстовые снимки <code>codelab</code> из руководства: их можно выделить и скопировать.</p>
+    <ul class="shots">
+      {
+        terminalShots.map((shot) => (
+          <li>
+            <figure class="shot">
+              <pre class="term"><code>{shot.text}</code></pre>
+              <figcaption>{shot.caption}. <a href={docHref(shot.docRef)}>В руководстве</a></figcaption>
+            </figure>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<script>
+  import '../../scripts/showcase/tabs-demo';
+</script>

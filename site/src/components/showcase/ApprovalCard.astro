@@ -1,0 +1,66 @@
+---
+/**
+ * Карточка запроса разрешения app в макете.
+ *
+ * Почему: главная идея продукта — агент спрашивает, решает пользователь
+ * (design.md redesign-site-showcase, D3). Подписи — строки русского каталога
+ * `codelab_ui_ru.arb` (D6, `scenarios.ts`), поэтому переименование ключа ломает
+ * сборку, а не показывает устаревшую подпись.
+ *
+ * Для чего: одна карточка в двух видах. Интерактивная живёт в `Workbench.astro`:
+ * выбор «Только сейчас» / «Всегда» и кнопки «Разрешить» и «Отклонить» отрисованы
+ * скрытыми и появляются со скриптом; без него — слова о вариантах ответа
+ * (D2 п. 5). Статическая — иллюстрация четвёртого шага (`HowItWorks.astro`):
+ * только слова, без элементов, которые ничего не делают.
+ *
+ * Как использовать: `<ApprovalCard interactive />` в макете, `<ApprovalCard />`
+ * в иллюстрации. Идентификаторы `wb-…` уникальны, интерактивная карточка на
+ * странице одна.
+ */
+import { scenario } from '../../lib/showcase/scenarios';
+
+interface Props {
+  readonly interactive?: boolean;
+}
+
+const { interactive = false } = Astro.props;
+const { approval, call } = scenario;
+---
+
+<div
+  class="wb-card"
+  data-card
+  role="group"
+  aria-labelledby={interactive ? 'wb-card-title' : undefined}
+  tabindex={interactive ? -1 : undefined}
+>
+  <div class="wb-card-head">
+    <strong id={interactive ? 'wb-card-title' : undefined} data-card-title>{approval.awaiting.text}</strong>
+    <span class="wb-tag" data-kind="warn">{call.risk.text}</span>
+  </div>
+  <p class="wb-card-path"><code>{call.path.text}</code></p>
+  {
+    interactive && (
+      <>
+        <div class="wb-scope" role="radiogroup" aria-labelledby="wb-card-title" data-live-only hidden data-scope>
+          <label>
+            <input type="radio" name="wb-scope" value="once" checked />
+            {approval.scopeOnce.text}
+          </label>
+          <label>
+            <input type="radio" name="wb-scope" value="always" />
+            {approval.scopeAlways.text}
+          </label>
+        </div>
+        <div class="wb-actions" data-live-only hidden data-actions>
+          <button class="btn accent" type="button" data-allow>{approval.allow.text}</button>
+          <button class="btn" type="button" data-reject>{approval.reject.text}</button>
+        </div>
+      </>
+    )
+  }
+  {interactive && <span hidden data-card-resolved>{approval.resolved.text}</span>}
+  <p class="wb-options" data-nojs={interactive ? '' : undefined}>
+    Варианты ответа: «{approval.scopeOnce.text}» или «{approval.scopeAlways.text}»; «{approval.allow.text}» или «{approval.reject.text}».
+  </p>
+</div>

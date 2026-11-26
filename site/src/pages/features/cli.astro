@@ -9,10 +9,14 @@
  * и `doc/user-guide.md`; тексты — черновик для проверки фактов `docs-writer`
  * (tasks.md 7.2).
  *
- * Для чего: что пользователь делает в `codelab` и куда читать дальше.
+ * Для чего: что пользователь делает в `codelab` и куда читать дальше. В начале
+ * страницы — демо клавиш ответа (design.md redesign-site-showcase, D1, D5): строки
+ * таблицы руководства подтверждены при сборке, снимки терминала берутся из
+ * документов через `snippet` (D6), а не копируются в страницу.
  *
  * Как использовать: правка текста — по отчёту проверки фактов.
  */
+import CliKeysDemo from '../../components/showcase/CliKeysDemo.astro';
 import Feature from '../../components/Feature.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { pageUrl } from '../../lib/urls';
@@ -37,6 +41,10 @@ const dir = 'apps/codelab_cli/doc/user/';
     <a href={pageUrl('docs/user/run-from-source.md', base) + '#2-сборка-cli-и-агента'}>запуск из исходников</a>.
   </p>
 
+  <section class="demo-section">
+    <CliKeysDemo />
+  </section>
+
   <ul class="features">
     <Feature
       title="Диалог в терминале"
@@ -58,7 +66,7 @@ const dir = 'apps/codelab_cli/doc/user/';
     <Feature title="Разрешения одной клавишей" docPath={`${dir}02-repl.md#разрешения`} linkText="Клавиши ответа на запрос">
       Перед запуском команды или записью файла агент может спросить разрешение. <code>codelab</code> показывает, что
       агент хочет сделать, и ждёт клавишу: <kbd>y</kbd> — разрешить один раз, <kbd>a</kbd> — разрешать всегда, если агент предложил такой вариант,
-      <kbd>n</kbd> — отклонить.
+      <kbd>n</kbd> — отклонить один раз.
     </Feature>
     <Feature
       title="Один запрос из скрипта или CI"

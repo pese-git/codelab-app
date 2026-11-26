@@ -1,0 +1,80 @@
+---
+/**
+ * «Клавиши ответа `codelab`»: нажатие клавиши показывает ответ из руководства.
+ *
+ * Почему: у терминального клиента запрос разрешения отвечается одной клавишей, и
+ * это проще показать, чем описать (design.md redesign-site-showcase, D5). Клавиши
+ * и их ответы — строки таблицы `02-repl.md#разрешения`, подтверждённые `quote`
+ * при сборке (`scenarios.ts`, D6).
+ *
+ * Для чего: таблица клавиш видна всегда (без JavaScript — единственное
+ * содержимое). Со скриптом (`scripts/showcase/cli-keys.ts`) появляются кнопки
+ * `<kbd>`; нажатие кнопки или клавиши при фокусе внутри демо показывает ответ в
+ * области `aria-live="polite"`.
+ *
+ * Как использовать: `<CliKeysDemo headingLevel={3} />`; на странице один экземпляр.
+ */
+import '../../styles/showcase.css';
+
+import { scenario } from '../../lib/showcase/scenarios';
+import { splitTicks } from '../../lib/showcase/ticks';
+import { docRefUrl } from '../../lib/urls';
+
+interface Props {
+  readonly headingLevel?: 2 | 3;
+}
+
+const { headingLevel = 2 } = Astro.props;
+const Heading = `h${headingLevel}` as 'h2' | 'h3';
+const base = import.meta.env.BASE_URL;
+const { keys, docRef, onlyOffered, noAlways } = scenario.clients.cli;
+const href = docRefUrl(docRef, base);
+---
+
+<div class="cli-keys" data-demo="cli-keys">
+  <Heading class="t-subtitle">Клавиши ответа</Heading>
+  <p class="t2">Перед опасным действием <code>codelab</code> показывает, что хочет сделать агент, и ждёт клавишу.</p>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th scope="col">Клавиша</th>
+        <th scope="col">Ответ</th>
+      </tr>
+    </thead>
+    <tbody>
+      {
+        keys.map((row) => (
+          <tr>
+            <td><kbd class="key">{row.key.text}</kbd></td>
+            <td>{row.answer.text}</td>
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+  <p class="note">
+    {onlyOffered.text}
+    {splitTicks(noAlways.text).map((part) => (part.code ? <kbd class="key">{part.text}</kbd> : part.text))}
+  </p>
+
+  <div data-live-only hidden>
+    <p class="note">Нажмите кнопку или клавишу, когда фокус внутри этого блока.</p>
+    <div class="key-buttons">
+      {
+        keys.map((row) => (
+          <button class="key-btn" type="button" data-key={row.key.text} data-answer={row.answer.text} aria-pressed="false">
+            <kbd>{row.key.text}</kbd>
+          </button>
+        ))
+      }
+    </div>
+    <p class="key-answer" aria-live="polite" data-announce></p>
+  </div>
+
+  <p><a href={href}>Клавиши ответа в руководстве <code>codelab</code></a></p>
+</div>
+
+<script>
+  import '../../scripts/showcase/cli-keys';
+</script>

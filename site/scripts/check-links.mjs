@@ -10,7 +10,13 @@
 // и собственные модули сайта из `src/lib/` (allowlist и маски личных путей
 // существуют в одном месте, D3, D11).
 //
-// Как использовать: `checkDist({ dist, base, expectedPages })` возвращает
+// Правила витрины (design.md redesign-site-showcase, D2, D12) живут здесь же:
+// не больше одного встроенного скрипта с одинаковым текстом, нет атрибутов
+// `on*`, бюджет JavaScript демо, картинка для ссылок 1200×630. Это одна зона —
+// безопасность и ресурсы сборки; второй проход по тегам был бы вторым разбором
+// HTML.
+//
+// Как использовать: `checkDist({ dist, base, expectedPages, chunks })` возвращает
 // список нарушений (пустой — всё в порядке). Запуск скриптом —
 // `node scripts/check-links.mjs` из `site/` после `astro build`: `base` берётся
 // из `SITE_BASE` так же, как в `astro.config.mjs`, ожидаемые страницы
@@ -20,6 +26,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 
 import { findHomePaths } from '../src/lib/home-paths.ts';
 import { isPublished, publishRoots } from '../src/lib/publish.ts';
@@ -68,6 +75,10 @@ const navigationSchemes = new Set(['http:', 'https:', 'mailto:']);
  * `data:` — исполняемое или встраиваемое содержимое в обход проверок (D2, D8).
  */
 const dataUrlTags = new Set(['img', 'source']);
+const linkAttributeNames = new Set(['href', 'src', 'srcset', 'data', 'action', 'poster']);
+
+/** Любой атрибут тега: имя и значение. */
+const anyAttribute = /\s([^\s"'>/=]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
 const idAttribute = /\sid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/gi;
 const relAttribute = /\srel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i;
 // Теги целиком; значения атрибутов в кавычках могут содержать `>`.
@@ -78,6 +89,29 @@ const tagPattern = /<([A-Za-z][A-Za-z0-9-]*)((?:\s+[^\s"'>/=]+(?:\s*=\s*(?:"[^"]
  * браузер не загружает как ресурс: `canonical` появляется при `SITE_URL` (D12).
  */
 const nonFetchingRel = new Set(['canonical', 'alternate', 'author', 'license', 'me']);
+
+/** Бюджет JavaScript демо на странице после gzip, без темы и mermaid (D2 п. 8). */
+const demoBudgetBytes = 12 * 1024;
+
+/** Размер картинки для ссылок (D10, D12 п. 4). */
+const ogImageSize = { width: 1200, height: 630 };
+
+/** Адрес файла картинки для ссылок относительно `base` (D10). */
+const ogImagePath = 'og.png';
+
+/**
+ * Исходники модулей, которые в бюджет демо не входят: тема и mermaid (D2 п. 8).
+ * Определяются по исходным модулям чанка из манифеста сборки, а не по имени
+ * чанка: хэш и имя файла меняются при любой правке (D12 п. 3).
+ */
+const excludedEntryModules = ['src/scripts/theme.ts', 'src/scripts/mermaid.ts'];
+const excludedSharedModules = [...excludedEntryModules, 'src/scripts/theme-state.ts'];
+
+/** Имя атрибута-обработчика события: `onclick`, `onerror`; `one` и `data-on…` — нет. */
+const eventHandlerName = /^on[a-z]{3,}$/;
+
+/** Встроенный и внешний `<script>`: атрибуты и текст до закрывающего тега. */
+const scriptPattern = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
 
 /** Декодирует ссылки на символы HTML, которые Astro пишет в атрибутах. */
 function decodeEntities(value) {
@@ -144,10 +178,17 @@ function attrValue(match, from) {
 }
 
 /**
- * @param {{ dist: string, base: string, expectedPages?: readonly string[] }} options
+ * Манифест сборки [chunks] — чанк (путь от `dist/`) → его статические
+ * импорты и исходные модули от корня репозитория; его пишет плагин
+ * `astro.config.mjs` при сборке (D12 п. 3). Без манифеста бюджет считает все
+ * модули страницы модулями демо.
+ *
+ * @typedef {Record<string, { imports: readonly string[], modules: readonly string[] }>} BuildChunks
+ *
+ * @param {{ dist: string, base: string, expectedPages?: readonly string[], chunks?: BuildChunks, requireOgImage?: boolean }} options
  * @returns {LinkProblem[]}
  */
-export function checkDist({ dist, base, expectedPages = [] }) {
+export function checkDist({ dist, base, expectedPages = [], chunks, requireOgImage = false }) {
   /** @type {LinkProblem[]} */
   const problems = [];
   const files = walk(dist).sort();
@@ -186,6 +227,18 @@ export function checkDist({ dist, base, expectedPages = [] }) {
       const relMatch = relAttribute.exec(attrs);
       const rel = relMatch ? attrValue(relMatch, 1).toLowerCase().split(/\s+/) : [];
 
+      for (const attribute of attrs.matchAll(anyAttribute)) {
+        const name = attribute[1].toLowerCase();
+        if (eventHandlerName.test(name)) {
+          problems.push({ file, message: `event handler attribute ${name} on <${tagName}> is not allowed (D2, D12)` });
+        }
+        const value = attrValue(attribute, 2).replace(/[\t\n\r ]/g, '').toLowerCase();
+        // Схемы ссылок в `href`, `src` и подобных проверяет `checkLink` ниже.
+        if (!eventHandlerName.test(name) && !linkAttributeNames.has(name) && value.startsWith('javascript:')) {
+          problems.push({ file, message: `javascript: in attribute ${name} of <${tagName}> is not allowed (D2, D12)` });
+        }
+      }
+
       for (const attr of attrs.matchAll(linkAttribute)) {
         const name = attr[1].toLowerCase();
         const owner = attributeOwners.get(name);
@@ -199,6 +252,46 @@ export function checkDist({ dist, base, expectedPages = [] }) {
       }
     }
   }
+
+  // Правила витрины, страница за страницей (D12 п. 1, 3).
+  /** @type {Map<string, string>} текст встроенного скрипта → первая страница с ним */
+  const inlineTexts = new Map();
+  for (const [file, content] of html) {
+    const modules = [];
+    let inlineCount = 0;
+    for (const script of content.matchAll(scriptPattern)) {
+      const attrs = script[1];
+      const src = [...attrs.matchAll(anyAttribute)].find((m) => m[1].toLowerCase() === 'src');
+      if (src === undefined) {
+        inlineCount++;
+        if (!inlineTexts.has(script[2])) inlineTexts.set(script[2], file);
+        continue;
+      }
+      const type = [...attrs.matchAll(anyAttribute)].find((m) => m[1].toLowerCase() === 'type');
+      if (type !== undefined && attrValue(type, 2).toLowerCase() === 'module') modules.push(attrValue(src, 2));
+    }
+    if (inlineCount > 1) {
+      problems.push({
+        file,
+        message: `${inlineCount} inline <script> elements: only the theme script may be inline (CSP hash, D2, D12)`,
+      });
+    }
+    const size = demoBytes(modules, base, dist, chunks);
+    if (size > demoBudgetBytes) {
+      problems.push({
+        file,
+        message: `showcase JavaScript budget is 12 KB gzip without theme and mermaid, the page has ${(size / 1024).toFixed(1)} KB (D2, D12)`,
+      });
+    }
+  }
+  if (inlineTexts.size > 1) {
+    problems.push({
+      file: [...inlineTexts.values()].join(', '),
+      message: 'inline <script> text differs between pages: the CSP hash must be one (D2, D12)',
+    });
+  }
+
+  checkOgImage({ html, base, dist, problems, requireOgImage });
 
   /**
    * Проверка одной ссылки страницы; описание нарушения или `undefined`.
@@ -286,6 +379,112 @@ export function checkDist({ dist, base, expectedPages = [] }) {
   return problems;
 }
 
+/** Исходный модуль чанка без запроса Vite (`?astro&type=script…`) и с путём от `site/`. */
+function moduleBase(id) {
+  const path = id.split('?')[0];
+  const at = path.indexOf('src/');
+  return at === -1 ? path : path.slice(at);
+}
+
+/**
+ * Байты gzip модулей демо страницы: статический импорт чанков входит в сумму,
+ * тема и mermaid и чанки только из их исходников — нет (D2 п. 8, D12 п. 3).
+ */
+function demoBytes(moduleSrcs, base, dist, chunks) {
+  const keyOf = (src) => {
+    const path = src.split(/[?#]/)[0];
+    return path.startsWith(base) ? path.slice(base.length) : path.replace(/^\//, '');
+  };
+  // Входной чанк исключается, только если в нём нет ничего, кроме темы и
+  // mermaid: смешанный чанк с кодом демо — это код демо (D2 п. 8).
+  const isEntryExcluded = (key) => {
+    const modules = chunks?.[key]?.modules ?? [];
+    return modules.length > 0 && modules.every((m) => excludedEntryModules.includes(moduleBase(m)));
+  };
+  const isSharedExcluded = (key) => {
+    const modules = chunks?.[key]?.modules ?? [];
+    return modules.length > 0 && modules.every((m) => excludedSharedModules.includes(moduleBase(m)));
+  };
+
+  const counted = new Set();
+  const visit = (key) => {
+    if (counted.has(key) || isSharedExcluded(key)) return;
+    counted.add(key);
+    for (const imported of chunks?.[key]?.imports ?? []) visit(imported);
+  };
+  for (const src of moduleSrcs) {
+    const key = keyOf(src);
+    if (!isEntryExcluded(key)) visit(key);
+  }
+
+  let total = 0;
+  for (const key of counted) {
+    const file = join(dist, key);
+    if (existsSync(file) && statSync(file).isFile()) total += gzipSync(readFileSync(file)).length;
+  }
+  return total;
+}
+
+/**
+ * Проверка картинки для ссылок (D10, D12 п. 4): `og:image` страницы указывает
+ * на PNG 1200×630 внутри `base`; без `og:image` (нет `SITE_URL`) проверяется
+ * сам файл по известному адресу, если он собран.
+ */
+function checkOgImage({ html, base, dist, problems, requireOgImage }) {
+  /** @type {Map<string, string>} путь файла от `dist/` → страница, на которую он указан */
+  const targets = new Map();
+  for (const [file, content] of html) {
+    for (const tag of content.matchAll(tagPattern)) {
+      if (tag[1].toLowerCase() !== 'meta') continue;
+      const attrs = Object.fromEntries(
+        [...(tag[2] ?? '').matchAll(anyAttribute)].map((m) => [m[1].toLowerCase(), attrValue(m, 2)]),
+      );
+      if (attrs.property?.toLowerCase() !== 'og:image') continue;
+      const content = attrs.content ?? '';
+      let path;
+      try {
+        path = new URL(content).pathname;
+      } catch {
+        problems.push({ file, link: content, message: 'og:image must be an absolute address (D10)' });
+        continue;
+      }
+      if (!path.startsWith(base)) {
+        problems.push({ file, link: content, message: `og:image does not start with base ${base} (D10, D12)` });
+        continue;
+      }
+      const target = safeDecode(path.slice(base.length));
+      if (!existsSync(join(dist, target)) || !statSync(join(dist, target)).isFile()) {
+        problems.push({ file, link: content, message: 'og:image target file does not exist in dist/ (D12)' });
+        continue;
+      }
+      targets.set(target, file);
+    }
+  }
+  if (targets.size === 0 && existsSync(join(dist, ogImagePath))) targets.set(ogImagePath, ogImagePath);
+  // В CLI картинка обязана быть в сборке, даже когда `SITE_URL` не задан и
+  // `og:image` на страницах нет: её отдаёт endpoint `og.png.ts` всегда (D10).
+  if (requireOgImage && !existsSync(join(dist, ogImagePath))) {
+    problems.push({ file: ogImagePath, message: `${ogImagePath} is missing in dist/: the og.png endpoint did not build (D10, D12)` });
+  }
+
+  for (const target of targets.keys()) {
+    const bytes = readFileSync(join(dist, target));
+    const isPng = bytes.length >= 24 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    if (!isPng) {
+      problems.push({ file: target, message: 'og:image must be a PNG file (D10, D12)' });
+      continue;
+    }
+    const width = bytes.readUInt32BE(16);
+    const height = bytes.readUInt32BE(20);
+    if (width !== ogImageSize.width || height !== ogImageSize.height) {
+      problems.push({
+        file: target,
+        message: `og:image must be ${ogImageSize.width}×${ogImageSize.height}, the file is ${width}×${height} (D10, D12)`,
+      });
+    }
+  }
+}
+
 /**
  * Опубликованный файл, из которого получена страница [file] `docs/…/index.html`;
  * `undefined`, если такого нет.
@@ -343,7 +542,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     console.error(`${relative(process.cwd(), dist) || 'dist'}: not found, run astro build first.`);
     process.exit(1);
   }
-  const problems = checkDist({ dist, base, expectedPages: expectedPagesFromRepo(repoRoot, base) });
+  // Манифест чанков пишет плагин сборки; без него тема и mermaid попали бы в бюджет демо.
+  const chunksFile = join(siteRoot, '.astro', 'build-chunks.json');
+  if (!existsSync(chunksFile)) {
+    console.error(`${relative(process.cwd(), chunksFile)}: not found, run astro build first (D12).`);
+    process.exit(1);
+  }
+  const chunks = JSON.parse(readFileSync(chunksFile, 'utf8'));
+  const problems = checkDist({ dist, base, expectedPages: expectedPagesFromRepo(repoRoot, base), chunks, requireOgImage: true });
   if (problems.length > 0) {
     console.error(`dist/: ${problems.length} problem(s) (D6):`);
     for (const { file, link, message } of problems) {

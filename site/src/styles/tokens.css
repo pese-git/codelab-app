@@ -57,6 +57,11 @@
   --syn-c: light-dark(#5C5C5C, #A8A8A8);
   --syn-n: light-dark(#9D5D00, #F2C26B);
 
+  /* Терминал — fluent.css `.fx` / `.fx.dark`: фон блоков `codelab` на витрине
+     (design.md redesign-site-showcase, D4); цвет текста в обеих темах один. */
+  --term-bg: light-dark(#1C1C1C, #141414);
+  --term-fg: #E3E3E3;
+
   /* Тени. */
   --shadow-card: 0 1px 2px light-dark(rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.3));
   --shadow-flyout: 0 8px 16px light-dark(rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.4));

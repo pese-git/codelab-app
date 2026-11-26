@@ -1,0 +1,47 @@
+---
+/**
+ * Блок «Ваш код и ключи»: четыре утверждения с ограничениями рядом.
+ *
+ * Почему: гарантия без ограничения создаёт ложное впечатление о безопасности
+ * (`AGENTS.md` §2, приоритет 1; design.md redesign-site-showcase, D8). Поэтому
+ * там, где документ называет ограничение, оно стоит в том же пункте, а у
+ * каждого утверждения есть ссылка на раздел руководства.
+ *
+ * Для чего: пункты берёт `trustItems` (`facts.ts`); слова подтверждены цитатами
+ * документов при сборке (D6).
+ *
+ * Как использовать: `<Trust />` на главной между «Возможностями» и «Снимками».
+ */
+import '../../styles/showcase.css';
+
+import { trustItems, type Fact } from '../../lib/showcase/facts';
+import { splitTicks } from '../../lib/showcase/ticks';
+import { docRefUrl } from '../../lib/urls';
+
+const base = import.meta.env.BASE_URL;
+
+const docHref = (docRef: string): string => docRefUrl(docRef, base);
+
+/** Текст с `кодом` в обратных кавычках: фрагменты, без `innerHTML` (D2 п. 3). */
+const parts = (fact: Fact) => splitTicks(fact.text);
+---
+
+<section class="home-section" id="trust" aria-labelledby="trust-title">
+  <h2 class="t-subtitle" id="trust-title">Ваш код и ключи</h2>
+  <ul class="trust">
+    {
+      trustItems.map((item) => (
+        <li class="card">
+          <p>{parts(item).map((part) => (part.code ? <code>{part.text}</code> : part.text))}</p>
+          {item.limits.map((limit) => (
+            <p class="trust-limit">
+              <strong>Ограничение.</strong> {parts(limit).map((part) => (part.code ? <code>{part.text}</code> : part.text))}
+              {limit.docRef !== item.docRef && <a href={docHref(limit.docRef)}>Подробнее</a>}
+            </p>
+          ))}
+          <a class="card-link" href={docHref(item.docRef)}>Подробнее в руководстве</a>
+        </li>
+      ))
+    }
+  </ul>
+</section>

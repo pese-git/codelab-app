@@ -2,18 +2,32 @@
 /**
  * Главная: `/`.
  *
- * Почему: что такое CodeLab, три продукта карточками, «Установка» и
- * последние новости (design.md add-astro-site, D9; project-site «Разделы
- * сайта», сценарий «Главная ведёт к продуктам и установке»). Шаги установки
+ * Почему: за первые секунды показать главную идею продукта — агент спрашивает
+ * разрешение, решение за пользователем (design.md redesign-site-showcase, D1;
+ * project-site «Разделы сайта», сценарии «Главная ведёт к продуктам и
+ * установке» и «Порядок секций главной»). Секции по порядку: первый экран с
+ * живым макетом и переключателем клиентов, «Как это работает», продукты,
+ * возможности, «Ваш код и ключи», снимки, установка, новости. Шаги установки
  * названы словами, команды живут только в `docs/user/run-from-source.md`
  * («один факт — одно место»). Факты — `docs/user/README.md`; тексты —
- * черновик для проверки фактов `docs-writer` (tasks.md 7.2).
+ * черновик для проверки фактов `docs-writer` (tasks.md 6.1).
  *
  * Для чего: вход на сайт и маршруты к страницам возможностей и документации.
+ * На широком экране текст первого экрана и переключатель клиентов с макетом
+ * стоят рядом, на узком — переключатель под текстом отдельной секцией.
  *
- * Как использовать: правка текста — по отчёту проверки фактов.
+ * Как использовать: правка текста — по отчёту проверки фактов; демо и факты —
+ * в `src/lib/showcase/`.
  */
 import NewsList from '../components/NewsList.astro';
+import Badges from '../components/showcase/Badges.astro';
+import ClientSwitcher from '../components/showcase/ClientSwitcher.astro';
+import CliKeysDemo from '../components/showcase/CliKeysDemo.astro';
+import Gallery from '../components/showcase/Gallery.astro';
+import HowItWorks from '../components/showcase/HowItWorks.astro';
+import ModesDemo from '../components/showcase/ModesDemo.astro';
+import Trust from '../components/showcase/Trust.astro';
+import VersionPill from '../components/showcase/VersionPill.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { pageUrl, withBase } from '../lib/urls';
 
@@ -47,44 +61,99 @@ const products = [
   description="CodeLab — рабочее место для работы с AI-агентами по протоколу ACP: настольное приложение, терминальный клиент и агент."
   current="home"
 >
-  <h1 class="t-title-large">CodeLab</h1>
-  <p class="lead t-body-large">
-    Рабочее место для работы с AI-агентами по протоколу ACP (Agent Client Protocol). Агент работает в папке проекта
-    и спрашивает разрешение на опасные действия по правилам режима.
-  </p>
-  <p class="lead">
-    CodeLab app и <code>codelab</code> — клиенты. По умолчанию они запускают встроенного агента внутри своего
-    процесса, отдельная программа для этого не нужна. <code>codelab-agent</code> — тот же агент для сторонних
-    клиентов.
-  </p>
+  <div class="hero-grid">
+    <section class="hero" aria-labelledby="hero-title">
+      <VersionPill />
+      <h1 class="t-title-large" id="hero-title">CodeLab</h1>
+      <p class="lead t-body-large">
+        Рабочее место для работы с AI-агентами по протоколу ACP (Agent Client Protocol). Агент работает в папке
+        проекта и спрашивает разрешение на опасные действия по правилам режима.
+      </p>
+      <Badges />
+      <p class="cta">
+        <a class="btn accent" href={install}>Установка</a>
+        <a class="btn" href="#features">Возможности</a>
+      </p>
+    </section>
+    <ClientSwitcher />
+  </div>
 
-  <h2 class="t-subtitle section-title">Продукты</h2>
-  <ul class="cards">
-    {
-      products.map((product) => (
-        <li class="card">
-          <h3 class="t-subtitle">{product.code ? <code>{product.title}</code> : product.title}</h3>
-          <p class="t2">{product.text}</p>
-          <a class="card-link" href={product.href}>
-            Возможности {product.code ? <code>{product.title}</code> : product.title}
-          </a>
-        </li>
-      ))
-    }
-  </ul>
+  <HowItWorks />
 
-  <h2 class="t-subtitle section-title" id="install">Установка</h2>
-  <p class="lead">
-    Установщика нет: <code>codelab</code>, <code>codelab-agent</code> и CodeLab app собираются из репозитория.
-    Понадобятся FVM, а для app на macOS — Xcode с командной строкой. Шаги: подготовить репозиторий, собрать CLI и
-    агента, запустить CLI или app.
-  </p>
-  <p>
-    <a class="btn accent" href={install}>Установка и быстрый старт</a>
-    <a class="btn" href={withBase('docs/', base)}>Вся документация</a>
-  </p>
+  <section class="home-section" id="products" aria-labelledby="products-title">
+    <h2 class="t-subtitle" id="products-title">Продукты</h2>
+    <p class="lead">
+      CodeLab app и <code>codelab</code> — клиенты. По умолчанию они запускают встроенного агента внутри своего
+      процесса, отдельная программа для этого не нужна. <code>codelab-agent</code> — тот же агент для сторонних
+      клиентов.
+    </p>
+    <ul class="cards">
+      {
+        products.map((product) => (
+          <li class="card">
+            <h3 class="t-subtitle">{product.code ? <code>{product.title}</code> : product.title}</h3>
+            <p class="t2">{product.text}</p>
+            <a class="card-link" href={product.href}>
+              Возможности {product.code ? <code>{product.title}</code> : product.title}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
 
-  <h2 class="t-subtitle section-title">Новости</h2>
-  <NewsList limit={3} headingLevel={3} />
-  <p><a href={withBase('news/', base)}>Все новости выпусков</a></p>
+  <section class="home-section" id="features" aria-labelledby="features-title">
+    <h2 class="t-subtitle" id="features-title">Возможности</h2>
+    <ul class="cards">
+      <li class="card demo-card">
+        <ModesDemo headingLevel={3} />
+        <a class="card-link" href={withBase('features/agent/', base)}>Возможности <code>codelab-agent</code></a>
+      </li>
+      <li class="card demo-card">
+        <CliKeysDemo headingLevel={3} />
+        <a class="card-link" href={withBase('features/cli/', base)}>Возможности <code>codelab</code></a>
+      </li>
+      <li class="card">
+        <h3 class="t-subtitle">Проекты и сессии</h3>
+        <p class="t2">
+          Вы открываете папку проекта, и приложение запускает встроенного агента. Сессии сгруппированы по проектам в
+          боковой панели. При следующем запуске приложение открывает последний проект само.
+        </p>
+        <a class="card-link" href={withBase('features/app/', base)}>Возможности CodeLab app</a>
+      </li>
+      <li class="card">
+        <h3 class="t-subtitle">Один запрос из скрипта или CI</h3>
+        <p class="t2">
+          В режиме без диалога <code>codelab</code> отправляет один запрос, печатает ответ и завершается. В stdout
+          попадает только текст ответа агента.
+        </p>
+        <a class="card-link" href={pageUrl('apps/codelab_cli/doc/user/04-headless.md', base)}>
+          Как выполнить запрос без диалога
+        </a>
+      </li>
+    </ul>
+  </section>
+
+  <Trust />
+
+  <Gallery />
+
+  <section class="home-section" id="install" aria-labelledby="install-title">
+    <h2 class="t-subtitle" id="install-title">Установка</h2>
+    <p class="lead">
+      Установщика нет: <code>codelab</code>, <code>codelab-agent</code> и CodeLab app собираются из репозитория.
+      Понадобятся FVM, а для app на macOS — Xcode с командной строкой. Шаги: подготовить репозиторий, собрать CLI и
+      агента, запустить CLI или app.
+    </p>
+    <p>
+      <a class="btn accent" href={install}>Установка и быстрый старт</a>
+      <a class="btn" href={withBase('docs/', base)}>Вся документация</a>
+    </p>
+  </section>
+
+  <section class="home-section" id="news" aria-labelledby="news-title">
+    <h2 class="t-subtitle" id="news-title">Новости</h2>
+    <NewsList limit={3} headingLevel={3} />
+    <p><a href={withBase('news/', base)}>Все новости выпусков</a></p>
+  </section>
 </BaseLayout>

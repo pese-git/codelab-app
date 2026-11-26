@@ -2,18 +2,21 @@
 /**
  * Возможности агента `codelab-agent`: `/features/agent/`.
  *
- * Почему: витрина агента (design.md add-astro-site, D9). У
- * `apps/codelab_agent` пока нет README и `doc/` (ответ на Q5), поэтому
- * страница ссылается на `docs/user/zed.md`, `docs/user/configuration.md`,
- * `docs/user/README.md` и `docs/ops/`. Факты — из этих документов; тексты —
- * черновик для проверки фактов `docs-writer` (tasks.md 7.2).
+ * Почему: витрина агента (design.md add-astro-site, D9). Факты — из
+ * руководства агента `apps/codelab_agent/doc/user/`, `docs/user/zed.md`,
+ * `docs/user/configuration.md` и `docs/ops/`; тексты прошли проверку фактов
+ * (redesign-site-showcase, 6.1).
  *
- * Для чего: что делает агент как отдельная программа и куда читать дальше.
+ * Для чего: что делает агент как отдельная программа и куда читать дальше. В
+ * начале страницы — переключатель режимов разрешений (design.md
+ * redesign-site-showcase, D1, D5), значения которого берутся из таблицы
+ * руководства при сборке (D6).
  *
- * Как использовать: когда у `apps/codelab_agent` появится документация,
- * ссылки переводятся на неё.
+ * Как использовать: правка текста — по отчёту проверки фактов; новая
+ * возможность — `<Feature>` со ссылкой на раздел руководства.
  */
 import Feature from '../../components/Feature.astro';
+import ModesDemo from '../../components/showcase/ModesDemo.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { pageUrl } from '../../lib/urls';
 
@@ -36,6 +39,10 @@ const base = import.meta.env.BASE_URL;
     процесс. Установщика нет: агент собирается из исходников —{' '}
     <a href={pageUrl('docs/user/run-from-source.md', base) + '#2-сборка-cli-и-агента'}>запуск из исходников</a>.
   </p>
+
+  <section class="demo-section" aria-labelledby="modes-title">
+    <ModesDemo />
+  </section>
 
   <ul class="features">
     <Feature title="Агент в Zed" docPath="docs/user/zed.md" linkText="Как подключить агента к Zed">
@@ -72,7 +79,7 @@ const base = import.meta.env.BASE_URL;
     </Feature>
     <Feature
       title="Разрешения по режиму"
-      docPath="docs/user/zed.md#разрешения-и-режимы"
+      docPath="apps/codelab_agent/doc/user/05-permissions.md#режимы"
       linkText="Режимы разрешений"
     >
       Агент спрашивает у клиента разрешение на правки и команды по правилам режима. Новая сессия стартует в режиме
@@ -80,7 +87,7 @@ const base = import.meta.env.BASE_URL;
     </Feature>
     <Feature
       title="Журналы сессий"
-      docPath="docs/user/zed.md#если-что-то-не-работает"
+      docPath="apps/codelab_agent/doc/user/10-data-and-logs.md"
       linkText="Где журналы и логи"
     >
       Каждый разговор записывается в журнал сессии в каталоге <code>CODELAB_HOME</code>, по подкаталогу на папку
