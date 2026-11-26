@@ -6,7 +6,7 @@
 
 `bin/codelab.dart` — одна строка: `exit(await runCodelab(args, environment: Platform.environment))`. `exit`, а не `exitCode`: подписки на stdin и сигналы держали бы процесс живым после завершения клиента.
 
-Вся логика — в `runCodelab` (`lib/src/run.dart`). Он нужен отдельной функцией, чтобы выбор режима, коды выхода и содержимое stdout были одними для процесса и для модульных тестов: тесты вызывают `runCodelab(args, environment: …, io: FakeCliIo(), embeddedOpener: …, signals: …)`. Параметры функции — это её швы ([глава 01](development.md#швы-для-тестов)):
+Вся логика — в `runCodelab` (`lib/src/run.dart`). Он нужен отдельной функцией, чтобы выбор режима, коды выхода и содержимое stdout были одними для процесса и для модульных тестов: тесты вызывают `runCodelab(args, environment: …, io: FakeCliIo(), embeddedOpener: …, signals: …)`. Параметры функции — это её швы ([глава 01](01-overview.md#швы-для-тестов)):
 
 | Параметр | По умолчанию | Для чего |
 |---|---|---|

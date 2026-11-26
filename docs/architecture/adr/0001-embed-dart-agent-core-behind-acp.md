@@ -4,6 +4,8 @@ Status: Accepted
 
 Date: 2026-10-21
 
+> **Имена пакетов.** ADR записан до переименования пакетов и текст не правится: имена `acp_*` и `apps/codelab_app` здесь — прежние. Действующие имена (`codelab_acp_protocol`, `codelab_client_core`, `codelab_ui`, `apps/codelab_desktop` и другие) — таблица переименований [ADR-0002](0002-name-packages-codelab-side-layer.md#2-таблица-переименований).
+
 ## Context
 
 Сейчас CodeLab состоит из двух частей:

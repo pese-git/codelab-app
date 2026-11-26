@@ -149,5 +149,5 @@ fvm dart run melos run web-compile
 - [`codelab_agent_acp`](../codelab_agent_acp/README.md) — `AcpAgentServer`;
 - [`codelab_acp_transports`](../codelab_acp_transports/README.md) — `InProcessAcpLink`;
 - [`codelab_setup`](../codelab_setup/README.md) — второй мост, настройки агента для клиентов;
-- [`apps/codelab_cli/doc/development.md`](../../../apps/codelab_cli/doc/development.md) и [`apps/codelab_desktop/doc/development.md`](../../../apps/codelab_desktop/doc/development.md) — как клиенты используют мост;
+- [`apps/codelab_cli/doc/02-startup-and-composition.md`](../../../apps/codelab_cli/doc/02-startup-and-composition.md) и [`apps/codelab_desktop/doc/07-embedded-agent-and-connections.md`](../../../apps/codelab_desktop/doc/07-embedded-agent-and-connections.md) — как клиенты используют мост;
 - [`openspec/specs/embedded-agent/spec.md`](../../../openspec/specs/embedded-agent/spec.md), [`09-12-stage-7-embedded.md`](../../../docs/architecture/proposals/dart-agent-and-clients/09-12-stage-7-embedded.md).

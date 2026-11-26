@@ -134,7 +134,7 @@ fvm flutter widget-preview start
 
 ### Приложение
 
-Настоящее окно видно только в `apps/codelab_desktop`. Приложение с расширением `flutter_driver` запускается так (подробности — в [руководстве приложения](../../../../apps/codelab_desktop/doc/development.md)):
+Настоящее окно видно только в `apps/codelab_desktop`. Приложение с расширением `flutter_driver` запускается так (подробности — в [руководстве приложения](../../../../apps/codelab_desktop/doc/00-getting-started.md#управление-запущенным-приложением-flutter_driver-и-dart-mcp)):
 
 ```bash
 cd apps/codelab_desktop

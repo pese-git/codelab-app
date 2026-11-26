@@ -27,7 +27,7 @@
 
 ## 3. Документация и закрытие (итерация 3)
 
-- [ ] 3.1 `[desktop]` `apps/codelab_desktop/doc/operations.md` (абзац о недавних проектах: без переноса и событий; ключ предвыпускных сборок не читается), `doc/development.md` (строка `lib/core/platform/`) — `docs-writer` (D6).
+- [ ] 3.1 `[desktop]` `apps/codelab_desktop/doc/operations.md` (абзац о недавних проектах: без переноса и событий; ключ предвыпускных сборок не читается), `doc/01-overview.md` (строка `lib/core/platform/` карты кода) и `doc/06-platform-and-appearance.md` — `docs-writer` (D6).
 - [ ] 3.2 `[client]` `packages/dart/codelab_client_core/README.md`, строка `RecentProjectsStore` таблицы реализаций — `docs-writer` (D6).
 - [ ] 3.3 `docs/architecture/platform-integration.md` §28 (история порта: перенос удалён этим change); `delivery-roadmap.md` §4.5 (критерий M4 выполнен) и §10.4 (строка закрыта) (D6).
 - [ ] 3.4 `openspec validate remove-recent-projects-migration --strict`; проверки затронутого по `AGENTS.md` §21: `fvm dart format --set-exit-if-changed` изменённых файлов; `fvm flutter analyze` и `fvm flutter test` в `apps/codelab_desktop`; `fvm dart analyze` в `codelab_client_io` (doc-комментарий); `melos run guard` (удалён файл с импортами `shared_preferences` и `codelab_client_io` в `lib/core/platform/`); `cd site && npm ci && npm run verify` — СЛЕДУЕТ при установленном Node (изменены опубликованные `doc/` и README). `web-compile`, `test:e2e:cli:*`, conformance — не нужны: web-безопасные пакеты, CLI и ACP не меняются. Полный `melos run check` — только по просьбе пользователя.

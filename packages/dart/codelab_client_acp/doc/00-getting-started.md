@@ -104,7 +104,7 @@ PASS acp/prompt-tool-permission-allow (0.2s)
 2 passed, 0 failed, 0 skipped
 ```
 
-Эти две фикстуры затрагивают разрешение и отмену. Что они проверяют, смотрите в их поле `description`. Команды CLI описывает [руководство `codelab`](../../../../apps/codelab_cli/doc/development.md).
+Эти две фикстуры затрагивают разрешение и отмену. Что они проверяют, смотрите в их поле `description`. Команды CLI описывает [руководство `codelab`](../../../../apps/codelab_cli/doc/README.md).
 
 ## Отладка
 

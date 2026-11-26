@@ -99,7 +99,7 @@ codelab_acp_testing
     └── используется только тестовым и dev-кодом
 ```
 
-В коде клиентская сторона шире схемы: между приложениями и `codelab_client_acp` стоит общий клиентский слой `codelab_client_core` (владелец состояния рабочего пространства), его `dart:io`-адаптеры — `codelab_client_io`, а вторым клиентом рядом с `codelab_desktop` работает `apps/codelab_cli`. Фактические рёбра: `codelab_desktop` и `codelab_cli` → `codelab_client_core`, `codelab_client_io`, `codelab_client_acp`, `codelab_acp_protocol`, `codelab_acp_transports`, мосты `codelab_setup` и `codelab_embedded`; `codelab_desktop` → `codelab_ui`; `codelab_client_io` → `codelab_client_core` → `codelab_client_acp` → `codelab_acp_transports` → `codelab_acp_protocol` (`pubspec.yaml` пакетов; схема зависимостей app — `apps/codelab_desktop/doc/development.md`). Направление `codelab_client_core` → `codelab_client_acp` обратно агентскому `codelab_agent_acp` → `codelab_agent_core`: одинаковые имена слоёв у сторон не означают одинакового направления (ADR-0002, Consequences). `codelab_ui` не зависит ни от одного пакета `codelab_*`. Агентская сторона и мосты — §53.
+В коде клиентская сторона шире схемы: между приложениями и `codelab_client_acp` стоит общий клиентский слой `codelab_client_core` (владелец состояния рабочего пространства), его `dart:io`-адаптеры — `codelab_client_io`, а вторым клиентом рядом с `codelab_desktop` работает `apps/codelab_cli`. Фактические рёбра: `codelab_desktop` и `codelab_cli` → `codelab_client_core`, `codelab_client_io`, `codelab_client_acp`, `codelab_acp_protocol`, `codelab_acp_transports`, мосты `codelab_setup` и `codelab_embedded`; `codelab_desktop` → `codelab_ui`; `codelab_client_io` → `codelab_client_core` → `codelab_client_acp` → `codelab_acp_transports` → `codelab_acp_protocol` (`pubspec.yaml` пакетов; схема зависимостей app — `apps/codelab_desktop/doc/01-overview.md`). Направление `codelab_client_core` → `codelab_client_acp` обратно агентскому `codelab_agent_acp` → `codelab_agent_core`: одинаковые имена слоёв у сторон не означают одинакового направления (ADR-0002, Consequences). `codelab_ui` не зависит ни от одного пакета `codelab_*`. Агентская сторона и мосты — §53.
 
 ---
 
@@ -107,7 +107,7 @@ codelab_acp_testing
 
 Зависимости ДОЛЖНЫ быть направлены от более высокоуровневых компонентов к более низкоуровневым либо к абстракциям, задающим границу.
 
-Низкоуровневый пакет НЕ ДОЛЖЕН зависеть от высокоуровневого пакета приложения.
+Запрет зависимости пакетов от приложений и циклов между пакетами — корневой `AGENTS.md` §5. Ниже — какие рёбра между пакетами клиентской стороны этим исключаются.
 
 ЗАПРЕЩЕНО:
 
@@ -509,7 +509,7 @@ ConcreteStdioTransport
 
 Однако каждую зависимость ДОЛЖЕН использовать только соответствующий слой.
 
-В коде к этому списку добавлены `codelab_client_core`, `codelab_client_io` и мосты `codelab_setup`, `codelab_embedded`; это весь допустимый набор пакетов `codelab_*` (`desktopAllowlist`). Пакеты `codelab_agent_*` в зависимостях и импортах app запрещены сторожем (корневой `AGENTS.md` §5). Сторонние зависимости app и правила их изоляции в `lib/core/platform/` — `apps/codelab_desktop/doc/development.md` и `platform-integration.md` §8.
+В коде к этому списку добавлены `codelab_client_core`, `codelab_client_io` и мосты `codelab_setup`, `codelab_embedded`; это весь допустимый набор пакетов `codelab_*` (`desktopAllowlist`). Пакеты `codelab_agent_*` в зависимостях и импортах app запрещены сторожем (корневой `AGENTS.md` §5). Сторонние зависимости app и правила их изоляции в `lib/core/platform/` — [обзор app, «Правила зависимостей и как их проверяет сторож»](../../apps/codelab_desktop/doc/01-overview.md#правила-зависимостей-и-как-их-проверяет-сторож) и `platform-integration.md` §8.
 
 ---
 
@@ -555,7 +555,7 @@ features/chat/
 
 НЕ СЛЕДУЕТ создавать `domain/application/infrastructure/presentation` автоматически.
 
-В коде `lib/app/` не разбит на `bootstrap/`, `di/` и `routing/`: сборка и запуск — `app_scope.dart` (`createCodeLabRootScope`, `CodeLabBootstrap`), корневой виджет — `codelab_app_widget.dart`, рядом подкаталоги `appearance/`, `language/`, `navigation/` (`NavigationCubit`, `AppDestination`; пакета маршрутизации нет), `onboarding/`. `lib/core/` — `platform/` (адаптеры платформы и хранилища настроек) и `text/`. Фичи — `workbench`, `settings`, `onboarding`, `project_files`, `terminal`, `protocol`, `usage`; у каждой только `application/` и `presentation/`: доменная логика живёт в `codelab_client_core` и `codelab_client_acp`, адаптеры — в `lib/core/platform/` и `lib/app/` (`apps/codelab_desktop/doc/development.md`). Каталогов `chat/` и `sessions/` нет: их роль играет `workbench`.
+В коде `lib/app/` не разбит на `bootstrap/`, `di/` и `routing/`: сборка и запуск — `app_scope.dart` (`createCodeLabRootScope`, `CodeLabBootstrap`), корневой виджет — `codelab_app_widget.dart`, рядом подкаталоги `appearance/`, `language/`, `navigation/` (`NavigationCubit`, `AppDestination`; пакета маршрутизации нет), `onboarding/`. `lib/core/` — `platform/` (адаптеры платформы и хранилища настроек) и `text/`. Фичи — `workbench`, `settings`, `onboarding`, `project_files`, `terminal`, `protocol`, `usage`; у каждой только `application/` и `presentation/`: доменная логика живёт в `codelab_client_core` и `codelab_client_acp`, адаптеры — в `lib/core/platform/` и `lib/app/` (`apps/codelab_desktop/doc/01-overview.md`). Каталогов `chat/` и `sessions/` нет: их роль играет `workbench`.
 
 ---
 
@@ -668,7 +668,7 @@ BLoC / Cubit
 API application
 ```
 
-В коде Cubit-ы desktop лежат в `features/*/application/`, а не в `presentation/`; в `presentation/` — только виджеты (`apps/codelab_desktop/doc/development.md`, `state-management.md`). В `presentation/` нет импортов `dart:io`, `codelab_acp_transports` и `codelab_client_io`. Сторож запрещает `dart:io` в `features/settings/presentation/`, во всей фиче `onboarding` и во всей фиче `project_files`, IO-барели мостов `codelab_embedded/io.dart` и `codelab_setup/io.dart` — во всём `lib/` app, кроме `lib/app/`, а пять плагинов платформы (`file_selector`, `url_launcher`, `pty2`, `desktop_drop`, `system_theme`) — вне своих адаптеров в `lib/core/platform/`. Общего запрета `dart:io` и транспортов для `presentation/` остальных фич в стороже нет.
+В коде Cubit-ы desktop лежат в `features/*/application/`, а не в `presentation/`; в `presentation/` — только виджеты (`apps/codelab_desktop/doc/03-state-flow.md`, `state-management.md`). В `presentation/` нет импортов `dart:io`, `codelab_acp_transports` и `codelab_client_io`. Сторож запрещает `dart:io` в `features/settings/presentation/`, во всей фиче `onboarding` и во всей фиче `project_files`, IO-барели мостов `codelab_embedded/io.dart` и `codelab_setup/io.dart` — во всём `lib/` app, кроме `lib/app/`, а пять плагинов платформы (`file_selector`, `url_launcher`, `pty2`, `desktop_drop`, `system_theme`) — вне своих адаптеров в `lib/core/platform/`. Общего запрета `dart:io` и транспортов для `presentation/` остальных фич в стороже нет.
 
 ---
 
@@ -1840,21 +1840,16 @@ Cubit
 | `codelab_agent_acp` | проекция `AgentRuntime` в ACP-сервер `AcpAgentServer` над любым `AcpTransport` | `codelab_agent_core`, `codelab_acp_protocol`, `codelab_acp_transports`, `async`, `meta` |
 | `apps/codelab_agent` | бинарь `codelab-agent serve --stdio \| --ws`; composition root агента как процесса | пакеты агента, `codelab_acp_*`, `args`, `http`, `async`, `meta` |
 
-Правила направления:
-
-* ядро не знает ни одного другого пакета проекта и не импортирует `dart:io`; всё внешнее приходит портами от хоста (PKG-1, PKG-6);
-* `codelab_agent_acp` и `codelab_agent_mcp` не импортируют `dart:io` и друг друга; IO-транспорты и процессы им передаёт хост;
-* ядро собирается только через `buildAgentCore` (HOST-6): `ToolRegistry(`, `Agent(`, `AgentRuntime(` в хостах ЗАПРЕЩЕНЫ;
-* `codelab_agent_*` не зависят от клиентских пакетов, `codelab_ui` и приложений.
+Правила направления (ядро без пакетов проекта и `dart:io`, PKG-1 и PKG-6; `codelab_agent_acp` и `codelab_agent_mcp` без `dart:io` и друг без друга, PKG-3; сборка ядра только через `buildAgentCore`, HOST-6; агентские пакеты без клиентских пакетов, `codelab_ui` и приложений) — требование spec [`workspace-architecture`](../../openspec/specs/workspace-architecture/spec.md) «Автоматический сторож границ пакетов» и инварианты [`proposals/agent-core/01-layers-and-packages.md`](proposals/agent-core/01-layers-and-packages.md) §1.5. Почему: ядро — одно для трёх хостов (бинарь, встроенный агент, web-smoke), поэтому всё внешнее приходит портами; ACP-проекция и MCP-клиент без `dart:io` собираются вместе с ядром во встроенном агенте; единая точка сборки `buildAgentCore` не даёт хостам разойтись в порядке шагов ([`proposals/agent-core/10-core-assembly-and-profiles.md`](proposals/agent-core/10-core-assembly-and-profiles.md) §10.7).
 
 В коде запрет `dart:io` для `codelab_agent_acp` и `codelab_agent_mcp` проверяют правила `rules.dart` (PKG-3), а отсутствие зависимости друг от друга и от клиентских пакетов — их allowlist-ы (`acpAllowlist`, `mcpAllowlist`). В `dev_dependencies` `codelab_agent_acp` есть `codelab_client_acp` (контрактный тест `test/contract/client_application_contract_test.dart`), рабочие `dependencies` чисты.
 
 ### Мосты к клиентам
 
-Клиенты НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*` (`AGENTS.md` §5; allowlist сторожа). Агентская сторона приходит только через два моста:
+Запрет импорта `package:codelab_agent_*` в клиентах и правила импорта барелей мостов — корневой `AGENTS.md` §5 и требование spec `workspace-architecture` «Автоматический сторож границ пакетов» (PKG-4). Агентская сторона приходит через два моста:
 
 * `codelab_setup` — настройка агента: чистые типы конфигурации ядра (основной барель, web-безопасный) и общие подкоманды `config`, `secret`, `provider`, `mcp` из `codelab_agent_io` (`lib/io.dart`). Через него клиенты читают и редактируют `config.yaml`, не зная о `ConfigLoader`.
-* `codelab_embedded` — встроенный агент: хост ядра, который собирает агента через `buildAgentCore` и `AcpAgentServer` и соединяет его с клиентом парой `InProcessAcpLink` в процессе клиента. Точки входа: `codelab_embedded.dart` (web-безопасная), `io.dart` (настольный открыватель: конфигурация, секреты, журнал сессий, MCP), `testing.dart` (сценарный открыватель для тестов). Правила импорта `io.dart` и `testing.dart` — в `AGENTS.md` §5 и в стороже.
+* `codelab_embedded` — встроенный агент: хост ядра, который собирает агента через `buildAgentCore` и `AcpAgentServer` и соединяет его с клиентом парой `InProcessAcpLink` в процессе клиента. Точки входа: `codelab_embedded.dart` (web-безопасная), `io.dart` (настольный открыватель: конфигурация, секреты, журнал сессий, MCP), `testing.dart` (сценарный открыватель для тестов). Правила импорта `io.dart` и `testing.dart` — `AGENTS.md` §5 и то же требование spec.
 
 ```text
 apps/codelab_desktop ─┐                      ┌─ codelab_setup ──── codelab_agent_core (типы)

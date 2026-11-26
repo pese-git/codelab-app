@@ -161,45 +161,24 @@ sequenceDiagram
 
 ## Хранилище на диске: `JsonlSessionStore`
 
-Реализация порта для настольных хостов (`packages/dart/codelab_agent_io/lib/src/session/jsonl_session_store.dart`). Хост создаёт одно хранилище на процесс функцией `openHostSessions` (`host_sessions.dart`): корень — `sessions.dir` или `$CODELAB_HOME/sessions`, политика — `sessions.fsync`. Пользовательский смысл этих ключей и раскладка `CODELAB_HOME` — в [`apps/codelab_agent/doc/operations.md`](../../../../apps/codelab_agent/doc/operations.md) и [`docs/ops/codelab-home.md`](../../../../docs/ops/codelab-home.md).
-
-Раскладка:
-
-```text
-<sessions>/
-  index.json                              кэш списка сессий
-  <cwdSlug>/
-    <created>_<sessionId>.jsonl           журнал корневой сессии
-    <created>_<sessionId>.jsonl.corrupt   карантин битых строк
-    <created>_<sessionId>/
-      usage.json                          журнал расхода
-      subagents/<created>_<childId>.jsonl журналы субагентов
-```
-
-`cwdSlug(cwd)` (`lib/src/session/slug.dart`) — два последних сегмента пути плюс хеш FNV-1a полного пути. Человек находит каталог глазами, хеш исключает коллизии `/a/b-c` и `/a-b/c`. Слаг необратим, истинный `cwd` хранится в заголовке. Журналы субагентов любой глубины лежат плоско в `subagents/` корня: вложенные каталоги дали бы путь длиннее 260 символов Windows.
-
-Остальное:
-
-- **Очередь на путь** (`write_queue.dart`). Одна цепочка `Future` на файл, общая для процесса, чтобы байты двух строк не перемешались (SES-4). Межпроцессной блокировки нет: одна сессия — один процесс-писатель.
-- **Индекс списка.** `list` не разбирает все журналы заново: `index.json` хранит сводку и ключ свежести `(size, mtime)`. Индекс — производный файл: нечитаемый игнорируется с `session.index.ignored`. Страницы идут от новых к старым, курсор — base64 от времени и id (`pageOf` в `session_store.dart`).
-- **Containment.** Файл, чей `realpath` вне корня хранилища, не читается и не переписывается: подложенная ссылка не должна вывести ремонт за `sessions/`.
+Реализация порта для настольных хостов (`packages/dart/codelab_agent_io/lib/src/session/jsonl_session_store.dart`). Хост создаёт одно хранилище на процесс функцией `openHostSessions` (`host_sessions.dart`): корень — `sessions.dir` или `$CODELAB_HOME/sessions`, политика — `sessions.fsync`. Хранилище отвечает за байты: каталоги по слагу рабочей папки, один журнал на сессию, очередь записи на путь, `fsync`, карантин и переписывание, кэш списка `index.json`, разбор журнала в отдельном isolate. Раскладка каталогов, правила слага, карантин и защита от ссылок за пределы `sessions/` описаны в [главе 6 пакета `codelab_agent_io`](../../codelab_agent_io/doc/06-sessions-and-state.md#раскладка-на-диске) — здесь не повторяются. Пользовательский смысл ключей и раскладка `CODELAB_HOME` — в [`apps/codelab_agent/doc/operations.md`](../../../../apps/codelab_agent/doc/operations.md) и [`docs/ops/codelab-home.md`](../../../../docs/ops/codelab-home.md).
 
 ## Открытие и ремонт
 
-`SessionStore.open(id)` читает файл как текст (`utf8.decode(..., allowMalformed: true)`) и отдаёт его `parseSessionLines` (`lib/src/session/parse.dart`). Ремонт делится на две части: что исправить в памяти (делает ядро) и что исправить на носителе (делает хранилище по отчёту `ParsedJournal`).
+`SessionStore.open(id)` отдаёт текст журнала функции `parseSessionLines` (`lib/src/session/parse.dart`). Ремонт делится на две части: что исправить в памяти (делает ядро) и что исправить на носителе (делает хранилище по отчёту `ParsedJournal`; порядок действий над файлом — в [главе 6 `codelab_agent_io`](../../codelab_agent_io/doc/06-sessions-and-state.md#карантин-и-переписывание)).
 
-| Ситуация | Что делает разбор | Что делает хранилище |
-|---|---|---|
-| нет заголовка | синтезирует его в памяти, `headerMissing` | в файл не дописывает |
-| строка не разбирается: обрыв, мусор, не объект, нет `id` | отправляет в `quarantine` | пишет `{line, text, reason, at}` в `.corrupt` |
-| дубликат `id` | в карантин, `reason: duplicate id` | так же |
-| оборвана только последняя строка | `onlyTailBroken` | усекает файл до конца последней целой строки |
-| иной карантин | `keptLines` — уцелевшие строки как были | переписывает файл через `.tmp` и `rename` |
-| последняя строка целая, но без `\n` | `missingFinalNewline` | дописывает `\n`, иначе две записи склеятся |
-| лист указывает на несуществующий id | лист — последняя уцелевшая запись не `leaf`, `healedLeafFrom`, лог `session.leaf.healed` | в файл ничего не пишет |
-| `parentId` указывает в пустоту | считает `brokenLinks` | — |
+| Ситуация | Что делает разбор |
+|---|---|
+| нет заголовка | синтезирует его в памяти, `headerMissing` |
+| строка не разбирается: обрыв, мусор, не объект, нет `id` | отправляет в `quarantine` |
+| дубликат `id` | в карантин, `reason: duplicate id` |
+| оборвана только последняя строка | `onlyTailBroken` |
+| иной карантин | `keptLines` — уцелевшие строки как были |
+| последняя строка целая, но без `\n` | `missingFinalNewline` |
+| лист указывает на несуществующий id | лист — последняя уцелевшая запись не `leaf`, `healedLeafFrom`, лог `session.leaf.healed` |
+| `parentId` указывает в пустоту | считает `brokenLinks` |
 
-Переписывание при карантине — единственное, что меняет существующие строки журнала (SES-1). Оборванная последняя строка не мешает открыть сессию (SES-5): падение посреди записи — обычный случай, а не авария.
+Переписывание файла при карантине — единственное, что меняет существующие строки журнала (SES-1). Оборванная последняя строка не мешает открыть сессию (SES-5): падение посреди записи — обычный случай, а не авария.
 
 Итог ремонта — `RepairReport` в снимке (`quarantinedLines`, `headerMissing`, `healedLeafFrom`, `brokenLinks`, `interruptedToolCalls`); `isClean` истинно, когда чинить было нечего.
 

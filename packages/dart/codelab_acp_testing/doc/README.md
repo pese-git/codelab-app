@@ -49,6 +49,6 @@
 ## Смежные документы
 
 - Соседние руководства: [`codelab_acp_protocol`](../../codelab_acp_protocol/doc/README.md) (модели и кодеки, по которым собираются кадры), [`codelab_acp_transports`](../../codelab_acp_transports/doc/README.md) (транспорты и `InProcessAcpLink`), [`codelab_architecture_tests`](../../codelab_architecture_tests/doc/README.md) (сторож: импорты этого пакета и доказательства матрицы целей), [ядро агента](../../codelab_agent_core/doc/README.md), в частности [главу о тестировании](../../codelab_agent_core/doc/12-testing.md) и сценарную модель.
-- Команда `codelab test-scenario`: [эксплуатация CLI](../../../../apps/codelab_cli/doc/operations.md#проверка-агента-фикстурами-test-scenario) и [разработка CLI](../../../../apps/codelab_cli/doc/development.md).
+- Команда `codelab test-scenario`: [эксплуатация CLI](../../../../apps/codelab_cli/doc/operations.md#проверка-агента-фикстурами-test-scenario) и [разработка CLI](../../../../apps/codelab_cli/doc/01-overview.md).
 - Стратегия тестов: [`docs/architecture/testing.md`](../../../../docs/architecture/testing.md).
 - Спецификации: [`acp-golden-fixtures`](../../../../openspec/specs/acp-golden-fixtures/spec.md), [`cli-scenario-driver`](../../../../openspec/specs/cli-scenario-driver/spec.md), [`testing-quality`](../../../../openspec/specs/testing-quality/spec.md).

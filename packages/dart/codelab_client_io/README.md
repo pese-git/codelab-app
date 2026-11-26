@@ -120,4 +120,4 @@ fvm dart test
 - [`codelab_client_acp`](../codelab_client_acp/README.md) — протокольный клиент и порты `fs/*`, `terminal/*`.
 - [`codelab_acp_transports`](../codelab_acp_transports/README.md) — транспорты stdio и WebSocket.
 - [`codelab_embedded`](../codelab_embedded/README.md) — встроенный агент, который открывают резолверы приложений.
-- [Разработка `codelab`](../../../apps/codelab_cli/doc/development.md), [разработка CodeLab app](../../../apps/codelab_desktop/doc/development.md).
+- [Разработка `codelab`](../../../apps/codelab_cli/doc/01-overview.md), [разработка CodeLab app](../../../apps/codelab_desktop/doc/01-overview.md).

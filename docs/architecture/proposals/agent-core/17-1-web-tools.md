@@ -1,6 +1,8 @@
 # 17.1. Web-инструменты: `web_fetch` и `web_search`
 
 > Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
+>
+> **Статус реализации (сверено с кодом 2026-11-26).** Не реализовано: инструментов `web_fetch` и `web_search` в ядре нет; ключ `tools.web` распознаётся без применения (`settings_registry.dart`).
 
 ← [17. Спецификации после MVP](17-0-post-mvp.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.2. Skills и шаблоны промптов](17-2-skills-and-templates.md) →
 

@@ -1,6 +1,8 @@
 # 17.2. Skills и шаблоны промптов
 
 > Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
+>
+> **Статус реализации (сверено с кодом 2026-11-26).** Реализовано: skills (каталог в промпте, инструмент `skill`, `/skill:<name>`, активные навыки и повторная активация после сжатия) и шаблоны команд `/<template> args` — changes `add-agent-skills` и `add-agent-project-files` (архив), спецификации `agent-skills`, `agent-slash-commands`. Не реализовано: закреплённые строки operative (K-06; ключ `operative` без потребителя, `schema.dart`) и точки расширения E-18, E-19 (§17.2.13).
 
 ← [17.1. Web-инструменты: `web_fetch` и `web_search`](17-1-web-tools.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.3. Субагенты: инструмент `agent`](17-3-subagents.md) →
 

@@ -82,7 +82,7 @@ Flutter UI НЕ ДОЛЖЕН напрямую управлять этими си
 
 Пакеты-библиотеки называются по схеме `codelab_<сторона>_<слой>` ([ADR-0002](adr/0002-name-packages-codelab-side-layer.md)): сторона — `acp` (общий протокольный слой), `client` или `agent`; слой — `core` (логика без IO), `io` (адаптеры `dart:io`), `acp` (проекция стороны в протокол) или предметное имя у общего слоя. Пакеты без стороны — мосты `codelab_setup` и `codelab_embedded`, через которые клиенты получают агентскую сторону, кит виджетов `codelab_ui` и сторож `codelab_architecture_tests`.
 
-Рабочие зависимости между пакетами (`dependencies` в `pubspec.yaml`; показаны основные рёбра, пакет МОЖЕТ зависеть и от нижележащих пакетов напрямую):
+Рабочие зависимости между пакетами (`dependencies` в `pubspec.yaml`; показаны основные рёбра; пакеты зависят и от нижележащих пакетов напрямую, где это нужно):
 
 ```text id="k2p8sd"
 клиентская сторона
@@ -102,13 +102,12 @@ Flutter UI НЕ ДОЛЖЕН напрямую управлять этими си
   codelab_agent_mcp, codelab_agent_io ─► codelab_agent_core
 ```
 
-Правила:
+Правила пакетов (направление зависимостей, чистый Dart в `packages/dart/`, запрет `package:codelab_agent_*` в клиентах, `codelab_acp_testing` только как `dev_dependency`, web-безопасные барели) задаёт корневой `AGENTS.md` §5; проверяемые сторожем запреты и allowlist-ы — требование spec [`workspace-architecture`](../../openspec/specs/workspace-architecture/spec.md) «Автоматический сторож границ пакетов», инварианты ядра — PKG-1…PKG-6 ([`proposals/agent-core/01-layers-and-packages.md`](proposals/agent-core/01-layers-and-packages.md) §1.5). Почему граф устроен так:
 
-* пакеты НЕ ДОЛЖНЫ зависеть от приложений, циклы между пакетами ЗАПРЕЩЕНЫ;
-* пакеты в `packages/dart/` ДОЛЖНЫ оставаться на чистом Dart; Flutter допустим только в `packages/flutter/` и `apps/codelab_desktop`;
-* клиенты (`apps/codelab_desktop`, `apps/codelab_cli`) НЕ ДОЛЖНЫ импортировать `package:codelab_agent_*` — агентская сторона приходит только через мосты;
-* ядро агента `codelab_agent_core` не знает ни одного другого пакета проекта и не импортирует `dart:io`, всё внешнее приходит портами от хоста (PKG-1, PKG-6); его зависимости ограничены allowlist-ом (PKG-2);
-* другие пакеты МОГУТ подключать `codelab_acp_testing` только как `dev_dependency`; единственное исключение — `apps/codelab_cli` (драйвер фикстур `test-scenario`).
+* пакеты не знают приложений и не образуют циклов — иначе общий слой нельзя переиспользовать во втором клиенте (`apps/codelab_cli`) и тестировать без приложения;
+* клиенты получают агента только через мосты — клиентский код говорит с агентом по ACP и не ветвится по виду агента, а мосты остаются единственным местом, где меняется сборка агентской стороны (ADR-0002, §53 `layers-and-dependencies.md`);
+* ядро агента не знает пакетов проекта и `dart:io` — одно ядро собирается в бинаре, в процессе клиента и в web; узкий allowlist держит поверхность сторонних зависимостей ядра под контролем;
+* `codelab_acp_testing` не входит в рабочие зависимости — фикстуры и двойники не попадают в релизную сборку; исключение `apps/codelab_cli` нужно рабочей команде `test-scenario`.
 
 Подробно — [`layers-and-dependencies.md`](layers-and-dependencies.md) §2 и §53, корневой `AGENTS.md` §5. Сайт `site/` (Astro, [ADR-0003](adr/0003-build-project-site-with-astro-in-monorepo.md)) — вне pub workspace и Melos, в граф пакетов не входит.
 

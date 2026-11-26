@@ -1,6 +1,6 @@
 # Как расширять app
 
-Глава собирает рецепты типовых изменений `apps/codelab_desktop`: новая фича, страница настроек, строка интерфейса, сочетание клавиш, порт платформы, вид строки ленты. У каждого рецепта одна схема: нужен ли OpenSpec change, шаги, скелет кода, тест, проверки. Краткие версии трёх рецептов (страница настроек, строка, сочетание клавиш) есть в [development.md](development.md); здесь они раскрыты скелетами и тестами.
+Глава собирает рецепты типовых изменений `apps/codelab_desktop`: новая фича, страница настроек, строка интерфейса, сочетание клавиш, порт платформы, вид строки ленты. У каждого рецепта одна схема: нужен ли OpenSpec change, шаги, скелет кода, тест, проверки. Как собрать, запустить и проверить приложение — в [development.md](development.md) и [главе 00](00-getting-started.md).
 
 Перед рецептами прочитайте [01-overview.md](01-overview.md) (слои и карта `lib/`) и [02-composition-root.md](02-composition-root.md) (как собираются Cubit-ы и порты). Правила приложения — в [`AGENTS.md`](../AGENTS.md); как писать тесты из рецептов — в [08-testing.md](08-testing.md).
 
@@ -21,7 +21,7 @@
 
 ## Рецепт 1. Новая фича
 
-Фича — каталог `lib/features/<фича>/` со слоями `application/` (Cubit-ы и состояние, без виджетов) и `presentation/` (виджеты). Слои `domain/` и `infrastructure/` не создаются: доменная логика живёт в `codelab_client_core`, адаптеры — в `lib/core/platform/` и `lib/app/` ([development.md](development.md#структура-кода)). Пустые слои ради формы запрещены (`AGENTS.md` §6, §13).
+Фича — каталог `lib/features/<фича>/` со слоями `application/` (Cubit-ы и состояние, без виджетов) и `presentation/` (виджеты). Слои `domain/` и `infrastructure/` не создаются: доменная логика живёт в `codelab_client_core`, адаптеры — в `lib/core/platform/` и `lib/app/` ([карта кода](01-overview.md#карта-кода)). Пустые слои ради формы запрещены (`AGENTS.md` §6, §13).
 
 ### Шаги
 
@@ -651,7 +651,7 @@ final class FakeTextClipboard implements TextClipboard {
 
 ### Проверки
 
-Тесты адаптера и потребителя, `fvm flutter analyze`, `fvm dart run melos run guard` (новый импорт плагина и правило сторожа). Если порт меняет поведение для пользователя, нужен change и обновление [06-platform-and-appearance.md](06-platform-and-appearance.md) и таблицы `lib/core/platform/` в [development.md](development.md#структура-кода).
+Тесты адаптера и потребителя, `fvm flutter analyze`, `fvm dart run melos run guard` (новый импорт плагина и правило сторожа). Если порт меняет поведение для пользователя, нужен change и обновление [06-platform-and-appearance.md](06-platform-and-appearance.md) и таблицы `lib/core/platform/` в [обзоре](01-overview.md#карта-кода).
 
 ## Рецепт 6. Новый вид строки ленты
 
@@ -724,7 +724,7 @@ test('TaskOpsItem becomes a quiet CodeLabTaskOpsRow with the kit text', () {
 ## Смотрите также
 
 - [08-testing.md](08-testing.md) — как писать тесты из рецептов и что запускать.
-- [development.md](development.md) — краткие версии рецептов страницы, строки и сочетания клавиш, карта `lib/`.
+- [01-overview.md](01-overview.md#карта-кода) — карта `lib/`; [development.md](development.md) — вход разработчика.
 - [`AGENTS.md`](../AGENTS.md) приложения — правила и ключи тестов отдельных страниц.
 - [layers-and-dependencies.md](../../../docs/architecture/layers-and-dependencies.md), [state-management.md](../../../docs/architecture/state-management.md), [platform-integration.md](../../../docs/architecture/platform-integration.md) — архитектурные границы, на которых стоят рецепты.
 - [codelab_ui](../../../packages/flutter/codelab_ui/README.md) — виджеты, каталог сочетаний и строки ленты.

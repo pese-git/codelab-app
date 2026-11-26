@@ -1,6 +1,8 @@
 # 17.12. Цикл и безопасность
 
 > Часть [архитектуры ядра агента CodeLab](../agent-core-architecture.md). Status: Accepted. Общие соглашения, термины и порядок чтения — в оглавлении.
+>
+> **Статус реализации (сверено с кодом 2026-11-26).** Частично: точка финального гейта `beforeFinalResponse` с вердиктами `Revise`/`Hold` есть в цикле (`loop_config.dart`), но хосты её не подключают (проверки — активный change `add-final-response-guardrails`). Не реализовано: режимы-промпты (`architect` — только синоним режима `plan`, `modes.dart`), супервизия зависшего инструмента (`tools.heartbeat`), дедлайн сессии (лишь значения `BudgetLimit.deadline`, `LoopNudgeReason.deadline` без источника), перезапись секретов в команде (`redact.command_rewrite`) и запрет чтения файлов учётных данных (`redact.block`) — ключи распознаются без применения.
 
 ← [17.11. Дополнительные инструменты](17-11-extra-tools.md) · [Оглавление ядра](../agent-core-architecture.md) · [17.13. Масштаб сессий](17-13-session-scale.md) →
 

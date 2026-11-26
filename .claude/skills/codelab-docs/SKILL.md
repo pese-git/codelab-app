@@ -37,7 +37,8 @@ apps/<app>/README.md                 вход: что это, кому како�
 apps/<app>/doc/user-guide.md         пользователь: оглавление руководства
 apps/<app>/doc/user/NN-<тема>.md     пользователь: главы руководства (00-overview, 01-…)
 apps/<app>/doc/operations.md         DevOps
-apps/<app>/doc/development.md        разработчик (если не помещается в README)
+apps/<app>/doc/development.md        разработчик: короткий вход — собрать, проверить, куда смотреть
+apps/<app>/doc/NN-<тема>.md          разработчик: главы (00-getting-started, 01-overview, …), оглавление — doc/README.md
 apps/<app>/doc/images/*.png          скриншоты
 packages/<dart|flutter>/<pkg>/README.md      разработчик; для маленького пакета — единственный файл
 packages/<dart|flutter>/<pkg>/doc/*.md       углублённые темы большого пакета
@@ -73,7 +74,7 @@ docs/ops/                            сквозное руководство Dev
 - `templates/app-readme.md` — README приложения (вход для всех аудиторий);
 - `templates/user-guide.md` — руководство пользователя: каркас одной главы `doc/user/NN-<тема>.md`; `doc/user-guide.md` — только оглавление (введение, кому, таблица глав «что внутри»). Возможности агента, общие для всех клиентов (инструменты, режимы разрешений, навыки, `AGENTS.md`, шаблоны команд, определения агентов, MCP, сессии), описываются только в `apps/codelab_agent/doc/user/`; руководства app и `codelab` описывают свой интерфейс и ссылаются туда за смыслом;
 - `templates/operations.md` — руководство DevOps;
-- `templates/development.md` — руководство разработчика приложения (`apps/*/doc/development.md`).
+- `templates/development.md` — вход разработчика приложения (`apps/*/doc/development.md`); устройство и рецепты — в главах `doc/NN-<тема>.md`.
 
 Шаблон — каркас, а не анкета: удаляй разделы, которым нечего сказать, и не оставляй заглушек «TBD».
 
