@@ -405,6 +405,62 @@ void main() {
       }
     });
 
+    // Источники строк витрины (change redesign-site-showcase, D6; project-site
+    // «Проверка сайта в CI»). Список файлов здесь повторяет `scopePatterns` в
+    // `site/test/ci-scope-sync.test.ts`: правка одного списка без другого
+    // ломает тот или другой тест.
+    test('каталог локализации запускает сайт, а Dart-матрица прежняя '
+        '(redesign-site-showcase, D6)', () {
+      for (final file in [
+        'packages/flutter/codelab_ui/lib/src/l10n/codelab_ui_ru.arb',
+        'apps/codelab_desktop/lib/l10n/app_ru.arb',
+      ]) {
+        final scope = _scope([file]);
+        final owner = file.startsWith('apps/')
+            ? 'codelab_desktop'
+            : 'codelab_ui';
+
+        expect(scope.site, isTrue, reason: file);
+        expect(scope.full, isFalse, reason: file);
+        expect(scope.changed, {owner}, reason: file);
+        expect(_byName(scope)['l10n']?.scripts, 'l10n:check', reason: file);
+      }
+    });
+
+    test('бренд docs/design/brand/ запускает сайт без Dart-джобов '
+        '(redesign-site-showcase, D6)', () {
+      final scope = _scope(['docs/design/brand/codelab-logo.svg']);
+
+      expect(scope.site, isTrue);
+      expect(scope.full, isFalse);
+      expect(scope.jobs, isEmpty);
+    });
+
+    test('виджет codelab_ui вне каталога локализации не запускает сайт '
+        '(redesign-site-showcase, D6)', () {
+      final scope = _scope([
+        'packages/flutter/codelab_ui/lib/src/widgets/x.dart',
+      ]);
+
+      expect(scope.site, isFalse);
+      expect(scope.full, isFalse);
+    });
+
+    test('остальные файлы локализации пакетов не запускают сайт '
+        '(redesign-site-showcase, D6; project-site «Проверка сайта в CI»)', () {
+      // `pubspec.yaml` и `l10n.yaml` не служат источниками строк витрины:
+      // с ними джоб `site` шёл бы на каждую правку зависимостей этих пакетов.
+      for (final file in [
+        'packages/flutter/codelab_ui/pubspec.yaml',
+        'apps/codelab_desktop/l10n.yaml',
+      ]) {
+        final scope = _scope([file]);
+
+        expect(scope.site, isFalse, reason: file);
+        expect(scope.full, isFalse, reason: file);
+      }
+    });
+
     test('полный прогон всегда включает сайт', () {
       final explicit = _scope(['docs/x.md'], fullReason: 'push to develop');
       final outside = _scope(['.github/workflows/ci.yml']);
