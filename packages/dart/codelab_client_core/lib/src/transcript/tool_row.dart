@@ -96,7 +96,8 @@ final class ToolRowView {
 /// должны жить в ядре клиента, а не повторяться в каждом UI.
 ///
 /// Для чего: чистая функция без состояния и без времени; секреты в детали
-/// маскируются [SecretRedactor], query-строка адреса отбрасывается.
+/// маскируются [SecretRedactor], у адреса `fetch` отбрасываются схема,
+/// userinfo, query и фрагмент.
 ///
 /// Как использовать: `ToolRowFormatter.format(item, cwd: session.cwd)` —
 /// [cwd] нужен, чтобы показать путь внутри проекта относительным.
@@ -245,7 +246,7 @@ abstract final class ToolRowFormatter {
         ].join();
       case ToolKind.fetch:
         final url = _string(input['url']);
-        return url == null ? '' : _withoutSchemeAndQuery(url);
+        return url == null ? '' : _hostAndPath(url);
       case ToolKind.think:
         final agent = _string(input['agent']);
         final description = _string(input['description']);
@@ -289,14 +290,58 @@ abstract final class ToolRowFormatter {
         : path;
   }
 
-  /// Схема, query и фрагмент отбрасываются: query может нести секрет.
-  static String _withoutSchemeAndQuery(String url) {
-    final withoutScheme = url.replaceFirst(
-      RegExp(r'^[a-zA-Z][a-zA-Z0-9+.-]*://'),
-      '',
-    );
-    return withoutScheme.split(RegExp('[?#]')).first;
+  /// Хост и путь адреса `fetch` — без схемы, userinfo, query и фрагмента.
+  ///
+  /// Почему: userinfo (`user:pass@`) и query несут учётные данные, а
+  /// маскировка [SecretRedactor] узнаёт userinfo только по `://`, которого
+  /// в детали уже нет. Поэтому учётные данные снимаются здесь, до
+  /// маскировки, и не зависят от её правил (design.md change
+  /// `strip-fetch-url-userinfo`, D1).
+  ///
+  /// Для чего: деталь строки `fetch` (§12.1.6, VIEW-9) — только куда идёт
+  /// запрос.
+  ///
+  /// Как использовать: вызывает [ToolRowFormatter.format] для `rawInput.url`.
+  /// Порядок D2 повторяет первые шаги парсера WHATWG, чтобы запись, которую
+  /// внешний агент примет за адрес с userinfo, не прошла мимо:
+  /// 1. удалить табы и переводы строк, обрезать пробелы (в том числе
+  ///    юникодные и BOM) и управляющие символы по краям;
+  /// 2. отрезать всё от `?`/`#` (там `@` не userinfo);
+  /// 3. снять схему, если за ней идёт `/` или `\` (`localhost:8080` — не
+  ///    схема), и все ведущие `/`, `\` и пробелы;
+  /// 4. в authority (до первого `/`) отбросить всё по последний `@`
+  ///    включительно, чтобы пароль с `@` не оставил хвоста. `\` границей не
+  ///    считается: WHATWG видит в `https://h\a@b` путь, а RFC 3986 (Python,
+  ///    `requests`) — userinfo `h\a`, и при расхождении показываем меньше.
+  ///
+  /// Только строки, без [Uri]: `user:pass@host` [Uri] принял бы за схему
+  /// `user` (D1). `https://user:pass@example.com/x?t=1` → `example.com/x`;
+  /// `//user:pass@host/x` → `host/x`; `https://example.com/a@b` — без
+  /// изменений.
+  static String _hostAndPath(String url) {
+    final normalized = url
+        .replaceAll(_tabOrNewline, '')
+        .replaceAll(_edgeControlOrSpace, '');
+    final withoutQuery = normalized.split(_queryOrFragment).first;
+    final withoutScheme = withoutQuery.replaceFirst(_schemeAndSlashes, '');
+    final slash = withoutScheme.indexOf('/');
+    final authorityEnd = slash < 0 ? withoutScheme.length : slash;
+    // Поиск только внутри authority: `@` в пути — часть пути, а не userinfo.
+    final at = withoutScheme.substring(0, authorityEnd).lastIndexOf('@');
+    return at < 0 ? withoutScheme : withoutScheme.substring(at + 1);
   }
+
+  // Выражения [_hostAndPath] компилируются один раз, как в `SecretRedactor`.
+  static final _tabOrNewline = RegExp('[\t\n\r]');
+  // Одно выражение краёв, а не `trim()` плюс выражение: управляющие символы
+  // вперемешку с юникодными пробелами срезаются за один проход.
+  static final _edgeControlOrSpace = RegExp(
+    r'^[\x00-\x20\s\uFEFF]+|[\x00-\x20\s\uFEFF]+$',
+  );
+  static final _queryOrFragment = RegExp('[?#]');
+  static final _schemeAndSlashes = RegExp(
+    r'^(?:[a-zA-Z][a-zA-Z0-9+.-]*:(?=[/\\]))?[/\\\s]*',
+  );
 
   static String _withoutLeadingWord(String title, String label) {
     final trimmed = title.trim();
