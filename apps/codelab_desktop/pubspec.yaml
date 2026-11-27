@@ -73,6 +73,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   freezed: ^3.2.5
+  msix: ^3.18.0
 
 flutter:
   generate: true
@@ -91,3 +92,11 @@ flutter:
     - assets/legal/TERMS.ru.md
     - assets/legal/LICENSE
     - assets/legal/THIRD_PARTY_NOTICES.md
+
+msix_config:
+  display_name: CodeLab Desktop
+  publisher_display_name: CodeLab
+  identity_name: com.example.codelabDesktop
+  msix_version: 0.1.0.1
+  sign_msix: true
+  install_certificate: false

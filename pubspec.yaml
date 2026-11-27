@@ -185,13 +185,21 @@ melos:
         exit $status;
         }
 
+#    build:agent:
+#      description: Compile the codelab-agent binary to build/bin/codelab-agent (not part of check).
+#      run: mkdir -p build/bin && fvm dart compile exe apps/codelab_agent/bin/codelab_agent.dart -o build/bin/codelab-agent
+#
+#    build:cli:
+#      description: Compile the codelab terminal client to build/bin/codelab (not part of check).
+#      run: mkdir -p build/bin && fvm dart compile exe apps/codelab_cli/bin/codelab.dart -o build/bin/codelab
     build:agent:
       description: Compile the codelab-agent binary to build/bin/codelab-agent (not part of check).
-      run: mkdir -p build/bin && fvm dart compile exe apps/codelab_agent/bin/codelab_agent.dart -o build/bin/codelab-agent
+      run: fvm dart run scripts/build_bin.dart apps/codelab_agent/bin/codelab_agent.dart codelab-agent
 
     build:cli:
       description: Compile the codelab terminal client to build/bin/codelab (not part of check).
-      run: mkdir -p build/bin && fvm dart compile exe apps/codelab_cli/bin/codelab.dart -o build/bin/codelab
+      run: fvm dart run scripts/build_bin.dart apps/codelab_cli/bin/codelab.dart codelab
+
 
     test:e2e:cli:
       description: Run the codelab_cli end-to-end tests (the CLI process against the scripted stdio agent, Dart VM; also part of test).
