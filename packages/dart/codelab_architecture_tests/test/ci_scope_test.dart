@@ -29,6 +29,13 @@ final _graph = [
     'codelab_util',
   }),
   WorkspacePackage('codelab_util', 'packages/dart/codelab_util'),
+  WorkspacePackage('codelab_agent_io', 'packages/dart/codelab_agent_io', {
+    'codelab_agent_core',
+  }),
+  WorkspacePackage('codelab_setup', 'packages/dart/codelab_setup', {
+    'codelab_agent_core',
+    'codelab_agent_io',
+  }),
   WorkspacePackage('codelab_agent_acp', 'packages/dart/codelab_agent_acp', {
     'codelab_acp_protocol',
     'codelab_agent_core',
@@ -235,15 +242,93 @@ void main() {
     final dependency = _byName(
       _scope(['packages/dart/codelab_util/lib/a.dart']),
     );
-    final dependent = _byName(
-      _scope(['packages/dart/codelab_agent_acp/lib/a.dart']),
-    );
 
     expect(core['guard']!.scripts, 'guard prompts:check');
     expect(core.keys, contains('web-compile'));
     expect(dependency.keys, contains('web-compile'));
     expect(dependency['guard']!.scripts, 'guard');
-    expect(dependent.keys, isNot(contains('web-compile')));
+  });
+
+  test('web-compile runs when any web-smoke package or its dependency '
+      'changes: the embedded agent and the setup bridge too', () {
+    for (final file in [
+      'packages/dart/codelab_embedded/lib/a.dart',
+      'packages/dart/codelab_setup/lib/a.dart',
+      // Зависимость только моста встроенного агента, не ядра.
+      'packages/dart/codelab_agent_acp/lib/a.dart',
+      // Зависимость только моста настроек, не ядра.
+      'packages/dart/codelab_agent_io/lib/a.dart',
+    ]) {
+      final jobs = _byName(_scope([file]));
+
+      expect(jobs.keys, contains('web-compile'), reason: file);
+      expect(jobs['guard']!.scripts, 'guard', reason: file);
+    }
+  });
+
+  test('web-compile does not run for a package no web-smoke entry point '
+      'compiles', () {
+    for (final file in [
+      'apps/codelab_cli/lib/a.dart',
+      'apps/codelab_agent/bin/a.dart',
+      'packages/flutter/codelab_ui/lib/a.dart',
+    ]) {
+      expect(
+        _byName(_scope([file])).keys,
+        isNot(contains('web-compile')),
+        reason: file,
+      );
+    }
+  });
+
+  test('web-compile follows only what the entry points compile: dev '
+      'dependencies of the web-smoke packages themselves, not of their '
+      'dependencies', () {
+    final packages = readWorkspace(repoRoot());
+    bool web(String dir) => ciScope(
+      packages: packages,
+      changedFiles: ['$dir/lib/a.dart'],
+    ).jobs.any((job) => job.job == 'web-compile');
+
+    // dev-зависимость codelab_embedded: её импортирует точка входа и замер.
+    expect(web('packages/dart/codelab_client_core'), isTrue);
+    // dev-зависимость только codelab_agent_acp и клиентских пакетов.
+    expect(web('packages/dart/codelab_acp_testing'), isFalse);
+    expect(web('packages/dart/codelab_client_io'), isFalse);
+    expect(web('packages/dart/codelab_agent_mcp'), isTrue);
+  });
+
+  test('web-smoke packages match the entry points the web-compile script '
+      'compiles', () {
+    final root = repoRoot();
+    final onDisk = {
+      for (final pkg in readWorkspace(root))
+        if (File(
+          p.join(root, pkg.dir, 'test', 'web_smoke', 'main.dart'),
+        ).existsSync())
+          pkg.name,
+    };
+    final pubspec = File(p.join(root, 'pubspec.yaml')).readAsStringSync();
+    // Только строки после `run:` скрипта: путь из `description:` не
+    // доказывает, что точка компилируется.
+    final script = RegExp(
+      r'^    web-compile:\n(?:      (?!run:).*\n)*      run: >-\n((?:        .*\n|\n)+)',
+      multiLine: true,
+    ).firstMatch(pubspec);
+    expect(
+      script,
+      isNotNull,
+      reason: 'web-compile script with a folded run: not found in pubspec.yaml',
+    );
+    final compiled = {
+      for (final match in RegExp(
+        r'packages/dart/(\w+)/test/web_smoke/main\.dart',
+      ).allMatches(script![1]!))
+        match[1]!,
+    };
+
+    expect(webSmokePackages, onDisk);
+    expect(webSmokePackages, compiled);
   });
 
   test('l10n:check runs when a catalog or generated localization code of '
@@ -506,6 +591,10 @@ flutter:
       'codelab_client_core',
       'codelab_acp_testing',
       'codelab_architecture_tests',
+    });
+    expect(package.runtimeDependencies, {
+      'codelab_client_core',
+      'codelab_acp_testing',
     });
   });
 

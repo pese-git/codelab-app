@@ -35,8 +35,13 @@ import 'dart:io';
 /// Как использовать: в тестах — конструктором, в CI — через [readWorkspace]
 /// или [WorkspacePackage.fromPubspec]; [dir] — путь от корня репозитория.
 final class WorkspacePackage {
-  WorkspacePackage(this.name, this.dir, [Set<String>? dependencies])
-    : dependencies = dependencies ?? const {};
+  WorkspacePackage(
+    this.name,
+    this.dir, [
+    Set<String>? dependencies,
+    Set<String>? runtimeDependencies,
+  ]) : dependencies = dependencies ?? const {},
+       runtimeDependencies = runtimeDependencies ?? dependencies ?? const {};
 
   /// Разбирает `pubspec.yaml` пакета без пакета `yaml`.
   ///
@@ -50,30 +55,44 @@ final class WorkspacePackage {
   }) {
     String? name;
     final dependencies = <String>{};
+    final runtimeDependencies = <String>{};
     var inDependencies = false;
+    var inRuntime = false;
     for (final line in pubspec.split('\n')) {
       final top = RegExp(r'^([A-Za-z_]\w*):(.*)$').firstMatch(line);
       if (top != null) {
         if (top[1] == 'name') name = top[2]!.trim();
-        inDependencies =
-            top[1] == 'dependencies' || top[1] == 'dev_dependencies';
+        inRuntime = top[1] == 'dependencies';
+        inDependencies = inRuntime || top[1] == 'dev_dependencies';
         continue;
       }
       if (!inDependencies) continue;
       final entry = RegExp(r'^  ([a-z_][a-z0-9_]*):').firstMatch(line);
       if (entry != null && workspace.contains(entry[1])) {
         dependencies.add(entry[1]!);
+        if (inRuntime) runtimeDependencies.add(entry[1]!);
       }
     }
     if (name == null) {
       throw FormatException('No name: in $dir/pubspec.yaml');
     }
-    return WorkspacePackage(name, dir, dependencies);
+    return WorkspacePackage(name, dir, dependencies, runtimeDependencies);
   }
 
   final String name;
   final String dir;
+
+  /// Пакеты workspace из `dependencies` и `dev_dependencies`: по ним
+  /// считаются зависимые для `analyze` и `test`.
   final Set<String> dependencies;
+
+  /// Только `dependencies`: то, что попадает в сборку чужой точки входа.
+  ///
+  /// Почему: dev-зависимость пакета не входит в программу, которая этот пакет
+  /// импортирует, поэтому для `web-compile` ([webSmokePackages]) транзитивный
+  /// обход идёт по этому набору. В тестовом графе без него он равен
+  /// [dependencies].
+  final Set<String> runtimeDependencies;
 }
 
 /// Один джоб матрицы `ci.yml`.
@@ -183,8 +202,32 @@ bool _isL10nFile(String file) {
       RegExp(r'_localizations(_\w+)?\.dart$').hasMatch(name);
 }
 
-/// Точка входа `web-compile` собирает ядро агента и его зависимости.
-const _webSmoke = 'codelab_agent_core';
+/// Ядро агента: единственный пакет с промптами, их проверяет `prompts:check`.
+/// Отдельно от [webSmokePackages]: web-smoke точек больше, чем пакетов с
+/// промптами.
+const _agentCore = 'codelab_agent_core';
+
+/// Пакеты, web-smoke точки входа которых (`test/web_smoke/main.dart`)
+/// компилирует скрипт `web-compile` корневого `pubspec.yaml`.
+///
+/// Почему: web-безопасный барель ломается в web-сборке от импорта `dart:io`
+/// в любом пакете, который он тянет (`AGENTS.md` §21). Если суженный прогон
+/// следит не за всеми точками входа скрипта, правка, например, только моста
+/// встроенного агента вскрылась бы лишь в полном прогоне (`testing.md` §74).
+///
+/// Для чего: [ciScope] добавляет джоб `web-compile`, если изменён любой из
+/// этих пакетов или то, что попадает в сборку их точки входа: зависимости и
+/// dev-зависимости самого пакета (точка лежит в его `test/`), дальше —
+/// транзитивно только `dependencies` ([_webSmokeClosure]).
+///
+/// Как использовать: `ci_scope_test.dart` сторожа сверяет набор с каталогами
+/// `test/web_smoke/` и со скриптом, поэтому новая точка входа добавляется
+/// сюда вместе со строкой скрипта.
+const webSmokePackages = {
+  'codelab_agent_core',
+  'codelab_embedded',
+  'codelab_setup',
+};
 
 /// Матрица целей: документ, который разбирает `parity_evidence_test` сторожа.
 ///
@@ -262,7 +305,7 @@ CiScope ciScope({
       if (affected.contains(entry.key)) entry.value,
     if (affected.any(_embeddedCli.contains)) 'conformance:embedded',
   ];
-  final webDependencies = _withDependencies({_webSmoke}, packages);
+  final webDependencies = _webSmokeClosure(packages);
 
   return CiScope(
     full: false,
@@ -278,7 +321,7 @@ CiScope ciScope({
       // файл; промпты живут только в ядре агента.
       CiJob(
         'guard',
-        changed.contains(_webSmoke) ? 'guard prompts:check' : 'guard',
+        changed.contains(_agentCore) ? 'guard prompts:check' : 'guard',
       ),
       if (l10nChanged) const CiJob('l10n', 'l10n:check'),
       if (changed.any(webDependencies.contains))
@@ -374,14 +417,25 @@ Set<String> _withDependents(Set<String> roots, List<WorkspacePackage> graph) {
 }
 
 /// [roots] и все их зависимости внутри workspace, транзитивно.
-Set<String> _withDependencies(Set<String> roots, List<WorkspacePackage> graph) {
+/// Пакеты, которые попадают в сборку web-smoke точек входа [webSmokePackages].
+///
+/// Почему: точка `test/web_smoke/main.dart` вправе импортировать
+/// dev-зависимости своего пакета, но dev-зависимости их зависимостей в
+/// программу не входят; обход по [WorkspacePackage.dependencies] запускал бы
+/// `web-compile` почти на любую правку `packages/dart/`.
+///
+/// Как использовать: вызывает только [ciScope]; корни — все зависимости
+/// пакетов набора, дальше — [WorkspacePackage.runtimeDependencies].
+Set<String> _webSmokeClosure(List<WorkspacePackage> graph) {
   final byName = {for (final pkg in graph) pkg.name: pkg};
-  final result = <String>{};
-  final pending = [...roots];
+  final result = <String>{...webSmokePackages};
+  final pending = [
+    for (final root in webSmokePackages) ...?byName[root]?.dependencies,
+  ];
   while (pending.isNotEmpty) {
     final name = pending.removeLast();
     if (!result.add(name)) continue;
-    pending.addAll(byName[name]?.dependencies ?? const {});
+    pending.addAll(byName[name]?.runtimeDependencies ?? const {});
   }
   return result;
 }

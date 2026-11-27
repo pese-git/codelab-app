@@ -83,7 +83,7 @@ CodeLab SHALL запускать CI (`.github/workflows/ci.yml`) на push в `m
   - `guard` — всегда, с `prompts:check`, если изменено ядро агента;
   - `conformance` — корпуса затронутых ACP-слоёв, а `conformance:embedded` — если затронуты `codelab_cli` или `codelab_embedded`;
   - `l10n` — при изменении файлов локализации `codelab_desktop` или `codelab_ui`;
-  - `web-compile` — при изменении ядра агента или пакета, от которого оно зависит;
+  - `web-compile` — при изменении пакета с web-smoke точкой входа (ядро агента, мост встроенного агента, мост настроек) или пакета, который попадает в сборку этой точки: зависимости и dev-зависимости самого пакета, дальше — транзитивно только `dependencies`;
   - `e2e-cli-dart` — если затронуты `codelab_cli` или `codelab_agent`;
   - `e2e-cli-embedded` — если затронуты `codelab_cli` или `codelab_embedded`.
 - Признак джоба `site` SHALL считаться независимо от Dart-матрицы (project-site «Проверка сайта в CI»).
