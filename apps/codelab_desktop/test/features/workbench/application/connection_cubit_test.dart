@@ -129,6 +129,27 @@ final class _Secrets implements ProfileSecrets {
   Future<ProfileSecretDelete> delete(String name) async => const Deleted();
 }
 
+/// Хранилище, чьи чтения ждут [gate], когда тест включил [engaged]: тест
+/// вытесняет попытку, пока Cubit читает источник токена после её сбоя.
+final class _GatedSecrets extends _Secrets {
+  _GatedSecrets(super.values, this.gate);
+
+  final Future<void> gate;
+  bool engaged = false;
+
+  @override
+  Future<bool> isSet(String name) async {
+    if (engaged) await gate;
+    return super.isSet(name);
+  }
+
+  @override
+  Future<String?> read(String name) async {
+    if (engaged) await gate;
+    return super.read(name);
+  }
+}
+
 void main() {
   late CodeLabShellParts parts;
   late _RecordingResolver resolver;
@@ -1085,6 +1106,40 @@ void main() {
         await next;
       },
     );
+
+    // Сбой вытесненной попытки: запись журнала без текста ошибки при
+    // `metadataOnly` (задача 7.5 change `redesign-protocol-pane`, D3).
+    // Вытеснение происходит, пока Cubit ждёт чтение источника токена после
+    // сбоя попытки A (ветка `on Object`).
+    test('a superseded attempt writes no error text to the journal', () async {
+      final gate = Completer<void>();
+      final secrets = _GatedSecrets({'codelab/ws-remote': marker}, gate.future);
+      build(tokenSecrets: ProfileSecretSource(const {}, stored: secrets));
+      final handshake = Completer<void>();
+      resolver.holds['remote'] = handshake.future;
+      resolver.failWith['remote'] = AcpTransportException(
+        code: AcpTransportErrorCode.startFailed,
+        message: 'AGENT_MSG_MARKER /home/u/secret.txt',
+        cause: AcpWebSocketHandshakeRejected(401),
+      );
+
+      final a = start(remote);
+      await pumpEventQueue();
+      secrets.engaged = true;
+      handshake.complete();
+      await pumpEventQueue();
+      await start(embeddedConnectionProfile);
+      gate.complete();
+      await a;
+      await pumpEventQueue();
+
+      final events = shellLog.entries.map((e) => '${e['event']}').toList();
+      expect(
+        events,
+        contains(startsWith('A superseded connection attempt ended: ')),
+      );
+      expect(events.join('\n'), isNot(contains('AGENT_MSG_MARKER')));
+    });
 
     test('a superseded attempt does not overwrite the current one', () async {
       build(tokenSecrets: withToken());

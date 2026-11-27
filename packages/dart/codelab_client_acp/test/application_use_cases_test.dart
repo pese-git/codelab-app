@@ -977,7 +977,8 @@ void main() {
               'context',
               allOf(
                 containsPair('code', AcpTransportErrorCode.receiveFailed.name),
-                containsPair('cause', 'broken frame'),
+                // Клиент этого файла на `full`: вложенная причина — текст (D3).
+                containsPair('inner_cause', 'broken frame'),
               ),
             ),
       ),

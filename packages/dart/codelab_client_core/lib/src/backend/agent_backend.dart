@@ -31,6 +31,16 @@ abstract interface class AgentBackend {
   /// владельцем ядра.
   Stream<ProtocolFrame> get protocolFrames;
 
+  /// Базовая политика payload ядра клиента (D3 change
+  /// `redesign-protocol-pane`, «Текст ошибки агента»).
+  ///
+  /// Почему в порту: kit решает по ней, что писать в `WorkspaceDiagnostic` о
+  /// сбое — текст агента (`full`) или только метаданные (`metadataOnly`).
+  /// Единственный источник — параметр конструктора ядра; второго параметра у
+  /// kit нет, рассинхронизация невозможна. Это не действующая политика
+  /// кадров: режим Trace её не меняет.
+  ProtocolPayloadPolicy get protocolPayloads;
+
   /// Режим Trace кадров возможен: базовая политика ядра — `metadataOnly`
   /// (D17).
   bool get traceAvailable;
@@ -104,6 +114,9 @@ final class AcpClientBackend implements AgentBackend {
 
   @override
   Stream<ProtocolFrame> get protocolFrames => _application.protocolFrames;
+
+  @override
+  ProtocolPayloadPolicy get protocolPayloads => _application.protocolPayloads;
 
   @override
   bool get traceAvailable => _application.traceAvailable;

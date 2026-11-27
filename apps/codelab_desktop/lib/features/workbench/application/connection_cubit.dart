@@ -18,7 +18,6 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         UnsupportedTokenRef,
         WebSocketProfile,
         WorkspaceState,
-        describeFailure,
         profileTokenSent,
         tokenRejectionStatus,
         secretMissingWarning;
@@ -777,26 +776,28 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         return;
       }
       // В журнал — английский текст независимо от языка интерфейса (D5 п. 6).
-      final message =
-          (rejection == null
-              ? null
-              : _tokenRejectionText(rejection, AppLocalizationsEn())) ??
-          _byType(
-            target,
-            stdio: restart
-                ? 'Failed to reconnect stdio ACP agent: ${describeFailure(error)}'
-                : 'Failed to start stdio ACP agent: $error',
-            webSocket: restart
-                ? 'Failed to reconnect WebSocket ACP agent: ${describeFailure(error)}'
-                : 'Failed to connect WebSocket ACP agent: $error',
-            embedded: restart
-                ? 'Failed to reconnect embedded ACP agent: ${describeFailure(error)}'
-                : 'Failed to start embedded ACP agent: $error',
-          );
+      // Текст отказа по токену — постоянный текст CodeLab; остальные сбои
+      // идут через `recordFailure`: при `metadataOnly` без текста агента (D3).
+      final tokenText = rejection == null
+          ? null
+          : _tokenRejectionText(rejection, AppLocalizationsEn());
+      final what = _byType(
+        target,
+        stdio: restart
+            ? 'Failed to reconnect stdio ACP agent'
+            : 'Failed to start stdio ACP agent',
+        webSocket: restart
+            ? 'Failed to reconnect WebSocket ACP agent'
+            : 'Failed to connect WebSocket ACP agent',
+        embedded: restart
+            ? 'Failed to reconnect embedded ACP agent'
+            : 'Failed to start embedded ACP agent',
+      );
       // Одинаковый сбой старта не плодит записи (D13): счётчик растёт в
       // состоянии экрана, в журнал уходит debug-событие. Перезапуск пишет
-      // каждый сбой, как прежний reconnect.
-      final key = '${target.id}|$directory|$message';
+      // каждый сбой, как прежний reconnect. Ключ живёт в памяти и в журнал
+      // не попадает, поэтому в нём полный текст ошибки.
+      final key = '${target.id}|$directory|${tokenText ?? '$what|$error'}';
       final repeat = !restart && key == _lastFailureKey
           ? state.failureRepeat + 1
           : 0;
@@ -814,11 +815,15 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
         );
       }
       if (repeat == 0) {
-        _diagnostics.record(
-          message,
-          severity: DiagnosticSeverity.error,
-          source: 'transport',
-        );
+        if (tokenText != null) {
+          _diagnostics.record(
+            tokenText,
+            severity: DiagnosticSeverity.error,
+            source: 'transport',
+          );
+        } else {
+          _diagnostics.recordFailure(what, error, source: 'transport');
+        }
       }
     }
   }
@@ -1038,8 +1043,10 @@ final class ConnectionCubit extends ShellPartCubit<WindowConnectionState>
   }
 
   /// Сбой вытесненной попытки: статус не меняется, в журнал — уровнем info.
-  void _recordStaleAttempt(Object error) => _diagnostics.record(
-    'A superseded connection attempt ended: ${describeFailure(error)}',
+  void _recordStaleAttempt(Object error) => _diagnostics.recordFailure(
+    'A superseded connection attempt ended',
+    error,
+    severity: DiagnosticSeverity.info,
     source: 'transport',
   );
 

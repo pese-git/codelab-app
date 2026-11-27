@@ -402,7 +402,7 @@ ConnectionFailure(
 
 Исходная причина НЕ ДОЛЖНА автоматически становиться содержимым для пользователя.
 
-В коде поле `cause` есть у `AcpTransportException`, `AcpProtocolError`, `AcpClientApplicationException`, `ClientConnectionState.failed`, `AcpClientApplicationFailure` и `DiagnosticEntry`; текст причины в записях диагностики (`_recordDiagnostic`) выбирает `_causeDetail` в `AcpClientApplication`: при `ProtocolPayloadPolicy.full` это `toString()` после `SecretRedactor`, при `metadataOnly` — только класс ошибки (`observability.md` §48а; D3 change `redesign-protocol-pane`). По этому правилу пишутся поле `DiagnosticEntry.cause` и внутренняя причина сбоя транспорта: `_handleTransportEvent` кладёт в `context` записи `code` и `cause`, и при `metadataOnly` там класс внутренней причины (`SocketException`, `JsonRpcProtocolException`), а не её текст с путями и фрагментами кадра. В журнал ключ `cause` уходит из поля `DiagnosticEntry.cause` и перекрывает вложенную причину из `context` (`_logDiagnosticEntry`), поэтому вложенная причина видна только в диагностике. Проверяет `payload_policy_diagnostics_test.dart` (`codelab_client_acp`).
+В коде поле `cause` есть у `AcpTransportException`, `AcpProtocolError`, `AcpClientApplicationException`, `ClientConnectionState.failed`, `AcpClientApplicationFailure` и `DiagnosticEntry`; текст причины в записях диагностики (`_recordDiagnostic`) выбирает `_causeDetail` в `AcpClientApplication`: при `ProtocolPayloadPolicy.full` это `toString()` после `SecretRedactor`, при `metadataOnly` — только класс ошибки (`observability.md` §48а; D3 change `redesign-protocol-pane`). По этому правилу пишутся поле `DiagnosticEntry.cause` и внутренняя причина сбоя транспорта: `_handleTransportEvent` кладёт в `context` записи `code` и `inner_cause`, и при `metadataOnly` там класс внутренней причины (`SocketException`, `JsonRpcProtocolException`), а не её текст с путями и фрагментами кадра. В журнале ключ `cause` — только поле `DiagnosticEntry.cause`, вложенная причина идёт под `inner_cause`, значения не перекрывают друг друга (`_logDiagnosticEntry`; D3, «Текст ошибки агента»). Проверяют `payload_policy_diagnostics_test.dart` и `agent_error_text_test.dart` (`codelab_client_acp`).
 
 ---
 
@@ -688,6 +688,8 @@ Text(error.toString())
 * содержать чувствительные данные.
 
 В коде ядро клиента даёт текст для UI и CLI через `describeFailure`: поле `message` известных исключений вместо `ClassName: message`, после `SecretRedactor.redactText`. Для прочих объектов используется `toString()` после той же редакции.
+
+`describeFailure` — текст **для пользователя**. Для журнала при базовой политике `metadataOnly` текст ошибки агента не используется: запись о сбое строится через `describeFailureMetadata` (класс, код JSON-RPC и его стандартное имя, код транспортной ошибки) — `observability.md` §48а, change `redesign-protocol-pane` D3.
 
 ---
 

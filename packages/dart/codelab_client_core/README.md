@@ -39,7 +39,7 @@ flowchart LR
 | Каталог команд палитры | `CommandCatalog`, `HostCommand`, `CatalogCommand` | слияние команд хоста и агента, конфликты имён, нечёткий поиск; `HostCommand.searchAliases` — дополнительные строки поиска (например, английская подпись при локализованной), по умолчанию пусты, CLI их не заполняет |
 | Расход (usage) | `UsageView`, `UsageDecoder`, `UsageFold`, `UsageLedgerDecoder`, `UsageLedgerState` | разбор `_codelab/session/usage` и журнала расхода; деньги — целые микроединицы |
 | Инспектор | `InspectorProjection`, `InspectorEntry`, `InspectorCategory` | записи для панели инспектора |
-| Диагностика | `WorkspaceDiagnostic`, `describeFailure` | события, которыми владеет пакет, без секретов |
+| Диагностика | `WorkspaceDiagnostic`, `describeFailure` | события, которыми владеет пакет, без секретов; при базовой политике `metadataOnly` диагностика сбоя не несёт текст ошибки агента, а `describeFailure` (текст для пользователя) сохраняет его после маскирования |
 | Файлы проекта | `ProjectFiles`, `ProjectEntry`, `DirectoryListing`, `FilePreview`, `normalizeRelativePath`, `classifyPreview`, `isMaybeSecretFileName`, `sortProjectEntries` | порт чтения папки проекта и чистые правила превью |
 | Восстановление | `WorkspaceSnapshot`, `WorkspaceSnapshotStore`, `InMemoryWorkspaceSnapshotStore` | снимок «проект, активная сессия, открытые сессии» после перезапуска хоста |
 | Хранилища | `ProfileStore`, `RecentProjectsStore`, `RecentProject`, `mergeRecentProjects` | порты постоянных данных клиента и правило слияния недавних проектов |

@@ -2027,7 +2027,13 @@ void main() {
   test(
     'connect redacts secrets leaked through transport factory failures',
     () async {
-      final application = AcpClientApplication(transport: FakeAcpTransport());
+      // Текст исключения попадает в журнал только при `full`; при
+      // `metadataOnly` там лишь класс ошибки (D3 change
+      // `redesign-protocol-pane`), маскировать нечего.
+      final application = AcpClientApplication(
+        transport: FakeAcpTransport(),
+        protocolPayloads: ProtocolPayloadPolicy.full,
+      );
       final logger = _RecordingLogger();
       final shellCubit = CodeLabShellCubit(
         strings: FixedAppStrings(AppLocalizationsEn()),

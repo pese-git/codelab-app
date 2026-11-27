@@ -504,6 +504,12 @@ final class _FakeBackend implements AgentBackend {
   @override
   final bool traceAvailable;
 
+  /// Согласована с [traceAvailable]: Trace возможен только при `metadataOnly`.
+  @override
+  ProtocolPayloadPolicy get protocolPayloads => traceAvailable
+      ? ProtocolPayloadPolicy.metadataOnly
+      : ProtocolPayloadPolicy.full;
+
   final traceCalls = <bool>[];
 
   /// `sync: false`, как у `AcpClientApplication.protocolFrames` (D2).

@@ -1036,7 +1036,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
           source: 'session',
           message:
               'Failed to load ACP session ${id.value}: '
-              '${describeFailure(error)}',
+              '${_diagnosticFailureText(error)}',
         ),
       );
       rethrow;
@@ -1115,7 +1115,8 @@ final class DefaultClientWorkspace implements ClientWorkspace {
         WorkspaceDiagnostic(
           severity: DiagnosticSeverity.error,
           source: 'session',
-          message: 'Failed to list ACP sessions: ${describeFailure(error)}',
+          message:
+              'Failed to list ACP sessions: ${_diagnosticFailureText(error)}',
         ),
       );
     }
@@ -1302,6 +1303,19 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     _publishConnection(view);
   }
 
+  /// Текст сбоя для записи диагностики ([WorkspaceDiagnostic]), а не для
+  /// пользователя (design.md change `redesign-protocol-pane`, D3, «Текст
+  /// ошибки агента»).
+  ///
+  /// Почему: `JsonRpcError.message` и `data` агента — payload (пути,
+  /// фрагменты данных). При базовой `metadataOnly` диагностика несёт только
+  /// метаданные (`describeFailureMetadata`), при `full` — замаскированный
+  /// текст (`describeFailure`). Политику читает порт у ядра клиента — второго
+  /// источника нет. Текст для пользователя (`PromptFailed.error`, заметка
+  /// транскрипта, баннер) по-прежнему строит `describeFailure`.
+  String _diagnosticFailureText(Object error) =>
+      describeFailureForDiagnostic(error, _backend.protocolPayloads);
+
   /// Публикует диагностику после редакции секретов.
   void _report(WorkspaceDiagnostic diagnostic) {
     if (_diagnostics.isClosed) {
@@ -1429,6 +1443,7 @@ final class DefaultClientWorkspace implements ClientWorkspace {
         }
       },
       onDiagnostic: _report,
+      failureText: _diagnosticFailureText,
       isConnected: () => _current.connection is Connected,
       clock: clock,
       usageDeclared: () => _usageDeclared,
@@ -1507,12 +1522,10 @@ final class DefaultClientWorkspace implements ClientWorkspace {
     _publishConnection(
       ConnectionView.failed(
         reason: ConnectionFailureReason.startFailed,
-        message: switch (error) {
-          AcpClientApplicationException(:final message) ||
-          AcpTransportException(:final message) ||
-          ClientWorkspaceException(:final message) => message,
-          _ => '$error',
-        },
+        // Текст для пользователя (баннер): `describeFailure` берёт сообщение
+        // известных исключений и маскирует секреты в любом тексте, в том
+        // числе в `toString()` прочего объекта (D3).
+        message: describeFailure(error),
       ),
     );
   }
@@ -1588,6 +1601,10 @@ final class _RestoreHostAdapter implements RestoreHost {
 
   @override
   void report(WorkspaceDiagnostic diagnostic) => _workspace._report(diagnostic);
+
+  @override
+  String diagnosticFailureText(Object error) =>
+      _workspace._diagnosticFailureText(error);
 }
 
 enum _Transition { none, connecting, reconnecting }
@@ -1620,6 +1637,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     required String Function() nextQueuedPromptId,
     required void Function(PromptOutcome outcome) onOutcome,
     required void Function(WorkspaceDiagnostic diagnostic) onDiagnostic,
+    required String Function(Object error) failureText,
     required bool Function() isConnected,
     required DateTime Function() clock,
     required bool Function() usageDeclared,
@@ -1631,6 +1649,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
        _nextQueuedPromptId = nextQueuedPromptId,
        _onOutcome = onOutcome,
        _onDiagnostic = onDiagnostic,
+       _failureText = failureText,
        _isConnected = isConnected,
        _clock = clock,
        _usageDeclared = usageDeclared,
@@ -1658,6 +1677,10 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
   final String Function() _nextQueuedPromptId;
   final void Function(PromptOutcome outcome) _onOutcome;
   final void Function(WorkspaceDiagnostic diagnostic) _onDiagnostic;
+
+  /// Текст сбоя для диагностики по базовой политике payload (D3);
+  /// `ClientWorkspace._diagnosticFailureText`.
+  final String Function(Object error) _failureText;
 
   /// Установлено ли соединение рабочего пространства.
   ///
@@ -1804,7 +1827,8 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
         'Session ${id.value} is detached from the agent.',
       );
       final outcome = PromptFailed(id, error);
-      _error('prompt', 'Failed to send prompt: ${describeFailure(error)}');
+      // Оба места `Failed to send prompt` идут через метаданные (D3).
+      _error('prompt', 'Failed to send prompt: ${_failureText(error)}');
       _onOutcome(outcome);
       return outcome;
     }
@@ -1833,10 +1857,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
       _info('prompt', 'Cancelled prompt turn ${turn.id.value}.');
       return turn;
     } on Object catch (error) {
-      _error(
-        'prompt',
-        'Failed to cancel prompt turn: ${describeFailure(error)}',
-      );
+      _error('prompt', 'Failed to cancel prompt turn: ${_failureText(error)}');
       rethrow;
     }
   }
@@ -1862,7 +1883,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
     } on Object catch (error) {
       _error(
         'approval',
-        'Failed to respond to approval request: ${describeFailure(error)}',
+        'Failed to respond to approval request: ${_failureText(error)}',
       );
       rethrow;
     }
@@ -1893,7 +1914,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
       _clearConfigOptionInFlight();
       _error(
         'session',
-        'Failed to set config option $configId: ${describeFailure(error)}',
+        'Failed to set config option $configId: ${_failureText(error)}',
       );
       rethrow;
     }
@@ -1974,7 +1995,7 @@ final class _SessionHandle implements SessionHandle, PromptQueue {
       );
     } on Object catch (error) {
       outcome = PromptFailed(id, error);
-      _error('prompt', 'Failed to send prompt: ${describeFailure(error)}');
+      _error('prompt', 'Failed to send prompt: ${_failureText(error)}');
     }
     _onOutcome(outcome);
     await _drainIfFree();

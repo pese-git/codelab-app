@@ -7,8 +7,7 @@ import 'package:codelab_client_core/codelab_client_core.dart'
         SessionStatusView,
         SessionSummaryView,
         WebSocketProfile,
-        WorkspaceState,
-        describeFailure;
+        WorkspaceState;
 import 'package:codelab_acp_protocol/codelab_acp_protocol.dart';
 import 'package:codelab_ui/codelab_ui.dart';
 
@@ -240,9 +239,9 @@ final class SessionsCubit extends ShellPartCubit<SessionsState> {
       session = _application.sessionById(handle.id);
     } on Object catch (error) {
       if (isClosed) return;
-      _diagnostics.record(
-        'Failed to create ACP session: ${describeFailure(error)}',
-        severity: DiagnosticSeverity.error,
+      _diagnostics.recordFailure(
+        'Failed to create ACP session',
+        error,
         source: 'session',
       );
       return;

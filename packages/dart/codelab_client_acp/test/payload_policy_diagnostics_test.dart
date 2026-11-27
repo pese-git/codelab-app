@@ -348,7 +348,7 @@ void main() {
         diag.context['code'],
         AcpTransportErrorCode.protocolViolation.name,
       );
-      expect(diag.context['cause'], '_FrameFailure');
+      expect(diag.context['inner_cause'], '_FrameFailure');
       expect(observable(), isNot(contains(_marker)));
     });
 
@@ -362,7 +362,7 @@ void main() {
         diag.context['code'],
         AcpTransportErrorCode.protocolViolation.name,
       );
-      expect(diag.context['cause'], contains(_marker));
+      expect(diag.context['inner_cause'], contains(_marker));
     });
   });
 }

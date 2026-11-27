@@ -63,7 +63,7 @@ CodeLab SHALL хранить in-memory историю diagnostic-событий 
 - **THEN** встроенный журнал получил записи `application` и `protocol`, а sink приложения записей `protocol` не получил (`structured_logging_test.dart`, «in-app viewer sink always captures both application and protocol-trace events…»)
 
 ### Requirement: Причина сбоя в диагностике по политике payload
-Текст причины сбоя SHALL следовать базовой политике payload ядра клиента (требование «Protocol tracing выключен по умолчанию в release»). Правило SHALL действовать для поля `DiagnosticEntry.cause` и для вложенной причины в `context['cause']`, например внутренней причины `AcpTransportException`:
+Текст причины сбоя SHALL следовать базовой политике payload ядра клиента (требование «Protocol tracing выключен по умолчанию в release»). Правило SHALL действовать для поля `DiagnosticEntry.cause` и для вложенной причины в `context['inner_cause']` (ключ `cause` записи журнала занят `DiagnosticEntry.cause`), например внутренней причины `AcpTransportException`:
 - при `metadataOnly` — только имя класса ошибки, без её `toString()`;
 - при `full` — текст `toString()` после маскирования секретов.
 
@@ -71,11 +71,11 @@ CodeLab SHALL хранить in-memory историю diagnostic-событий 
 
 #### Scenario: Причина сбоя транспорта при metadataOnly
 - **WHEN** при политике `metadataOnly` транспорт падает с `AcpTransportException(code: protocolViolation)`, внутренняя причина которой — исключение с данными агента в тексте
-- **THEN** `context['code']` диагностики — `protocolViolation`, `context['cause']` — имя класса внутренней причины, а ни диагностика, ни журнал не содержат её текста (`payload_policy_diagnostics_test.dart`, «внутренняя причина сбоя транспорта», «metadataOnly: code и класс причины, без её текста»)
+- **THEN** `context['code']` диагностики — `protocolViolation`, `context['inner_cause']` — имя класса внутренней причины, а ни диагностика, ни журнал не содержат её текста (`payload_policy_diagnostics_test.dart`, «внутренняя причина сбоя транспорта», «metadataOnly: code и класс причины, без её текста»)
 
 #### Scenario: Причина сбоя при full
 - **WHEN** тот же сбой происходит при политике `full`
-- **THEN** `context['cause']` содержит замаскированный текст внутренней причины (`payload_policy_diagnostics_test.dart`, «full: замаскированный текст причины, как прежде»)
+- **THEN** `context['inner_cause']` содержит замаскированный текст внутренней причины (`payload_policy_diagnostics_test.dart`, «full: замаскированный текст причины, как прежде»)
 
 #### Scenario: Причина сбоя адаптера при metadataOnly
 - **WHEN** при политике `metadataOnly` адаптер чтения файла бросает при обработке `fs/read_text_file` исключение, текст которого содержит данные

@@ -103,7 +103,12 @@ void main() {
         closeError: StateError('close failed'),
         closeFailures: 2,
       );
-      final client = AcpClientApplication(transport: old);
+      final client = AcpClientApplication(
+        transport: old,
+        // Текст ошибки в `error` пишется только при `full` (D3 change
+        // `redesign-protocol-pane`); при `metadataOnly` — `error_class`.
+        protocolPayloads: ProtocolPayloadPolicy.full,
+      );
       addTearDown(client.dispose);
       final loser = _TrackedTransport();
       final winner = _TrackedTransport();
@@ -205,7 +210,12 @@ void main() {
         protocolTraceOutput: (entry, level) => captured.add(entry),
       );
       addTearDown(StructlogConfiguration.reset);
-      final client = AcpClientApplication(transport: FakeAcpTransport());
+      final client = AcpClientApplication(
+        transport: FakeAcpTransport(),
+        // Текст ошибки в `error` — только при `full` (D3 change
+        // `redesign-protocol-pane`).
+        protocolPayloads: ProtocolPayloadPolicy.full,
+      );
       addTearDown(client.dispose);
       final stale = FakeAcpTransport()..autoRespondToInitialize = false;
       final sent = stale.sent.firstWhere(

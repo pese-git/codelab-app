@@ -1,4 +1,6 @@
 import 'package:codelab_client_acp/codelab_client_acp.dart';
+import 'package:codelab_client_core/codelab_client_core.dart'
+    show describeFailureForDiagnostic;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 /// Синхронный сигнал «часть рабочего места изменилась» и пакетирование
@@ -85,14 +87,27 @@ abstract base class ShellPartCubit<S> extends Cubit<S> {
 /// Decision 5); своего списка диагностики части не держат.
 ///
 /// Как использовать: один экземпляр на рабочее место; [record] с областью
-/// [source] (`transport`, `session`, `project`, `prompt`, ...).
+/// [source] (`transport`, `session`, `project`, `prompt`, ...) — для
+/// постоянного текста CodeLab. Сбой, чей текст может нести слова агента
+/// (`JsonRpcError.message`, `data`), пишется через [recordFailure]: при
+/// `metadataOnly` он даёт только метаданные (D3, «Текст ошибки агента», change
+/// `redesign-protocol-pane`); текст для пользователя остаётся в состоянии
+/// экрана и этим классом не строится.
 final class ShellDiagnostics {
-  ShellDiagnostics({Logger? logger})
-    : _logger = (logger ?? StructuredLogLogger('codelab_desktop.shell')).bind({
-        logCategoryKey: applicationLogCategory,
-        logComponentKey: presentationComponent,
-      });
+  /// [payloads] — базовая политика ядра (`AcpClientApplication.protocolPayloads`):
+  /// единственный источник, второго параметра у app нет (D3). По умолчанию
+  /// `metadataOnly`: хост, забывший передать политику, не раскрывает текст
+  /// агента.
+  ShellDiagnostics({
+    Logger? logger,
+    ProtocolPayloadPolicy payloads = ProtocolPayloadPolicy.metadataOnly,
+  }) : _payloads = payloads,
+       _logger = (logger ?? StructuredLogLogger('codelab_desktop.shell')).bind({
+         logCategoryKey: applicationLogCategory,
+         logComponentKey: presentationComponent,
+       });
 
+  final ProtocolPayloadPolicy _payloads;
   final Logger _logger;
   final _redactor = const SecretRedactor();
 
@@ -114,4 +129,24 @@ final class ShellDiagnostics {
         _logger.error(redactedMessage, context: logContext);
     }
   }
+
+  /// Пишет сбой: `'<what>: <описание>'`.
+  ///
+  /// Почему: `describeFailure` и `'$error'` несут текст ошибки агента (пути,
+  /// фрагменты файлов), а журнал при `metadataOnly` не вправе его хранить
+  /// (D3). Решение принимает единственное место — здесь, а не каждый Cubit.
+  ///
+  /// Как использовать: [what] — постоянный текст CodeLab без данных; `full` —
+  /// `describeFailure(error)` с маскированием в [record], `metadataOnly` —
+  /// `describeFailureMetadata(error)`.
+  void recordFailure(
+    String what,
+    Object error, {
+    DiagnosticSeverity severity = DiagnosticSeverity.error,
+    required String source,
+  }) => record(
+    '$what: ${describeFailureForDiagnostic(error, _payloads)}',
+    severity: severity,
+    source: source,
+  );
 }
