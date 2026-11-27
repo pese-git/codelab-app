@@ -8,10 +8,7 @@
 
 ACP uses JSON-RPC to encode messages. JSON-RPC messages **MUST** be UTF-8 encoded.
 
-The protocol currently defines the following transport mechanisms for agent-client communication:
-
-1. [stdio](#stdio), communication over standard in and standard out
-2. *[Streamable HTTP](#streamable-http) (draft proposal in progress)*
+The protocol currently defines one transport mechanism for agent-client communication: [stdio](#stdio), communication over standard in and standard out. A remote transport based on Streamable HTTP is being specified in the [transport RFD](https://agentclientprotocol.com/rfds/streamable-http-websocket-transport.md).
 
 Agents and clients **SHOULD** support stdio whenever possible.
 
@@ -29,7 +26,7 @@ In the **stdio** transport:
 * The agent **MUST NOT** write anything to its `stdout` that is not a valid ACP message.
 * The client **MUST NOT** write anything to the agent's `stdin` that is not a valid ACP message.
 
-```mermaid  theme={null}
+```mermaid theme={null}
 sequenceDiagram
     participant Client
     participant Agent Process
@@ -44,10 +41,6 @@ sequenceDiagram
     deactivate Agent Process
 ```
 
-## *Streamable HTTP*
-
-*In discussion, draft proposal in progress.*
-
 ## Custom Transports
 
 Agents and clients **MAY** implement additional custom transport mechanisms to suit their specific needs. The protocol is transport-agnostic and can be implemented over any communication channel that supports bidirectional message exchange.
@@ -55,4 +48,4 @@ Agents and clients **MAY** implement additional custom transport mechanisms to s
 Implementers who choose to support custom transports **MUST** ensure they preserve the JSON-RPC message format and lifecycle requirements defined by ACP. Custom transports **SHOULD** document their specific connection establishment and message exchange patterns to aid interoperability.
 
 
-Built with [Mintlify](https://mintlify.com).
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.

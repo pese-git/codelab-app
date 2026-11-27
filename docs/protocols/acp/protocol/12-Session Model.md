@@ -6,19 +6,20 @@
 
 > Switch between different agent operating modes
 
-<Note>
-  You can now use [Session Config Options](./session-config-options). Dedicated
-  session mode methods will be removed in a future version of the protocol.
-  Until then, you can offer both to clients for backwards compatibility.
-</Note>
+> [!NOTE]
+>
+> You can now use [Session Config Options](https://agentclientprotocol.com/protocol/v1/session-config-options.md).
+> Dedicated session mode methods will be removed in a future version of the
+> protocol. Until then, you can offer both to clients for backwards
+> compatibility.
 
 Agents can provide a set of modes they can operate in. Modes often affect the system prompts used, the availability of tools, and whether they request permission before running.
 
 ## Initial state
 
-During [Session Setup](./session-setup) the Agent **MAY** return a list of modes it can operate in and the currently active mode:
+During [Session Setup](https://agentclientprotocol.com/protocol/v1/session-setup.md) the Agent **MAY** return a list of modes it can operate in and the currently active mode:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -48,33 +49,33 @@ During [Session Setup](./session-setup) the Agent **MAY** return a list of modes
 }
 ```
 
-<ResponseField name="modes" type="SessionModeState">
-  The current mode state for the session
-</ResponseField>
+**modes** `SessionModeState`
+
+The current mode state for the session
 
 ### SessionModeState
 
-<ResponseField name="currentModeId" type="SessionModeId" required>
-  The ID of the mode that is currently active
-</ResponseField>
+**currentModeId** `SessionModeId` *required*
 
-<ResponseField name="availableModes" type="SessionMode[]" required>
-  The set of modes that the Agent can operate in
-</ResponseField>
+The ID of the mode that is currently active
+
+**availableModes** `SessionMode[]` *required*
+
+The set of modes that the Agent can operate in
 
 ### SessionMode
 
-<ResponseField name="id" type="SessionModeId" required>
-  Unique identifier for this mode
-</ResponseField>
+**id** `SessionModeId` *required*
 
-<ResponseField name="name" type="string" required>
-  Human-readable name of the mode
-</ResponseField>
+Unique identifier for this mode
 
-<ResponseField name="description" type="string">
-  Optional description providing more details about what this mode does
-</ResponseField>
+**name** `string` *required*
+
+Human-readable name of the mode
+
+**description** `string`
+
+Optional description providing more details about what this mode does
 
 ## Setting the current mode
 
@@ -82,9 +83,9 @@ The current mode can be changed at any point during a session, whether the Agent
 
 ### From the Client
 
-Typically, Clients display the available modes to the user and allow them to change the current one, which they can do by calling the [`session/set_mode`](./schema#session%2Fset-mode) method.
+Typically, Clients display the available modes to the user and allow them to change the current one, which they can do by calling the [`session/set_mode`](https://agentclientprotocol.com/protocol/v1/schema#session%2Fset-mode) method.
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 2,
@@ -96,20 +97,20 @@ Typically, Clients display the available modes to the user and allow them to cha
 }
 ```
 
-<ParamField path="sessionId" type="SessionId" required>
-  The ID of the session to set the mode for
-</ParamField>
+**sessionId** `SessionId` *required*
 
-<ParamField path="modeId" type="SessionModeId" required>
-  The ID of the mode to switch to. Must be one of the modes listed in
-  `availableModes`
-</ParamField>
+The ID of the session to set the mode for
+
+**modeId** `SessionModeId` *required*
+
+The ID of the mode to switch to. Must be one of the modes listed in
+`availableModes`
 
 ### From the Agent
 
 The Agent can also change its own mode and let the Client know by sending the `current_mode_update` session notification:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "method": "session/update",
@@ -117,7 +118,7 @@ The Agent can also change its own mode and let the Client know by sending the `c
     "sessionId": "sess_abc123def456",
     "update": {
       "sessionUpdate": "current_mode_update",
-      "modeId": "code"
+      "currentModeId": "code"
     }
   }
 }
@@ -129,7 +130,7 @@ A common case where an Agent might switch modes is from within a special "exit m
 
 This "switch mode" tool will usually request permission before running, which it can do just like any other tool:
 
-```json  theme={null}
+```json theme={null}
 {
   "jsonrpc": "2.0",
   "id": 3,
@@ -143,8 +144,11 @@ This "switch mode" tool will usually request permission before running, which it
       "status": "pending",
       "content": [
         {
-          "type": "text",
-          "text": "## Implementation Plan..."
+          "type": "content",
+          "content": {
+            "type": "text",
+            "text": "## Implementation Plan..."
+          }
         }
       ]
     },
@@ -171,9 +175,9 @@ This "switch mode" tool will usually request permission before running, which it
 
 When an option is chosen, the tool runs, setting the mode and sending the `current_mode_update` notification mentioned above.
 
-<Card icon="shield-check" horizontal href="./tool-calls#requesting-permission">
-  Learn more about permission requests
-</Card>
+> Learn more about permission requests
+>
+> [Open](https://agentclientprotocol.com/protocol/v1/tool-calls.md#requesting-permission)
 
 
-Built with [Mintlify](https://mintlify.com).
+This documentation is built and hosted on [Mintlify](https://mintlify.com), a developer documentation platform.
