@@ -286,3 +286,108 @@ melos:
         - conformance:agent
         - conformance:embedded
         - web-compile
+
+
+    build:ios:appstore:
+      description: Сборка iOS release IPA для App Store
+      run: >
+        melos exec --scope="codelab_desktop" --
+        flutter build ipa --release --export-options-plist=ios/ExportOptions-AppStore.plist
+
+    build:macos:appstore:
+      description: Сборка и упаковка macOS release PKG для App Store
+      run: >
+        melos exec --scope="codelab_desktop" --
+        sh -c '
+          flutter build macos --release &&
+          rm -rf build/macos/Runner.xcarchive build/macos/pkg &&
+          xcodebuild -workspace macos/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath build/macos/Runner.xcarchive \
+            archive &&
+          xcodebuild -exportArchive \
+            -archivePath build/macos/Runner.xcarchive \
+            -exportPath build/macos/pkg \
+            -exportOptionsPlist macos/ExportOptions-AppStore.plist
+        '
+
+    build:macos:dmg:
+      description: Сборка macOS release DMG для прямого распространения
+      run: >
+        melos exec --scope="codelab_desktop" --
+        sh -c '
+          flutter build macos --release &&
+          mkdir -p build/macos/dmg &&
+          rm -f build/macos/dmg/codelab_app.dmg &&
+          create-dmg \
+            --volname "Codelab App" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "codelab_app.app" 175 190 \
+            --hide-extension "codelab_app.app" \
+            --app-drop-link 425 190 \
+            "build/macos/dmg/codelab_app.dmg" \
+            "build/macos/Build/Products/Release/codelab_app.app"
+        '
+
+    deploy:ios:appstore:
+      description: Загрузка iOS IPA в App Store Connect
+      run: >
+        melos exec --scope="codelab_desktop" --
+        xcrun altool --upload-app -f build/ios/ipa/*.ipa -t ios
+        --apiKey "$APPSTORE_KEY_ID" --apiIssuer "$APPSTORE_ISSUER_ID"
+
+    deploy:macos:appstore:
+      description: Загрузка macOS PKG в App Store Connect
+      run: >
+        melos exec --scope="codelab_desktop" --
+        xcrun altool --upload-app -f build/macos/pkg/*.pkg -t macos
+        --apiKey "$APPSTORE_KEY_ID" --apiIssuer "$APPSTORE_ISSUER_ID"
+
+
+    build:android:playstore:
+      description: Сборка Android release App Bundle (.aab) для Google Play
+      run: >
+        melos exec --scope="codelab_desktop" --
+        flutter build appbundle --release
+
+    build:android:apk:
+      description: Сборка Android release APK для прямой установки
+      run: >
+        melos exec --scope="codelab_desktop" --
+        flutter build apk --release
+
+    build:web:
+      description: Сборка Web release с переменными окружения
+      run: >
+        melos exec --scope="codelab_desktop" --
+        flutter build web --release --base-href=/
+
+    build:web:wasm:
+      description: Сборка Web release с компиляцией в WebAssembly (WasmGC)
+      run: >
+        melos exec --scope="codelab_desktop" --
+        flutter build web --release --wasm
+        
+    build:windows:
+      description: Сборка Windows release приложения (.exe)
+      run: >
+        melos exec --scope="codelab_desktop" --
+        flutter build windows --release
+
+    build:windows:msix:
+      description: Сборка Windows MSIX пакета для Microsoft Store или прямой установки
+      run: >
+        melos exec --scope="codelab_desktop" --
+        dart run msix:create
+
+    build:linux:
+      description: Сборка Linux release приложения и упаковка в tar.gz
+      run: >
+        melos exec --scope="codelab_desktop" --
+        sh -c '
+          flutter build linux --release &&
+          tar -czf build/linux/codelab_app-linux-x64.tar.gz -C build/linux/x64/release/bundle .
+        '

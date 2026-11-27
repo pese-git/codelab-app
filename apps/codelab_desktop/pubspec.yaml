@@ -1,6 +1,6 @@
 name: codelab_desktop
 description: Desktop CodeLab ACP client application.
-version: 0.1.0
+version: 0.1.0+1
 publish_to: none
 resolution: workspace
 

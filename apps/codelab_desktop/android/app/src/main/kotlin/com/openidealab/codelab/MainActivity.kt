@@ -1,4 +1,4 @@
-package com.example.codelab_desktop
+package com.openidealab.codelab
 
 import io.flutter.embedding.android.FlutterActivity
 

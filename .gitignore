@@ -37,3 +37,10 @@ crash.txt
 
 # FVM Version Cache
 .fvm/
+
+
+**/ExportOptions-AppStore.plist
+
+**/upload_certificate.pem
+**/prod.keystore.properties
+**/openidealab-release-key.jks
