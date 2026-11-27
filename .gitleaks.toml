@@ -1,0 +1,19 @@
+title = "Gitleaks project config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignore documentation, specs, tests, and dummy secrets"
+paths = [
+  '''(^|/)(docs?|openspec|test)/''',
+  '''_test\.dart$''',
+]
+regexes = [
+  '''sk-test-''',
+]
+stopwords = [
+  "dGhlIHNhbXBsZSBub25jZQ==",
+  "secret-token",
+  "wrong-token",
+]
