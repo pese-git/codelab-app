@@ -384,10 +384,34 @@ melos:
         dart run msix:create
 
     build:linux:
-      description: Сборка Linux release приложения и упаковка в tar.gz
-      run: >
-        melos exec --scope="codelab_desktop" --
-        sh -c '
-          flutter build linux --release &&
-          tar -czf build/linux/codelab_app-linux-x64.tar.gz -C build/linux/x64/release/bundle .
-        '
+      description: Сборка Linux release и упаковка в архив (.tar.gz)
+      exec: |
+        flutter build linux --release
+        tar -czf build/linux/codelab_app-linux-$(uname -m).tar.gz -C build/linux/*/release/bundle .
+      packageFilters:
+        scope: "codelab_desktop"
+
+    build:linux:deb:
+      description: Сборка Linux release и упаковка в .deb пакет
+      exec: |
+        flutter build linux --release
+        ../../scripts/package_linux.sh deb
+      packageFilters:
+        scope: "codelab_desktop"
+
+    build:linux:appimage:
+      description: Сборка Linux release и упаковка в .AppImage
+      exec: |
+        flutter build linux --release
+        ../../scripts/package_linux.sh appimage
+      packageFilters:
+        scope: "codelab_desktop"
+
+    build:linux:all:
+      description: Сборка Linux release во всех форматах (.tar.gz, .deb, .AppImage)
+      exec: |
+        flutter build linux --release
+        tar -czf build/linux/codelab_app-linux-$(uname -m).tar.gz -C build/linux/*/release/bundle .
+        ../../scripts/package_linux.sh all
+      packageFilters:
+        scope: "codelab_desktop"
